@@ -14,7 +14,54 @@ use std::os::raw::{c_char, c_int};
 use std::sync::{Arc, Mutex};
 
 use ruffle_common::tag_utils::SwfMovie;
+use ruffle_core::external::{ExternalInterfaceProvider, FsCommandProvider, Value as ExtValue};
+use ruffle_core::context::UpdateContext;
 use ruffle_core::{Player, PlayerBuilder};
+
+// --- Captured ExternalInterface log -----------------------------------------
+//
+// LCE's menu calls ExternalInterface.call(name, args) repeatedly during
+// init. Stubbing each call by name is how we eventually get the menu to
+// render its visible content. To find out what names it calls we log every
+// invocation into this global ring buffer and expose it to the iOS app.
+
+static EXTINT_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub struct LoggingExternalInterface;
+
+impl ExternalInterfaceProvider for LoggingExternalInterface {
+    fn call_method(&self, _context: &mut UpdateContext<'_>, name: &str, args: &[ExtValue]) -> ExtValue {
+        let rendered_args: Vec<String> = args.iter().map(|v| format!("{v:?}")).collect();
+        let line = format!("{name}({})", rendered_args.join(", "));
+        if let Ok(mut log) = EXTINT_LOG.lock() {
+            // Cap memory to a reasonable upper bound; drop oldest.
+            if log.len() >= 256 {
+                log.remove(0);
+            }
+            log.push(line);
+        }
+        // For now, every call returns Null. Specific menus may need better
+        // responses; we wire those once we know what the names are.
+        ExtValue::Null
+    }
+
+    fn on_callback_available(&self, _name: &str) {}
+
+    fn get_id(&self) -> Option<String> { None }
+}
+
+pub struct LoggingFsCommands;
+
+impl FsCommandProvider for LoggingFsCommands {
+    fn on_fs_command(&self, command: &str, args: &str) -> bool {
+        let line = format!("fscommand::{command}({args})");
+        if let Ok(mut log) = EXTINT_LOG.lock() {
+            if log.len() >= 256 { log.remove(0); }
+            log.push(line);
+        }
+        true
+    }
+}
 
 // --- Boxed handle shared across the C boundary -------------------------------
 
@@ -316,10 +363,27 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         .with_movie(movie)
         .with_viewport_dimensions(width, height, 1.0)
         .with_autoplay(true)
+        .with_external_interface(Box::new(LoggingExternalInterface))
+        .with_fs_commands(Box::new(LoggingFsCommands))
         .build();
 
     eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);
     to_handle(player)
+}
+
+/// Copy the captured ExternalInterface call log into `out` as a
+/// newline-separated UTF-8 string. Writes at most `cap - 1` bytes plus a
+/// trailing NUL. Returns the number of bytes written (excluding NUL).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_extint_log(out: *mut u8, cap: usize) -> usize {
+    if out.is_null() || cap == 0 { return 0; }
+    let Ok(log) = EXTINT_LOG.lock() else { return 0; };
+    let joined = log.join("\n");
+    let bytes = joined.as_bytes();
+    let n = bytes.len().min(cap - 1);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n);
+    *out.add(n) = 0;
+    n
 }
 
 /// Drop a Player created by `ruffle_ios_player_create`.

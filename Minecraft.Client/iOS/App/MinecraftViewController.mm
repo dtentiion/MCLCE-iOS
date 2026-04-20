@@ -191,9 +191,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int wgpuProbe = ruffle_ios_wgpu_probe();
     extern int g_ruffle_surface_probe;
 
+    // Pull the ExternalInterface call log Ruffle has captured so far.
+    static uint8_t extintBuf[2048];
+    size_t extintLen = ruffle_ios_extint_log(extintBuf, sizeof(extintBuf));
+    NSString* extintLog = extintLen
+        ? [[NSString alloc] initWithBytes:extintBuf length:extintLen encoding:NSUTF8StringEncoding]
+        : @"<no ExternalInterface calls yet>";
+
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle magic: 0x%08X  render_probe=%d\n"
         @"Loaded SWF: %@\n"
+        @"--- SWF ExternalInterface calls ---\n%@\n"
         @"wgpu on Metal: %s (%d)  surface_on_CAMetalLayer=%d\n"
         @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
         @"Ruffle Player: %s  declared_fps=%.3f\n"
@@ -201,6 +209,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"  %@",
         rustMagic, renderProbe,
         self.loadedSwfName ?: @"<none>",
+        extintLog,
         (wgpuProbe == 1 ? "OK" :
          wgpuProbe == -1 ? "no adapter" :
          wgpuProbe == -2 ? "no device" : "??"),
