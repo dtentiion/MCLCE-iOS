@@ -1,0 +1,60 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ios-device",
+      "displayName": "iOS device (arm64)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build-ios-device",
+      "toolchainFile": "${sourceDir}/cmake/ios.toolchain.cmake",
+      "cacheVariables": {
+        "PLATFORM": "OS64",
+        "DEPLOYMENT_TARGET": "14.0"
+      }
+    },
+    {
+      "name": "ios-sim-arm64",
+      "displayName": "iOS simulator (arm64 on Apple Silicon)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build-ios-sim-arm64",
+      "toolchainFile": "${sourceDir}/cmake/ios.toolchain.cmake",
+      "cacheVariables": {
+        "PLATFORM": "SIMULATORARM64",
+        "DEPLOYMENT_TARGET": "14.0"
+      }
+    },
+    {
+      "name": "ios-sim-x86_64",
+      "displayName": "iOS simulator (x86_64 on Intel Mac)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build-ios-sim-x86_64",
+      "toolchainFile": "${sourceDir}/cmake/ios.toolchain.cmake",
+      "cacheVariables": {
+        "PLATFORM": "SIMULATOR64",
+        "DEPLOYMENT_TARGET": "14.0"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "ios-device-debug",
+      "configurePreset": "ios-device",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ios-device-release",
+      "configurePreset": "ios-device",
+      "configuration": "Release"
+    },
+    {
+      "name": "ios-sim-arm64-debug",
+      "configurePreset": "ios-sim-arm64",
+      "configuration": "Debug"
+    }
+  ]
+}
