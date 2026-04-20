@@ -26,15 +26,25 @@ python3 - "$ROOT" <<'PY'
 import os, re, sys, pathlib
 
 root = pathlib.Path(sys.argv[1])
-pattern = re.compile(r"\b(fmax|fmin)\b")
 
-def replace(m):
+# Rename clashes with libc: fmax / fmin.
+RENAME = re.compile(r"\b(fmax|fmin)\b")
+
+# compiler_assert(x) macro is "switch(0){case 0: case x:;}", which clang now
+# rejects as duplicate case when x == 0. The macro is used in generic
+# template bodies as an "unreachable, should specialize" trip, and modern
+# clang parses those bodies eagerly. Swap the macro for a no-op so the
+# library compiles; we lose a compile-time tripwire but never relied on it.
+CA_DEF_OLD = "#define compiler_assert(x)\tswitch(0){case 0: case x:;}"
+CA_DEF_NEW = "#define compiler_assert(x)\t((void)0)"
+
+def rename_replace(m):
     return "gs_" + m.group(1)
 
 changed = 0
 scanned = 0
 for p in root.rglob("*"):
-    if p.suffix.lower() not in (".cpp", ".h", ".hpp", ".cc", ".cxx"):
+    if p.suffix.lower() not in (".cpp", ".h", ".hpp", ".cc", ".cxx", ".c"):
         continue
     scanned += 1
     try:
@@ -42,7 +52,13 @@ for p in root.rglob("*"):
     except Exception as e:
         print(f"skip {p}: {e}", file=sys.stderr)
         continue
-    new = pattern.sub(replace, src)
+    new = RENAME.sub(rename_replace, src)
+    new = new.replace(CA_DEF_OLD, CA_DEF_NEW)
+    # Also replace the non-tab variant just in case.
+    new = new.replace(
+        "#define compiler_assert(x) switch(0){case 0: case x:;}",
+        "#define compiler_assert(x) ((void)0)",
+    )
     if new != src:
         p.write_text(new, encoding="utf-8", errors="surrogateescape")
         changed += 1
