@@ -217,10 +217,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     const char* playingStr = (playingSample == 1) ? "true"
                           : (playingSample == 2) ? "false"
                           : "?";
+    int cfPre = -1, cfMid = -1, cfPost = -1;
+    uint64_t frameAdvances = 0;
+    ruffle_ios_player_frame_diag(&cfPre, &cfMid, &cfPost, &frameAdvances);
 
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle magic: 0x%08X  render_probe=%d  cur_frame=%d  movie=%dx%d  ticks=%llu\n"
         @"tick stages  lock=%llu tick=%llu run=%llu render=%llu  is_playing=%s\n"
+        @"frame samples  pre=%d mid=%d post=%d  advances=%llu\n"
         @"Loaded SWF: %@\n"
         @"--- SWF ExternalInterface calls ---\n%@\n"
         @"--- Ruffle AVM log (trace/warn) ---\n%@\n"
@@ -231,6 +235,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"  %@",
         rustMagic, renderProbe, curFrame, movW, movH, tickN,
         stage[0], stage[1], stage[2], stage[3], playingStr,
+        cfPre, cfMid, cfPost, frameAdvances,
         self.loadedSwfName ?: @"<none>",
         extintLog,
         avmLog,

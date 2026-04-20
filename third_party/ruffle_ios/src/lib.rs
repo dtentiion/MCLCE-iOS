@@ -38,6 +38,16 @@ static TICK_AFTER_RENDER:  std::sync::atomic::AtomicU64 = std::sync::atomic::Ato
 // 0 = unknown, 1 = true, 2 = false. Written every tick.
 static IS_PLAYING_SAMPLE:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
+// Frame samples taken around the tick/run_frame pair. `cf_pre` is the
+// current frame just after we grab the player lock; `cf_mid` is after
+// `Player::tick`; `cf_post` is after `Player::run_frame`. If `run_frame`
+// actually advances the root clip, cf_post > cf_pre for at least some
+// ticks and FRAME_ADVANCES climbs.
+static LATEST_CF_PRE:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+static LATEST_CF_MID:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+static LATEST_CF_POST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+static FRAME_ADVANCES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 pub struct LoggingExternalInterface;
 
 impl ExternalInterfaceProvider for LoggingExternalInterface {
@@ -557,15 +567,40 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
         IS_PLAYING_SAMPLE.store(if p.is_playing() { 1 } else { 2 }, Relaxed);
         use ruffle_common::duration::FloatDuration;
         let dt = FloatDuration::from_secs(dt_seconds as f64);
+        let cf_pre = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        LATEST_CF_PRE.store(cf_pre, Relaxed);
         p.tick(dt);
         TICK_AFTER_TICK.fetch_add(1, Relaxed);
+        let cf_mid = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        LATEST_CF_MID.store(cf_mid, Relaxed);
         // Kick the frame logic hard, in case tick's dt accumulator hasn't
         // crossed the frame-time threshold yet.
         p.run_frame();
         TICK_AFTER_RUNFRAME.fetch_add(1, Relaxed);
+        let cf_post = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        LATEST_CF_POST.store(cf_post, Relaxed);
+        if cf_post != cf_pre && cf_pre >= 0 && cf_post >= 0 {
+            FRAME_ADVANCES.fetch_add(1, Relaxed);
+        }
         p.render();
         TICK_AFTER_RENDER.fetch_add(1, Relaxed);
     }
+}
+
+/// Frame-transition diag: pre/mid/post cur_frame samples from the last
+/// tick, and the count of ticks where cur_frame actually changed.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_frame_diag(
+    cf_pre: *mut c_int,
+    cf_mid: *mut c_int,
+    cf_post: *mut c_int,
+    frame_advances: *mut u64,
+) {
+    use std::sync::atomic::Ordering::Relaxed;
+    if !cf_pre.is_null()  { *cf_pre  = LATEST_CF_PRE.load(Relaxed)  as c_int; }
+    if !cf_mid.is_null()  { *cf_mid  = LATEST_CF_MID.load(Relaxed)  as c_int; }
+    if !cf_post.is_null() { *cf_post = LATEST_CF_POST.load(Relaxed) as c_int; }
+    if !frame_advances.is_null() { *frame_advances = FRAME_ADVANCES.load(Relaxed); }
 }
 
 /// Fill `out_counters` with the tick-stage breakdown:
