@@ -63,5 +63,29 @@
     </array>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
+    <!-- Expose Documents/ via the Files app so users can drop their own LCE
+         SWF assets in (MainMenu1080.swf etc.). We cannot ship those since
+         they are Mojang-copyrighted. -->
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+    <!-- Declare a document type so SWF files can be Shared-To-App. -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>SWF Movie</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.adobe.shockwave-flash</string>
+                <string>public.data</string>
+            </array>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+        </dict>
+    </array>
 </dict>
 </plist>
