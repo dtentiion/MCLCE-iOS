@@ -38,6 +38,11 @@ jobs:
           xcodebuild -version
           cmake --version
 
+      - name: Patch vendored GameSWF for libc++
+        run: |
+          chmod +x scripts/patch-gameswf.sh
+          ./scripts/patch-gameswf.sh
+
       - name: Configure (iOS device)
         run: |
           cmake -S . -B build \
