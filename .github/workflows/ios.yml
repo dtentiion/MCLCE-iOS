@@ -23,7 +23,7 @@ jobs:
   build:
     name: build (arm64, unsigned)
     runs-on: macos-14
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
