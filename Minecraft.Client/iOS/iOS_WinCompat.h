@@ -34,7 +34,10 @@ typedef uint32_t ULONG;
 typedef int64_t  LONGLONG;
 typedef uint64_t ULONGLONG;
 
-typedef int32_t  BOOL;
+// BOOL intentionally omitted: Apple's Objective-C runtime already defines it
+// as signed char (via objc/objc.h) and redefining here breaks builds that
+// pull in any UIKit or Foundation header. If upstream code needs a
+// Windows-style BOOL, use INT32 explicitly instead.
 typedef int32_t  INT;
 typedef uint32_t UINT;
 
