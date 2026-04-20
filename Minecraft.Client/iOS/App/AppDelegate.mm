@@ -18,8 +18,44 @@ PlayerHandle* g_ruffle_player = NULL;
 
 @implementation AppDelegate
 
+- (void)primeDocumentsFolder {
+    NSFileManager* fm = NSFileManager.defaultManager;
+    NSURL* docs = [fm URLsForDirectory:NSDocumentDirectory
+                             inDomains:NSUserDomainMask].firstObject;
+    if (!docs) return;
+
+    // Make sure the folder exists (it should, but be explicit).
+    [fm createDirectoryAtURL:docs
+ withIntermediateDirectories:YES
+                  attributes:nil
+                       error:nil];
+
+    // Write a single README so the folder is visible in Files.app. Rewrite
+    // every launch so updates to the text propagate; a few hundred bytes.
+    NSString* readme =
+        @"Minecraft LCE for iOS\n"
+        @"=====================\n\n"
+        @"Drop your own LCE SWF files in this folder.\n\n"
+        @"Preferred filename: MainMenu1080.swf\n"
+        @"If that is not present, the app will play the first .swf it\n"
+        @"finds here. Without any SWF it falls back to a tiny built-in\n"
+        @"test rectangle.\n\n"
+        @"See INSTALL.md in the repo for how to extract SWFs from an LCE\n"
+        @"install using scripts/list-arc.py or PCK Studio.\n";
+    NSURL* readmeURL = [docs URLByAppendingPathComponent:@"README.txt"];
+    [readme writeToURL:readmeURL
+            atomically:YES
+              encoding:NSUTF8StringEncoding
+                 error:nil];
+}
+
 - (BOOL)application:(UIApplication*)application
     didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+
+    // Ensure Documents/ is non-empty so iOS exposes it under Files ->
+    // On My iPhone. Without this the folder stays hidden until the app
+    // writes something, which makes dropping user-supplied SWFs awkward.
+    [self primeDocumentsFolder];
 
     // Start listening for controllers before the view controller comes up so
     // we don't miss a connect notification from an already-paired pad.
