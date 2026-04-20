@@ -24,6 +24,11 @@ std::atomic<bool> g_ready{false};
 gameswf::render_handler* g_rh = nullptr;
 gameswf::player* g_player = nullptr;
 
+// Strong hold on the loaded root. player::m_current_root is a weak_ptr,
+// so without this the root gets garbage-collected the moment our local
+// gc_ptr in mcle_swf_load goes out of scope.
+gameswf::gc_ptr<gameswf::root> g_root;
+
 // Tiny last-status buffer. Updated by init/load/tick so the UI layer can
 // display it on-device.
 char g_status[256] = "uninit";
@@ -69,6 +74,7 @@ extern "C" const char* mcle_swf_last_status(void) {
 
 extern "C" void mcle_swf_shutdown(void) {
     g_ready.store(false, std::memory_order_release);
+    g_root = nullptr;  // drop strong reference to the loaded root
     if (g_player) {
         delete g_player;
         g_player = nullptr;
@@ -156,13 +162,13 @@ extern "C" int mcle_swf_load(const char* path) {
     set_status("load: file %ld bytes, calling load_file", sz);
 
     @autoreleasepool {
-        auto root = g_player->load_file(path);
-        if (!root.get_ptr()) {
+        g_root = g_player->load_file(path);  // strong ref held here
+        if (!g_root.get_ptr()) {
             set_status("load_file returned null");
             NSLog(@"[mcle_swf] %s (%s)", g_status, path);
             return 2;
         }
-        g_player->set_root(root.get_ptr());
+        g_player->set_root(g_root.get_ptr());
         set_status("movie loaded, has_root=%d", g_player->get_root() ? 1 : 0);
         NSLog(@"[mcle_swf] %s", g_status);
     }
