@@ -4,3 +4,6 @@
 [submodule "third_party/4JLibs"]
 	path = third_party/4JLibs
 	url = https://github.com/MCLCE/4JLibs.git
+[submodule "third_party/gameswf"]
+	path = third_party/gameswf
+	url = https://github.com/marmalade/gameswf.git
