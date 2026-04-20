@@ -1,4 +1,5 @@
 #import "MinecraftViewController.h"
+#import "MetalView.h"
 
 #import <QuartzCore/CADisplayLink.h>
 
@@ -10,6 +11,7 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 @interface MinecraftViewController ()
 @property (strong, nonatomic) CADisplayLink* displayLink;
 @property (strong, nonatomic) UILabel* statusLabel;
+@property (strong, nonatomic) MetalView* metalView;
 @end
 
 @implementation MinecraftViewController
@@ -18,16 +20,26 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.blackColor;
 
-    // Temporary on-screen text so the app is visibly alive before the
-    // renderer is wired. Replaced with the MTKView / ANGLE surface later.
     CGRect frame = self.view.bounds;
-    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectInset(frame, 24, 24)];
+
+    // Metal-backed view fills the whole screen. Renderer draws into its layer.
+    self.metalView = [[MetalView alloc] initWithFrame:frame];
+    self.metalView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.metalView.opaque = YES;
+    self.metalView.backgroundColor = UIColor.blackColor;
+    [self.view addSubview:self.metalView];
+
+    // Overlay label with build info + live controller state. Sits inside the
+    // safe area so the Dynamic Island does not chew it up on newer iPhones.
+    CGRect safeFrame = CGRectInset(frame, 24, 24);
+    self.statusLabel = [[UILabel alloc] initWithFrame:safeFrame];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textColor = UIColor.whiteColor;
     self.statusLabel.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
     self.statusLabel.text =
         @"Minecraft: Legacy Console Edition (iOS)\n\n"
-        @"Early scaffold build. No renderer yet.\n"
+        @"Early scaffold build. Renderer: Metal (triangle test).\n"
         @"Connect a controller to see input events.\n";
     self.statusLabel.textAlignment = NSTextAlignmentLeft;
     self.statusLabel.autoresizingMask =
@@ -35,14 +47,26 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
     [self.view addSubview:self.statusLabel];
 }
 
+- (void)viewSafeAreaInsetsDidChange {
+    [super viewSafeAreaInsetsDidChange];
+    // Keep the overlay label inside the safe area so notches do not clip it.
+    CGRect b = self.view.bounds;
+    UIEdgeInsets s = self.view.safeAreaInsets;
+    self.statusLabel.frame = CGRectMake(
+        s.left + 16, s.top + 12,
+        b.size.width  - s.left - s.right  - 32,
+        b.size.height - s.top  - s.bottom - 24);
+}
+
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 
-    CGSize sz = self.view.bounds.size;
+    CGSize sz = self.metalView.bounds.size;
     CGFloat scale = self.view.window.screen.nativeScale ?: UIScreen.mainScreen.nativeScale;
     int pw = (int)(sz.width  * scale);
     int ph = (int)(sz.height * scale);
-    mcle_render_init((__bridge void*)self.view.layer, pw, ph);
+    self.metalView.layer.contentsScale = scale;
+    mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
@@ -57,7 +81,7 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGSize sz = self.view.bounds.size;
+    CGSize sz = self.metalView.bounds.size;
     CGFloat scale = self.view.window.screen.nativeScale ?: UIScreen.mainScreen.nativeScale;
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
 }

@@ -7,6 +7,8 @@ set(APP_SOURCES
   AppDelegate.mm
   MinecraftViewController.h
   MinecraftViewController.mm
+  MetalView.h
+  MetalView.mm
   GameBootstrap.cpp
 )
 
