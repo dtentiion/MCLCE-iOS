@@ -2,10 +2,13 @@
 # Translate an HLSL shader to Metal Shading Language via SPIR-V.
 #
 # Pipeline:
-#   HLSL  --dxc-->  SPIR-V  --spirv-cross-->  MSL  --metal-->  .metallib
+#   HLSL  --glslang-->  SPIR-V  --spirv-cross-->  MSL  --metal-->  .metallib
 #
-# Requires: dxc, spirv-cross, xcrun metal (Xcode). Install the first two via
-# Homebrew on macOS: brew install dxc spirv-cross
+# Requires: glslang, spirv-cross, xcrun metal (Xcode). On macOS:
+#   brew install glslang spirv-cross
+#
+# glslangValidator is used instead of DXC because DXC is not packaged on
+# Homebrew. glslang has HLSL frontend support via -D.
 #
 # Usage:
 #   ./scripts/translate-shader.sh <shader.hlsl> <stage> <entry> <out-dir>
@@ -25,9 +28,9 @@ ENTRY="${3:?missing entry}"
 OUTDIR="${4:?missing outdir}"
 
 case "$STAGE" in
-  vertex)   DXC_PROFILE="vs_6_0"; SPV_STAGE="vert" ;;
-  fragment) DXC_PROFILE="ps_6_0"; SPV_STAGE="frag" ;;
-  compute)  DXC_PROFILE="cs_6_0"; SPV_STAGE="comp" ;;
+  vertex)   GLSLANG_STAGE="vert" ;;
+  fragment) GLSLANG_STAGE="frag" ;;
+  compute)  GLSLANG_STAGE="comp" ;;
   *) echo "unknown stage: $STAGE"; exit 2 ;;
 esac
 
@@ -38,12 +41,10 @@ MSL="$OUTDIR/$BASE.metal"
 AIR="$OUTDIR/$BASE.air"
 METALLIB="$OUTDIR/$BASE.metallib"
 
-# 1. HLSL -> SPIR-V via dxc. -spirv enables the Khronos/SPV emit path.
-echo "[dxc] $HLSL_PATH -> $SPV"
-dxc -spirv -T "$DXC_PROFILE" -E "$ENTRY" \
-    -fvk-use-dx-layout -fvk-use-dx-position-w \
-    -fspv-target-env=vulkan1.1 \
-    -Fo "$SPV" "$HLSL_PATH"
+# 1. HLSL -> SPIR-V via glslangValidator with the HLSL frontend (-D).
+echo "[glslang] $HLSL_PATH -> $SPV"
+glslangValidator -D -e "$ENTRY" -V -S "$GLSLANG_STAGE" \
+    "$HLSL_PATH" -o "$SPV"
 
 # 2. SPIR-V -> MSL via spirv-cross.
 echo "[spirv-cross] $SPV -> $MSL"
