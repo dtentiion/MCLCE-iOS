@@ -30,6 +30,11 @@ void mcle_swf_tick(float dt);
 // it as the active root movie. Returns 0 on success, non-zero on failure.
 int  mcle_swf_load(const char* path);
 
+// Draws a synthetic colored rectangle via the render_handler, bypassing
+// the SWF player. Used before a real movie is loaded so the render_handler
+// + Metal pipeline are visibly exercised on device.
+void mcle_swf_draw_test_rect(int vp_width, int vp_height);
+
 #ifdef __cplusplus
 }
 #endif
