@@ -66,7 +66,7 @@ extern "C" void mcle_swf_tick(float dt) {
 extern "C" int mcle_swf_load(const char* path) {
     if (!g_player || !path) return 1;
     @autoreleasepool {
-        gc_ptr<gameswf::root> root = g_player->load_file(path);
+        auto root = g_player->load_file(path);
         if (!root.get_ptr()) {
             NSLog(@"[mcle_swf] load_file failed: %s", path);
             return 2;
