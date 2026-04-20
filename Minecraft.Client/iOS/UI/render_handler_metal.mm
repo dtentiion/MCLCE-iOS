@@ -1,11 +1,16 @@
 // Metal-backed render_handler for GameSWF.
 //
-// First pass: every method is stubbed with enough real logic for the probe
-// to link, and for `begin_display` / `end_display` / `draw_mesh_strip` to
-// be wired into our Metal renderer. The rest (textured fills, line
-// strips, bitmap uploads, masks) comes in follow-up passes.
+// Second pass: plugs into MetalContext so draws issue commands on whatever
+// render pass the outer frame loop has opened. begin_display / end_display
+// bracket a SWF within an existing frame; they do not present.
+//
+// Draw calls are tracked via a per-frame counter and logged at most once a
+// second so we can observe activity without spamming the log. Actual
+// vertex submission will land in the next pass once we wire a solid-color
+// pipeline state + vertex buffer pool.
 
 #include "render_handler_metal.h"
+#include "MetalContext.h"
 
 #include "gameswf/gameswf.h"
 #include "gameswf/gameswf_types.h"
@@ -13,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 
 namespace {
 
@@ -45,6 +51,14 @@ struct metal_bitmap_info : public gameswf::bitmap_info {
 };
 
 struct metal_render_handler : public gameswf::render_handler {
+    // --- Frame state captured between begin_display and end_display ---
+    int vp_x0 = 0, vp_y0 = 0, vp_w = 0, vp_h = 0;
+    float stage_x0 = 0, stage_x1 = 0, stage_y0 = 0, stage_y1 = 0;
+    unsigned char fill_r = 255, fill_g = 255, fill_b = 255, fill_a = 255;
+    bool  fill_enabled = false;
+    int   mesh_strips_this_frame = 0;
+    int   triangles_this_frame = 0;
+
     // ---- Bitmap creation --------------------------------------------------
     gameswf::bitmap_info* create_bitmap_info_empty() override {
         return new metal_bitmap_info();
@@ -75,13 +89,24 @@ struct metal_render_handler : public gameswf::render_handler {
         float x0, float x1, float y0, float y1) override
     {
         (void)background_color;
-        (void)viewport_x0; (void)viewport_y0;
-        (void)viewport_width; (void)viewport_height;
-        (void)x0; (void)x1; (void)y0; (void)y1;
-        // TODO: save the viewport + background color, begin a Metal render pass.
+        vp_x0 = viewport_x0; vp_y0 = viewport_y0;
+        vp_w = viewport_width; vp_h = viewport_height;
+        stage_x0 = x0; stage_x1 = x1;
+        stage_y0 = y0; stage_y1 = y1;
+        mesh_strips_this_frame = 0;
+        triangles_this_frame = 0;
     }
     void end_display() override {
-        // TODO: present the pass to the drawable.
+        // Emit a heartbeat at most once per second so we can confirm the
+        // SWF player is actually calling into us once a movie loads.
+        using namespace std::chrono;
+        static steady_clock::time_point last;
+        auto now = steady_clock::now();
+        if (now - last > seconds(1)) {
+            last = now;
+            std::printf("[swf-handler] frame strips=%d tris=%d viewport=%dx%d\n",
+                mesh_strips_this_frame, triangles_this_frame, vp_w, vp_h);
+        }
     }
 
     // ---- Transforms -------------------------------------------------------
@@ -89,22 +114,32 @@ struct metal_render_handler : public gameswf::render_handler {
     void set_cxform(const gameswf::cxform& cx) override { (void)cx; }
 
     // ---- Draw -------------------------------------------------------------
+    // TODO next pass: upload coords to a ring-buffered MTLBuffer and dispatch
+    // a triangle-strip draw using a solid-color pipeline state. Today we
+    // just count calls so we can validate wiring with logs.
     void draw_mesh_strip(const void* coords, int vertex_count) override {
-        (void)coords; (void)vertex_count;
-        // TODO: upload to a dynamic vertex buffer, dispatch a solid-color
-        // triangle-strip draw under the current fill style.
+        (void)coords;
+        mesh_strips_this_frame++;
+        triangles_this_frame += (vertex_count > 2) ? (vertex_count - 2) : 0;
     }
     void draw_triangle_list(const void* coords, int vertex_count) override {
-        (void)coords; (void)vertex_count;
+        (void)coords;
+        triangles_this_frame += vertex_count / 3;
     }
     void draw_line_strip(const void* coords, int vertex_count) override {
         (void)coords; (void)vertex_count;
     }
 
     // ---- Styles -----------------------------------------------------------
-    void fill_style_disable(int fill_side) override { (void)fill_side; }
+    void fill_style_disable(int fill_side) override {
+        (void)fill_side;
+        fill_enabled = false;
+    }
     void fill_style_color(int fill_side, const gameswf::rgba& color) override {
-        (void)fill_side; (void)color;
+        (void)fill_side;
+        fill_r = color.m_r; fill_g = color.m_g;
+        fill_b = color.m_b; fill_a = color.m_a;
+        fill_enabled = true;
     }
     void fill_style_bitmap(int fill_side, gameswf::bitmap_info* bi, const gameswf::matrix& m,
                            bitmap_wrap_mode wm, bitmap_blend_mode bm) override
