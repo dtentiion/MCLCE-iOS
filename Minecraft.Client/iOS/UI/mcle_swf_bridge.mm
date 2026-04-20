@@ -23,6 +23,17 @@ namespace {
 std::atomic<bool> g_ready{false};
 gameswf::render_handler* g_rh = nullptr;
 gameswf::player* g_player = nullptr;
+
+// Tiny last-status buffer. Updated by init/load/tick so the UI layer can
+// display it on-device.
+char g_status[256] = "uninit";
+
+void set_status(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(g_status, sizeof(g_status), fmt, ap);
+    va_end(ap);
+}
 }
 
 extern "C" int mcle_swf_init(void) {
@@ -47,8 +58,13 @@ extern "C" int mcle_swf_init(void) {
 
         g_ready.store(true, std::memory_order_release);
         NSLog(@"[mcle_swf] init ok, player=%p", g_player);
+        set_status("runtime ready, no movie");
     }
     return 0;
+}
+
+extern "C" const char* mcle_swf_last_status(void) {
+    return g_status;
 }
 
 extern "C" void mcle_swf_shutdown(void) {
@@ -120,18 +136,35 @@ extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h) {
 
 extern "C" int mcle_swf_load(const char* path) {
     if (!g_player || !path) {
-        NSLog(@"[mcle_swf] load: bad state (player=%p path=%s)", g_player, path ?: "<null>");
+        set_status("load: bad state (player=%p path=%s)",
+                   (void*)g_player, path ?: "<null>");
+        NSLog(@"[mcle_swf] %s", g_status);
         return 1;
     }
-    NSLog(@"[mcle_swf] load: attempting %s", path);
+    // Check that the file exists and is readable at this path.
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        set_status("load: fopen failed errno=%d path=%s", errno, path);
+        NSLog(@"[mcle_swf] %s", g_status);
+        return 3;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fclose(f);
+
+    NSLog(@"[mcle_swf] load: attempting %s (%ld bytes)", path, sz);
+    set_status("load: file %ld bytes, calling load_file", sz);
+
     @autoreleasepool {
         auto root = g_player->load_file(path);
         if (!root.get_ptr()) {
-            NSLog(@"[mcle_swf] load_file returned null: %s", path);
+            set_status("load_file returned null");
+            NSLog(@"[mcle_swf] %s (%s)", g_status, path);
             return 2;
         }
         g_player->set_root(root.get_ptr());
-        NSLog(@"[mcle_swf] loaded movie: %s", path);
+        set_status("movie loaded, has_root=%d", g_player->get_root() ? 1 : 0);
+        NSLog(@"[mcle_swf] %s", g_status);
     }
     return 0;
 }

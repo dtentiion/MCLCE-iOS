@@ -5,6 +5,7 @@
 
 #include "RND_iOS_Stub.h"
 #include "INP_iOS_Bridge.h"
+#include "mcle_swf_bridge.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 
@@ -90,18 +91,30 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
     mcle_game_tick();
     mcle_render_frame();
 
-    // Update the temporary label with live controller state so the scaffold
-    // is visibly responsive when a pad is connected.
+    const char* swfStatusC = mcle_swf_last_status();
+    NSString* swfStatus = swfStatusC ? [NSString stringWithUTF8String:swfStatusC] : @"";
+    int swfReady = mcle_swf_is_ready();
+    int swfHas = mcle_swf_has_movie();
+
     mcle_ios_pad_state pad;
     if (mcle_ios_input_poll(0, &pad)) {
         self.statusLabel.text = [NSString stringWithFormat:
             @"Minecraft: Legacy Console Edition (iOS)\n\n"
+            @"SWF: ready=%d movie=%d  %@\n\n"
             @"Controller connected.\n"
             @"buttons: 0x%08X\n"
             @"L stick: %+.2f, %+.2f\n"
             @"R stick: %+.2f, %+.2f\n"
             @"triggers: L=%.2f R=%.2f",
+            swfReady, swfHas, swfStatus,
             pad.buttons, pad.lx, pad.ly, pad.rx, pad.ry, pad.lt, pad.rt];
+    } else {
+        self.statusLabel.text = [NSString stringWithFormat:
+            @"Minecraft: Legacy Console Edition (iOS)\n\n"
+            @"Early scaffold build. Renderer: Metal.\n"
+            @"SWF: ready=%d movie=%d  %@\n"
+            @"Connect a controller to see input events.\n",
+            swfReady, swfHas, swfStatus];
     }
 }
 
