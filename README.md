@@ -1,15 +1,15 @@
-# MCLE-iOS
+# MCLCE-iOS
 
-[![iOS build](https://github.com/dtentiion/MCLE-iOS/actions/workflows/ios.yml/badge.svg)](https://github.com/dtentiion/MCLE-iOS/actions/workflows/ios.yml)
-[![Visits](https://hits.sh/github.com/dtentiion/MCLE-iOS.svg?label=visits&color=6cc644)](https://hits.sh/github.com/dtentiion/MCLE-iOS/)
-[![Downloads](https://img.shields.io/github/downloads/dtentiion/MCLE-iOS/total?color=6cc644&label=downloads)](https://github.com/dtentiion/MCLE-iOS/releases)
-[![Stars](https://img.shields.io/github/stars/dtentiion/MCLE-iOS?color=6cc644)](https://github.com/dtentiion/MCLE-iOS/stargazers)
+[![iOS build](https://github.com/dtentiion/MCLCE-iOS/actions/workflows/ios.yml/badge.svg)](https://github.com/dtentiion/MCLCE-iOS/actions/workflows/ios.yml)
+[![Visits](https://hits.sh/github.com/dtentiion/MCLCE-iOS.svg?label=visits&color=6cc644)](https://hits.sh/github.com/dtentiion/MCLCE-iOS/)
+[![Downloads](https://img.shields.io/github/downloads/dtentiion/MCLCE-iOS/total?color=6cc644&label=downloads)](https://github.com/dtentiion/MCLCE-iOS/releases)
+[![Stars](https://img.shields.io/github/stars/dtentiion/MCLCE-iOS?color=6cc644)](https://github.com/dtentiion/MCLCE-iOS/stargazers)
 
 Native iOS port of [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) (the TU19 Legacy Console Edition base).
 
 **Status: early work-in-progress. Nothing runs yet.** If you're looking for a playable build, this isn't it. Check back later or follow the roadmap.
 
-The CI does produce a signed-on-install `.ipa` on every push (just an empty app shell at the moment; no game logic). Grab the latest from the [Actions tab](https://github.com/dtentiion/MCLE-iOS/actions).
+The CI does produce a signed-on-install `.ipa` on every push (just an empty app shell at the moment; no game logic). Grab the latest from the [Actions tab](https://github.com/dtentiion/MCLCE-iOS/actions).
 
 ## What this is
 
@@ -35,7 +35,7 @@ If you want to build it yourself you'll need a Mac with Xcode 15+. On Windows yo
 
 Until there's a working build, this section is empty. When there is:
 
-1. Download the latest `MCLE-iOS.ipa` from Releases.
+1. Download the latest `MCLCE-iOS.ipa` from Releases.
 2. Install it with one of:
    - **AltStore** (needs free Apple ID, resigns every 7 days)
    - **Sideloadly** (same idea, desktop app)

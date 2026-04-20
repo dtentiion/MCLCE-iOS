@@ -1,6 +1,6 @@
-# Installing MCLE-iOS
+# Installing MCLCE-iOS
 
-There is no playable build yet. When there is, download the latest `Minecraft.LCE.ipa` from [Releases](https://github.com/dtentiion/MCLE-iOS/releases) (once tagged) or from the Actions tab (every push builds one). Then pick one of the methods below.
+There is no playable build yet. When there is, download the latest `Minecraft.LCE.ipa` from [Releases](https://github.com/dtentiion/MCLCE-iOS/releases) (once tagged) or from the Actions tab (every push builds one). Then pick one of the methods below.
 
 ## AltStore
 
