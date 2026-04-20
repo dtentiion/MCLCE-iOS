@@ -14,7 +14,7 @@
 
 #include <atomic>
 
-extern id<MTLDevice> mcle_metal_shared_device_objc(void);
+extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);
 
 namespace {
 
