@@ -11,7 +11,9 @@
 #if !defined(_WIN32) && !defined(_WIN64)
 
 #include <stdint.h>
+#include <stddef.h>
 #include <wchar.h>
+#include <pthread.h>
 
 // Basic integer aliases.
 typedef int8_t   INT8;
@@ -34,14 +36,61 @@ typedef uint32_t ULONG;
 typedef int64_t  LONGLONG;
 typedef uint64_t ULONGLONG;
 
-// BOOL intentionally omitted: Apple's Objective-C runtime already defines it
-// as signed char (via objc/objc.h) and redefining here breaks builds that
-// pull in any UIKit or Foundation header. If upstream code needs a
-// Windows-style BOOL, use INT32 explicitly instead.
+// BOOL: Apple's Objective-C runtime defines BOOL as signed char. Only define
+// the Windows-style int BOOL when Obj-C is NOT active (i.e. pure C++ TUs that
+// are compiling upstream code that expects int BOOL semantics).
+#ifndef __OBJC__
+typedef int32_t  BOOL;
+#endif
 typedef int32_t  INT;
 typedef uint32_t UINT;
 
 typedef float    FLOAT;
+
+// Pointer-sized integers. Matches the Win32 semantic meaning; size depends on
+// the target arch. iOS is always 64-bit, so these are all 64-bit.
+typedef size_t    SIZE_T;
+typedef ssize_t   SSIZE_T;
+typedef uintptr_t ULONG_PTR;
+typedef intptr_t  LONG_PTR;
+typedef uintptr_t DWORD_PTR;
+
+// VOID is Microsoft's all-caps spelling of void. Used in function pointer
+// typedefs and callbacks in upstream headers.
+#ifndef VOID
+#  define VOID void
+#endif
+typedef void* PVOID;
+
+// File-time related. The upstream uses FILETIME as an opaque 64-bit stamp in
+// most places. A struct of two DWORDs keeps binary layout identical to the
+// Windows declaration so sizeof checks do not break.
+typedef struct _FILETIME {
+    DWORD dwLowDateTime;
+    DWORD dwHighDateTime;
+} FILETIME, *PFILETIME, *LPFILETIME;
+
+typedef struct _SYSTEMTIME {
+    WORD wYear;
+    WORD wMonth;
+    WORD wDayOfWeek;
+    WORD wDay;
+    WORD wHour;
+    WORD wMinute;
+    WORD wSecond;
+    WORD wMilliseconds;
+} SYSTEMTIME, *PSYSTEMTIME, *LPSYSTEMTIME;
+
+// Lightweight stand-in for CRITICAL_SECTION. Backed by a pthread mutex so the
+// Enter/Leave helpers in upstream code that the compat shims will eventually
+// provide can delegate here. If upstream ever relies on the exact field
+// layout, this will need revisiting; it does not today.
+typedef struct _CRITICAL_SECTION {
+    pthread_mutex_t _mu;
+    // Padding so sizeof matches something reasonable on 64-bit targets.
+    // Not binary-compatible with Win32 and not meant to be.
+    char _pad[8];
+} CRITICAL_SECTION, *PCRITICAL_SECTION, *LPCRITICAL_SECTION;
 
 // String-ish.
 typedef wchar_t  WCHAR;
