@@ -1,8 +1,12 @@
 # MCLE-iOS
 
+[![iOS build](https://github.com/dtentiion/MCLE-iOS/actions/workflows/ios.yml/badge.svg)](https://github.com/dtentiion/MCLE-iOS/actions/workflows/ios.yml)
+
 Native iOS port of [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) (the TU19 Legacy Console Edition base).
 
 **Status: early work-in-progress. Nothing runs yet.** If you're looking for a playable build, this isn't it. Check back later or follow the roadmap.
+
+The CI does produce a signed-on-install `.ipa` on every push (just an empty app shell at the moment; no game logic). Grab the latest from the [Actions tab](https://github.com/dtentiion/MCLE-iOS/actions).
 
 ## What this is
 

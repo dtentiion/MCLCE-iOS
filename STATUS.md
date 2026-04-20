@@ -4,7 +4,7 @@ Snapshot of where the port actually stands. Kept honest. Updated as things move.
 
 ## Builds?
 
-- Yes: CI builds the iOS app shell (no game code yet) on every push. Unsigned `.ipa` is attached to each workflow run.
+- Yes: CI builds the iOS app shell (no game code yet) on every push. Unsigned `.ipa` is attached to each workflow run. First green build was commit 0fe641e. Artifact size about 15 KB compressed.
 - No: the game itself does not run. What ships right now is an empty shell that shows a black screen with a controller-state readout.
 
 ## What works
