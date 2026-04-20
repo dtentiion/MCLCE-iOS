@@ -12,6 +12,9 @@
 
 set -euo pipefail
 
+# BSD sed on macOS chokes on non-ASCII bytes unless we set an 8-bit locale.
+export LC_ALL=C
+
 ROOT="${1:-third_party/gameswf/GameSwfPort/GameSwf}"
 
 if [[ ! -d "$ROOT" ]]; then
