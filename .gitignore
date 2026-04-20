@@ -1,0 +1,73 @@
+# Build output
+build/
+build-*/
+DerivedData/
+cmake-build-*/
+
+# Xcode
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+
+# iOS packaging
+*.ipa
+*.dSYM.zip
+*.dSYM/
+Payload/
+
+# Provisioning / signing (never commit these)
+*.mobileprovision
+*.p12
+*.p8
+*.cer
+*.certSigningRequest
+ExportOptions.plist
+
+# CocoaPods / SPM (if we ever use them)
+Pods/
+.build/
+Package.resolved
+
+# Object files
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.pdb
+*.exe
+
+# Editor / IDE
+.vscode/
+!.vscode/tasks.example.json
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Game data (copied in at build time, do not commit)
+GameHDD/
+game-assets/
+Common/Media/*.arc
+Common/res/
+
+# Local secrets / user config
+*.local
+.env
+username.txt
+uid.dat
+
+# CI artifact staging
+artifacts/
+dist/
