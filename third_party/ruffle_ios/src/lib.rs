@@ -467,6 +467,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     vp_h: c_int,
     data: *const u8,
     len: usize,
+    base_path_c: *const c_char,
 ) -> *mut PlayerHandle {
     init_tracing_subscriber_once();
     use ruffle_render_wgpu::backend::{WgpuRenderBackend, request_adapter_and_device};
@@ -534,8 +535,19 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     // LocalPool executor we can never drive, so any future Ruffle spawns
     // during preload / AS3 setup never gets polled. Use `with_base_path`
     // instead, which lets us share an executor we can run each tick.
+    //
+    // `base_path_c` is where the SWF's relative fetches resolve (Loader
+    // for sister assets, etc.). iOS passes the Documents directory so
+    // MainMenu1080.swf's sibling SWFs (skinHD.swf, etc.) resolve there.
     let executor = NullExecutor::new();
-    let base_path = std::env::temp_dir();
+    let base_path: std::path::PathBuf = if base_path_c.is_null() {
+        std::env::temp_dir()
+    } else {
+        match std::ffi::CStr::from_ptr(base_path_c).to_str() {
+            Ok(s) => std::path::PathBuf::from(s),
+            Err(_) => std::env::temp_dir(),
+        }
+    };
     let navigator = match NullNavigatorBackend::with_base_path(&base_path, &executor) {
         Ok(nav) => nav,
         Err(e) => {
