@@ -12,49 +12,6 @@
 #include <atomic>
 
 namespace {
-// GameSWF calls this to open a SWF by path. Returns a tu_file which
-// GameSWF owns (it deletes when done). Mirrors the reference
-// implementation shipped in gameswf's own processor/test_ogl.
-tu_file* mcle_swf_file_opener(const char* url) {
-    return new tu_file(url, "rb");
-}
-
-// GameSWF log callback: mirrors to NSLog and keeps the last few lines in
-// a wraparound buffer so we can surface them on the on-device overlay.
-void mcle_swf_log_callback(bool is_error, const char* msg) {
-    if (!msg) msg = "";
-    NSLog(@"[gameswf%s] %s", is_error ? " ERR" : "", msg);
-
-    // Append; if it overflows, shift the oldest lines out.
-    size_t cur = strlen(g_gameswf_log);
-    size_t room = sizeof(g_gameswf_log) - 1 - cur;
-    size_t in = strlen(msg);
-    // Strip trailing newline from each line for the overlay.
-    while (in > 0 && (msg[in - 1] == '\n' || msg[in - 1] == '\r')) in--;
-    if (in + 1 > sizeof(g_gameswf_log) - 1) in = sizeof(g_gameswf_log) - 2;
-    if (in + 1 > room) {
-        // Shift: drop from front until we fit.
-        size_t need = (in + 1) - room;
-        size_t cut = need;
-        // Advance past a newline to keep line-alignment when possible.
-        while (cut < cur && g_gameswf_log[cut] != '\n') cut++;
-        if (cut < cur) cut++;  // include the newline
-        memmove(g_gameswf_log, g_gameswf_log + cut, cur - cut + 1);
-        cur -= cut;
-    }
-    if (cur > 0 && cur < sizeof(g_gameswf_log) - 1) {
-        g_gameswf_log[cur++] = '\n';
-        g_gameswf_log[cur] = '\0';
-    }
-    // Now append up to `in` bytes.
-    size_t copy = in;
-    if (cur + copy >= sizeof(g_gameswf_log)) copy = sizeof(g_gameswf_log) - 1 - cur;
-    memcpy(g_gameswf_log + cur, msg, copy);
-    g_gameswf_log[cur + copy] = '\0';
-}
-} // namespace
-
-namespace {
 std::atomic<bool> g_ready{false};
 gameswf::render_handler* g_rh = nullptr;
 gameswf::player* g_player = nullptr;
@@ -70,6 +27,42 @@ char g_status[256] = "uninit";
 
 // Last N log lines from GameSWF, joined. Size tuned to fit the overlay.
 char g_gameswf_log[512] = "";
+
+// GameSWF calls this to open a SWF by path. Returns a tu_file which
+// GameSWF owns (it deletes when done). Mirrors the reference
+// implementation shipped in gameswf's own processor/test_ogl.
+tu_file* mcle_swf_file_opener(const char* url) {
+    return new tu_file(url, "rb");
+}
+
+// GameSWF log callback: mirrors to NSLog and keeps the last few lines in
+// a wraparound buffer so we can surface them on the on-device overlay.
+void mcle_swf_log_callback(bool is_error, const char* msg) {
+    if (!msg) msg = "";
+    NSLog(@"[gameswf%s] %s", is_error ? " ERR" : "", msg);
+
+    size_t cur = strlen(g_gameswf_log);
+    size_t room = sizeof(g_gameswf_log) - 1 - cur;
+    size_t in = strlen(msg);
+    while (in > 0 && (msg[in - 1] == '\n' || msg[in - 1] == '\r')) in--;
+    if (in + 1 > sizeof(g_gameswf_log) - 1) in = sizeof(g_gameswf_log) - 2;
+    if (in + 1 > room) {
+        size_t need = (in + 1) - room;
+        size_t cut = need;
+        while (cut < cur && g_gameswf_log[cut] != '\n') cut++;
+        if (cut < cur) cut++;
+        memmove(g_gameswf_log, g_gameswf_log + cut, cur - cut + 1);
+        cur -= cut;
+    }
+    if (cur > 0 && cur < sizeof(g_gameswf_log) - 1) {
+        g_gameswf_log[cur++] = '\n';
+        g_gameswf_log[cur] = '\0';
+    }
+    size_t copy = in;
+    if (cur + copy >= sizeof(g_gameswf_log)) copy = sizeof(g_gameswf_log) - 1 - cur;
+    memcpy(g_gameswf_log + cur, msg, copy);
+    g_gameswf_log[cur + copy] = '\0';
+}
 
 void set_status(const char* fmt, ...) {
     va_list ap;
