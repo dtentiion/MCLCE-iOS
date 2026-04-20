@@ -23,10 +23,14 @@
 #  undef TU_USE_OPENAL
 #endif
 
-// Keep jpeg (bundled inside GameSWF already) and zlib (iOS ships libz).
+// Drop jpeg support for the first probe pass. jpeglib/ sources can be folded
+// in later; without them the bundled jpeg.cpp can't find jpeglib.h.
 #ifndef TU_CONFIG_LINK_TO_JPEGLIB
-#  define TU_CONFIG_LINK_TO_JPEGLIB 1
+#  define TU_CONFIG_LINK_TO_JPEGLIB 0
 #endif
+
+// zlib ships with iOS as libz. Will link against it in the final library
+// target when we start handling compressed SWFs.
 #ifndef TU_CONFIG_LINK_TO_ZLIB
 #  define TU_CONFIG_LINK_TO_ZLIB 1
 #endif

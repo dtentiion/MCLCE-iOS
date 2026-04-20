@@ -20,7 +20,8 @@ set(GAMESWF_PROBE_SOURCES
   ${GAMESWF_ROOT}/base/file_util.cpp
   ${GAMESWF_ROOT}/base/image.cpp
   ${GAMESWF_ROOT}/base/image_filters.cpp
-  ${GAMESWF_ROOT}/base/jpeg.cpp
+  # jpeg.cpp needs bundled libjpeg wired in; disabled in this pass.
+  # TODO: enable once jpeglib/ sources are added to the target.
   ${GAMESWF_ROOT}/base/logger.cpp
   ${GAMESWF_ROOT}/base/membuf.cpp
   ${GAMESWF_ROOT}/base/postscript.cpp
