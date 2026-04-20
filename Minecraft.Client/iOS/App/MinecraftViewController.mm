@@ -6,6 +6,7 @@
 #include "RND_iOS_Stub.h"
 #include "INP_iOS_Bridge.h"
 #include "mcle_swf_bridge.h"
+#include "ruffle_ios.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -111,20 +112,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     unsigned long long swfMasks   = mcle_swf_total_masks();
     unsigned long long swfFillBmp = mcle_swf_total_fill_bitmaps();
 
-    const char* gsLogC = mcle_swf_gameswf_log();
-    NSString* gsLog = gsLogC ? [NSString stringWithUTF8String:gsLogC] : @"";
+    int rustMagic = ruffle_ios_magic();
 
     NSString* swfLine = [NSString stringWithFormat:
-        @"SWF: ready=%d movie=%d frames=%llu\n"
-        @"     strips=%llu tris=%llu\n"
-        @"     bitmaps=%llu lines=%llu masks=%llu fill_bmp=%llu\n"
-        @"     %@\n"
-        @"--- gameswf log ---\n%@",
-        swfReady, swfHas, swfFrames,
-        swfStrips, swfTris,
-        swfBitmaps, swfLines, swfMasks, swfFillBmp,
-        swfStatus,
-        gsLog];
+        @"Ruffle (Rust) magic: 0x%08X (want 0x52554646)\n"
+        @"GameSWF: ready=%d movie=%d frames=%llu strips=%llu tris=%llu\n"
+        @"         %@",
+        rustMagic,
+        swfReady, swfHas, swfFrames, swfStrips, swfTris,
+        swfStatus];
+    // Keep unused-counter locals warning-free.
+    (void)swfBitmaps; (void)swfLines; (void)swfMasks; (void)swfFillBmp;
 
     mcle_ios_pad_state pad;
     if (mcle_ios_input_poll(0, &pad)) {
