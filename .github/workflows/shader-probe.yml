@@ -35,11 +35,11 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Install dxc and spirv-cross
+      - name: Install glslang and spirv-cross
         run: |
           brew update-reset
-          brew install dxc spirv-cross
-          dxc --version || true
+          brew install glslang spirv-cross
+          glslangValidator --version | head -3 || true
           spirv-cross --version || true
 
       - name: Select Xcode
