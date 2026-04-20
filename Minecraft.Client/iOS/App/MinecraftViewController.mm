@@ -118,13 +118,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern int g_ruffle_player_ok;
     extern int g_ruffle_framerate_mHz;
 
+    int wgpuProbe = ruffle_ios_wgpu_probe();
+
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle magic: 0x%08X  render_probe=%d\n"
+        @"wgpu on Metal: %s (%d)\n"
         @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
         @"Ruffle Player: %s  declared_fps=%.3f\n"
         @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
         @"  %@",
         rustMagic, renderProbe,
+        (wgpuProbe == 1 ? "OK" :
+         wgpuProbe == -1 ? "no adapter" :
+         wgpuProbe == -2 ? "no device" : "??"),
+        wgpuProbe,
         g_ruffle_swf_version,
         (g_ruffle_player_ok == 1 ? "INSTANTIATED" :
          g_ruffle_player_ok == 0 ? "FAILED" : "not probed"),
