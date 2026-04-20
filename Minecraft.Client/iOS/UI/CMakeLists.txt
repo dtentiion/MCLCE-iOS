@@ -34,6 +34,7 @@ set(GAMESWF_BASE_SOURCES
   ${GAMESWF_ROOT}/base/tu_types.cpp
   ${GAMESWF_ROOT}/base/utf8.cpp
   ${GAMESWF_ROOT}/base/utility.cpp
+  ${GAMESWF_ROOT}/base/zlib_adapter.cpp
 )
 
 # Player layer. Skip desktop-OpenGL / Xbox / SDL / OpenAL handlers and the
