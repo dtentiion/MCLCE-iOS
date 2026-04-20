@@ -11,15 +11,16 @@ Snapshot of where the port actually stands. Kept honest. Updated as things move.
 
 - Bundle layout, launch, orientation locking (landscape only).
 - GameController.framework bridge, mapped to the 4J / Xbox 360 button bitmask. Connect an Xbox or PlayStation controller and the status label shows live input.
-- Per-frame display link ticking the placeholder renderer.
+- Per-frame display link driving the Metal renderer. RGB test triangle draws on device.
 - NSFileManager-backed paths for `GameHDD`, application support, documents, and bundle resources. Nothing writes to them yet.
 - CMake build with Xcode as generator. Presets for device (arm64), simulator (arm64), and simulator (x86_64).
 - **Shader translation pipeline.** All four real 4JLibs HLSL shaders round-trip HLSL → SPIR-V → MSL → `.metallib` in CI. See the `Shader probe` workflow. Means Phase 2 does not need manual shader rewriting.
 - **Iggy-to-SWF converter script.** `scripts/iggy-to-swf.sh` drives JPEXS to turn `.iggy` files into standard `.swf` that GameSWF can consume. Build-time only, not in CI (game assets are not shipped here).
+- **GameSWF runtime linked into the main app.** Full SWF player compiled in (base + player + 30 AS3 builtin classes, ~96 TUs). `AppDelegate` calls `mcle_swf_init()` on launch, which builds our Metal `render_handler`, installs it via `gameswf::set_render_handler`, and allocates a `gameswf::player`. libz linked for SWF decompression. All in the `.ipa` you download from the Actions tab.
 
 ## What does not work
 
-- Rendering: no real renderer. `mcle_render_frame` is a no-op.
+- Real GameSWF drawing: render_handler methods are still stubs, so even if a SWF is loaded nothing visible comes out yet.
 - UI: Iggy is stubbed. Menus, HUD, inventory, chat will not draw.
 - Audio: nothing wired yet.
 - Networking: nothing wired yet. LAN discovery and multiplayer will need their own port pass.
