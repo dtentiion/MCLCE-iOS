@@ -1,0 +1,51 @@
+# Normalize line endings. Repo stores LF, platforms decide on checkout.
+* text=auto
+
+# Explicit text files
+*.md        text eol=lf
+*.txt       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.sh        text eol=lf
+*.cmake     text eol=lf
+CMakeLists.txt text eol=lf
+
+# C / C++
+*.c         text eol=lf
+*.h         text eol=lf
+*.cpp       text eol=lf
+*.hpp       text eol=lf
+*.cc        text eol=lf
+*.cxx       text eol=lf
+*.m         text eol=lf
+*.mm        text eol=lf
+
+# Swift / Apple
+*.swift     text eol=lf
+*.plist     text eol=lf
+*.entitlements text eol=lf
+
+# Shader sources
+*.metal     text eol=lf
+*.glsl      text eol=lf
+*.hlsl      text eol=lf
+
+# Windows batch needs CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Treat as binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.webp      binary
+*.ipa       binary
+*.a         binary
+*.lib       binary
+*.dylib     binary
+*.so        binary
+*.swf       binary
+*.iggy      binary
+*.arc       binary
