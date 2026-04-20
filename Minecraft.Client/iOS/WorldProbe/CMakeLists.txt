@@ -23,6 +23,7 @@ target_include_directories(mcle_world_probe PRIVATE
   ${UPSTREAM_DIR}/Minecraft.World/x64headers
   ${UPSTREAM_DIR}/include
   ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS
+  ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/compat_headers
 )
 
 # Drop the Win32 compat shim into every translation unit via force-include so
