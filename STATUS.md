@@ -26,22 +26,31 @@ Snapshot of where the port actually stands. Kept honest. Updated as things move.
 - Save system: paths exist; actual serialization needs upstream Common code to compile against iOS.
 - Most of upstream's `Minecraft.Client/Common` and all of `Minecraft.World` are not yet in the build graph.
 
-## GameSWF probe: base/ compiles clean
+## GameSWF probe: full player compiles clean
 
-Running `-DENABLE_GAMESWF_PROBE=ON` (manual workflow "Port probes") now builds green for iOS ARM64 on all 21 portable sources in `third_party/gameswf/GameSwfPort/GameSwf/base/`. That's container, triangulation, image filtering, file I/O, GC, timers, random, types, utf8, config vars, and more.
+Running `-DENABLE_GAMESWF_PROBE=ON` (manual workflow "Port probes") builds green for iOS ARM64 on the complete SWF player. Scope:
 
-Walls cleared by `scripts/patch-gameswf.sh`:
-- `fmax` / `fmin` in `utility.h` collided with libc++'s same-named functions; renamed to `gs_fmax` / `gs_fmin` across the whole submodule.
-- `compiler_assert(x)` expanded to a `switch` with duplicate `case 0` labels that newer clang parses eagerly inside template bodies. Replaced with a no-op.
+- All 21 portable sources in `base/` (containers, triangulation, image manipulation, GC, timers, utf8, config, etc.)
+- All ~45 portable sources in `gameswf/` (player, SWF stream parser, shape rendering, AVM1 / AVM2 virtual machines, ActionScript, sprite, button, font, fontlib, tesselation, text, character, canvas, filters, morph, all AS3 builtin classes, etc.)
 
-Deliberately excluded from this pass:
-- `base/jpeg.cpp`: wants `jpeglib.h`; the bundled `jpeglib/` sources aren't in the build yet.
-- `base/png_helper.cpp`: needs libpng. Disabled via `TU_CONFIG_LINK_TO_LIBPNG=0`.
-- `base/ogl.cpp`, `base/test_ogl.cpp`, `base/Stackwalker.cpp`, `base/tu_file_SDL.cpp`: platform-specific to desktop OpenGL / Windows / SDL.
+Excluded from the probe (not portable as-is, not needed yet):
+- Renderer handlers for D3D / OGL / OGL ES / Intel Wireless GL / Xbox. We write our own Metal render_handler.
+- Sound handlers for SDL / OpenAL. We wire AVFoundation later.
+- `gameswf_freetype.cpp` and `gameswf_test_ogl.cpp`. FreeType comes with the font pass, test_ogl is demo code.
+- `base/jpeg.cpp` (pending jpeglib wiring) and `base/png_helper.cpp` (pending libpng).
 
-Next, one at a time:
-- Add `jpeglib/` bundled sources to the target, flip `TU_CONFIG_LINK_TO_JPEGLIB=1`.
-- Start adding `gameswf/` player sources. Expect to shim `render_handler`, `sound_handler`, and font support as empty stubs.
+Walls cleared, all automated by `scripts/patch-gameswf.sh`:
+1. `fmax` / `fmin` rename to `gs_fmax` / `gs_fmin` (libc++ collision).
+2. `compiler_assert(x)` macro neutralized (newer clang trips on its `switch` duplicate-case trick inside template bodies).
+3. `vm_stack : private array<as_value>` flipped to `public` so derived classes can name `array<T>` unqualified, which the original code assumed.
+4. `compatibility_include.h` rewritten with guarded `#define`s so our iOS config overrides rather than gets overridden by the Marmalade defaults.
+5. `__DATE__` / `__TIME__` adjacency to string literals space-separated so the C++11 UDL parser does not treat them as suffixes.
+
+Not-yet-handled in the probe (next walls to tackle):
+- Pull in the bundled `jpeglib/` sources, flip `TU_CONFIG_LINK_TO_JPEGLIB=1`.
+- Write a Metal-backed `render_handler` under `Minecraft.Client/iOS/UI/` and link it into the probe (will give us our first SWF-driven frame on screen).
+- Load a test `.swf` from the app bundle and drive the player.
+- FreeType for font rendering (can defer; many SWFs embed their own).
 
 ## World probe: current wall
 
