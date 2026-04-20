@@ -1,4 +1,4 @@
-# Minimal iOS toolchain file for MCLE-iOS.
+# Minimal iOS toolchain file for MCLCE-iOS.
 #
 # Configure once from the command line with:
 #   cmake -B build-ios -G Xcode \

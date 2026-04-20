@@ -7,7 +7,7 @@
 # Requires the GitHub CLI (`gh`) and an authenticated session (`gh auth login`).
 
 param(
-    [string] $Repo   = "dtentiion/MCLE-iOS",
+    [string] $Repo   = "dtentiion/MCLCE-iOS",
     [string] $Branch = "main",
     [string] $Out    = "Minecraft.LCE.ipa"
 )
