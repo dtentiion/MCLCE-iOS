@@ -1,0 +1,79 @@
+name: iOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (arm64, unsigned)
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
+          xcodebuild -version
+          cmake --version
+
+      - name: Configure (iOS device)
+        run: |
+          cmake -S . -B build \
+            -G Xcode \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/ios.toolchain.cmake" \
+            -DPLATFORM=OS64 \
+            -DDEPLOYMENT_TARGET=14.0
+
+      - name: Build (Release)
+        run: |
+          cmake --build build --config Release -- -quiet
+
+      - name: Package .ipa
+        id: package
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Minecraft.Client/iOS/App/Release-iphoneos/Minecraft.LCE.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "App bundle not found at $APP_PATH"
+            find build -name '*.app' -type d
+            exit 1
+          fi
+
+          STAGE="$PWD/artifacts"
+          mkdir -p "$STAGE/Payload"
+          cp -R "$APP_PATH" "$STAGE/Payload/"
+          ( cd "$STAGE" && zip -qr "Minecraft.LCE.ipa" Payload )
+
+          ls -la "$STAGE"
+          echo "ipa_path=$STAGE/Minecraft.LCE.ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minecraft.LCE-ipa
+          path: artifacts/Minecraft.LCE.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload .app bundle (debug, unzipped)
+        if: failure() || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minecraft.LCE-app-bundle
+          path: build/Minecraft.Client/iOS/App/Release-iphoneos/Minecraft.LCE.app
+          if-no-files-found: warn
+          retention-days: 7
