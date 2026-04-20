@@ -18,6 +18,18 @@
     // mcle_swf_init tells us what happened.
     if (mcle_swf_init() != 0) {
         NSLog(@"[AppDelegate] mcle_swf_init reported failure; continuing");
+    } else {
+        // Load the bundled test SWF so the render_handler path is driven
+        // by a real movie rather than our synthetic rect.
+        NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"start"
+                                                            ofType:@"swf"];
+        if (swfPath.length) {
+            if (mcle_swf_load([swfPath UTF8String]) != 0) {
+                NSLog(@"[AppDelegate] failed to load %@", swfPath);
+            }
+        } else {
+            NSLog(@"[AppDelegate] start.swf not found in bundle");
+        }
     }
 
     self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];

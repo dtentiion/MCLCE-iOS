@@ -14,6 +14,9 @@ set(APP_SOURCES
 
 set(APP_RESOURCES
   ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/Resources/LaunchScreen.storyboard
+  # GameSWF's own test movie, checked into its public-domain repo. Used as a
+  # smoke test for the Metal render_handler until we bundle LCE assets.
+  ${CMAKE_SOURCE_DIR}/third_party/gameswf/GameSwfPort/data/start.swf
 )
 
 add_executable(Minecraft.LCE MACOSX_BUNDLE
