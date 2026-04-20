@@ -26,6 +26,11 @@ int  mcle_swf_is_ready(void);
 // / _end bracket.
 void mcle_swf_tick(float dt);
 
+// Same as mcle_swf_tick, but passes the current drawable size so the player
+// can set its display viewport. Without a non-zero viewport the root clips
+// everything and nothing visible is drawn.
+void mcle_swf_tick_with_viewport(float dt, int vp_w, int vp_h);
+
 // Attempt to load a SWF from `path` (bundle-relative or absolute) and set
 // it as the active root movie. Returns 0 on success, non-zero on failure.
 int  mcle_swf_load(const char* path);

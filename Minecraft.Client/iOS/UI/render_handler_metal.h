@@ -7,3 +7,15 @@
 namespace gameswf { struct render_handler; }
 
 gameswf::render_handler* create_render_handler_metal();
+
+// Diagnostics: totals of draws issued across the full program lifetime.
+// Both monotonic. Read from C to show on the status overlay.
+#ifdef __cplusplus
+extern "C" {
+#endif
+unsigned long long mcle_swf_total_mesh_strips(void);
+unsigned long long mcle_swf_total_triangles(void);
+unsigned long long mcle_swf_total_frames(void);
+#ifdef __cplusplus
+}
+#endif

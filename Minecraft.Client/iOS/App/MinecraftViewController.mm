@@ -95,26 +95,34 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
     NSString* swfStatus = swfStatusC ? [NSString stringWithUTF8String:swfStatusC] : @"";
     int swfReady = mcle_swf_is_ready();
     int swfHas = mcle_swf_has_movie();
+    unsigned long long swfFrames = mcle_swf_total_frames();
+    unsigned long long swfStrips = mcle_swf_total_mesh_strips();
+    unsigned long long swfTris   = mcle_swf_total_triangles();
+
+    NSString* swfLine = [NSString stringWithFormat:
+        @"SWF: ready=%d movie=%d frames=%llu strips=%llu tris=%llu\n"
+        @"     %@",
+        swfReady, swfHas, swfFrames, swfStrips, swfTris, swfStatus];
 
     mcle_ios_pad_state pad;
     if (mcle_ios_input_poll(0, &pad)) {
         self.statusLabel.text = [NSString stringWithFormat:
             @"Minecraft: Legacy Console Edition (iOS)\n\n"
-            @"SWF: ready=%d movie=%d  %@\n\n"
+            @"%@\n\n"
             @"Controller connected.\n"
             @"buttons: 0x%08X\n"
             @"L stick: %+.2f, %+.2f\n"
             @"R stick: %+.2f, %+.2f\n"
             @"triggers: L=%.2f R=%.2f",
-            swfReady, swfHas, swfStatus,
+            swfLine,
             pad.buttons, pad.lx, pad.ly, pad.rx, pad.ry, pad.lt, pad.rt];
     } else {
         self.statusLabel.text = [NSString stringWithFormat:
             @"Minecraft: Legacy Console Edition (iOS)\n\n"
             @"Early scaffold build. Renderer: Metal.\n"
-            @"SWF: ready=%d movie=%d  %@\n"
+            @"%@\n"
             @"Connect a controller to see input events.\n",
-            swfReady, swfHas, swfStatus];
+            swfLine];
     }
 }
 
