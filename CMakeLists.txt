@@ -68,5 +68,10 @@ if(ENABLE_WORLD_PROBE)
   add_subdirectory(Minecraft.Client/iOS/WorldProbe)
 endif()
 
+option(ENABLE_GAMESWF_PROBE "Try to compile GameSWF core sources for iOS" OFF)
+if(ENABLE_GAMESWF_PROBE)
+  add_subdirectory(Minecraft.Client/iOS/GameswfProbe)
+endif()
+
 # App target (Objective-C++ shell + game bootstrap).
 add_subdirectory(Minecraft.Client/iOS/App)
