@@ -84,6 +84,12 @@ uint64_t      ruffle_ios_tick_count(void);
 void          ruffle_ios_player_diag(uint64_t* out_counters, size_t len,
                                      int* is_playing);
 
+// Frame-transition diag: the last cur_frame samples taken around
+// Player::tick and Player::run_frame, plus the number of ticks where the
+// root clip's frame actually changed. Any pointer may be NULL.
+void          ruffle_ios_player_frame_diag(int* cf_pre, int* cf_mid,
+                                           int* cf_post, uint64_t* frame_advances);
+
 #ifdef __cplusplus
 }
 #endif

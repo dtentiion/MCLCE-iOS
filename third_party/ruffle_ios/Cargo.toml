@@ -38,5 +38,8 @@ raw-window-handle   = "0.6"
 pollster            = "0.4"
 # Subscriber that forwards Ruffle's internal tracing (stubs hit, tag
 # warnings, invalid SWF bits, etc.) into our AVM_LOG ring buffer.
-tracing             = "0.1"
+# `max_level_trace` + `release_max_level_trace` defeat tracing's compile-time
+# level gate in release builds, which otherwise strips everything under INFO
+# and hides all the AVM2 / player debug events we care about.
+tracing             = { version = "0.1", features = ["max_level_trace", "release_max_level_trace"] }
 tracing-subscriber  = { version = "0.3", default-features = false, features = ["std", "fmt", "env-filter"] }
