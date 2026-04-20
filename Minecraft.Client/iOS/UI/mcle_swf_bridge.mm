@@ -6,6 +6,7 @@
 #include "gameswf/gameswf.h"
 #include "gameswf/gameswf_player.h"
 #include "gameswf/gameswf_root.h"
+#include "gameswf/gameswf_movie_def.h"
 #include "base/tu_file.h"
 
 #include <atomic>
@@ -176,7 +177,15 @@ extern "C" int mcle_swf_load(const char* path) {
             return 2;
         }
         g_player->set_root(g_root.get_ptr());
-        set_status("movie loaded, has_root=%d", g_player->get_root() ? 1 : 0);
+        gameswf::movie_definition* def = g_root->get_movie_definition();
+        if (def) {
+            set_status("loaded v%d %.0fx%.0f frames=%d fps=%.1f",
+                def->get_version(),
+                def->get_width_pixels(), def->get_height_pixels(),
+                def->get_frame_count(), def->get_frame_rate());
+        } else {
+            set_status("loaded but movie_def is null");
+        }
         NSLog(@"[mcle_swf] %s", g_status);
     }
     return 0;
