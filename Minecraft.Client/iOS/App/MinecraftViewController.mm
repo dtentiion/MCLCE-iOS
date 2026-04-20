@@ -8,6 +8,9 @@
 #include "mcle_swf_bridge.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
+extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
+extern "C" unsigned long long mcle_swf_total_triangles(void);
+extern "C" unsigned long long mcle_swf_total_frames(void);
 
 @interface MinecraftViewController ()
 @property (strong, nonatomic) CADisplayLink* displayLink;
