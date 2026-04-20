@@ -19,10 +19,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
+#include <atomic>
 
 extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);
 
 namespace {
+
+std::atomic<unsigned long long> g_total_strips{0};
+std::atomic<unsigned long long> g_total_tris{0};
+std::atomic<unsigned long long> g_total_frames{0};
 
 NSString* const kSolidColorShader = @R"(
     #include <metal_stdlib>
@@ -259,6 +264,11 @@ struct metal_render_handler : public gameswf::render_handler {
         triangles_this_frame = 0;
     }
     void end_display() override {
+        g_total_frames.fetch_add(1, std::memory_order_relaxed);
+        g_total_strips.fetch_add((unsigned long long)mesh_strips_this_frame,
+                                 std::memory_order_relaxed);
+        g_total_tris.fetch_add((unsigned long long)triangles_this_frame,
+                               std::memory_order_relaxed);
         using namespace std::chrono;
         static steady_clock::time_point last;
         auto now = steady_clock::now();
@@ -346,4 +356,14 @@ struct metal_render_handler : public gameswf::render_handler {
 
 gameswf::render_handler* create_render_handler_metal() {
     return new metal_render_handler();
+}
+
+extern "C" unsigned long long mcle_swf_total_mesh_strips(void) {
+    return g_total_strips.load(std::memory_order_relaxed);
+}
+extern "C" unsigned long long mcle_swf_total_triangles(void) {
+    return g_total_tris.load(std::memory_order_relaxed);
+}
+extern "C" unsigned long long mcle_swf_total_frames(void) {
+    return g_total_frames.load(std::memory_order_relaxed);
 }

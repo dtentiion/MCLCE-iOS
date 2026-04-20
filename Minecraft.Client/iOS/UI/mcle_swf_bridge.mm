@@ -95,12 +95,19 @@ extern "C" int mcle_swf_has_movie(void) {
     return g_player->get_root() ? 1 : 0;
 }
 
-extern "C" void mcle_swf_tick(float dt) {
+extern "C" void mcle_swf_tick_with_viewport(float dt, int vp_w, int vp_h) {
     if (!g_ready.load(std::memory_order_acquire) || !g_player) return;
     gameswf::root* r = g_player->get_root();
     if (!r) return;  // no movie loaded yet; nothing to do
+    if (vp_w > 0 && vp_h > 0) {
+        r->set_display_viewport(0, 0, vp_w, vp_h);
+    }
     r->advance(dt);
     r->display();
+}
+
+extern "C" void mcle_swf_tick(float dt) {
+    mcle_swf_tick_with_viewport(dt, 0, 0);
 }
 
 extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h) {

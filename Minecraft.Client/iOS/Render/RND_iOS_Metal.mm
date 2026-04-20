@@ -15,6 +15,7 @@
 // Forward-declared (defined in mcle_ios_ui). Avoids a circular include
 // between the Render library and the UI library.
 extern "C" void mcle_swf_tick(float dt);
+extern "C" void mcle_swf_tick_with_viewport(float dt, int vp_w, int vp_h);
 extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h);
 extern "C" int  mcle_swf_is_ready(void);
 extern "C" int  mcle_swf_has_movie(void);
@@ -110,13 +111,13 @@ extern "C" void mcle_render_frame(void) {
     }
 
     // GameSWF drawing happens here. If no movie is loaded, it is a no-op.
-    mcle_swf_tick(1.0f / 60.0f);
+    int vw = 0, vh = 0;
+    mcle_metal_current_size(&vw, &vh);
+    mcle_swf_tick_with_viewport(1.0f / 60.0f, vw, vh);
 
     // Synthetic test rect only when no movie is loaded, so a real SWF
     // does not get painted over.
     if (mcle_swf_is_ready() && !mcle_swf_has_movie()) {
-        int vw = 0, vh = 0;
-        mcle_metal_current_size(&vw, &vh);
         mcle_swf_draw_test_rect(vw, vh);
     }
 
