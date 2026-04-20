@@ -26,6 +26,7 @@ use ruffle_core::{Player, PlayerBuilder};
 // invocation into this global ring buffer and expose it to the iOS app.
 
 static EXTINT_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub struct LoggingExternalInterface;
 
@@ -102,11 +103,18 @@ fn init_tracing_subscriber_once() {
         fn make_writer(&'a self) -> Self::Writer { RingBufferWriter }
     }
     ONCE.get_or_init(|| {
+        use tracing_subscriber::EnvFilter;
+        // Default: ruffle modules at debug, everything else at warn so we
+        // don't drown in tracing from wgpu/naga.
+        let filter = EnvFilter::try_new(
+            "warn,ruffle_core=debug,ruffle_render=debug,ruffle_render_wgpu=debug,ruffle_common=debug"
+        ).unwrap_or_else(|_| EnvFilter::new("info"));
         let _ = fmt()
             .with_writer(Maker)
             .with_ansi(false)
             .with_target(true)
             .with_level(true)
+            .with_env_filter(filter)
             .try_init();
     });
 }
@@ -524,12 +532,21 @@ pub unsafe extern "C" fn ruffle_ios_player_destroy(raw: *mut PlayerHandle) {
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_seconds: f32) {
     let Some(handle) = borrow_handle(raw) else { return; };
+    TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if let Ok(mut p) = handle.player.lock() {
         use ruffle_common::duration::FloatDuration;
         let dt = FloatDuration::from_secs(dt_seconds as f64);
         p.tick(dt);
+        // Kick the frame logic hard, in case tick's dt accumulator hasn't
+        // crossed the frame-time threshold yet.
+        p.run_frame();
         p.render();
     }
+}
+
+#[no_mangle]
+pub extern "C" fn ruffle_ios_tick_count() -> u64 {
+    TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Diagnostic: return the player's current SWF frame rate (times 1000 so we

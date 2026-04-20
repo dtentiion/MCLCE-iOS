@@ -73,6 +73,9 @@ int           ruffle_ios_player_current_frame(PlayerHandle* h);
 int           ruffle_ios_player_movie_width(PlayerHandle* h);
 int           ruffle_ios_player_movie_height(PlayerHandle* h);
 
+// Monotonic count of how many times ruffle_ios_player_tick was called.
+uint64_t      ruffle_ios_tick_count(void);
+
 #ifdef __cplusplus
 }
 #endif
