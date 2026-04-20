@@ -34,6 +34,8 @@ target_link_libraries(Minecraft.LCE PRIVATE
   "-framework Foundation"
   "-framework CoreGraphics"
   "-framework QuartzCore"
+  # GameSWF reads compressed SWF headers via zlib. iOS ships libz.
+  "-lz"
 )
 
 set_source_files_properties(${APP_RESOURCES} PROPERTIES
