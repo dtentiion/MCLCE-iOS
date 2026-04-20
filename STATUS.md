@@ -26,6 +26,23 @@ Snapshot of where the port actually stands. Kept honest. Updated as things move.
 - Save system: paths exist; actual serialization needs upstream Common code to compile against iOS.
 - Most of upstream's `Minecraft.Client/Common` and all of `Minecraft.World` are not yet in the build graph.
 
+## GameSWF probe: base/ compiles clean
+
+Running `-DENABLE_GAMESWF_PROBE=ON` (manual workflow "Port probes") now builds green for iOS ARM64 on all 21 portable sources in `third_party/gameswf/GameSwfPort/GameSwf/base/`. That's container, triangulation, image filtering, file I/O, GC, timers, random, types, utf8, config vars, and more.
+
+Walls cleared by `scripts/patch-gameswf.sh`:
+- `fmax` / `fmin` in `utility.h` collided with libc++'s same-named functions; renamed to `gs_fmax` / `gs_fmin` across the whole submodule.
+- `compiler_assert(x)` expanded to a `switch` with duplicate `case 0` labels that newer clang parses eagerly inside template bodies. Replaced with a no-op.
+
+Deliberately excluded from this pass:
+- `base/jpeg.cpp`: wants `jpeglib.h`; the bundled `jpeglib/` sources aren't in the build yet.
+- `base/png_helper.cpp`: needs libpng. Disabled via `TU_CONFIG_LINK_TO_LIBPNG=0`.
+- `base/ogl.cpp`, `base/test_ogl.cpp`, `base/Stackwalker.cpp`, `base/tu_file_SDL.cpp`: platform-specific to desktop OpenGL / Windows / SDL.
+
+Next, one at a time:
+- Add `jpeglib/` bundled sources to the target, flip `TU_CONFIG_LINK_TO_JPEGLIB=1`.
+- Start adding `gameswf/` player sources. Expect to shim `render_handler`, `sound_handler`, and font support as empty stubs.
+
 ## World probe: current wall
 
 The optional `-DENABLE_WORLD_PROBE=ON` target now attempts to compile `AABB.cpp` and `Vec3.cpp` from upstream. Two walls cleared, one new wall hit.
