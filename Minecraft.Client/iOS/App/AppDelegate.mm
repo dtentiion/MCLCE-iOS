@@ -10,6 +10,7 @@
 int g_ruffle_swf_version = -99;
 int g_ruffle_player_ok = -99;  // 1 = Player instantiated, 0 = failed
 int g_ruffle_framerate_mHz = -99;
+int g_ruffle_surface_probe = -99;  // 1 = wgpu Surface over CAMetalLayer OK
 
 @implementation AppDelegate
 

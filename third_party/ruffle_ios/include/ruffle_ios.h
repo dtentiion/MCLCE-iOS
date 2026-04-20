@@ -38,6 +38,11 @@ int  ruffle_ios_render_probe(void);
 // device.
 int  ruffle_ios_wgpu_probe(void);
 
+// Probe that a wgpu Surface can be created from a CAMetalLayer. Pass the
+// CAMetalLayer* cast to void*. Returns 1 on full success, <0 on failure
+// (see lib.rs for specific codes).
+int  ruffle_ios_surface_probe(void* ca_metal_layer);
+
 // Full player lifecycle backed by ruffle_core.
 typedef struct PlayerHandle PlayerHandle;
 
