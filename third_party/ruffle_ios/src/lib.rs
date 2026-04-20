@@ -1,59 +1,63 @@
 // ruffle_ios: FFI wrapper around Ruffle for the MCLCE-iOS app.
 //
-// Skeleton pass. Exposes three C entry points so the Objective-C++ side can
-// link today. Each is stubbed until we pull the actual Ruffle dep in and
-// implement the RenderBackend against our Metal context.
+// Exposes a compact C ABI so the Objective-C++ app can drive a ruffle_core
+// Player without having to speak Rust. Every function is `extern "C"` with
+// `#[no_mangle]` so the linker finds it by the exact C name.
 //
-// All functions are `extern "C"` and `#[no_mangle]` so the linker finds
-// them by the exact names the iOS app looks up.
+// The rendering path is still the NullRenderer provided by Ruffle; our
+// Metal backend goes in next. All other backends (audio, navigator, etc.)
+// stay at their safe Null defaults for now.
 
 #![allow(clippy::missing_safety_doc)]
 
 use std::os::raw::{c_char, c_int};
+use std::sync::{Arc, Mutex};
 
-/// Initialize the Ruffle runtime. Returns 0 on success, non-zero on error.
+use ruffle_common::tag_utils::SwfMovie;
+use ruffle_core::{Player, PlayerBuilder};
+
+// --- Boxed handle shared across the C boundary -------------------------------
+
+/// Opaque handle type the C side receives from `ruffle_ios_player_create`.
+/// Storing an `Arc<Mutex<Player>>` so Ruffle's internal self-reference
+/// stays valid; the Box is the heap anchor the C pointer points at.
+pub struct PlayerHandle {
+    player: Arc<Mutex<Player>>,
+}
+
+fn to_handle(p: Arc<Mutex<Player>>) -> *mut PlayerHandle {
+    Box::into_raw(Box::new(PlayerHandle { player: p }))
+}
+
+unsafe fn borrow_handle<'a>(raw: *mut PlayerHandle) -> Option<&'a PlayerHandle> {
+    if raw.is_null() { None } else { Some(&*raw) }
+}
+
+// --- Diagnostic probes (kept so older builds keep building) ------------------
+
 #[no_mangle]
 pub extern "C" fn ruffle_ios_init() -> c_int {
-    eprintln!("[ruffle_ios] init (stub)");
+    eprintln!("[ruffle_ios] init");
     0
 }
 
-/// Shut down the runtime.
 #[no_mangle]
 pub extern "C" fn ruffle_ios_shutdown() {}
 
-/// Load a SWF from the given filesystem path. Returns 0 on success.
 #[no_mangle]
-pub unsafe extern "C" fn ruffle_ios_load_swf(path: *const c_char) -> c_int {
-    if path.is_null() {
-        return 1;
-    }
-    // Just demonstrate we can round-trip a C string. Real load happens when
-    // the ruffle dep is wired.
-    let cstr = std::ffi::CStr::from_ptr(path);
-    if let Ok(s) = cstr.to_str() {
-        eprintln!("[ruffle_ios] load_swf (stub): {s}");
-    }
+pub unsafe extern "C" fn ruffle_ios_load_swf(_path: *const c_char) -> c_int {
+    // Old path stub. New callers go through player_create + load_bytes.
     0
 }
 
-/// Advance playback by `dt_seconds` and draw the current frame into the
-/// viewport. A no-op today; the real call wires into Ruffle once added.
 #[no_mangle]
 pub extern "C" fn ruffle_ios_tick(_dt_seconds: f32, _vp_w: c_int, _vp_h: c_int) {}
 
-/// Probe: returns a build-identifying integer so the iOS side can tell the
-/// Rust crate was actually linked in. Handy for on-device diagnostics while
-/// the real runtime is being wired.
 #[no_mangle]
 pub extern "C" fn ruffle_ios_magic() -> c_int {
-    0x5255_4646  // "RUFF"
+    0x5255_4646
 }
 
-/// Force a reference to ruffle's `swf` crate so the linker can't garbage
-/// collect it before we have other code using it. Returns the declared
-/// SWF version from the header struct -- proves the parser crate's types
-/// are reachable from iOS ARM64.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_swf_probe(data: *const u8, len: usize) -> c_int {
     if data.is_null() || len < 8 {
@@ -66,12 +70,93 @@ pub unsafe extern "C" fn ruffle_ios_swf_probe(data: *const u8, len: usize) -> c_
     }
 }
 
-/// Probe the ruffle_render crate by referencing a known type. Returns the
-/// numeric tag of ruffle_render::quality::StageQuality::High, which is
-/// stable across patch versions. Succeeding here proves the render-backend
-/// trait crate compiles cleanly for iOS ARM64 and its symbols are linked.
 #[no_mangle]
 pub extern "C" fn ruffle_ios_render_probe() -> c_int {
     use ruffle_render::quality::StageQuality;
     StageQuality::High as c_int
+}
+
+// --- Real Player API ---------------------------------------------------------
+
+/// Create a Player with default (Null) backends and no movie loaded.
+/// Returns an opaque handle the caller must later pass to
+/// `ruffle_ios_player_destroy`. Returns NULL on failure.
+#[no_mangle]
+pub extern "C" fn ruffle_ios_player_create(vp_w: c_int, vp_h: c_int) -> *mut PlayerHandle {
+    let width = vp_w.max(1) as u32;
+    let height = vp_h.max(1) as u32;
+
+    let player = PlayerBuilder::new()
+        .with_viewport_dimensions(width, height, 1.0)
+        .with_autoplay(true)
+        .build();
+
+    to_handle(player)
+}
+
+/// Create a Player with the given SWF bytes pre-loaded. Preferred path:
+/// PlayerBuilder::with_movie takes care of wiring the movie into the player
+/// during construction, so we don't need a separate load step.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_create_with_swf(
+    vp_w: c_int,
+    vp_h: c_int,
+    data: *const u8,
+    len: usize,
+) -> *mut PlayerHandle {
+    if data.is_null() || len < 8 {
+        return std::ptr::null_mut();
+    }
+    let bytes = std::slice::from_raw_parts(data, len).to_vec();
+    let movie = match SwfMovie::from_data(&bytes, String::from("file://mcle.swf"), None) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[ruffle_ios] SwfMovie::from_data failed: {e:?}");
+            return std::ptr::null_mut();
+        }
+    };
+
+    let width = vp_w.max(1) as u32;
+    let height = vp_h.max(1) as u32;
+    let player = PlayerBuilder::new()
+        .with_movie(movie)
+        .with_viewport_dimensions(width, height, 1.0)
+        .with_autoplay(true)
+        .build();
+
+    to_handle(player)
+}
+
+/// Drop a Player created by `ruffle_ios_player_create`.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_destroy(raw: *mut PlayerHandle) {
+    if raw.is_null() {
+        return;
+    }
+    drop(Box::from_raw(raw));
+}
+
+/// Advance the player by `dt_seconds` and run pending frame logic.
+/// The render happens against the current RenderBackend (NullRenderer for now).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_seconds: f32) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    if let Ok(mut p) = handle.player.lock() {
+        use ruffle_common::duration::FloatDuration;
+        let dt = FloatDuration::from_seconds(dt_seconds as f64);
+        p.tick(dt);
+        p.render();
+    }
+}
+
+/// Diagnostic: return the player's current SWF frame rate (times 1000 so we
+/// can fit it in an int without losing precision on typical values).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_framerate_mHz(raw: *mut PlayerHandle) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return -1; };
+    if let Ok(p) = handle.player.lock() {
+        (p.frame_rate() * 1000.0) as c_int
+    } else {
+        -2
+    }
 }

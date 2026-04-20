@@ -33,6 +33,18 @@ int  ruffle_ios_swf_probe(const uint8_t* data, size_t len);
 // StageQuality::High (stable). Any positive value means the crate is in.
 int  ruffle_ios_render_probe(void);
 
+// Full player lifecycle backed by ruffle_core.
+typedef struct PlayerHandle PlayerHandle;
+
+PlayerHandle* ruffle_ios_player_create(int vp_w, int vp_h);
+PlayerHandle* ruffle_ios_player_create_with_swf(int vp_w, int vp_h,
+                                                const uint8_t* data, size_t len);
+void          ruffle_ios_player_destroy(PlayerHandle* h);
+void          ruffle_ios_player_tick(PlayerHandle* h, float dt_seconds);
+
+// Diagnostics.
+int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
+
 #ifdef __cplusplus
 }
 #endif
