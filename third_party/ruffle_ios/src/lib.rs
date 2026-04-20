@@ -65,3 +65,13 @@ pub unsafe extern "C" fn ruffle_ios_swf_probe(data: *const u8, len: usize) -> c_
         Err(_) => -2,
     }
 }
+
+/// Probe the ruffle_render crate by referencing a known type. Returns the
+/// numeric tag of ruffle_render::quality::StageQuality::High, which is
+/// stable across patch versions. Succeeding here proves the render-backend
+/// trait crate compiles cleanly for iOS ARM64 and its symbols are linked.
+#[no_mangle]
+pub extern "C" fn ruffle_ios_render_probe() -> c_int {
+    use ruffle_render::quality::StageQuality;
+    StageQuality::High as c_int
+}
