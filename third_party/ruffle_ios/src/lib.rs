@@ -63,6 +63,55 @@ impl FsCommandProvider for LoggingFsCommands {
     }
 }
 
+// AS3 trace() and AVM warnings go through a LogBackend. Capture them into
+// a separate ring buffer so we can see what Ruffle is complaining about
+// while the menu SWF runs.
+static AVM_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub struct CapturingLogBackend;
+
+impl ruffle_core::backend::log::LogBackend for CapturingLogBackend {
+    fn avm_trace(&self, message: &str) {
+        let line = format!("TRACE {message}");
+        if let Ok(mut log) = AVM_LOG.lock() {
+            if log.len() >= 256 { log.remove(0); }
+            log.push(line);
+        }
+    }
+    fn avm_warning(&self, message: &str) {
+        let line = format!("WARN {message}");
+        if let Ok(mut log) = AVM_LOG.lock() {
+            if log.len() >= 256 { log.remove(0); }
+            log.push(line);
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_avm_log(out: *mut u8, cap: usize) -> usize {
+    if out.is_null() || cap == 0 { return 0; }
+    let Ok(log) = AVM_LOG.lock() else { return 0; };
+    let joined = log.join("\n");
+    let bytes = joined.as_bytes();
+    let n = bytes.len().min(cap - 1);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n);
+    *out.add(n) = 0;
+    n
+}
+
+/// Diagnostic: returns the current frame number the player is on, or -1
+/// if no player / no root movie. Tells us if the movie is advancing at all.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_current_frame(raw: *mut PlayerHandle) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return -1; };
+    if let Ok(p) = handle.player.lock() {
+        match p.current_frame() {
+            Some(n) => n as c_int,
+            None => -1,
+        }
+    } else { -2 }
+}
+
 // --- Boxed handle shared across the C boundary -------------------------------
 
 /// Opaque handle type the C side receives from `ruffle_ios_player_create`.
@@ -365,6 +414,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         .with_autoplay(true)
         .with_external_interface(Box::new(LoggingExternalInterface))
         .with_fs_commands(Box::new(LoggingFsCommands))
+        .with_log(CapturingLogBackend)
         .build();
 
     eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);

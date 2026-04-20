@@ -198,18 +198,30 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         ? [[NSString alloc] initWithBytes:extintBuf length:extintLen encoding:NSUTF8StringEncoding]
         : @"<no ExternalInterface calls yet>";
 
+    // Ruffle's AVM trace/warning output - this is usually the more useful
+    // signal about what Ruffle thinks is broken in the SWF.
+    static uint8_t avmBuf[4096];
+    size_t avmLen = ruffle_ios_avm_log(avmBuf, sizeof(avmBuf));
+    NSString* avmLog = avmLen
+        ? [[NSString alloc] initWithBytes:avmBuf length:avmLen encoding:NSUTF8StringEncoding]
+        : @"<no AVM output>";
+
+    int curFrame = g_ruffle_player ? ruffle_ios_player_current_frame(g_ruffle_player) : -99;
+
     NSString* swfLine = [NSString stringWithFormat:
-        @"Ruffle magic: 0x%08X  render_probe=%d\n"
+        @"Ruffle magic: 0x%08X  render_probe=%d  cur_frame=%d\n"
         @"Loaded SWF: %@\n"
         @"--- SWF ExternalInterface calls ---\n%@\n"
+        @"--- Ruffle AVM log (trace/warn) ---\n%@\n"
         @"wgpu on Metal: %s (%d)  surface_on_CAMetalLayer=%d\n"
         @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
         @"Ruffle Player: %s  declared_fps=%.3f\n"
         @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
         @"  %@",
-        rustMagic, renderProbe,
+        rustMagic, renderProbe, curFrame,
         self.loadedSwfName ?: @"<none>",
         extintLog,
+        avmLog,
         (wgpuProbe == 1 ? "OK" :
          wgpuProbe == -1 ? "no adapter" :
          wgpuProbe == -2 ? "no device" : "??"),
