@@ -30,6 +30,15 @@ root = pathlib.Path(sys.argv[1])
 # Rename clashes with libc: fmax / fmin.
 RENAME = re.compile(r"\b(fmax|fmin)\b")
 
+# Flip vm_stack's private inheritance to public. Modern clang enforces the
+# private-inherited-name rule more strictly, and gameswf_environment.h uses
+# unqualified `array<...>` inside classes that indirectly inherit from
+# `array<as_value>` via vm_stack. Making vm_stack publicly inherit keeps the
+# base name accessible to subclasses, which is what the original code
+# already assumed.
+VM_STACK_OLD = "struct vm_stack : private array<as_value>"
+VM_STACK_NEW = "struct vm_stack : public array<as_value>"
+
 # compiler_assert(x) macro is "switch(0){case 0: case x:;}", which clang now
 # rejects as duplicate case when x == 0. The macro is used in generic
 # template bodies as an "unreachable, should specialize" trip, and modern
@@ -59,6 +68,7 @@ for p in root.rglob("*"):
         "#define compiler_assert(x) switch(0){case 0: case x:;}",
         "#define compiler_assert(x) ((void)0)",
     )
+    new = new.replace(VM_STACK_OLD, VM_STACK_NEW)
     if new != src:
         p.write_text(new, encoding="utf-8", errors="surrogateescape")
         changed += 1
