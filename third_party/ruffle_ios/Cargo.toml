@@ -26,3 +26,4 @@ strip = "symbols"
 swf = "0.2"
 ruffle_render = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
 ruffle_core   = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
+ruffle_common = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
