@@ -15,9 +15,12 @@ lto = "thin"
 panic = "abort"
 strip = "symbols"
 
-# Start with ruffle's standalone `swf` parser crate. It's a leaf dep with a
-# small dependency tree, so the first cross-compile pass stays fast while
-# we validate the toolchain end-to-end. Once this compiles clean on iOS
-# ARM64 we grow the tree to pull in ruffle_render_common + the AVM.
+# ruffle_render brings the RenderBackend trait we need to implement for
+# Metal. Starting with this smaller crate first; we add ruffle_core (the
+# full player) once the trait compiles cleanly on iOS.
+#
+# Pulled from upstream master until we know what commits actually build for
+# us; pin a revision in a follow-up once green.
 [dependencies]
 swf = "0.2"
+ruffle_render = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
