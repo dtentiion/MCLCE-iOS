@@ -16,6 +16,14 @@ extern "C" {
 unsigned long long mcle_swf_total_mesh_strips(void);
 unsigned long long mcle_swf_total_triangles(void);
 unsigned long long mcle_swf_total_frames(void);
+
+// Counters for paths we currently stub. If these climb while triangles stay
+// at zero, the bundled SWF relies on features the Metal backend has not
+// implemented yet (bitmaps, lines, masks).
+unsigned long long mcle_swf_total_bitmap_draws(void);
+unsigned long long mcle_swf_total_line_strips(void);
+unsigned long long mcle_swf_total_masks(void);
+unsigned long long mcle_swf_total_fill_bitmaps(void);
 #ifdef __cplusplus
 }
 #endif

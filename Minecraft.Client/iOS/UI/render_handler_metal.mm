@@ -28,6 +28,10 @@ namespace {
 std::atomic<unsigned long long> g_total_strips{0};
 std::atomic<unsigned long long> g_total_tris{0};
 std::atomic<unsigned long long> g_total_frames{0};
+std::atomic<unsigned long long> g_total_bitmap_draws{0};
+std::atomic<unsigned long long> g_total_line_strips{0};
+std::atomic<unsigned long long> g_total_masks{0};
+std::atomic<unsigned long long> g_total_fill_bitmaps{0};
 
 NSString* const kSolidColorShader = @R"(
     #include <metal_stdlib>
@@ -297,6 +301,7 @@ struct metal_render_handler : public gameswf::render_handler {
     }
     void draw_line_strip(const void* coords, int vertex_count) override {
         (void)coords; (void)vertex_count;
+        g_total_line_strips.fetch_add(1, std::memory_order_relaxed);
     }
 
     // ---- Styles -----------------------------------------------------------
@@ -316,6 +321,7 @@ struct metal_render_handler : public gameswf::render_handler {
                            bitmap_wrap_mode wm, bitmap_blend_mode bm) override
     {
         (void)fill_side; (void)bi; (void)m; (void)wm; (void)bm;
+        g_total_fill_bitmaps.fetch_add(1, std::memory_order_relaxed);
         // Fall back to white until we wire a textured pipeline.
         fill_r = fill_g = fill_b = 1.0f;
         fill_a = 1.0f;
@@ -334,6 +340,7 @@ struct metal_render_handler : public gameswf::render_handler {
         gameswf::rgba color) override
     {
         (void)m; (void)bi; (void)coords; (void)uv_coords; (void)color;
+        g_total_bitmap_draws.fetch_add(1, std::memory_order_relaxed);
     }
 
     void set_antialiased(bool enable) override { (void)enable; }
@@ -343,7 +350,9 @@ struct metal_render_handler : public gameswf::render_handler {
         (void)bound; (void)pattern;
         return false;
     }
-    void begin_submit_mask() override {}
+    void begin_submit_mask() override {
+        g_total_masks.fetch_add(1, std::memory_order_relaxed);
+    }
     void end_submit_mask() override {}
     void disable_mask() override {}
 
@@ -366,4 +375,16 @@ extern "C" unsigned long long mcle_swf_total_triangles(void) {
 }
 extern "C" unsigned long long mcle_swf_total_frames(void) {
     return g_total_frames.load(std::memory_order_relaxed);
+}
+extern "C" unsigned long long mcle_swf_total_bitmap_draws(void) {
+    return g_total_bitmap_draws.load(std::memory_order_relaxed);
+}
+extern "C" unsigned long long mcle_swf_total_line_strips(void) {
+    return g_total_line_strips.load(std::memory_order_relaxed);
+}
+extern "C" unsigned long long mcle_swf_total_masks(void) {
+    return g_total_masks.load(std::memory_order_relaxed);
+}
+extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void) {
+    return g_total_fill_bitmaps.load(std::memory_order_relaxed);
 }
