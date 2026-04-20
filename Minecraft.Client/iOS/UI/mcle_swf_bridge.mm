@@ -6,8 +6,18 @@
 #include "gameswf/gameswf.h"
 #include "gameswf/gameswf_player.h"
 #include "gameswf/gameswf_root.h"
+#include "base/tu_file.h"
 
 #include <atomic>
+
+namespace {
+// GameSWF calls this to open a SWF by path. Returns a tu_file which
+// GameSWF owns (it deletes when done). Mirrors the reference
+// implementation shipped in gameswf's own processor/test_ogl.
+tu_file* mcle_swf_file_opener(const char* url) {
+    return new tu_file(url, "rb");
+}
+} // namespace
 
 namespace {
 std::atomic<bool> g_ready{false};
@@ -25,6 +35,9 @@ extern "C" int mcle_swf_init(void) {
             return 1;
         }
         gameswf::set_render_handler(g_rh);
+
+        // File opener: gameswf will not open any SWF without one.
+        gameswf::register_file_opener_callback(mcle_swf_file_opener);
 
         g_player = new gameswf::player();
         if (!g_player) {
@@ -106,11 +119,15 @@ extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h) {
 }
 
 extern "C" int mcle_swf_load(const char* path) {
-    if (!g_player || !path) return 1;
+    if (!g_player || !path) {
+        NSLog(@"[mcle_swf] load: bad state (player=%p path=%s)", g_player, path ?: "<null>");
+        return 1;
+    }
+    NSLog(@"[mcle_swf] load: attempting %s", path);
     @autoreleasepool {
         auto root = g_player->load_file(path);
         if (!root.get_ptr()) {
-            NSLog(@"[mcle_swf] load_file failed: %s", path);
+            NSLog(@"[mcle_swf] load_file returned null: %s", path);
             return 2;
         }
         g_player->set_root(root.get_ptr());
