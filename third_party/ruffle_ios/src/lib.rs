@@ -238,6 +238,90 @@ pub unsafe extern "C" fn ruffle_ios_player_create_with_swf(
     to_handle(player)
 }
 
+/// Full wgpu-backed Player: creates a wgpu Surface over the given
+/// CAMetalLayer, wires a WgpuRenderBackend into PlayerBuilder, and
+/// pre-loads the SWF. Every Player tick after this will draw real Ruffle
+/// output into the layer. Returns NULL on failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
+    layer_ptr: *mut std::ffi::c_void,
+    vp_w: c_int,
+    vp_h: c_int,
+    data: *const u8,
+    len: usize,
+) -> *mut PlayerHandle {
+    use ruffle_render_wgpu::backend::{WgpuRenderBackend, request_adapter_and_device};
+    use ruffle_render_wgpu::descriptors::Descriptors;
+    use ruffle_render_wgpu::target::SwapChainTarget;
+
+    if layer_ptr.is_null() || data.is_null() || len < 8 {
+        return std::ptr::null_mut();
+    }
+
+    let width = vp_w.max(1) as u32;
+    let height = vp_h.max(1) as u32;
+
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::METAL,
+        ..Default::default()
+    });
+
+    let surface = match instance.create_surface_unsafe(
+        wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer_ptr)
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[ruffle_ios] create_surface_unsafe: {e:?}");
+            return std::ptr::null_mut();
+        }
+    };
+
+    let (adapter, device, queue) = match pollster::block_on(
+        request_adapter_and_device(
+            wgpu::Backends::METAL,
+            &instance,
+            Some(&surface),
+            wgpu::PowerPreference::default(),
+        ),
+    ) {
+        Ok(tup) => tup,
+        Err(e) => {
+            eprintln!("[ruffle_ios] request_adapter_and_device: {e:?}");
+            return std::ptr::null_mut();
+        }
+    };
+
+    let descriptors = std::sync::Arc::new(Descriptors::new(instance, adapter, device, queue));
+    let target = SwapChainTarget::new(surface, &descriptors.adapter, (width, height), &descriptors.device);
+
+    let backend = match WgpuRenderBackend::new(descriptors, target) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[ruffle_ios] WgpuRenderBackend::new: {e:?}");
+            return std::ptr::null_mut();
+        }
+    };
+
+    let bytes = std::slice::from_raw_parts(data, len).to_vec();
+    let movie = match SwfMovie::from_data(&bytes, String::from("file://mcle.swf"), None) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[ruffle_ios] SwfMovie::from_data: {e:?}");
+            return std::ptr::null_mut();
+        }
+    };
+
+    let player = PlayerBuilder::new()
+        .with_renderer(backend)
+        .with_movie(movie)
+        .with_viewport_dimensions(width, height, 1.0)
+        .with_autoplay(true)
+        .build();
+
+    eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);
+    to_handle(player)
+}
+
 /// Drop a Player created by `ruffle_ios_player_create`.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_destroy(raw: *mut PlayerHandle) {
