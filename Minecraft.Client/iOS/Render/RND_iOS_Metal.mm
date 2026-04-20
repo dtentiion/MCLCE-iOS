@@ -15,6 +15,8 @@
 // Forward-declared (defined in mcle_ios_ui). Avoids a circular include
 // between the Render library and the UI library.
 extern "C" void mcle_swf_tick(float dt);
+extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h);
+extern "C" int  mcle_swf_is_ready(void);
 
 #include <atomic>
 
@@ -108,6 +110,14 @@ extern "C" void mcle_render_frame(void) {
 
     // GameSWF drawing happens here. If no movie is loaded, it is a no-op.
     mcle_swf_tick(1.0f / 60.0f);
+
+    // Until a real SWF is bundled, drive the render_handler directly with
+    // a synthetic rectangle so the Metal draw path is visibly exercised.
+    if (mcle_swf_is_ready()) {
+        int vw = 0, vh = 0;
+        mcle_metal_current_size(&vw, &vh);
+        mcle_swf_draw_test_rect(vw, vh);
+    }
 
     mcle_metal_frame_end();
 }

@@ -63,6 +63,43 @@ extern "C" void mcle_swf_tick(float dt) {
     r->display();
 }
 
+extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h) {
+    if (!g_rh) return;
+    if (vp_w <= 0 || vp_h <= 0) return;
+
+    gameswf::rgba bg;   bg.m_r = 0;   bg.m_g = 0;   bg.m_b = 0;   bg.m_a = 0;
+    gameswf::rgba fill; fill.m_r = 240; fill.m_g = 100; fill.m_b = 200; fill.m_a = 255;
+
+    // Stage units = pixels for the test. Matrix is identity.
+    g_rh->begin_display(bg, 0, 0, vp_w, vp_h,
+                        0.0f, (float)vp_w, 0.0f, (float)vp_h);
+
+    gameswf::matrix m;
+    m.m_[0][0] = 1; m.m_[0][1] = 0; m.m_[0][2] = 0;
+    m.m_[1][0] = 0; m.m_[1][1] = 1; m.m_[1][2] = 0;
+    g_rh->set_matrix(m);
+    g_rh->fill_style_color(0, fill);
+
+    // Centered rectangle, ~40% of the screen. Triangle strip order:
+    //   0----1
+    //   |  / |
+    //   | /  |
+    //   2----3
+    const int16_t cx = (int16_t)(vp_w / 2);
+    const int16_t cy = (int16_t)(vp_h / 2);
+    const int16_t hw = (int16_t)(vp_w / 5);
+    const int16_t hh = (int16_t)(vp_h / 5);
+    const int16_t verts[] = {
+        (int16_t)(cx - hw), (int16_t)(cy - hh),
+        (int16_t)(cx + hw), (int16_t)(cy - hh),
+        (int16_t)(cx - hw), (int16_t)(cy + hh),
+        (int16_t)(cx + hw), (int16_t)(cy + hh),
+    };
+    g_rh->draw_mesh_strip(verts, 4);
+
+    g_rh->end_display();
+}
+
 extern "C" int mcle_swf_load(const char* path) {
     if (!g_player || !path) return 1;
     @autoreleasepool {
