@@ -113,15 +113,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     unsigned long long swfFillBmp = mcle_swf_total_fill_bitmaps();
 
     int rustMagic = ruffle_ios_magic();
+    extern int g_ruffle_swf_version;
 
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle (Rust) magic: 0x%08X (want 0x52554646)\n"
+        @"Ruffle SWF parser version on test_rect.swf: %d (want 6)\n"
         @"GameSWF: ready=%d movie=%d frames=%llu strips=%llu tris=%llu\n"
         @"         %@",
-        rustMagic,
+        rustMagic, g_ruffle_swf_version,
         swfReady, swfHas, swfFrames, swfStrips, swfTris,
         swfStatus];
-    // Keep unused-counter locals warning-free.
     (void)swfBitmaps; (void)swfLines; (void)swfMasks; (void)swfFillBmp;
 
     mcle_ios_pad_state pad;
