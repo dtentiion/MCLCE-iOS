@@ -24,6 +24,22 @@ Snapshot of where the port actually stands. Kept honest. Updated as things move.
 - Save system: paths exist; actual serialization needs upstream Common code to compile against iOS.
 - Most of upstream's `Minecraft.Client/Common` and all of `Minecraft.World` are not yet in the build graph.
 
+## World probe: current wall
+
+The optional `-DENABLE_WORLD_PROBE=ON` target now attempts to compile `AABB.cpp` and `Vec3.cpp` from upstream. Two walls cleared, one new wall hit.
+
+Cleared so far:
+- `sal.h` (Microsoft Source Annotation Language) shimmed with empty macros.
+- Core Win32 typedefs (`WORD`, `DWORD`, `LPVOID`, `LPCWSTR`, `SIZE_T`, `ULONG_PTR`, `FILETIME`, `CRITICAL_SECTION`, `VOID`, `PBYTE`) mapped in `Minecraft.Client/iOS/iOS_WinCompat.h`.
+
+Blocking the probe right now:
+- `reference to 'byte' is ambiguous`. Upstream `extraX64.h` does `typedef unsigned char byte;` alongside `using namespace std;` somewhere transitive. On C++17+ libc++ this collides with `std::byte`. MSVC suppressed this via `_HAS_STD_BYTE=0`; libc++ has no equivalent switch. Likely fixes, ordered by effort:
+  1. Patch upstream headers to rename the typedef to `u8` or `Byte`, or qualify every use.
+  2. Force the probe TU to `-std=c++14` where `std::byte` does not exist. Brittle; won't work once we pull in C++17-only code.
+  3. Do a small header injection that does `namespace std { using ::byte; }` before C++17 is introduced. Very hacky.
+
+See `world-probe.yml` Actions run artifact for full log.
+
 ## Known issues / questions
 
 - GameSWF vs Ruffle: both are candidates to replace Iggy. GameSWF is C++, easier to embed, but old and unmaintained. Ruffle is in Rust, actively developed, harder to glue to a C++ game. Plan is GameSWF first, Ruffle as a fallback.
