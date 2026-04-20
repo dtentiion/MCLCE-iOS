@@ -29,6 +29,10 @@ int  ruffle_ios_magic(void);
 //   -2 = parse failed (Ruffle rejected the bytes)
 int  ruffle_ios_swf_probe(const uint8_t* data, size_t len);
 
+// Probe that ruffle_render is linked. Returns the enum value for
+// StageQuality::High (stable). Any positive value means the crate is in.
+int  ruffle_ios_render_probe(void);
+
 #ifdef __cplusplus
 }
 #endif
