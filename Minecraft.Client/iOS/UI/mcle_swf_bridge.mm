@@ -5,6 +5,7 @@
 
 #include "gameswf/gameswf.h"
 #include "gameswf/gameswf_player.h"
+#include "gameswf/gameswf_root.h"
 
 #include <atomic>
 
@@ -52,4 +53,26 @@ extern "C" void mcle_swf_shutdown(void) {
 
 extern "C" int mcle_swf_is_ready(void) {
     return g_ready.load(std::memory_order_acquire) ? 1 : 0;
+}
+
+extern "C" void mcle_swf_tick(float dt) {
+    if (!g_ready.load(std::memory_order_acquire) || !g_player) return;
+    gameswf::root* r = g_player->get_root();
+    if (!r) return;  // no movie loaded yet; nothing to do
+    r->advance(dt);
+    r->display();
+}
+
+extern "C" int mcle_swf_load(const char* path) {
+    if (!g_player || !path) return 1;
+    @autoreleasepool {
+        gc_ptr<gameswf::root> root = g_player->load_file(path);
+        if (!root.get_ptr()) {
+            NSLog(@"[mcle_swf] load_file failed: %s", path);
+            return 2;
+        }
+        g_player->set_root(root.get_ptr());
+        NSLog(@"[mcle_swf] loaded movie: %s", path);
+    }
+    return 0;
 }

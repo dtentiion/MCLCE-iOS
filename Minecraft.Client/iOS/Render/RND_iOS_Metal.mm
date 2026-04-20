@@ -12,6 +12,10 @@
 #include "MetalContext.h"
 #include "RND_iOS_Stub.h"
 
+// Forward-declared (defined in mcle_ios_ui). Avoids a circular include
+// between the Render library and the UI library.
+extern "C" void mcle_swf_tick(float dt);
+
 #include <atomic>
 
 extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);
@@ -102,9 +106,8 @@ extern "C" void mcle_render_frame(void) {
         [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
     }
 
-    // GameSWF drawing (if a SWF is loaded) happens here. Its render_handler
-    // issues additional draw commands on the same encoder.
-    // TODO: call mcle_swf_advance_and_display() once wired.
+    // GameSWF drawing happens here. If no movie is loaded, it is a no-op.
+    mcle_swf_tick(1.0f / 60.0f);
 
     mcle_metal_frame_end();
 }
