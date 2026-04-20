@@ -202,8 +202,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         : @"<no ExternalInterface calls yet>";
 
     // Ruffle's AVM trace/warning output - this is usually the more useful
-    // signal about what Ruffle thinks is broken in the SWF.
-    static uint8_t avmBuf[4096];
+    // signal about what Ruffle thinks is broken in the SWF. 16 KB is enough
+    // to see all 256 ring-buffer lines at typical sizes without punishing
+    // the overlay layout; the Rust side returns the TAIL so live errors
+    // stay visible as older noise scrolls off.
+    static uint8_t avmBuf[16384];
     size_t avmLen = ruffle_ios_avm_log(avmBuf, sizeof(avmBuf));
     NSString* avmLog = avmLen
         ? [[NSString alloc] initWithBytes:avmBuf length:avmLen encoding:NSUTF8StringEncoding]

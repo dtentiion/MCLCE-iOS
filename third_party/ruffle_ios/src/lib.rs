@@ -177,8 +177,16 @@ pub unsafe extern "C" fn ruffle_ios_avm_log(out: *mut u8, cap: usize) -> usize {
     let Ok(log) = AVM_LOG.lock() else { return 0; };
     let joined = log.join("\n");
     let bytes = joined.as_bytes();
-    let n = bytes.len().min(cap - 1);
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n);
+    // Prefer the TAIL of the log so live errors don't fall off the bottom
+    // of the overlay when earlier noise fills the buffer.
+    let budget = cap - 1;
+    let (src, n) = if bytes.len() <= budget {
+        (bytes, bytes.len())
+    } else {
+        let start = bytes.len() - budget;
+        (&bytes[start..], budget)
+    };
+    std::ptr::copy_nonoverlapping(src.as_ptr(), out, n);
     *out.add(n) = 0;
     n
 }
