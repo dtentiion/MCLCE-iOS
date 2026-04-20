@@ -49,6 +49,10 @@ typedef struct PlayerHandle PlayerHandle;
 PlayerHandle* ruffle_ios_player_create(int vp_w, int vp_h);
 PlayerHandle* ruffle_ios_player_create_with_swf(int vp_w, int vp_h,
                                                 const uint8_t* data, size_t len);
+// Preferred: wgpu-backed player drawing directly into the CAMetalLayer.
+PlayerHandle* ruffle_ios_player_create_wgpu(void* ca_metal_layer,
+                                            int vp_w, int vp_h,
+                                            const uint8_t* data, size_t len);
 void          ruffle_ios_player_destroy(PlayerHandle* h);
 void          ruffle_ios_player_tick(PlayerHandle* h, float dt_seconds);
 
