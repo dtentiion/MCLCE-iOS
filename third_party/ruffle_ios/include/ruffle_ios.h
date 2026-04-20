@@ -23,6 +23,12 @@ void ruffle_ios_tick(float dt_seconds, int vp_w, int vp_h);
 // iOS app can confirm the Rust library actually linked in.
 int  ruffle_ios_magic(void);
 
+// Quick SWF-parse test using Ruffle's `swf` crate. Returns the declared
+// SWF version on success, or a negative value on failure:
+//   -1 = bad input
+//   -2 = parse failed (Ruffle rejected the bytes)
+int  ruffle_ios_swf_probe(const uint8_t* data, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -5,6 +5,10 @@
 #include "mcle_swf_bridge.h"
 #include "ruffle_ios.h"
 
+// Shared with MinecraftViewController so the overlay can display the
+// probe result. Simple global is fine for this debug-only path.
+int g_ruffle_swf_version = -99;
+
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication*)application
@@ -19,6 +23,21 @@
     NSLog(@"[AppDelegate] ruffle_ios_magic = 0x%08X (expected 0x52554646 'RUFF')",
           rust_magic);
     ruffle_ios_init();
+
+    // Probe-parse the bundled test SWF through Ruffle's parser. Result is
+    // stashed globally and shown on the status overlay.
+    NSString* probePath = [[NSBundle mainBundle] pathForResource:@"test_rect"
+                                                          ofType:@"swf"];
+    extern int g_ruffle_swf_version;
+    g_ruffle_swf_version = -99;
+    if (probePath.length) {
+        NSData* data = [NSData dataWithContentsOfFile:probePath];
+        if (data.length) {
+            g_ruffle_swf_version =
+                ruffle_ios_swf_probe((const uint8_t*)data.bytes, data.length);
+            NSLog(@"[AppDelegate] ruffle_ios_swf_probe -> %d", g_ruffle_swf_version);
+        }
+    }
 
     // Bring up the SWF runtime (render_handler + player). If this fails the
     // app still runs, just without future SWF-driven UI. The log line in
