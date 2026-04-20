@@ -1,0 +1,86 @@
+name: Shader probe
+
+# Validates the HLSL -> SPIR-V -> MSL -> .metallib pipeline on one real shader.
+# Running green here means we can translate the rest of the upstream shaders
+# without rewriting them by hand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/translate-shader.sh"
+      - ".github/workflows/shader-probe.yml"
+      - "third_party/4JLibs/**/shaders/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/translate-shader.sh"
+      - ".github/workflows/shader-probe.yml"
+      - "third_party/4JLibs/**/shaders/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  translate:
+    name: HLSL -> MSL on main_VS
+    runs-on: macos-14
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install dxc and spirv-cross
+        run: |
+          brew update-reset
+          brew install dxc spirv-cross
+          dxc --version || true
+          spirv-cross --version || true
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
+
+      - name: Translate main_VS.hlsl
+        run: |
+          chmod +x scripts/translate-shader.sh
+          ./scripts/translate-shader.sh \
+            third_party/4JLibs/Windows_Libs/Dev/Render/shaders/main_VS.hlsl \
+            vertex main out/shaders
+
+      - name: Translate main_PS.hlsl
+        run: |
+          ./scripts/translate-shader.sh \
+            third_party/4JLibs/Windows_Libs/Dev/Render/shaders/main_PS.hlsl \
+            fragment main out/shaders
+
+      - name: Translate screen_VS.hlsl
+        run: |
+          ./scripts/translate-shader.sh \
+            third_party/4JLibs/Windows_Libs/Dev/Render/shaders/screen_VS.hlsl \
+            vertex main out/shaders
+
+      - name: Translate screen_PS.hlsl
+        run: |
+          ./scripts/translate-shader.sh \
+            third_party/4JLibs/Windows_Libs/Dev/Render/shaders/screen_PS.hlsl \
+            fragment main out/shaders
+
+      - name: Show generated MSL (main_VS)
+        run: |
+          echo "=== out/shaders/main_VS.metal ==="
+          head -80 out/shaders/main_VS.metal || true
+
+      - name: Upload translated shaders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: translated-shaders
+          path: out/shaders/
+          if-no-files-found: warn
+          retention-days: 14

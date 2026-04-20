@@ -7,3 +7,6 @@
 [submodule "third_party/gameswf"]
 	path = third_party/gameswf
 	url = https://github.com/marmalade/gameswf.git
+[submodule "third_party/spirv-cross"]
+	path = third_party/spirv-cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
