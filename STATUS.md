@@ -14,6 +14,8 @@ Snapshot of where the port actually stands. Kept honest. Updated as things move.
 - Per-frame display link ticking the placeholder renderer.
 - NSFileManager-backed paths for `GameHDD`, application support, documents, and bundle resources. Nothing writes to them yet.
 - CMake build with Xcode as generator. Presets for device (arm64), simulator (arm64), and simulator (x86_64).
+- **Shader translation pipeline.** All four real 4JLibs HLSL shaders round-trip HLSL → SPIR-V → MSL → `.metallib` in CI. See the `Shader probe` workflow. Means Phase 2 does not need manual shader rewriting.
+- **Iggy-to-SWF converter script.** `scripts/iggy-to-swf.sh` drives JPEXS to turn `.iggy` files into standard `.swf` that GameSWF can consume. Build-time only, not in CI (game assets are not shipped here).
 
 ## What does not work
 
