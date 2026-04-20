@@ -21,15 +21,15 @@
     } else {
         // Load the bundled test SWF so the render_handler path is driven
         // by a real movie rather than our synthetic rect.
-        NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"start"
+        NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"test_rect"
                                                             ofType:@"swf"];
         if (swfPath.length) {
-            NSLog(@"[AppDelegate] bundle start.swf -> %@", swfPath);
+            NSLog(@"[AppDelegate] bundle test_rect.swf -> %@", swfPath);
             if (mcle_swf_load([swfPath UTF8String]) != 0) {
                 NSLog(@"[AppDelegate] mcle_swf_load returned non-zero");
             }
         } else {
-            NSLog(@"[AppDelegate] start.swf not found in bundle");
+            NSLog(@"[AppDelegate] test_rect.swf not found in bundle");
             // Dump a short listing so we can tell from on-screen logs
             // roughly what IS in the bundle.
             NSString* bundlePath = [[NSBundle mainBundle] bundlePath];
