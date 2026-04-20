@@ -26,6 +26,8 @@ typedef int64_t  INT64;
 typedef uint64_t UINT64;
 
 typedef uint8_t  BYTE;
+typedef uint8_t* PBYTE;
+typedef uint8_t* LPBYTE;
 typedef int8_t   CHAR;
 typedef uint8_t  UCHAR;
 typedef uint16_t WORD;
