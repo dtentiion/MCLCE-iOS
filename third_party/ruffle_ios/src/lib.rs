@@ -471,6 +471,26 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         .with_log(CapturingLogBackend)
         .build();
 
+    // Force full preload synchronously, then explicitly set the run state
+    // to Playing. `with_autoplay(true)` is documented as the trigger for
+    // play, but in practice AVM2 movies sometimes start suspended until
+    // preload completes. Running preload to completion here removes that
+    // ambiguity.
+    {
+        use ruffle_core::limits::ExecutionLimit;
+        let mut p = player.lock().expect("player lock");
+        let mut limit = ExecutionLimit::none();
+        let mut guard = 0;
+        while !p.preload(&mut limit) && guard < 1024 {
+            guard += 1;
+        }
+        p.set_is_playing(true);
+        eprintln!(
+            "[ruffle_ios] preload rounds={} movie={}x{} fps={}",
+            guard, p.movie_width(), p.movie_height(), p.frame_rate()
+        );
+    }
+
     eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);
     to_handle(player)
 }
