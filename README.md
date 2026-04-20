@@ -60,4 +60,4 @@ For general LCE porting conventions please follow the upstream [CONTRIBUTING.md]
 
 ## Legal
 
-This project is based on the MinecraftConsoles source tree. Minecraft is a trademark of Mojang AB / Microsoft. Not affiliated with, endorsed by, or connected to Mojang, Microsoft, or 4J Studios. No Minecraft game assets are redistributed in this repo. You need a legal copy of the original game's data files to actually play.
+This project is based on the MinecraftConsoles source tree. Minecraft is a trademark of Mojang AB / Microsoft. Not affiliated with, endorsed by, or connected to Mojang, Microsoft, or 4J Studios. No Minecraft game assets are redistributed in this repo.

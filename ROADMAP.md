@@ -19,21 +19,39 @@ Sub-tasks:
 
 ## Phase 2: renderer
 
-Two paths. Pick one after prototyping both. Listed in the order of least pain:
+Native Metal is now the plan. Reason: the shader translation problem turned out to be automated.
 
-1. Rewrite the renderer backend against OpenGL ES 3.0. Wrap it with MetalANGLE on device. This gets us a working Metal pipeline without writing Metal directly, and the GL ES code is more portable if we ever want Android or Linux.
-2. Write a native Metal backend. Faster at runtime, but full HLSL to MSL shader translation and a pipeline state rewrite is a lot of work.
+Working tooling (validated in the `Shader probe` CI workflow):
 
-Whichever path, the shader sources in `upstream/Minecraft.Client/Common/res/shaders` need translation. Keep that translation in one place so the other path remains open.
+- Input:  HLSL from `third_party/4JLibs/Windows_Libs/Dev/Render/shaders/*.hlsl`.
+- Pipeline: `glslangValidator -D` produces SPIR-V. `spirv-cross --msl` produces Metal Shading Language. `xcrun metal` compiles MSL to `.air`, `xcrun metallib` packs to `.metallib`.
+- Output: valid `.metallib` files on every push of a shader change. `main_VS`, `main_PS`, `screen_VS`, `screen_PS` all round-trip cleanly today.
 
-## Phase 3: UI (GameSWF for Iggy)
+Remaining renderer work with this pipeline in hand:
 
-The upstream UI layer calls into Iggy, which is closed source on Windows. The `.iggy` files shipped with the game are SWFs under a different name.
+- C++ side: port `RendererCore.cpp`, `RendererState.cpp`, `RendererTexture.cpp`, `RendererVertex.cpp`, `RendererCBuff.cpp`, `RendererMatrix.cpp` from `third_party/4JLibs/Windows_Libs/Dev/Render` against Metal instead of D3D11. The pipeline-state and resource-binding code needs a rewrite; the high-level draw dispatch can stay.
+- Bundle generated `.metallib` files at build time and load them at runtime from `[NSBundle mainBundle]`.
+- Wire `mcle_render_init` / `mcle_render_frame` into the new backend.
 
-- Vendor GameSWF into `third_party/gameswf`.
-- Implement the Iggy C API surface in `Minecraft.Client/iOS/UI/Iggy_Shim.cpp` by delegating to GameSWF C++ objects (create a movie, play, draw, query focusable objects, call AS3 methods, etc).
-- Start with a single screen (the title / press-start screen) end-to-end, then expand.
-- If GameSWF turns out to be too stale for the AS3 features LCE uses, switch to Ruffle via its C API.
+GL ES + MetalANGLE stays as a backup plan if the Metal renderer port gets too painful.
+
+## Phase 3: UI (GameSWF + Iggy-to-SWF conversion)
+
+The upstream UI calls into Iggy, which is closed source. The `.iggy` files shipped with the game are a 4J wrapper around standard SWF.
+
+Two paths into this phase now that tooling is available:
+
+1. **Convert at build time.** JPEXS has an Iggy-to-SWF converter in its Java library. `scripts/iggy-to-swf.sh` drives the JPEXS CLI against a directory of `.iggy` files. The output `.swf` files go in `Resources/` and get bundled into the `.ipa`. GameSWF then reads normal SWF at runtime. This is the current plan.
+2. **Read `.iggy` at runtime.** Would require writing an iggy-aware loader inside GameSWF. More fragile. Avoid unless option 1 hits a wall.
+
+Sub-tasks in order:
+
+- Vendor GameSWF (done, see `third_party/gameswf`).
+- Stand up a minimal CMake target that compiles the GameSWF core for iOS ARM64. Expected to surface zlib / libpng / jpeg dependencies; bring those in via iOS-available versions.
+- Hook GameSWF's `render_handler` interface to our Metal backend from Phase 2.
+- Implement the Iggy C API shim in `Minecraft.Client/iOS/UI/Iggy_Shim.cpp` by delegating to GameSWF's C++ player object.
+- Start with a single screen (title / press-start) end-to-end, then expand.
+- If GameSWF cannot handle the AS3 features LCE uses, switch to Ruffle via its C API.
 
 ## Phase 4: input pass 2
 
