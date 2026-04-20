@@ -78,11 +78,14 @@ int           ruffle_ios_player_movie_height(PlayerHandle* h);
 uint64_t      ruffle_ios_tick_count(void);
 
 // Tick-stage breakdown. out_counters must point to an array of at least 4
-// u64: [lock_ok, after_tick, after_run_frame, after_render]. `is_playing`
-// receives the most recent Player::is_playing() sample: 0=unknown, 1=true,
-// 2=false. Either pointer may be NULL.
+// u64: [lock_ok, after_tick, after_run_frame, after_render]. A fifth slot,
+// if provided (len >= 5), receives the per-handle executor_runs count.
+// `is_playing` receives the most recent Player::is_playing() sample:
+// 0=unknown, 1=true, 2=false. `handle_ptr` is the PlayerHandle whose
+// executor_runs to read (NULL returns 0). Any pointer may be NULL.
 void          ruffle_ios_player_diag(uint64_t* out_counters, size_t len,
-                                     int* is_playing);
+                                     int* is_playing,
+                                     PlayerHandle* handle_ptr);
 
 // Frame-transition diag: the last cur_frame samples taken around
 // Player::tick and Player::run_frame, plus the number of ticks where the
