@@ -536,14 +536,16 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     // instead, which lets us share an executor we can run each tick.
     let executor = NullExecutor::new();
     let base_path = std::env::temp_dir();
-    let navigator: Box<dyn ruffle_core::backend::navigator::NavigatorBackend> =
-        match NullNavigatorBackend::with_base_path(&base_path, &executor) {
-            Ok(nav) => Box::new(nav),
-            Err(e) => {
-                eprintln!("[ruffle_ios] NullNavigatorBackend::with_base_path: {e:?}");
-                Box::new(NullNavigatorBackend::new())
-            }
-        };
+    let navigator = match NullNavigatorBackend::with_base_path(&base_path, &executor) {
+        Ok(nav) => nav,
+        Err(e) => {
+            eprintln!(
+                "[ruffle_ios] with_base_path({}) failed: {e:?}",
+                base_path.display()
+            );
+            return std::ptr::null_mut();
+        }
+    };
 
     let player = PlayerBuilder::new()
         .with_renderer(backend)
