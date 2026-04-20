@@ -46,11 +46,15 @@ Walls cleared, all automated by `scripts/patch-gameswf.sh`:
 4. `compatibility_include.h` rewritten with guarded `#define`s so our iOS config overrides rather than gets overridden by the Marmalade defaults.
 5. `__DATE__` / `__TIME__` adjacency to string literals space-separated so the C++11 UDL parser does not treat them as suffixes.
 
+Metal render_handler wired (stub, but valid vtable):
+- `Minecraft.Client/iOS/UI/render_handler_metal.{h,mm}` subclasses `gameswf::render_handler` and implements every pure virtual method with either real stub logic (bitmap_info storage) or a no-op that will be filled in with Metal draw calls.
+- Link-smoke test in the probe does `create_render_handler_metal()` + `gameswf::set_render_handler()` + `new gameswf::player()`. CI builds green, so the full object graph links.
+
 Not-yet-handled in the probe (next walls to tackle):
 - Pull in the bundled `jpeglib/` sources, flip `TU_CONFIG_LINK_TO_JPEGLIB=1`.
-- Write a Metal-backed `render_handler` under `Minecraft.Client/iOS/UI/` and link it into the probe (will give us our first SWF-driven frame on screen).
-- Load a test `.swf` from the app bundle and drive the player.
-- FreeType for font rendering (can defer; many SWFs embed their own).
+- Fill in the render_handler stubs with real Metal draw calls: textured quads for bitmaps, triangle-strip mesh for vector shapes, alpha blending, masks.
+- Load a test `.swf` from the app bundle and drive `player->step()` each frame.
+- FreeType for font rendering (can defer; many SWFs embed their own glyphs).
 
 ## World probe: current wall
 
