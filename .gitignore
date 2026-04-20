@@ -76,3 +76,8 @@ dist/
 target/
 Cargo.lock
 **/*.rs.bk
+
+# Local-only: user-owned game assets (extracted from an LCE ARC with
+# scripts/list-arc.py). These are Mojang-copyrighted and must NEVER be
+# committed. Everything under local/ stays on your machine.
+local/
