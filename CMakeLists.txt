@@ -59,5 +59,14 @@ add_subdirectory(Minecraft.Client/iOS/Input)
 add_subdirectory(Minecraft.Client/iOS/Render)
 add_subdirectory(Minecraft.Client/iOS/UI)
 
+# Optional probe target: attempts to compile a single upstream Minecraft.World
+# translation unit for iOS. Expected to fail until the Windows-isms in the
+# world code are portable. Flip on with -DENABLE_WORLD_PROBE=ON to start
+# chewing through them.
+option(ENABLE_WORLD_PROBE "Try to compile a single Minecraft.World source file for iOS" OFF)
+if(ENABLE_WORLD_PROBE)
+  add_subdirectory(Minecraft.Client/iOS/WorldProbe)
+endif()
+
 # App target (Objective-C++ shell + game bootstrap).
 add_subdirectory(Minecraft.Client/iOS/App)
