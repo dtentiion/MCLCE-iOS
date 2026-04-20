@@ -37,8 +37,21 @@ set(GAMESWF_PROBE_SOURCES
   ${GAMESWF_ROOT}/base/utility.cpp
 )
 
+# Player library. Picked up via glob after excluding platform-specific ones.
+# Skipped: render_handler_{d3d,ogl,ogles,iwgl,xbox}.cpp (backend-specific, we
+# bring our own Metal render_handler), sound_handler_{sdl,openal}.cpp (we
+# wire an AVFoundation handler later), freetype.cpp (needs FreeType; fonts
+# come in a follow-up pass).
+file(GLOB GAMESWF_PLAYER_SOURCES_ALL CONFIGURE_DEPENDS
+  "${GAMESWF_ROOT}/gameswf/*.cpp"
+)
+list(FILTER GAMESWF_PLAYER_SOURCES_ALL EXCLUDE REGEX
+  "gameswf_(render_handler_[a-z0-9]+|sound_handler_[a-z]+|freetype)\\.cpp$"
+)
+
 add_library(mcle_gameswf_probe STATIC
   ${GAMESWF_PROBE_SOURCES}
+  ${GAMESWF_PLAYER_SOURCES_ALL}
   probe_stub.cpp
 )
 
