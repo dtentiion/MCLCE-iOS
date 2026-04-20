@@ -85,6 +85,14 @@ for p in root.rglob("*"):
         "#define compiler_assert(x) ((void)0)",
     )
     new = new.replace(VM_STACK_OLD, VM_STACK_NEW)
+
+    # C++11 user-defined literal parsing treats `"foo"__DATE__` as a UDL
+    # operator with suffix __DATE__. Insert spaces so the preprocessor sees
+    # three separate string literals.
+    new = re.sub(r'"__DATE__"',  '" __DATE__ "',  new)
+    new = re.sub(r'"__TIME__"',  '" __TIME__ "',  new)
+    new = re.sub(r'"__DATE__\)', '" __DATE__ )',  new)
+    new = re.sub(r'"__TIME__\)', '" __TIME__ )',  new)
     if new != src:
         p.write_text(new, encoding="utf-8", errors="surrogateescape")
         changed += 1
