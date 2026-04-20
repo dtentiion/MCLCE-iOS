@@ -8,6 +8,8 @@
 // Shared with MinecraftViewController so the overlay can display the
 // probe result. Simple global is fine for this debug-only path.
 int g_ruffle_swf_version = -99;
+int g_ruffle_player_ok = -99;  // 1 = Player instantiated, 0 = failed
+int g_ruffle_framerate_mHz = -99;
 
 @implementation AppDelegate
 
@@ -36,6 +38,24 @@ int g_ruffle_swf_version = -99;
             g_ruffle_swf_version =
                 ruffle_ios_swf_probe((const uint8_t*)data.bytes, data.length);
             NSLog(@"[AppDelegate] ruffle_ios_swf_probe -> %d", g_ruffle_swf_version);
+
+            // Real Ruffle Player: build one with the SWF pre-loaded, tick it
+            // a few times to make sure nothing panics, then tear it down.
+            PlayerHandle* h = ruffle_ios_player_create_with_swf(
+                640, 480, (const uint8_t*)data.bytes, data.length);
+            if (h) {
+                g_ruffle_player_ok = 1;
+                g_ruffle_framerate_mHz = ruffle_ios_player_framerate_mHz(h);
+                for (int i = 0; i < 3; ++i) {
+                    ruffle_ios_player_tick(h, 1.0f / 30.0f);
+                }
+                ruffle_ios_player_destroy(h);
+                NSLog(@"[AppDelegate] ruffle player ok, fps=%.3f",
+                      g_ruffle_framerate_mHz / 1000.0);
+            } else {
+                g_ruffle_player_ok = 0;
+                NSLog(@"[AppDelegate] ruffle_ios_player_create_with_swf FAILED");
+            }
         }
     }
 

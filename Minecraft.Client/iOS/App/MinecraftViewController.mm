@@ -115,16 +115,23 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int rustMagic = ruffle_ios_magic();
     int renderProbe = ruffle_ios_render_probe();
     extern int g_ruffle_swf_version;
+    extern int g_ruffle_player_ok;
+    extern int g_ruffle_framerate_mHz;
 
     NSString* swfLine = [NSString stringWithFormat:
-        @"Ruffle (Rust) magic: 0x%08X (want 0x52554646)\n"
+        @"Ruffle magic: 0x%08X  render_probe=%d\n"
         @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
-        @"Ruffle render crate probe -> %d (want > 0)\n"
-        @"GameSWF: ready=%d movie=%d frames=%llu strips=%llu tris=%llu\n"
-        @"         %@",
-        rustMagic, g_ruffle_swf_version, renderProbe,
-        swfReady, swfHas, swfFrames, swfStrips, swfTris,
+        @"Ruffle Player: %s  declared_fps=%.3f\n"
+        @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
+        @"  %@",
+        rustMagic, renderProbe,
+        g_ruffle_swf_version,
+        (g_ruffle_player_ok == 1 ? "INSTANTIATED" :
+         g_ruffle_player_ok == 0 ? "FAILED" : "not probed"),
+        g_ruffle_framerate_mHz / 1000.0,
+        swfReady, swfHas, swfFrames,
         swfStatus];
+    (void)swfStrips; (void)swfTris;
     (void)swfBitmaps; (void)swfLines; (void)swfMasks; (void)swfFillBmp;
 
     mcle_ios_pad_state pad;
