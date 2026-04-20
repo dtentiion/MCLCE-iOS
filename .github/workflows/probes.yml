@@ -72,6 +72,11 @@ jobs:
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
 
+      - name: Patch vendored GameSWF for libc++
+        run: |
+          chmod +x scripts/patch-gameswf.sh
+          ./scripts/patch-gameswf.sh
+
       - name: Configure with gameswf probe enabled
         run: |
           cmake -S . -B build-gs \
