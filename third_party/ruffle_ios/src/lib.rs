@@ -143,7 +143,7 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
     let Some(handle) = borrow_handle(raw) else { return; };
     if let Ok(mut p) = handle.player.lock() {
         use ruffle_common::duration::FloatDuration;
-        let dt = FloatDuration::from_seconds(dt_seconds as f64);
+        let dt = FloatDuration::from_secs(dt_seconds as f64);
         p.tick(dt);
         p.render();
     }
