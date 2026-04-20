@@ -25,6 +25,34 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 @implementation MinecraftViewController
 
+// Find a SWF to play. Preference order:
+//   1. Documents/MainMenu1080.swf  (user-supplied via Files app)
+//   2. Documents/*.swf             (anything the user dropped in)
+//   3. Bundled test_rect.swf       (built-in fallback)
+- (NSString*)resolveSwfPath {
+    NSFileManager* fm = NSFileManager.defaultManager;
+    NSURL* docs = [fm URLsForDirectory:NSDocumentDirectory
+                             inDomains:NSUserDomainMask].firstObject;
+    NSString* docsPath = docs.path;
+
+    // Preferred explicit filename: MainMenu1080.swf.
+    if (docsPath.length) {
+        NSString* preferred = [docsPath stringByAppendingPathComponent:@"MainMenu1080.swf"];
+        if ([fm fileExistsAtPath:preferred]) return preferred;
+
+        // Next, scan the Documents root for any .swf.
+        NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docsPath error:nil];
+        for (NSString* e in entries) {
+            if ([e.pathExtension caseInsensitiveCompare:@"swf"] == NSOrderedSame) {
+                return [docsPath stringByAppendingPathComponent:e];
+            }
+        }
+    }
+
+    // Fallback to the bundled test movie so we always render something.
+    return [[NSBundle mainBundle] pathForResource:@"test_rect" ofType:@"swf"];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.blackColor;
@@ -85,8 +113,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     g_ruffle_surface_probe =
         ruffle_ios_surface_probe((__bridge void*)self.metalView.layer);
 
-    NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"test_rect"
-                                                        ofType:@"swf"];
+    NSString* swfPath = [self resolveSwfPath];
     if (swfPath.length && g_ruffle_surface_probe == 1) {
         NSData* data = [NSData dataWithContentsOfFile:swfPath];
         if (data.length) {
@@ -94,7 +121,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 (__bridge void*)self.metalView.layer,
                 pw, ph,
                 (const uint8_t*)data.bytes, data.length);
-            NSLog(@"[MinecraftVC] ruffle wgpu player = %p", g_ruffle_player);
+            NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
+                  g_ruffle_player, swfPath.lastPathComponent);
         }
     }
 

@@ -37,6 +37,19 @@ If your device is on an iOS version TrollStore supports (15.0 to 16.6.1, plus a 
 2. AirDrop the `.ipa` to your device or share it via Files
 3. Open in TrollStore and install
 
+## Providing your own LCE assets
+
+The app cannot ship Minecraft content because it is copyrighted by Mojang. You provide your own:
+
+1. On a PC, extract `MediaWindows64.arc` from your LCE install using [PCK Studio](https://github.com/LCERD/PCK-Studio) or our bundled `scripts/list-arc.py` helper.
+2. The SWF you want is **`MainMenu1080.swf`** (about 14 KB). Copy it somewhere accessible to your iPhone: iCloud Drive, AirDrop, or email.
+3. On the iPhone, open the **Files** app.
+4. Navigate to **On My iPhone** then the **Minecraft LCE** folder (the app creates it the first time you launch).
+5. Drop `MainMenu1080.swf` in.
+6. Relaunch the app. It looks in this folder on startup and plays whatever SWF you put there, preferring `MainMenu1080.swf` if it exists.
+
+Without a user-supplied SWF the app falls back to the tiny test rectangle movie bundled for diagnostics.
+
 ## After the first install: enable Developer Mode
 
 On iOS 16 and newer, the first time you open a sideloaded app the system will refuse and tell you "Developer Mode required". One-time toggle:
