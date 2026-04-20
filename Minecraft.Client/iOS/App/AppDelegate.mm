@@ -12,6 +12,10 @@ int g_ruffle_player_ok = -99;  // 1 = Player instantiated, 0 = failed
 int g_ruffle_framerate_mHz = -99;
 int g_ruffle_surface_probe = -99;  // 1 = wgpu Surface over CAMetalLayer OK
 
+// The real wgpu-backed player created in MinecraftViewController::viewWillAppear.
+// Owned by the view controller; nil if wgpu setup failed.
+PlayerHandle* g_ruffle_player = NULL;
+
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication*)application
