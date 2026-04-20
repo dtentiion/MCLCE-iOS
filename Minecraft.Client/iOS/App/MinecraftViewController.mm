@@ -119,10 +119,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (swfPath.length && g_ruffle_surface_probe == 1) {
         NSData* data = [NSData dataWithContentsOfFile:swfPath];
         if (data.length) {
+            NSString* docsPath = [NSSearchPathForDirectoriesInDomains(
+                NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
             g_ruffle_player = ruffle_ios_player_create_wgpu(
                 (__bridge void*)self.metalView.layer,
                 pw, ph,
-                (const uint8_t*)data.bytes, data.length);
+                (const uint8_t*)data.bytes, data.length,
+                docsPath.UTF8String);
             // Tag the origin: Documents/ path = user-supplied, else bundle.
             BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
             self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
