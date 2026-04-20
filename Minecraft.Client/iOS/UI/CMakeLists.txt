@@ -38,9 +38,12 @@ set(GAMESWF_BASE_SOURCES
 )
 
 # Player layer. Skip desktop-OpenGL / Xbox / SDL / OpenAL handlers and the
-# FreeType font path.
+# FreeType font path. Include gameswf_as_classes/ (30+ ActionScript 3
+# builtin classes), otherwise gameswf_player.cpp has unresolved references
+# to flash_init and friends.
 file(GLOB GAMESWF_PLAYER_SOURCES CONFIGURE_DEPENDS
   "${GAMESWF_ROOT}/gameswf/*.cpp"
+  "${GAMESWF_ROOT}/gameswf/gameswf_as_classes/*.cpp"
 )
 list(FILTER GAMESWF_PLAYER_SOURCES EXCLUDE REGEX
   "gameswf_(render_handler_[a-z0-9]+|sound_handler_[a-z]+|freetype|test_ogl)\\.cpp$"

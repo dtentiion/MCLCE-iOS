@@ -44,6 +44,7 @@ set(GAMESWF_PROBE_SOURCES
 # come in a follow-up pass).
 file(GLOB GAMESWF_PLAYER_SOURCES_ALL CONFIGURE_DEPENDS
   "${GAMESWF_ROOT}/gameswf/*.cpp"
+  "${GAMESWF_ROOT}/gameswf/gameswf_as_classes/*.cpp"
 )
 list(FILTER GAMESWF_PLAYER_SOURCES_ALL EXCLUDE REGEX
   "gameswf_(render_handler_[a-z0-9]+|sound_handler_[a-z]+|freetype|test_ogl)\\.cpp$"
