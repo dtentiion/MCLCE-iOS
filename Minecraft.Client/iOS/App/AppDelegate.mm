@@ -24,11 +24,18 @@
         NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"start"
                                                             ofType:@"swf"];
         if (swfPath.length) {
+            NSLog(@"[AppDelegate] bundle start.swf -> %@", swfPath);
             if (mcle_swf_load([swfPath UTF8String]) != 0) {
-                NSLog(@"[AppDelegate] failed to load %@", swfPath);
+                NSLog(@"[AppDelegate] mcle_swf_load returned non-zero");
             }
         } else {
             NSLog(@"[AppDelegate] start.swf not found in bundle");
+            // Dump a short listing so we can tell from on-screen logs
+            // roughly what IS in the bundle.
+            NSString* bundlePath = [[NSBundle mainBundle] bundlePath];
+            NSArray* entries = [[NSFileManager defaultManager]
+                contentsOfDirectoryAtPath:bundlePath error:nil];
+            NSLog(@"[AppDelegate] bundle contents: %@", entries);
         }
     }
 

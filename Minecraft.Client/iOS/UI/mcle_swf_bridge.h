@@ -38,6 +38,12 @@ void mcle_swf_draw_test_rect(int vp_width, int vp_height);
 // True if a movie has been loaded and set as the active root.
 int  mcle_swf_has_movie(void);
 
+// Returns a short human-readable status string reflecting the most recent
+// operation (init, load, tick). Stable pointer; owned by the bridge.
+// Useful for on-screen diagnostics when Mac-side device logs are not
+// available.
+const char* mcle_swf_last_status(void);
+
 #ifdef __cplusplus
 }
 #endif
