@@ -1,6 +1,9 @@
 # MCLE-iOS
 
 [![iOS build](https://github.com/dtentiion/MCLE-iOS/actions/workflows/ios.yml/badge.svg)](https://github.com/dtentiion/MCLE-iOS/actions/workflows/ios.yml)
+[![Visits](https://hits.sh/github.com/dtentiion/MCLE-iOS.svg?label=visits&color=6cc644)](https://hits.sh/github.com/dtentiion/MCLE-iOS/)
+[![Downloads](https://img.shields.io/github/downloads/dtentiion/MCLE-iOS/total?color=6cc644&label=downloads)](https://github.com/dtentiion/MCLE-iOS/releases)
+[![Stars](https://img.shields.io/github/stars/dtentiion/MCLE-iOS?color=6cc644)](https://github.com/dtentiion/MCLE-iOS/stargazers)
 
 Native iOS port of [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) (the TU19 Legacy Console Edition base).
 
