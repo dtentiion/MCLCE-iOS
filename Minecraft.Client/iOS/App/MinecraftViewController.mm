@@ -11,6 +11,10 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
 extern "C" unsigned long long mcle_swf_total_triangles(void);
 extern "C" unsigned long long mcle_swf_total_frames(void);
+extern "C" unsigned long long mcle_swf_total_bitmap_draws(void);
+extern "C" unsigned long long mcle_swf_total_line_strips(void);
+extern "C" unsigned long long mcle_swf_total_masks(void);
+extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 @interface MinecraftViewController ()
 @property (strong, nonatomic) CADisplayLink* displayLink;
@@ -102,10 +106,20 @@ extern "C" unsigned long long mcle_swf_total_frames(void);
     unsigned long long swfStrips = mcle_swf_total_mesh_strips();
     unsigned long long swfTris   = mcle_swf_total_triangles();
 
+    unsigned long long swfBitmaps = mcle_swf_total_bitmap_draws();
+    unsigned long long swfLines   = mcle_swf_total_line_strips();
+    unsigned long long swfMasks   = mcle_swf_total_masks();
+    unsigned long long swfFillBmp = mcle_swf_total_fill_bitmaps();
+
     NSString* swfLine = [NSString stringWithFormat:
-        @"SWF: ready=%d movie=%d frames=%llu strips=%llu tris=%llu\n"
+        @"SWF: ready=%d movie=%d frames=%llu\n"
+        @"     strips=%llu tris=%llu\n"
+        @"     bitmaps=%llu lines=%llu masks=%llu fill_bmp=%llu\n"
         @"     %@",
-        swfReady, swfHas, swfFrames, swfStrips, swfTris, swfStatus];
+        swfReady, swfHas, swfFrames,
+        swfStrips, swfTris,
+        swfBitmaps, swfLines, swfMasks, swfFillBmp,
+        swfStatus];
 
     mcle_ios_pad_state pad;
     if (mcle_ios_input_poll(0, &pad)) {
