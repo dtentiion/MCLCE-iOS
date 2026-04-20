@@ -5,8 +5,6 @@ edition = "2021"
 description = "iOS FFI wrapper around Ruffle, consumed by the MCLCE-iOS app."
 publish = false
 
-# Build as a C-callable static library. CMake links this into the iOS app
-# next to our Metal + GameController bridges.
 [lib]
 name = "ruffle_ios"
 crate-type = ["staticlib"]
@@ -17,9 +15,9 @@ lto = "thin"
 panic = "abort"
 strip = "symbols"
 
-# Ruffle is pulled from its public repo. We pin a specific commit for
-# reproducibility; update it intentionally when we want the latest.
+# Start with ruffle's standalone `swf` parser crate. It's a leaf dep with a
+# small dependency tree, so the first cross-compile pass stays fast while
+# we validate the toolchain end-to-end. Once this compiles clean on iOS
+# ARM64 we grow the tree to pull in ruffle_render_common + the AVM.
 [dependencies]
-# Placeholder; actual dep added in a follow-up commit after the crate
-# skeleton builds on iOS. Having the real ruffle dep from commit zero
-# makes the first CI run slow and hard to debug.
+swf = "0.2"

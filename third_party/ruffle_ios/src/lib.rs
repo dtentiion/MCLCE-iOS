@@ -49,3 +49,19 @@ pub extern "C" fn ruffle_ios_tick(_dt_seconds: f32, _vp_w: c_int, _vp_h: c_int) 
 pub extern "C" fn ruffle_ios_magic() -> c_int {
     0x5255_4646  // "RUFF"
 }
+
+/// Force a reference to ruffle's `swf` crate so the linker can't garbage
+/// collect it before we have other code using it. Returns the declared
+/// SWF version from the header struct -- proves the parser crate's types
+/// are reachable from iOS ARM64.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_swf_probe(data: *const u8, len: usize) -> c_int {
+    if data.is_null() || len < 8 {
+        return -1;
+    }
+    let buf = std::slice::from_raw_parts(data, len);
+    match swf::decompress_swf(buf) {
+        Ok(decompressed) => decompressed.header.version() as c_int,
+        Err(_) => -2,
+    }
+}

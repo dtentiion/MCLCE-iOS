@@ -46,6 +46,25 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Cache cargo registry + git DB
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cargo-registry-${{ hashFiles('third_party/ruffle_ios/Cargo.toml', 'third_party/ruffle_ios/Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-
+
+      - name: Cache cargo build artifacts for aarch64-apple-ios
+        uses: actions/cache@v4
+        with:
+          path: third_party/ruffle_ios/target
+          key: cargo-target-ios-${{ hashFiles('third_party/ruffle_ios/Cargo.toml', 'third_party/ruffle_ios/Cargo.lock', 'third_party/ruffle_ios/src/**') }}
+          restore-keys: |
+            cargo-target-ios-
+
       - name: Build ruffle_ios static library for iOS ARM64
         run: |
           cd third_party/ruffle_ios
