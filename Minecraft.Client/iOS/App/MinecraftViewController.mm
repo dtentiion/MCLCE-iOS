@@ -111,15 +111,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     unsigned long long swfMasks   = mcle_swf_total_masks();
     unsigned long long swfFillBmp = mcle_swf_total_fill_bitmaps();
 
+    const char* gsLogC = mcle_swf_gameswf_log();
+    NSString* gsLog = gsLogC ? [NSString stringWithUTF8String:gsLogC] : @"";
+
     NSString* swfLine = [NSString stringWithFormat:
         @"SWF: ready=%d movie=%d frames=%llu\n"
         @"     strips=%llu tris=%llu\n"
         @"     bitmaps=%llu lines=%llu masks=%llu fill_bmp=%llu\n"
-        @"     %@",
+        @"     %@\n"
+        @"--- gameswf log ---\n%@",
         swfReady, swfHas, swfFrames,
         swfStrips, swfTris,
         swfBitmaps, swfLines, swfMasks, swfFillBmp,
-        swfStatus];
+        swfStatus,
+        gsLog];
 
     mcle_ios_pad_state pad;
     if (mcle_ios_input_poll(0, &pad)) {
