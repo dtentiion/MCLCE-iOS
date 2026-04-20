@@ -37,10 +37,23 @@ If your device is on an iOS version TrollStore supports (15.0 to 16.6.1, plus a 
 2. AirDrop the `.ipa` to your device or share it via Files
 3. Open in TrollStore and install
 
+## After the first install: enable Developer Mode
+
+On iOS 16 and newer, the first time you open a sideloaded app the system will refuse and tell you "Developer Mode required". One-time toggle:
+
+1. Settings -> Privacy & Security
+2. Scroll to the bottom, tap **Developer Mode**
+3. Flip it **On**, confirm the restart prompt
+4. After the phone reboots, confirm once more and enter your passcode
+5. Relaunch the app and it opens normally
+
+You only do this once per device. It is not specific to this app.
+
 ## Troubleshooting
 
 - "Unable to install": the app has been signed for another Apple ID. Re-sign via the method you used.
 - "App is damaged": the .ipa may have been re-zipped with the wrong structure. Redownload from Actions artifacts, not from a third party repack.
+- "Developer Mode required": see the section above.
 - Controller does not appear: make sure you're on iOS 14 or newer. For Xbox Series pads, update the controller firmware via the Xbox Accessories app on a Windows machine once.
 
 ## Fetching the latest build from Windows
