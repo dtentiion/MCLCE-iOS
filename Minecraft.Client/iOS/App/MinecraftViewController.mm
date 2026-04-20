@@ -75,15 +75,33 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int pw = (int)(sz.width  * scale);
     int ph = (int)(sz.height * scale);
     self.metalView.layer.contentsScale = scale;
-    mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
 
-    // Probe: can Rust's wgpu create a Metal surface attached to our layer?
-    // This is the last runtime unknown for wiring ruffle_render_wgpu.
+    // Try to stand up a Ruffle wgpu player that owns this CAMetalLayer.
+    // If it succeeds, every frame is driven by Ruffle. If it fails, we
+    // fall back to our legacy Metal triangle path for diagnostics.
+    extern PlayerHandle* g_ruffle_player;
     extern int g_ruffle_surface_probe;
+
     g_ruffle_surface_probe =
         ruffle_ios_surface_probe((__bridge void*)self.metalView.layer);
-    NSLog(@"[MinecraftVC] ruffle_ios_surface_probe -> %d",
-          g_ruffle_surface_probe);
+
+    NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"test_rect"
+                                                        ofType:@"swf"];
+    if (swfPath.length && g_ruffle_surface_probe == 1) {
+        NSData* data = [NSData dataWithContentsOfFile:swfPath];
+        if (data.length) {
+            g_ruffle_player = ruffle_ios_player_create_wgpu(
+                (__bridge void*)self.metalView.layer,
+                pw, ph,
+                (const uint8_t*)data.bytes, data.length);
+            NSLog(@"[MinecraftVC] ruffle wgpu player = %p", g_ruffle_player);
+        }
+    }
+
+    if (!g_ruffle_player) {
+        // Fallback: our hand-rolled Metal pipeline drew the triangle before.
+        mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
+    }
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
@@ -105,7 +123,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 - (void)tick:(CADisplayLink*)link {
     mcle_game_tick();
-    mcle_render_frame();
+
+    extern PlayerHandle* g_ruffle_player;
+    if (g_ruffle_player) {
+        // Ruffle owns the frame: advance the player, wgpu draws + presents.
+        ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+    } else {
+        // Legacy Metal path (triangle + pink rect).
+        mcle_render_frame();
+    }
 
     const char* swfStatusC = mcle_swf_last_status();
     NSString* swfStatus = swfStatusC ? [NSString stringWithUTF8String:swfStatusC] : @"";
