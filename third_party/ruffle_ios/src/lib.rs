@@ -76,6 +76,69 @@ pub extern "C" fn ruffle_ios_render_probe() -> c_int {
     StageQuality::High as c_int
 }
 
+/// Probe: create a wgpu Surface over the given CAMetalLayer, then a
+/// compatible Adapter and Device. `layer_ptr` must be a pointer to a live
+/// CAMetalLayer obtained on the Obj-C side.
+/// Returns:
+///   1  = full chain set up (surface + adapter + device)
+///   -1 = layer_ptr is null
+///   -2 = instance / surface creation failed
+///   -3 = no adapter
+///   -4 = no device
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_surface_probe(layer_ptr: *mut std::ffi::c_void) -> c_int {
+    if layer_ptr.is_null() { return -1; }
+
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::METAL,
+        ..Default::default()
+    });
+
+    let surface = unsafe {
+        instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer_ptr))
+    };
+    let surface = match surface {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[ruffle_ios] create_surface_unsafe failed: {e:?}");
+            return -2;
+        }
+    };
+
+    let adapter = pollster::block_on(instance.request_adapter(
+        &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            compatible_surface: Some(&surface),
+        },
+    ));
+    let adapter = match adapter {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("[ruffle_ios] surface adapter failed: {e:?}");
+            return -3;
+        }
+    };
+
+    let dev = pollster::block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            label: Some("mcle-ios-surface-device"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: wgpu::ExperimentalFeatures::default(),
+        },
+    ));
+    match dev {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("[ruffle_ios] surface device failed: {e:?}");
+            -4
+        }
+    }
+}
+
 /// Probe: create a wgpu Instance with the Metal backend, request an adapter,
 /// then a device. Returns:
 ///   1  = all three succeeded (Metal GPU is reachable from our Rust side)

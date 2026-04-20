@@ -77,6 +77,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.metalView.layer.contentsScale = scale;
     mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
 
+    // Probe: can Rust's wgpu create a Metal surface attached to our layer?
+    // This is the last runtime unknown for wiring ruffle_render_wgpu.
+    extern int g_ruffle_surface_probe;
+    g_ruffle_surface_probe =
+        ruffle_ios_surface_probe((__bridge void*)self.metalView.layer);
+    NSLog(@"[MinecraftVC] ruffle_ios_surface_probe -> %d",
+          g_ruffle_surface_probe);
+
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
 }
@@ -119,10 +127,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern int g_ruffle_framerate_mHz;
 
     int wgpuProbe = ruffle_ios_wgpu_probe();
+    extern int g_ruffle_surface_probe;
 
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle magic: 0x%08X  render_probe=%d\n"
-        @"wgpu on Metal: %s (%d)\n"
+        @"wgpu on Metal: %s (%d)  surface_on_CAMetalLayer=%d\n"
         @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
         @"Ruffle Player: %s  declared_fps=%.3f\n"
         @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
@@ -132,6 +141,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
          wgpuProbe == -1 ? "no adapter" :
          wgpuProbe == -2 ? "no device" : "??"),
         wgpuProbe,
+        g_ruffle_surface_probe,
         g_ruffle_swf_version,
         (g_ruffle_player_ok == 1 ? "INSTANTIATED" :
          g_ruffle_player_ok == 0 ? "FAILED" : "not probed"),
