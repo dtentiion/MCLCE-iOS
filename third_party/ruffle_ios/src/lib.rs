@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use ruffle_common::tag_utils::SwfMovie;
 use ruffle_core::external::{ExternalInterfaceProvider, FsCommandProvider, Value as ExtValue};
 use ruffle_core::context::UpdateContext;
+use ruffle_core::backend::navigator::{NullExecutor, NullNavigatorBackend};
 use ruffle_core::{Player, PlayerBuilder};
 
 // --- Captured ExternalInterface log -----------------------------------------
@@ -220,10 +221,28 @@ pub unsafe extern "C" fn ruffle_ios_player_current_frame(raw: *mut PlayerHandle)
 /// stays valid; the Box is the heap anchor the C pointer points at.
 pub struct PlayerHandle {
     player: Arc<Mutex<Player>>,
+    // NullExecutor wraps a futures::executor::LocalPool, which is !Send.
+    // iOS only ticks us from the main thread, so we hand out Send+Sync
+    // via unsafe impls below. RefCell gives interior mutability without
+    // needing a lock.
+    executor: std::cell::RefCell<NullExecutor>,
+    // Monotonic count of executor.run() calls, for diagnostics.
+    executor_runs: std::sync::atomic::AtomicU64,
 }
 
-fn to_handle(p: Arc<Mutex<Player>>) -> *mut PlayerHandle {
-    Box::into_raw(Box::new(PlayerHandle { player: p }))
+// Safety: the iOS app always invokes ruffle_ios_player_* functions from the
+// main UIKit thread (CADisplayLink callback). The Mutex on `player` handles
+// internal exclusion; the `executor` RefCell is single-threaded by
+// construction.
+unsafe impl Send for PlayerHandle {}
+unsafe impl Sync for PlayerHandle {}
+
+fn to_handle(p: Arc<Mutex<Player>>, executor: NullExecutor) -> *mut PlayerHandle {
+    Box::into_raw(Box::new(PlayerHandle {
+        player: p,
+        executor: std::cell::RefCell::new(executor),
+        executor_runs: std::sync::atomic::AtomicU64::new(0),
+    }))
 }
 
 unsafe fn borrow_handle<'a>(raw: *mut PlayerHandle) -> Option<&'a PlayerHandle> {
@@ -394,12 +413,13 @@ pub extern "C" fn ruffle_ios_player_create(vp_w: c_int, vp_h: c_int) -> *mut Pla
     let width = vp_w.max(1) as u32;
     let height = vp_h.max(1) as u32;
 
+    let executor = NullExecutor::new();
     let player = PlayerBuilder::new()
         .with_viewport_dimensions(width, height, 1.0)
         .with_autoplay(true)
         .build();
 
-    to_handle(player)
+    to_handle(player, executor)
 }
 
 /// Create a Player with the given SWF bytes pre-loaded. Preferred path:
@@ -426,13 +446,14 @@ pub unsafe extern "C" fn ruffle_ios_player_create_with_swf(
 
     let width = vp_w.max(1) as u32;
     let height = vp_h.max(1) as u32;
+    let executor = NullExecutor::new();
     let player = PlayerBuilder::new()
         .with_movie(movie)
         .with_viewport_dimensions(width, height, 1.0)
         .with_autoplay(true)
         .build();
 
-    to_handle(player)
+    to_handle(player, executor)
 }
 
 /// Full wgpu-backed Player: creates a wgpu Surface over the given
@@ -509,8 +530,24 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         }
     };
 
+    // NullNavigatorBackend's default constructor creates its own internal
+    // LocalPool executor we can never drive, so any future Ruffle spawns
+    // during preload / AS3 setup never gets polled. Use `with_base_path`
+    // instead, which lets us share an executor we can run each tick.
+    let executor = NullExecutor::new();
+    let base_path = std::env::temp_dir();
+    let navigator: Box<dyn ruffle_core::backend::navigator::NavigatorBackend> =
+        match NullNavigatorBackend::with_base_path(&base_path, &executor) {
+            Ok(nav) => Box::new(nav),
+            Err(e) => {
+                eprintln!("[ruffle_ios] NullNavigatorBackend::with_base_path: {e:?}");
+                Box::new(NullNavigatorBackend::new())
+            }
+        };
+
     let player = PlayerBuilder::new()
         .with_renderer(backend)
+        .with_navigator(navigator)
         .with_movie(movie)
         .with_viewport_dimensions(width, height, 1.0)
         .with_autoplay(true)
@@ -519,41 +556,68 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         .with_log(CapturingLogBackend)
         .build();
 
-    // Force full preload synchronously, then explicitly set the run state
-    // to Playing. `with_autoplay(true)` is documented as the trigger for
-    // play, but in practice AVM2 movies sometimes start suspended until
-    // preload completes. Running preload to completion here removes that
-    // ambiguity.
+    // Drive preload and executor alternately. `preload(limit)` advances all
+    // the synchronous bytes-into-frames work; `executor.run()` polls any
+    // futures Ruffle's internals spawn via the navigator (root Loader
+    // completion among them). Both must run or AS3 document-class setup
+    // stalls and run_frame becomes a no-op.
+    //
+    // CRITICAL: the futures Ruffle spawns call `player.lock().unwrap()` on
+    // their own, so we MUST release our player lock before `executor.run()`
+    // or we deadlock against ourselves.
+    let mut executor = executor;
     {
         use ruffle_core::limits::ExecutionLimit;
-        let mut p = player.lock().expect("player lock");
         let mut limit = ExecutionLimit::none();
         let mut guard = 0;
-        while !p.preload(&mut limit) && guard < 1024 {
+        loop {
+            let done = {
+                let mut p = player.lock().expect("player lock");
+                p.preload(&mut limit)
+            };
+            executor.run();
+            if done || guard >= 1024 {
+                break;
+            }
             guard += 1;
         }
-        p.set_is_playing(true);
-        eprintln!(
-            "[ruffle_ios] preload rounds={} movie={}x{} fps={}",
-            guard, p.movie_width(), p.movie_height(), p.frame_rate()
-        );
+        {
+            let mut p = player.lock().expect("player lock");
+            p.set_is_playing(true);
+            eprintln!(
+                "[ruffle_ios] preload rounds={} movie={}x{} fps={}",
+                guard, p.movie_width(), p.movie_height(), p.frame_rate()
+            );
+        }
+        executor.run();
 
         // Burn-frames probe: call run_frame() BURN_N times and record what
-        // the root clip's frame number looks like after each call. Writes
-        // summary stats (first / final / max / distinct) into atomics.
+        // the root clip's frame number looks like after each call, with the
+        // executor drained between each attempt. With the navigator wired
+        // we expect this to actually advance for AS3 movies now.
         use std::sync::atomic::Ordering::Relaxed;
-        let first = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        let first = {
+            let p = player.lock().expect("player lock");
+            p.current_frame().map(|n| n as i32).unwrap_or(-1)
+        };
         BURN_FIRST_CF.store(first, Relaxed);
         let mut max = first;
         let mut prev = first;
         let mut unique = 1i32;
         for _ in 0..BURN_N {
-            p.run_frame();
-            let cf = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+            let cf = {
+                let mut p = player.lock().expect("player lock");
+                p.run_frame();
+                p.current_frame().map(|n| n as i32).unwrap_or(-1)
+            };
+            executor.run();
             if cf > max { max = cf; }
             if cf != prev { unique += 1; prev = cf; }
         }
-        let final_cf = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        let final_cf = {
+            let p = player.lock().expect("player lock");
+            p.current_frame().map(|n| n as i32).unwrap_or(-1)
+        };
         BURN_FINAL_CF.store(final_cf, Relaxed);
         BURN_MAX_CF.store(max, Relaxed);
         BURN_UNIQUE.store(unique, Relaxed);
@@ -565,7 +629,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     }
 
     eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);
-    to_handle(player)
+    to_handle(player, executor)
 }
 
 /// Copy the captured ExternalInterface call log into `out` as a
@@ -599,29 +663,41 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
     use std::sync::atomic::Ordering::Relaxed;
     let Some(handle) = borrow_handle(raw) else { return; };
     TICK_COUNT.fetch_add(1, Relaxed);
-    if let Ok(mut p) = handle.player.lock() {
+
+    // Step 1: drain async futures (Loader completions etc.) WITHOUT holding
+    // the player lock. The futures lock the player themselves; holding our
+    // own lock here would deadlock.
+    handle.executor.borrow_mut().run();
+    handle.executor_runs.fetch_add(1, Relaxed);
+
+    // Step 2: take the lock, sample state, tick, run_frame, render, release.
+    let (cf_pre, cf_mid, cf_post) = {
+        let Ok(mut p) = handle.player.lock() else { return; };
         TICK_LOCK_OK.fetch_add(1, Relaxed);
         IS_PLAYING_SAMPLE.store(if p.is_playing() { 1 } else { 2 }, Relaxed);
         use ruffle_common::duration::FloatDuration;
         let dt = FloatDuration::from_secs(dt_seconds as f64);
-        let cf_pre = p.current_frame().map(|n| n as i32).unwrap_or(-1);
-        LATEST_CF_PRE.store(cf_pre, Relaxed);
+        let pre = p.current_frame().map(|n| n as i32).unwrap_or(-1);
         p.tick(dt);
         TICK_AFTER_TICK.fetch_add(1, Relaxed);
-        let cf_mid = p.current_frame().map(|n| n as i32).unwrap_or(-1);
-        LATEST_CF_MID.store(cf_mid, Relaxed);
-        // Kick the frame logic hard, in case tick's dt accumulator hasn't
-        // crossed the frame-time threshold yet.
+        let mid = p.current_frame().map(|n| n as i32).unwrap_or(-1);
         p.run_frame();
         TICK_AFTER_RUNFRAME.fetch_add(1, Relaxed);
-        let cf_post = p.current_frame().map(|n| n as i32).unwrap_or(-1);
-        LATEST_CF_POST.store(cf_post, Relaxed);
-        if cf_post != cf_pre && cf_pre >= 0 && cf_post >= 0 {
-            FRAME_ADVANCES.fetch_add(1, Relaxed);
-        }
+        let post = p.current_frame().map(|n| n as i32).unwrap_or(-1);
         p.render();
         TICK_AFTER_RENDER.fetch_add(1, Relaxed);
+        (pre, mid, post)
+    };
+
+    // Step 3: publish samples and run the executor one more time so any
+    // futures tick/run_frame queued start resolving before the next tick.
+    LATEST_CF_PRE.store(cf_pre, Relaxed);
+    LATEST_CF_MID.store(cf_mid, Relaxed);
+    LATEST_CF_POST.store(cf_post, Relaxed);
+    if cf_post != cf_pre && cf_pre >= 0 && cf_post >= 0 {
+        FRAME_ADVANCES.fetch_add(1, Relaxed);
     }
+    handle.executor.borrow_mut().run();
 }
 
 /// Burn-frames diag: stats from the back-to-back run_frame loop we
@@ -661,17 +737,24 @@ pub unsafe extern "C" fn ruffle_ios_player_frame_diag(
 
 /// Fill `out_counters` with the tick-stage breakdown:
 ///   out[0] = lock_ok, out[1] = after_tick, out[2] = after_run_frame,
-///   out[3] = after_render.
+///   out[3] = after_render, out[4] = executor_runs (per-handle).
 /// `is_playing` receives 0 (unknown), 1 (true), or 2 (false).
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_diag(out_counters: *mut u64, len: usize,
-                                                is_playing: *mut c_int) {
+                                                is_playing: *mut c_int,
+                                                handle_ptr: *mut PlayerHandle) {
     use std::sync::atomic::Ordering::Relaxed;
     if !out_counters.is_null() && len >= 4 {
         *out_counters.add(0) = TICK_LOCK_OK.load(Relaxed);
         *out_counters.add(1) = TICK_AFTER_TICK.load(Relaxed);
         *out_counters.add(2) = TICK_AFTER_RUNFRAME.load(Relaxed);
         *out_counters.add(3) = TICK_AFTER_RENDER.load(Relaxed);
+    }
+    if !out_counters.is_null() && len >= 5 {
+        let runs = borrow_handle(handle_ptr)
+            .map(|h| h.executor_runs.load(Relaxed))
+            .unwrap_or(0);
+        *out_counters.add(4) = runs;
     }
     if !is_playing.is_null() {
         *is_playing = IS_PLAYING_SAMPLE.load(Relaxed) as c_int;

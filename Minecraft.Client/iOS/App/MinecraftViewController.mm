@@ -211,9 +211,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int movH = g_ruffle_player ? ruffle_ios_player_movie_height(g_ruffle_player) : -99;
     uint64_t tickN = ruffle_ios_tick_count();
 
-    uint64_t stage[4] = {0, 0, 0, 0};
+    uint64_t stage[5] = {0, 0, 0, 0, 0};
     int playingSample = 0;
-    ruffle_ios_player_diag(stage, 4, &playingSample);
+    ruffle_ios_player_diag(stage, 5, &playingSample, g_ruffle_player);
     const char* playingStr = (playingSample == 1) ? "true"
                           : (playingSample == 2) ? "false"
                           : "?";
@@ -227,6 +227,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle magic: 0x%08X  render_probe=%d  cur_frame=%d  movie=%dx%d  ticks=%llu\n"
         @"tick stages  lock=%llu tick=%llu run=%llu render=%llu  is_playing=%s\n"
+        @"executor_runs=%llu\n"
         @"frame samples  pre=%d mid=%d post=%d  advances=%llu\n"
         @"burn_frames(100)  done=%d first=%d final=%d max=%d unique=%d\n"
         @"Loaded SWF: %@\n"
@@ -239,6 +240,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"  %@",
         rustMagic, renderProbe, curFrame, movW, movH, tickN,
         stage[0], stage[1], stage[2], stage[3], playingStr,
+        stage[4],
         cfPre, cfMid, cfPost, frameAdvances,
         burnDone, burnFirst, burnFinal, burnMax, burnUnique,
         self.loadedSwfName ?: @"<none>",
