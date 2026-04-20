@@ -112,6 +112,7 @@ pub extern "C" fn ruffle_ios_wgpu_probe() -> c_int {
             required_limits: wgpu::Limits::downlevel_defaults(),
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
+            experimental_features: wgpu::ExperimentalFeatures::default(),
         },
     ));
     match dev {
