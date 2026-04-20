@@ -9,11 +9,11 @@
 #      than fighting linkage rules.
 #
 # Idempotent: rerunning is a no-op once patched.
+#
+# Uses python3 for the actual substitution because BSD sed on macOS has
+# inconsistent word-boundary support.
 
 set -euo pipefail
-
-# BSD sed on macOS chokes on non-ASCII bytes unless we set an 8-bit locale.
-export LC_ALL=C
 
 ROOT="${1:-third_party/gameswf/GameSwfPort/GameSwf}"
 
@@ -22,16 +22,30 @@ if [[ ! -d "$ROOT" ]]; then
     exit 1
 fi
 
-# Rename fmax/fmin -> gs_fmax/gs_fmin everywhere in GameSWF source.
-# Use word-boundary sed so we don't touch std::fmax or fmaxf or similar.
-find "$ROOT" \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) -type f -print0 \
-  | while IFS= read -r -d '' f; do
-      # -i '' for BSD sed (macOS); -i for GNU. Detect and adapt.
-      if sed --version >/dev/null 2>&1; then
-          sed -i -E 's/\bfmax\b/gs_fmax/g; s/\bfmin\b/gs_fmin/g' "$f"
-      else
-          sed -i '' -E 's/\bfmax\b/gs_fmax/g; s/\bfmin\b/gs_fmin/g' "$f"
-      fi
-  done
+python3 - "$ROOT" <<'PY'
+import os, re, sys, pathlib
 
-echo "gameswf patch complete: fmax -> gs_fmax, fmin -> gs_fmin"
+root = pathlib.Path(sys.argv[1])
+pattern = re.compile(r"\b(fmax|fmin)\b")
+
+def replace(m):
+    return "gs_" + m.group(1)
+
+changed = 0
+scanned = 0
+for p in root.rglob("*"):
+    if p.suffix.lower() not in (".cpp", ".h", ".hpp", ".cc", ".cxx"):
+        continue
+    scanned += 1
+    try:
+        src = p.read_text(encoding="utf-8", errors="surrogateescape")
+    except Exception as e:
+        print(f"skip {p}: {e}", file=sys.stderr)
+        continue
+    new = pattern.sub(replace, src)
+    if new != src:
+        p.write_text(new, encoding="utf-8", errors="surrogateescape")
+        changed += 1
+
+print(f"gameswf patch: scanned {scanned} files, updated {changed}")
+PY
