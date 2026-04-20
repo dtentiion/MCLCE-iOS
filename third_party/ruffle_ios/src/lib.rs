@@ -28,6 +28,16 @@ use ruffle_core::{Player, PlayerBuilder};
 static EXTINT_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+// Stage counters for tick diagnostics. If `ticks` climbs but `cur_frame`
+// stays at 0, comparing these tells us which stage of the tick path is
+// dropping out silently.
+static TICK_LOCK_OK:       std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TICK_AFTER_TICK:    std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TICK_AFTER_RUNFRAME:std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TICK_AFTER_RENDER:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// 0 = unknown, 1 = true, 2 = false. Written every tick.
+static IS_PLAYING_SAMPLE:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
 pub struct LoggingExternalInterface;
 
 impl ExternalInterfaceProvider for LoggingExternalInterface {
@@ -107,15 +117,23 @@ fn init_tracing_subscriber_once() {
         // Default: ruffle modules at debug, everything else at warn so we
         // don't drown in tracing from wgpu/naga.
         let filter = EnvFilter::try_new(
-            "warn,ruffle_core=debug,ruffle_render=debug,ruffle_render_wgpu=debug,ruffle_common=debug"
+            "warn,ruffle_core=trace,ruffle_render=debug,ruffle_render_wgpu=debug,ruffle_common=debug"
         ).unwrap_or_else(|_| EnvFilter::new("info"));
-        let _ = fmt()
+        let installed = fmt()
             .with_writer(Maker)
             .with_ansi(false)
             .with_target(true)
             .with_level(true)
             .with_env_filter(filter)
-            .try_init();
+            .try_init()
+            .is_ok();
+        // Drop a direct breadcrumb into the AVM log so the overlay proves
+        // the subscriber was actually installed (not silently stepped on
+        // by some other global dispatcher).
+        avm_log_push(format!(
+            "[ruffle_ios] tracing subscriber installed={} (filter=ruffle_core=trace)",
+            installed
+        ));
     });
 }
 
@@ -531,16 +549,41 @@ pub unsafe extern "C" fn ruffle_ios_player_destroy(raw: *mut PlayerHandle) {
 /// The render happens against the current RenderBackend (NullRenderer for now).
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_seconds: f32) {
+    use std::sync::atomic::Ordering::Relaxed;
     let Some(handle) = borrow_handle(raw) else { return; };
-    TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    TICK_COUNT.fetch_add(1, Relaxed);
     if let Ok(mut p) = handle.player.lock() {
+        TICK_LOCK_OK.fetch_add(1, Relaxed);
+        IS_PLAYING_SAMPLE.store(if p.is_playing() { 1 } else { 2 }, Relaxed);
         use ruffle_common::duration::FloatDuration;
         let dt = FloatDuration::from_secs(dt_seconds as f64);
         p.tick(dt);
+        TICK_AFTER_TICK.fetch_add(1, Relaxed);
         // Kick the frame logic hard, in case tick's dt accumulator hasn't
         // crossed the frame-time threshold yet.
         p.run_frame();
+        TICK_AFTER_RUNFRAME.fetch_add(1, Relaxed);
         p.render();
+        TICK_AFTER_RENDER.fetch_add(1, Relaxed);
+    }
+}
+
+/// Fill `out_counters` with the tick-stage breakdown:
+///   out[0] = lock_ok, out[1] = after_tick, out[2] = after_run_frame,
+///   out[3] = after_render.
+/// `is_playing` receives 0 (unknown), 1 (true), or 2 (false).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_diag(out_counters: *mut u64, len: usize,
+                                                is_playing: *mut c_int) {
+    use std::sync::atomic::Ordering::Relaxed;
+    if !out_counters.is_null() && len >= 4 {
+        *out_counters.add(0) = TICK_LOCK_OK.load(Relaxed);
+        *out_counters.add(1) = TICK_AFTER_TICK.load(Relaxed);
+        *out_counters.add(2) = TICK_AFTER_RUNFRAME.load(Relaxed);
+        *out_counters.add(3) = TICK_AFTER_RENDER.load(Relaxed);
+    }
+    if !is_playing.is_null() {
+        *is_playing = IS_PLAYING_SAMPLE.load(Relaxed) as c_int;
     }
 }
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +76,13 @@ int           ruffle_ios_player_movie_height(PlayerHandle* h);
 
 // Monotonic count of how many times ruffle_ios_player_tick was called.
 uint64_t      ruffle_ios_tick_count(void);
+
+// Tick-stage breakdown. out_counters must point to an array of at least 4
+// u64: [lock_ok, after_tick, after_run_frame, after_render]. `is_playing`
+// receives the most recent Player::is_playing() sample: 0=unknown, 1=true,
+// 2=false. Either pointer may be NULL.
+void          ruffle_ios_player_diag(uint64_t* out_counters, size_t len,
+                                     int* is_playing);
 
 #ifdef __cplusplus
 }
