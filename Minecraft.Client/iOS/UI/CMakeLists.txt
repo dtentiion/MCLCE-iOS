@@ -65,6 +65,10 @@ target_include_directories(mcle_ios_ui PUBLIC
   ${GAMESWF_ROOT}/gameswf
 )
 
+# MetalContext (in mcle_ios_render) gives the SWF render_handler access to
+# the current command encoder without owning its own drawable.
+target_link_libraries(mcle_ios_ui PUBLIC mcle_ios_render)
+
 target_compile_options(mcle_ios_ui PRIVATE
   -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/UI/gameswf_ios_config.h"
   -w  # legacy codebase; focus on errors, not warnings
