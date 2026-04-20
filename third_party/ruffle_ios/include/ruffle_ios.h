@@ -90,6 +90,14 @@ void          ruffle_ios_player_diag(uint64_t* out_counters, size_t len,
 void          ruffle_ios_player_frame_diag(int* cf_pre, int* cf_mid,
                                            int* cf_post, uint64_t* frame_advances);
 
+// Burn-frames diag: summary of the back-to-back run_frame loop performed
+// once at player creation. `done` is 1 if the burn ran (0 otherwise).
+// `first` is cur_frame before the loop; `final_cf` is after the last call;
+// `max_cf` is the highest value seen; `unique_vals` is the count of
+// distinct frame values observed (1 = clip never moved).
+void          ruffle_ios_burn_diag(int* done, int* first, int* final_cf,
+                                   int* max_cf, int* unique_vals);
+
 #ifdef __cplusplus
 }
 #endif

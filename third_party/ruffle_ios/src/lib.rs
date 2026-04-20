@@ -48,6 +48,18 @@ static LATEST_CF_MID:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI
 static LATEST_CF_POST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
 static FRAME_ADVANCES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+// Burn-frames diagnostic: at player create time we hammer run_frame()
+// BURN_N times back to back and record cur_frame after each call. If the
+// root clip never advances under a tight back-to-back loop, run_frame is
+// either a real no-op for this movie or it's gated on something we haven't
+// wired. Independent of tick-time accumulation and of tracing delivery.
+const BURN_N: usize = 100;
+static BURN_FIRST_CF: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-99);
+static BURN_FINAL_CF: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-99);
+static BURN_MAX_CF:   std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-99);
+static BURN_UNIQUE:   std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static BURN_DONE:     std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 pub struct LoggingExternalInterface;
 
 impl ExternalInterfaceProvider for LoggingExternalInterface {
@@ -525,6 +537,31 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
             "[ruffle_ios] preload rounds={} movie={}x{} fps={}",
             guard, p.movie_width(), p.movie_height(), p.frame_rate()
         );
+
+        // Burn-frames probe: call run_frame() BURN_N times and record what
+        // the root clip's frame number looks like after each call. Writes
+        // summary stats (first / final / max / distinct) into atomics.
+        use std::sync::atomic::Ordering::Relaxed;
+        let first = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        BURN_FIRST_CF.store(first, Relaxed);
+        let mut max = first;
+        let mut prev = first;
+        let mut unique = 1i32;
+        for _ in 0..BURN_N {
+            p.run_frame();
+            let cf = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+            if cf > max { max = cf; }
+            if cf != prev { unique += 1; prev = cf; }
+        }
+        let final_cf = p.current_frame().map(|n| n as i32).unwrap_or(-1);
+        BURN_FINAL_CF.store(final_cf, Relaxed);
+        BURN_MAX_CF.store(max, Relaxed);
+        BURN_UNIQUE.store(unique, Relaxed);
+        BURN_DONE.store(1, Relaxed);
+        avm_log_push(format!(
+            "[ruffle_ios] burn_frames N={} first={} final={} max={} unique_values={}",
+            BURN_N, first, final_cf, max, unique
+        ));
     }
 
     eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);
@@ -585,6 +622,25 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
         p.render();
         TICK_AFTER_RENDER.fetch_add(1, Relaxed);
     }
+}
+
+/// Burn-frames diag: stats from the back-to-back run_frame loop we
+/// performed at player create time. Answers whether the root clip can
+/// advance at all under a tight loop, independent of per-tick dt timing.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_burn_diag(
+    done: *mut c_int,
+    first: *mut c_int,
+    final_cf: *mut c_int,
+    max_cf: *mut c_int,
+    unique_vals: *mut c_int,
+) {
+    use std::sync::atomic::Ordering::Relaxed;
+    if !done.is_null()        { *done        = BURN_DONE.load(Relaxed) as c_int; }
+    if !first.is_null()       { *first       = BURN_FIRST_CF.load(Relaxed) as c_int; }
+    if !final_cf.is_null()    { *final_cf    = BURN_FINAL_CF.load(Relaxed) as c_int; }
+    if !max_cf.is_null()      { *max_cf      = BURN_MAX_CF.load(Relaxed) as c_int; }
+    if !unique_vals.is_null() { *unique_vals = BURN_UNIQUE.load(Relaxed) as c_int; }
 }
 
 /// Frame-transition diag: pre/mid/post cur_frame samples from the last
