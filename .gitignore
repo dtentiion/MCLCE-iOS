@@ -71,3 +71,8 @@ uid.dat
 # CI artifact staging
 artifacts/
 dist/
+
+# Rust / Cargo
+target/
+Cargo.lock
+**/*.rs.bk
