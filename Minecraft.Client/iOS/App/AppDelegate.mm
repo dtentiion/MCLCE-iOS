@@ -3,6 +3,7 @@
 
 #include "INP_iOS_Bridge.h"
 #include "mcle_swf_bridge.h"
+#include "ruffle_ios.h"
 
 @implementation AppDelegate
 
@@ -12,6 +13,12 @@
     // Start listening for controllers before the view controller comes up so
     // we don't miss a connect notification from an already-paired pad.
     mcle_ios_input_init();
+
+    // Confirm the Rust Ruffle crate actually linked in and runs natively.
+    int rust_magic = ruffle_ios_magic();
+    NSLog(@"[AppDelegate] ruffle_ios_magic = 0x%08X (expected 0x52554646 'RUFF')",
+          rust_magic);
+    ruffle_ios_init();
 
     // Bring up the SWF runtime (render_handler + player). If this fails the
     // app still runs, just without future SWF-driven UI. The log line in

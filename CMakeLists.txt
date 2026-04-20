@@ -31,6 +31,9 @@ set(UPSTREAM_DIR "${CMAKE_SOURCE_DIR}/upstream")
 set(IOS_PLATFORM_DIR "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS")
 set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
 
+# Pull in the Rust SWF runtime (pre-built by CI's `cargo build` step).
+include("${CMAKE_SOURCE_DIR}/cmake/IntegrateRuffle.cmake")
+
 if(NOT EXISTS "${UPSTREAM_DIR}/Minecraft.Client/Common")
   message(FATAL_ERROR
     "Upstream submodule missing. Run: git submodule update --init --recursive"

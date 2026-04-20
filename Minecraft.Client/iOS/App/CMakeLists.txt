@@ -34,11 +34,14 @@ target_link_libraries(Minecraft.LCE PRIVATE
   mcle_ios_input
   mcle_ios_render
   mcle_ios_ui
+  # New Rust SWF runtime. Will replace the GameSWF path in mcle_ios_ui
+  # once FFI is wired.
+  ruffle_ios
   "-framework UIKit"
   "-framework Foundation"
   "-framework CoreGraphics"
   "-framework QuartzCore"
-  # GameSWF reads compressed SWF headers via zlib. iOS ships libz.
+  # zlib required by GameSWF and Ruffle alike.
   "-lz"
 )
 
