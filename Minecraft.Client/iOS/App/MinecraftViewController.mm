@@ -21,6 +21,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) CADisplayLink* displayLink;
 @property (strong, nonatomic) UILabel* statusLabel;
 @property (strong, nonatomic) MetalView* metalView;
+@property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
 @end
 
 @implementation MinecraftViewController
@@ -121,10 +122,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 (__bridge void*)self.metalView.layer,
                 pw, ph,
                 (const uint8_t*)data.bytes, data.length);
+            // Tag the origin: Documents/ path = user-supplied, else bundle.
+            BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
+            self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
+                swfPath.lastPathComponent,
+                fromDocs ? @"Documents" : @"bundled"];
             NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
-                  g_ruffle_player, swfPath.lastPathComponent);
+                  g_ruffle_player, self.loadedSwfName);
         }
     }
+    if (!self.loadedSwfName) self.loadedSwfName = @"<none>";
 
     if (!g_ruffle_player) {
         // Fallback: our hand-rolled Metal pipeline drew the triangle before.
@@ -185,12 +192,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     NSString* swfLine = [NSString stringWithFormat:
         @"Ruffle magic: 0x%08X  render_probe=%d\n"
+        @"Loaded SWF: %@\n"
         @"wgpu on Metal: %s (%d)  surface_on_CAMetalLayer=%d\n"
         @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
         @"Ruffle Player: %s  declared_fps=%.3f\n"
         @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
         @"  %@",
         rustMagic, renderProbe,
+        self.loadedSwfName ?: @"<none>",
         (wgpuProbe == 1 ? "OK" :
          wgpuProbe == -1 ? "no adapter" :
          wgpuProbe == -2 ? "no device" : "??"),
