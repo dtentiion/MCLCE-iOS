@@ -38,6 +38,20 @@ jobs:
           xcodebuild -version
           cmake --version
 
+      - name: Install Rust toolchain + aarch64-apple-ios target
+        run: |
+          # rustup is preinstalled on macos-14 runners.
+          rustup default stable
+          rustup target add aarch64-apple-ios
+          rustc --version
+          cargo --version
+
+      - name: Build ruffle_ios static library for iOS ARM64
+        run: |
+          cd third_party/ruffle_ios
+          cargo build --release --target aarch64-apple-ios
+          ls -la target/aarch64-apple-ios/release/libruffle_ios.a
+
       - name: Patch vendored GameSWF for libc++
         run: |
           chmod +x scripts/patch-gameswf.sh

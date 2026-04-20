@@ -1,0 +1,25 @@
+[package]
+name = "ruffle_ios"
+version = "0.0.1"
+edition = "2021"
+description = "iOS FFI wrapper around Ruffle, consumed by the MCLCE-iOS app."
+publish = false
+
+# Build as a C-callable static library. CMake links this into the iOS app
+# next to our Metal + GameController bridges.
+[lib]
+name = "ruffle_ios"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+panic = "abort"
+strip = "symbols"
+
+# Ruffle is pulled from its public repo. We pin a specific commit for
+# reproducibility; update it intentionally when we want the latest.
+[dependencies]
+# Placeholder; actual dep added in a follow-up commit after the crate
+# skeleton builds on iOS. Having the real ruffle dep from commit zero
+# makes the first CI run slow and hard to debug.
