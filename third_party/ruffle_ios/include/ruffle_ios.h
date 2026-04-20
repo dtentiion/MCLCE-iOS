@@ -64,6 +64,13 @@ int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
 // bytes written excluding the NUL.
 size_t        ruffle_ios_extint_log(uint8_t* out, size_t cap);
 
+// AS3 trace() output and AVM warnings captured from Ruffle's LogBackend.
+// Same format as ruffle_ios_extint_log.
+size_t        ruffle_ios_avm_log(uint8_t* out, size_t cap);
+
+// Current frame index the player is rendering. -1 if no movie.
+int           ruffle_ios_player_current_frame(PlayerHandle* h);
+
 #ifdef __cplusplus
 }
 #endif
