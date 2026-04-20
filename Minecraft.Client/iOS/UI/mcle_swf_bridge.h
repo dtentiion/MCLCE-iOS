@@ -49,6 +49,10 @@ int  mcle_swf_has_movie(void);
 // available.
 const char* mcle_swf_last_status(void);
 
+// Recent GameSWF log messages (newline separated). Same lifetime rules as
+// mcle_swf_last_status.
+const char* mcle_swf_gameswf_log(void);
+
 #ifdef __cplusplus
 }
 #endif

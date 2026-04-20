@@ -35,6 +35,13 @@
 #  define TU_CONFIG_LINK_TO_ZLIB 1
 #endif
 
+// Enable GameSWF's IF_VERBOSE_PARSE / IF_VERBOSE_DEBUG macros so we can see
+// what the parser actually does with a SWF. Routed to NSLog through a
+// trace callback installed at init.
+#ifndef TU_CONFIG_VERBOSE
+#  define TU_CONFIG_VERBOSE 1
+#endif
+
 // libpng is a bigger lift on iOS. For the first probe, skip PNG support so
 // we can see the rest of the library compile. Bring it back in a later pass.
 #ifndef TU_CONFIG_LINK_TO_LIBPNG
