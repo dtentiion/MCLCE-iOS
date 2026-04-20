@@ -30,6 +30,7 @@ target_link_libraries(Minecraft.LCE PRIVATE
   mcle_ios_ui
   "-framework UIKit"
   "-framework Foundation"
+  "-framework CoreGraphics"
   "-framework QuartzCore"
 )
 
