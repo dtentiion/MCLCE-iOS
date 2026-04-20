@@ -22,6 +22,22 @@ if [[ ! -d "$ROOT" ]]; then
     exit 1
 fi
 
+# Neutralize the Marmalade compatibility_include.h. It sets
+# TU_CONFIG_LINK_TO_THREAD=2 and TU_USE_OGLES / TU_USE_OPENAL unconditionally,
+# which overrides our iOS config. Replace its body with guarded defines so
+# our -include wins.
+COMPAT_FILE="$ROOT/compatibility_include.h"
+if [[ -f "$COMPAT_FILE" ]]; then
+    cat > "$COMPAT_FILE" <<'H'
+// Replaced by MCLCE-iOS patch-gameswf.sh. See scripts/patch-gameswf.sh.
+// Original Marmalade assumptions moved into guarded defines so our
+// Minecraft.Client/iOS/UI/gameswf_ios_config.h force-include wins.
+#ifndef TU_CONFIG_LINK_TO_THREAD
+#  define TU_CONFIG_LINK_TO_THREAD 2
+#endif
+H
+fi
+
 python3 - "$ROOT" <<'PY'
 import os, re, sys, pathlib
 
