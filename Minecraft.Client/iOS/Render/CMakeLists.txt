@@ -3,7 +3,7 @@
 # with GL ES. For now this target is a stub so the rest of the build links.
 
 add_library(mcle_ios_render STATIC
-  RND_iOS_Stub.cpp
+  RND_iOS_Metal.mm
 )
 
 target_include_directories(mcle_ios_render PUBLIC
