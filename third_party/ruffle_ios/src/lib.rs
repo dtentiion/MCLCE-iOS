@@ -76,6 +76,53 @@ pub extern "C" fn ruffle_ios_render_probe() -> c_int {
     StageQuality::High as c_int
 }
 
+/// Probe: create a wgpu Instance with the Metal backend, request an adapter,
+/// then a device. Returns:
+///   1  = all three succeeded (Metal GPU is reachable from our Rust side)
+///   -1 = no adapter
+///   -2 = no device
+/// This does NOT create a Surface (no CAMetalLayer yet) and does NOT draw
+/// anything; it just proves we can talk to the GPU from Rust on iOS.
+#[no_mangle]
+pub extern "C" fn ruffle_ios_wgpu_probe() -> c_int {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::METAL,
+        ..Default::default()
+    });
+
+    let adapter = pollster::block_on(instance.request_adapter(
+        &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            compatible_surface: None,
+        },
+    ));
+    let adapter = match adapter {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("[ruffle_ios] wgpu adapter failed: {e:?}");
+            return -1;
+        }
+    };
+
+    let dev = pollster::block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            label: Some("mcle-ios-device"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+        },
+    ));
+    match dev {
+        Ok(_) => 1,
+        Err(e) => {
+            eprintln!("[ruffle_ios] wgpu device failed: {e:?}");
+            -2
+        }
+    }
+}
+
 // --- Real Player API ---------------------------------------------------------
 
 /// Create a Player with default (Null) backends and no movie loaded.

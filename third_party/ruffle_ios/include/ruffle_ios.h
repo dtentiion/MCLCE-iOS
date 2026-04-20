@@ -33,6 +33,11 @@ int  ruffle_ios_swf_probe(const uint8_t* data, size_t len);
 // StageQuality::High (stable). Any positive value means the crate is in.
 int  ruffle_ios_render_probe(void);
 
+// Probe that wgpu can initialize on iOS Metal: creates Instance + Adapter
+// + Device. Returns 1 on full success, -1 for no adapter, -2 for no
+// device.
+int  ruffle_ios_wgpu_probe(void);
+
 // Full player lifecycle backed by ruffle_core.
 typedef struct PlayerHandle PlayerHandle;
 
