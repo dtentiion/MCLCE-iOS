@@ -52,6 +52,7 @@ list(FILTER GAMESWF_PLAYER_SOURCES_ALL EXCLUDE REGEX
 add_library(mcle_gameswf_probe STATIC
   ${GAMESWF_PROBE_SOURCES}
   ${GAMESWF_PLAYER_SOURCES_ALL}
+  ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/UI/render_handler_metal.mm
   probe_stub.cpp
 )
 
