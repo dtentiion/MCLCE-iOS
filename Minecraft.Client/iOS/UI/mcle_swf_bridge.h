@@ -35,6 +35,9 @@ int  mcle_swf_load(const char* path);
 // + Metal pipeline are visibly exercised on device.
 void mcle_swf_draw_test_rect(int vp_width, int vp_height);
 
+// True if a movie has been loaded and set as the active root.
+int  mcle_swf_has_movie(void);
+
 #ifdef __cplusplus
 }
 #endif

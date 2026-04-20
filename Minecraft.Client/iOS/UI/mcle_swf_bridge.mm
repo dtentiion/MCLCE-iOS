@@ -55,6 +55,11 @@ extern "C" int mcle_swf_is_ready(void) {
     return g_ready.load(std::memory_order_acquire) ? 1 : 0;
 }
 
+extern "C" int mcle_swf_has_movie(void) {
+    if (!g_player) return 0;
+    return g_player->get_root() ? 1 : 0;
+}
+
 extern "C" void mcle_swf_tick(float dt) {
     if (!g_ready.load(std::memory_order_acquire) || !g_player) return;
     gameswf::root* r = g_player->get_root();
