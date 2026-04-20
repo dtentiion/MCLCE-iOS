@@ -59,6 +59,11 @@ void          ruffle_ios_player_tick(PlayerHandle* h, float dt_seconds);
 // Diagnostics.
 int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
 
+// Copy the most recent ExternalInterface call log (newline-separated,
+// NUL-terminated) into `out`, up to `cap` bytes. Returns the number of
+// bytes written excluding the NUL.
+size_t        ruffle_ios_extint_log(uint8_t* out, size_t cap);
+
 #ifdef __cplusplus
 }
 #endif
