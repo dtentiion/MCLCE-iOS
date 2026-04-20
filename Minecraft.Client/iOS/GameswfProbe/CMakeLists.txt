@@ -7,12 +7,33 @@
 
 set(GAMESWF_ROOT "${THIRD_PARTY_DIR}/gameswf/GameSwfPort/GameSwf")
 
-# Start with the smallest possible slice. Grow as these compile.
+# Base library. Skipped: ogl.cpp + test_ogl.cpp (OpenGL on desktop, we use
+# Metal), Stackwalker.cpp (Windows debug tool), tu_file_SDL.cpp (SDL dep),
+# png_helper.cpp (libpng disabled for now in gameswf_ios_config.h), demo.cpp
+# and test_*.cpp (examples).
 set(GAMESWF_PROBE_SOURCES
+  ${GAMESWF_ROOT}/base/configvars.cpp
   ${GAMESWF_ROOT}/base/container.cpp
+  ${GAMESWF_ROOT}/base/dlmalloc.c
+  ${GAMESWF_ROOT}/base/ear_clip_triangulate_float.cpp
+  ${GAMESWF_ROOT}/base/ear_clip_triangulate_sint16.cpp
+  ${GAMESWF_ROOT}/base/file_util.cpp
+  ${GAMESWF_ROOT}/base/image.cpp
+  ${GAMESWF_ROOT}/base/image_filters.cpp
+  ${GAMESWF_ROOT}/base/jpeg.cpp
   ${GAMESWF_ROOT}/base/logger.cpp
   ${GAMESWF_ROOT}/base/membuf.cpp
+  ${GAMESWF_ROOT}/base/postscript.cpp
+  ${GAMESWF_ROOT}/base/triangulate_float.cpp
+  ${GAMESWF_ROOT}/base/triangulate_sint32.cpp
   ${GAMESWF_ROOT}/base/tu_file.cpp
+  ${GAMESWF_ROOT}/base/tu_gc_singlethreaded_marksweep.cpp
+  ${GAMESWF_ROOT}/base/tu_loadlib.cpp
+  ${GAMESWF_ROOT}/base/tu_random.cpp
+  ${GAMESWF_ROOT}/base/tu_timer.cpp
+  ${GAMESWF_ROOT}/base/tu_types.cpp
+  ${GAMESWF_ROOT}/base/utf8.cpp
+  ${GAMESWF_ROOT}/base/utility.cpp
 )
 
 add_library(mcle_gameswf_probe STATIC
