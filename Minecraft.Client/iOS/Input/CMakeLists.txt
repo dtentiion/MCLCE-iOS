@@ -8,6 +8,7 @@ add_library(mcle_ios_input STATIC
 
 target_include_directories(mcle_ios_input PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
   ${UPSTREAM_DIR}/Minecraft.Client/Windows64/4JLibs/inc
 )
 

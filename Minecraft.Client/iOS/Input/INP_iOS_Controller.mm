@@ -2,6 +2,9 @@
 #import <GameController/GameController.h>
 
 #include "INP_iOS_Bridge.h"
+
+// 4J_Input.h leans on Win32 types. Pull compat shims first.
+#include "iOS_WinCompat.h"
 #include "4J_Input.h"  // for _360_JOY_BUTTON_* macros
 
 #include <atomic>
