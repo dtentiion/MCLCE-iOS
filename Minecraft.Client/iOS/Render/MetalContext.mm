@@ -49,16 +49,21 @@ extern "C" int mcle_metal_available(void) {
 extern "C" void mcle_metal_attach_layer(void* ca_metal_layer, int width, int height) {
     if (mcle_metal_ensure_device() != 0) return;
 
-    CAMetalLayer* layer = (__bridge CAMetalLayer*)ca_metal_layer;
-    g.layer = layer;
     g.width = width;
     g.height = height;
 
+    // Null layer = resize-only call. Keep whatever layer was attached before
+    // and just update the drawable size on it.
+    CAMetalLayer* layer = (__bridge CAMetalLayer*)ca_metal_layer;
     if (layer) {
+        g.layer = layer;
         layer.device = g.device;
         layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
         layer.framebufferOnly = YES;
-        layer.drawableSize = CGSizeMake(width, height);
+    }
+
+    if (g.layer) {
+        g.layer.drawableSize = CGSizeMake(width, height);
     }
 }
 
