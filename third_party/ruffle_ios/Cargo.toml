@@ -15,12 +15,14 @@ lto = "thin"
 panic = "abort"
 strip = "symbols"
 
-# ruffle_render brings the RenderBackend trait we need to implement for
-# Metal. Starting with this smaller crate first; we add ruffle_core (the
-# full player) once the trait compiles cleanly on iOS.
+# ruffle_core brings the player, display list, AVM1/AVM2, and shape
+# tessellation. We keep ruffle_render pulled in explicitly so the
+# RenderBackend trait is in scope at the top level.
 #
-# Pulled from upstream master until we know what commits actually build for
-# us; pin a revision in a follow-up once green.
+# Both come from upstream master until we know a commit that builds clean
+# for iOS, then we pin. Expect the first CI build to take 10-20 minutes as
+# the full dep tree compiles.
 [dependencies]
 swf = "0.2"
 ruffle_render = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
+ruffle_core   = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
