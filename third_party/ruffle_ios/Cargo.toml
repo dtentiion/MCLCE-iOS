@@ -33,6 +33,6 @@ ruffle_common       = { git = "https://github.com/ruffle-rs/ruffle", branch = "m
 # tree (meaningful build-time hit, but much less work than a custom
 # backend and far more correct).
 ruffle_render_wgpu  = { git = "https://github.com/ruffle-rs/ruffle", branch = "master" }
-wgpu                = "26"
+wgpu                = "27"
 raw-window-handle   = "0.6"
 pollster            = "0.4"
