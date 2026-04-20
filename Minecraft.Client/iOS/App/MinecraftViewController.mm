@@ -207,9 +207,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         : @"<no AVM output>";
 
     int curFrame = g_ruffle_player ? ruffle_ios_player_current_frame(g_ruffle_player) : -99;
+    int movW = g_ruffle_player ? ruffle_ios_player_movie_width(g_ruffle_player) : -99;
+    int movH = g_ruffle_player ? ruffle_ios_player_movie_height(g_ruffle_player) : -99;
 
     NSString* swfLine = [NSString stringWithFormat:
-        @"Ruffle magic: 0x%08X  render_probe=%d  cur_frame=%d\n"
+        @"Ruffle magic: 0x%08X  render_probe=%d  cur_frame=%d  movie=%dx%d\n"
         @"Loaded SWF: %@\n"
         @"--- SWF ExternalInterface calls ---\n%@\n"
         @"--- Ruffle AVM log (trace/warn) ---\n%@\n"
@@ -218,7 +220,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"Ruffle Player: %s  declared_fps=%.3f\n"
         @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
         @"  %@",
-        rustMagic, renderProbe, curFrame,
+        rustMagic, renderProbe, curFrame, movW, movH,
         self.loadedSwfName ?: @"<none>",
         extintLog,
         avmLog,

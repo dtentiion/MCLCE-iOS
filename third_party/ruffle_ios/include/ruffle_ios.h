@@ -70,6 +70,8 @@ size_t        ruffle_ios_avm_log(uint8_t* out, size_t cap);
 
 // Current frame index the player is rendering. -1 if no movie.
 int           ruffle_ios_player_current_frame(PlayerHandle* h);
+int           ruffle_ios_player_movie_width(PlayerHandle* h);
+int           ruffle_ios_player_movie_height(PlayerHandle* h);
 
 #ifdef __cplusplus
 }

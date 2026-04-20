@@ -36,3 +36,7 @@ ruffle_render_wgpu  = { git = "https://github.com/ruffle-rs/ruffle", branch = "m
 wgpu                = "27"
 raw-window-handle   = "0.6"
 pollster            = "0.4"
+# Subscriber that forwards Ruffle's internal tracing (stubs hit, tag
+# warnings, invalid SWF bits, etc.) into our AVM_LOG ring buffer.
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", default-features = false, features = ["std", "fmt"] }

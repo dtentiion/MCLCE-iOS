@@ -68,22 +68,57 @@ impl FsCommandProvider for LoggingFsCommands {
 // while the menu SWF runs.
 static AVM_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+fn avm_log_push(line: String) {
+    if let Ok(mut log) = AVM_LOG.lock() {
+        if log.len() >= 256 { log.remove(0); }
+        log.push(line);
+    }
+}
+
+/// Writer that shunts `tracing` events into AVM_LOG so users can see what
+/// Ruffle is complaining about on-device without Mac-side log streaming.
+struct RingBufferWriter;
+
+impl std::io::Write for RingBufferWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if let Ok(s) = std::str::from_utf8(buf) {
+            for line in s.lines().filter(|l| !l.is_empty()) {
+                avm_log_push(format!("trc {}", line));
+            }
+        }
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+
+fn init_tracing_subscriber_once() {
+    use tracing_subscriber::fmt;
+    use tracing_subscriber::fmt::MakeWriter;
+    use std::sync::OnceLock;
+    static ONCE: OnceLock<()> = OnceLock::new();
+    struct Maker;
+    impl<'a> MakeWriter<'a> for Maker {
+        type Writer = RingBufferWriter;
+        fn make_writer(&'a self) -> Self::Writer { RingBufferWriter }
+    }
+    ONCE.get_or_init(|| {
+        let _ = fmt()
+            .with_writer(Maker)
+            .with_ansi(false)
+            .with_target(true)
+            .with_level(true)
+            .try_init();
+    });
+}
+
 pub struct CapturingLogBackend;
 
 impl ruffle_core::backend::log::LogBackend for CapturingLogBackend {
     fn avm_trace(&self, message: &str) {
-        let line = format!("TRACE {message}");
-        if let Ok(mut log) = AVM_LOG.lock() {
-            if log.len() >= 256 { log.remove(0); }
-            log.push(line);
-        }
+        avm_log_push(format!("TRACE {message}"));
     }
     fn avm_warning(&self, message: &str) {
-        let line = format!("WARN {message}");
-        if let Ok(mut log) = AVM_LOG.lock() {
-            if log.len() >= 256 { log.remove(0); }
-            log.push(line);
-        }
+        avm_log_push(format!("WARN {message}"));
     }
 }
 
@@ -101,6 +136,24 @@ pub unsafe extern "C" fn ruffle_ios_avm_log(out: *mut u8, cap: usize) -> usize {
 
 /// Diagnostic: returns the current frame number the player is on, or -1
 /// if no player / no root movie. Tells us if the movie is advancing at all.
+/// Pixel width of the currently-loaded root movie, or -1 on error.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_movie_width(raw: *mut PlayerHandle) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return -1; };
+    if let Ok(mut p) = handle.player.lock() {
+        p.movie_width() as c_int
+    } else { -2 }
+}
+
+/// Pixel height of the currently-loaded root movie, or -1 on error.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_movie_height(raw: *mut PlayerHandle) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return -1; };
+    if let Ok(mut p) = handle.player.lock() {
+        p.movie_height() as c_int
+    } else { -2 }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_current_frame(raw: *mut PlayerHandle) -> c_int {
     let Some(handle) = borrow_handle(raw) else { return -1; };
@@ -346,6 +399,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     data: *const u8,
     len: usize,
 ) -> *mut PlayerHandle {
+    init_tracing_subscriber_once();
     use ruffle_render_wgpu::backend::{WgpuRenderBackend, request_adapter_and_device};
     use ruffle_render_wgpu::descriptors::Descriptors;
     use ruffle_render_wgpu::target::SwapChainTarget;
