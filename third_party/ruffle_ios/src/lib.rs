@@ -299,6 +299,50 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
     n
 }
 
+/// One level deeper than `ruffle_ios_enumerate_root_children`: list the
+/// direct children of a named root child, e.g. what `Button1` actually
+/// contains. Hypothesis we're chasing: PlaceObject places Button1 by class
+/// name only (no char id), Ruffle builds the AS3 object but doesn't clone
+/// the bound sprite's timeline, so `FJ_TextContainer` (needed by
+/// `FJ_Base.GetTextField`) never exists. This dumps Button1's children so
+/// we can confirm in the log.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_enumerate_named_child_children(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0
+        || out.is_null() || cap == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let Ok(mut p) = handle.player.lock() else { return 0; };
+    let kids = p.enumerate_named_child_children(child_name);
+    drop(p);
+    let rendered: String = kids
+        .into_iter()
+        .map(|(n, c)| format!("{}\t{}", if n.is_empty() { "<unnamed>" } else { &n }, c))
+        .collect::<Vec<_>>()
+        .join("\n");
+    avm_log_push(format!(
+        "[ruffle_ios] '{}' children ({} total):\n{}",
+        child_name,
+        rendered.lines().count().max(if rendered.is_empty() { 0 } else { 1 }),
+        rendered
+    ));
+    let bytes = rendered.as_bytes();
+    let n = bytes.len().min(cap - 1);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n);
+    *out.add(n) = 0;
+    n
+}
+
 /// Invoke AS3 `childName.methodName(label, id)` on a direct child of the
 /// root clip. Returns 1 on success, 0 on bad args, -1 if the player lock
 /// can't be taken. A human-readable status line is pushed to AVM_LOG

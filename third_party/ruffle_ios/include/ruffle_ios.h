@@ -153,6 +153,16 @@ void          ruffle_ios_avm_counts(uint64_t* traces, uint64_t* warns);
 size_t        ruffle_ios_enumerate_root_children(PlayerHandle* h,
                                                  uint8_t* out, size_t cap);
 
+// One level deeper: list `childName`'s own direct children (the inner
+// display list of a named root child, e.g. what Button1 actually
+// contains). Same output shape as ruffle_ios_enumerate_root_children,
+// also pushed to AVM_LOG. Returns bytes written (excluding NUL). 0 is
+// returned both on empty containers and on lookup failure; check the
+// AVM_LOG line for "<N total>" to tell them apart.
+size_t        ruffle_ios_enumerate_named_child_children(PlayerHandle* h,
+                                                        const uint8_t* child_name, size_t child_name_len,
+                                                        uint8_t* out, size_t cap);
+
 // Invoke `childName.methodName(label, id)` on a direct child of the root
 // clip, mirroring the console LCE's IggyPlayerCallMethodRS pattern. The
 // status string produced by the call is always pushed to AVM_LOG.

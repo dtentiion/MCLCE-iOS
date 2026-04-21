@@ -257,6 +257,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                         (const uint8_t*)label,     strlen(label),
                         0.0);
                     NSLog(@"[MinecraftVC] SetLabel(%s, %s) -> %d", name, label, s);
+
+                    // Diag: dump Button<i>'s own children. FJ_Base.GetTextField
+                    // walks getChildByName("FJ_TextContainer") -> getChildAt(0)
+                    // -> getChildAt(0) as TextField. If the button's direct
+                    // child list is empty (or missing FJ_TextContainer), the
+                    // class-only PlaceObject in MainMenu.swf never cloned
+                    // skinHD sprite 136's frame-1 tags into the instance, and
+                    // the fix has to land in the Ruffle PlaceObject path.
+                    char kids[1024] = {0};
+                    ruffle_ios_enumerate_named_child_children(
+                        g_ruffle_player,
+                        (const uint8_t*)name, strlen(name),
+                        (uint8_t*)kids, sizeof(kids));
+                    NSLog(@"[MinecraftVC] %s children:\n%s", name, kids);
                 }
             }
         }
