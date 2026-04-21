@@ -149,8 +149,13 @@ fn init_tracing_subscriber_once() {
         use tracing_subscriber::EnvFilter;
         // Default: ruffle modules at debug, everything else at warn so we
         // don't drown in tracing from wgpu/naga.
+        // Keep ruffle_core at info (not trace): trace floods the ring
+        // buffer with every DefineShape/DefineSprite/tag parse during
+        // preload and pushes the try_settle_imports/drain diagnostics
+        // out of the head slice. info still captures the load cascade
+        // and resolver outcomes we actually need on-device.
         let filter = EnvFilter::try_new(
-            "warn,ruffle_core=trace,ruffle_render=debug,ruffle_render_wgpu=debug,ruffle_common=debug"
+            "warn,ruffle_core=info,ruffle_render=debug,ruffle_render_wgpu=debug,ruffle_common=debug"
         ).unwrap_or_else(|_| EnvFilter::new("info"));
         let installed = fmt()
             .with_writer(Maker)
@@ -164,7 +169,7 @@ fn init_tracing_subscriber_once() {
         // the subscriber was actually installed (not silently stepped on
         // by some other global dispatcher).
         avm_log_push(format!(
-            "[ruffle_ios] tracing subscriber installed={} (filter=ruffle_core=trace)",
+            "[ruffle_ios] tracing subscriber installed={} (filter=ruffle_core=info)",
             installed
         ));
     });
