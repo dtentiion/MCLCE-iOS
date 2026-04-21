@@ -294,9 +294,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             if ([line containsString:@"Fallback font not found"]) continue;
             [filtered addObject:line];
         }
-        const NSUInteger kHead = 8;
-        if (filtered.count > kHead) {
-            filtered = [[filtered subarrayWithRange:NSMakeRange(0, kHead)] mutableCopy];
+        const NSUInteger kTail = 8;
+        if (filtered.count > kTail) {
+            filtered = [[filtered subarrayWithRange:
+                NSMakeRange(filtered.count - kTail, kTail)] mutableCopy];
         }
         avmLog = [filtered componentsJoinedByString:@"\n"];
     } else {
@@ -328,7 +329,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d\n"
         @"Loaded SWF: %@\n"
         @"--- ExtInt (calls + addCallback names) ---\n%@\n"
-        @"--- AVM log (startup, first 8) ---\n%@",
+        @"--- AVM log (latest 8) ---\n%@",
         curFrame, movW, movH, tickN, playingStr,
         stage[0], stage[1], stage[2], stage[3], stage[4],
         cfPre, cfMid, cfPost, frameAdvances, burnFirst, burnFinal, burnMax,
