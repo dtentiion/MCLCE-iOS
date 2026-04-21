@@ -243,6 +243,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                         mainMenuButtons[i].id);
                     NSLog(@"[MinecraftVC] Init(%s, %s, %.0f) -> %d",
                           name, label, mainMenuButtons[i].id, r);
+                    // Init on FJ_MenuButton traces "This component doesn't
+                    // seem to have a Text Field" because the AS3 Init runs
+                    // before the inner TextField is auto-wired. On console
+                    // UIControl_Base::tick calls SetLabel every frame once
+                    // m_label is dirty, which is what actually paints the
+                    // visible text. Mirror that here with a follow-up call
+                    // so the label has another chance to land.
+                    int s = ruffle_ios_call_init_on_named_child(
+                        g_ruffle_player,
+                        (const uint8_t*)name,      strlen(name),
+                        (const uint8_t*)"SetLabel", 8,
+                        (const uint8_t*)label,     strlen(label),
+                        0.0);
+                    NSLog(@"[MinecraftVC] SetLabel(%s, %s) -> %d", name, label, s);
                 }
             }
         }
