@@ -163,6 +163,15 @@ size_t        ruffle_ios_enumerate_named_child_children(PlayerHandle* h,
                                                         const uint8_t* child_name, size_t child_name_len,
                                                         uint8_t* out, size_t cap);
 
+// Recursively enumerate a named root child's subtree up to max_depth
+// levels. Output is indented: "<name>\t<class>" per line, depth implied
+// by leading spaces (2 per level). Same buffer/return semantics as the
+// shallower enumerate_named_child_children.
+size_t        ruffle_ios_enumerate_subtree_of(PlayerHandle* h,
+                                              const uint8_t* child_name, size_t child_name_len,
+                                              size_t max_depth,
+                                              uint8_t* out, size_t cap);
+
 // Invoke `childName.methodName(label, id)` on a direct child of the root
 // clip, mirroring the console LCE's IggyPlayerCallMethodRS pattern. The
 // status string produced by the call is always pushed to AVM_LOG.

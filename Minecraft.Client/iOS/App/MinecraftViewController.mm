@@ -271,6 +271,22 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                         (const uint8_t*)name, strlen(name),
                         (uint8_t*)kids, sizeof(kids));
                     NSLog(@"[MinecraftVC] %s children:\n%s", name, kids);
+
+                    // Only for Button1: walk 3 levels (Button1 ->
+                    // FJ_TextContainer -> inner MovieClip -> TextField).
+                    // That's what FJ_Base.GetTextField traverses; if any
+                    // level comes up empty the class-only PlaceObject
+                    // inside sprite 46 (class="FJ_Label", no char id) is
+                    // the level that isn't cloning its bound content.
+                    if (i == 0) {
+                        char subtree[4096] = {0};
+                        ruffle_ios_enumerate_subtree_of(
+                            g_ruffle_player,
+                            (const uint8_t*)name, strlen(name),
+                            3,
+                            (uint8_t*)subtree, sizeof(subtree));
+                        NSLog(@"[MinecraftVC] %s subtree:\n%s", name, subtree);
+                    }
                 }
             }
         }
