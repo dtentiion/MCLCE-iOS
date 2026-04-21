@@ -74,7 +74,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.statusLabel = [[UILabel alloc] initWithFrame:safeFrame];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textColor = [UIColor colorWithRed:0.95 green:0.25 blue:0.35 alpha:1.0];
-    self.statusLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+    self.statusLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
     self.statusLabel.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
     self.statusLabel.text =
         @"Minecraft: Legacy Console Edition (iOS)\n\n"
