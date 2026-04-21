@@ -359,10 +359,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // outstanding issue and spams the ring, hiding the
         // preload/drain cascade diagnostics we actually need.
         NSMutableArray<NSString*>* filtered = [NSMutableArray new];
+        NSUInteger droppedFallback = 0;
         for (NSString* line in allLines) {
-            if ([line containsString:@"Mojangles7"]) continue;
-            if ([line containsString:@"Fallback font not found"]) continue;
+            // Collapse the repeating "Fallback font not found (Sans)" spam
+            // (one line per text field per frame) into a count so the real
+            // device-font load result isn't pushed off the bottom.
+            if ([line containsString:@"Fallback font not found"]) {
+                droppedFallback++;
+                continue;
+            }
             [filtered addObject:line];
+        }
+        if (droppedFallback > 0) {
+            [filtered addObject:[NSString stringWithFormat:
+                @"(suppressed %lu 'Fallback font not found' lines)",
+                (unsigned long)droppedFallback]];
         }
         const NSUInteger kTail = 8;
         if (filtered.count > kTail) {
