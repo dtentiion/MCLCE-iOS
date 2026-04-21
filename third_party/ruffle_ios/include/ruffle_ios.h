@@ -81,6 +81,17 @@ int           ruffle_ios_player_movie_height(PlayerHandle* h);
 // Monotonic count of how many times ruffle_ios_player_tick was called.
 uint64_t      ruffle_ios_tick_count(void);
 
+// Stage a TTF/OTF font to be registered with the *next* player created via
+// ruffle_ios_player_create_wgpu, BEFORE it runs preload. This is what you
+// want for device fonts the SWF references at init time (the menu font):
+// registering after the player is built misses the first text layout and
+// glyphs render as empty boxes. Same argument shape as the post-create
+// register function below. Returns 1 on success, 0 on bad args,
+// -1 if the staging list's lock is poisoned.
+int           ruffle_ios_stage_device_font(const uint8_t* name, size_t name_len,
+                                           const uint8_t* data, size_t data_len,
+                                           int is_bold, int is_italic);
+
 // Register a TTF/OTF font as a Ruffle device font. The SWF can then look it
 // up by `name` when it asks for a device font. Returns 1 on success, 0 on
 // bad arguments, -1 on a player lock failure.

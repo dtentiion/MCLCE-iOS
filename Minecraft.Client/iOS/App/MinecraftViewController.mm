@@ -123,25 +123,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         if (data.length) {
             NSString* docsPath = [NSSearchPathForDirectoriesInDomains(
                 NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            g_ruffle_player = ruffle_ios_player_create_wgpu(
-                (__bridge void*)self.metalView.layer,
-                pw, ph,
-                (const uint8_t*)data.bytes, data.length,
-                docsPath.UTF8String);
-            // Tag the origin: Documents/ path = user-supplied, else bundle.
-            BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
-            self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
-                swfPath.lastPathComponent,
-                fromDocs ? @"Documents" : @"bundled"];
-            NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
-                  g_ruffle_player, self.loadedSwfName);
 
-            // Register the LCE menu font if the user has dropped Mojangles7.ttf
-            // into Documents. Without this the SWF's device-font request for
-            // "Mojangles7" falls through and every label renders as empty
-            // boxes. LCE ships the file as "Mojang Font_7.ttf"; either name
-            // works. We also walk common subfolders in case the user created
-            // one in Files app.
+            // Stage the LCE menu font BEFORE create_wgpu so Ruffle registers
+            // it before preload. Registering after returns caches misses in
+            // text-field glyph tables and labels render as empty boxes.
+            // LCE ships the file as "Mojang Font_7.ttf"; also try the name
+            // the SWF references ("Mojangles7.ttf") and a few common
+            // subfolders for users who organise their Files app drop.
             NSArray<NSString*>* fontNames = @[
                 @"Mojangles7.ttf",
                 @"Mojang Font_7.ttf",
@@ -171,22 +159,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             }
             if (fontData.length) {
                 const char* nameCStr = "Mojangles7";
-                int rc = ruffle_ios_register_device_font(
-                    g_ruffle_player,
+                int rc = ruffle_ios_stage_device_font(
                     (const uint8_t*)nameCStr, strlen(nameCStr),
                     (const uint8_t*)fontData.bytes, fontData.length,
                     0, 0);
-                NSLog(@"[MinecraftVC] registered device font from %@ rc=%d",
+                NSLog(@"[MinecraftVC] staged device font from %@ rc=%d",
                       foundAt, rc);
                 if (rc == 1) {
                     self.fontStatus = [NSString stringWithFormat:
-                        @"Mojangles7 ok (%luk) from %@",
+                        @"Mojangles7 staged (%luk) from %@",
                         (unsigned long)(fontData.length / 1024),
                         [foundAt stringByReplacingOccurrencesOfString:docsPath
                                                            withString:@"Docs"]];
                 } else {
                     self.fontStatus = [NSString stringWithFormat:
-                        @"Mojangles7 register rc=%d", rc];
+                        @"Mojangles7 stage rc=%d", rc];
                 }
             } else {
                 // List what's actually in Documents so the user can see
@@ -201,6 +188,22 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 self.fontStatus = [NSString stringWithFormat:
                     @"Mojangles7 missing; Docs has: %@", summary];
             }
+
+            // Now that fonts are staged, build the player. create_wgpu will
+            // apply the staged fonts between PlayerBuilder::build() and the
+            // preload loop, so text fields find the device font on their
+            // first glyph layout.
+            g_ruffle_player = ruffle_ios_player_create_wgpu(
+                (__bridge void*)self.metalView.layer,
+                pw, ph,
+                (const uint8_t*)data.bytes, data.length,
+                docsPath.UTF8String);
+            BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
+            self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
+                swfPath.lastPathComponent,
+                fromDocs ? @"Documents" : @"bundled"];
+            NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
+                  g_ruffle_player, self.loadedSwfName);
         }
     }
     if (!self.loadedSwfName) self.loadedSwfName = @"<none>";
