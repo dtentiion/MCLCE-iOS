@@ -263,22 +263,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                                                    length:avmLen
                                                  encoding:NSUTF8StringEncoding];
         NSArray<NSString*>* lines = [full componentsSeparatedByString:@"\n"];
-        // Keep the first 12 (startup: preload + import cascade)
-        // plus the last 12 (newest), separated by an elision marker.
-        // With the resolver's per-frame failure demoted to trace, the
-        // first slice reliably contains try_settle_imports/drain logs.
-        const NSUInteger kHead = 12, kTail = 12;
-        if (lines.count > kHead + kTail + 1) {
-            NSArray* head = [lines subarrayWithRange:NSMakeRange(0, kHead)];
-            NSArray* tail = [lines subarrayWithRange:
-                NSMakeRange(lines.count - kTail, kTail)];
-            NSMutableArray* combined = [head mutableCopy];
-            [combined addObject:@"... (elided) ..."];
-            [combined addObjectsFromArray:tail];
-            avmLog = [combined componentsJoinedByString:@"\n"];
-        } else {
-            avmLog = [lines componentsJoinedByString:@"\n"];
+        // Show the first kHead lines (startup import cascade). Tail is
+        // almost always heartbeats right now; skipping it gives us more
+        // room for the diagnostics that actually matter on a phone
+        // that only lets us scroll the overlay by a single line.
+        const NSUInteger kHead = 25;
+        if (lines.count > kHead) {
+            lines = [lines subarrayWithRange:NSMakeRange(0, kHead)];
         }
+        avmLog = [lines componentsJoinedByString:@"\n"];
     } else {
         avmLog = @"<no AVM output>";
     }
@@ -308,7 +301,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d\n"
         @"Loaded SWF: %@\n"
         @"--- ExtInt (calls + addCallback names) ---\n%@\n"
-        @"--- AVM log (head + tail) ---\n%@",
+        @"--- AVM log (startup, first 25) ---\n%@",
         curFrame, movW, movH, tickN, playingStr,
         stage[0], stage[1], stage[2], stage[3], stage[4],
         cfPre, cfMid, cfPost, frameAdvances, burnFirst, burnFinal, burnMax,
