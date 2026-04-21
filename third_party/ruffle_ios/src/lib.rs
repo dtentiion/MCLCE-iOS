@@ -17,6 +17,7 @@ use ruffle_common::tag_utils::SwfMovie;
 use ruffle_core::external::{ExternalInterfaceProvider, FsCommandProvider, Value as ExtValue};
 use ruffle_core::context::UpdateContext;
 use ruffle_core::backend::navigator::{NullExecutor, NullNavigatorBackend};
+use ruffle_core::events::{GamepadButton, PlayerEvent};
 use ruffle_core::{Player, PlayerBuilder};
 
 // --- Captured ExternalInterface log -----------------------------------------
@@ -615,12 +616,16 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         {
             let mut p = player.lock().expect("player lock");
             p.set_is_playing(true);
+            // Fire a FocusGained so AS3 code that gates on
+            // stage.focus can proceed. Harmless if nothing listens.
+            p.handle_event(PlayerEvent::FocusGained);
             eprintln!(
                 "[ruffle_ios] preload rounds={} movie={}x{} fps={}",
                 guard, p.movie_width(), p.movie_height(), p.frame_rate()
             );
         }
         executor.run();
+        avm_log_push("[ruffle_ios] FocusGained sent, executor drained".into());
 
         // Burn-frames probe: call run_frame() BURN_N times and record what
         // the root clip's frame number looks like after each call, with the
@@ -661,6 +666,53 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
 
     eprintln!("[ruffle_ios] wgpu player built, {}x{}", width, height);
     to_handle(player, executor)
+}
+
+// --- Input events from the iOS controller layer ------------------------------
+
+fn map_gamepad_button(code: c_int) -> Option<GamepadButton> {
+    Some(match code {
+        0 => GamepadButton::South,          // Xbox A
+        1 => GamepadButton::East,           // Xbox B
+        2 => GamepadButton::North,          // Xbox Y
+        3 => GamepadButton::West,           // Xbox X
+        4 => GamepadButton::Start,
+        5 => GamepadButton::Select,
+        6 => GamepadButton::DPadUp,
+        7 => GamepadButton::DPadDown,
+        8 => GamepadButton::DPadLeft,
+        9 => GamepadButton::DPadRight,
+        10 => GamepadButton::LeftTrigger,
+        11 => GamepadButton::RightTrigger,
+        12 => GamepadButton::LeftTrigger2,
+        13 => GamepadButton::RightTrigger2,
+        _ => return None,
+    })
+}
+
+/// Forward a controller button press into the Ruffle player as a
+/// GamepadButtonDown event. `code` is the iOS-side mapping (see header).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_gamepad_down(raw: *mut PlayerHandle, code: c_int) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Some(button) = map_gamepad_button(code) else { return; };
+    if let Ok(mut p) = handle.player.lock() {
+        p.handle_event(PlayerEvent::GamepadButtonDown { button });
+    }
+    handle.executor.borrow_mut().run();
+    avm_log_push(format!("[ruffle_ios] GamepadButtonDown code={code}"));
+}
+
+/// Mirror of gamepad_down for button release.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_gamepad_up(raw: *mut PlayerHandle, code: c_int) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Some(button) = map_gamepad_button(code) else { return; };
+    if let Ok(mut p) = handle.player.lock() {
+        p.handle_event(PlayerEvent::GamepadButtonUp { button });
+    }
+    handle.executor.borrow_mut().run();
+    avm_log_push(format!("[ruffle_ios] GamepadButtonUp code={code}"));
 }
 
 /// Copy the captured ExternalInterface call log into `out` as a
