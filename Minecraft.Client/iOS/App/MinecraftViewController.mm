@@ -262,6 +262,28 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         NSString* full = [[NSString alloc] initWithBytes:avmBuf
                                                    length:avmLen
                                                  encoding:NSUTF8StringEncoding];
+        // Collapse noisy prefixes so a single log entry doesn't wrap
+        // across 3 visual rows on the phone. Container UUID changes
+        // per install, so match by structure.
+        NSArray<NSArray<NSString*>*>* subs = @[
+            @[@"file:///private/var/mobile/Containers/Data/Application/[0-9A-F-]+/Documents/",
+              @"Docs/"],
+            @[@"trc \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s+", @""],
+            @[@"ruffle_core::", @""],
+        ];
+        for (NSArray<NSString*>* pair in subs) {
+            NSError* err = nil;
+            NSRegularExpression* rx = [NSRegularExpression
+                regularExpressionWithPattern:pair[0]
+                options:0
+                error:&err];
+            if (rx) {
+                full = [rx stringByReplacingMatchesInString:full
+                    options:0
+                    range:NSMakeRange(0, full.length)
+                    withTemplate:pair[1]];
+            }
+        }
         NSArray<NSString*>* lines = [full componentsSeparatedByString:@"\n"];
         // Show the first kHead lines (startup import cascade). Tail is
         // almost always heartbeats right now; skipping it gives us more
