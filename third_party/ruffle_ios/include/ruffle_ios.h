@@ -141,6 +141,12 @@ void          ruffle_ios_player_frame_diag(int* cf_pre, int* cf_mid,
 void          ruffle_ios_burn_diag(int* done, int* first, int* final_cf,
                                    int* max_cf, int* unique_vals);
 
+// Count of AS3 trace() calls and AVM warnings. If `traces` stays flat as
+// ticks climb, AS3 is not executing past whatever ran at startup, which
+// means a deferred init / event handler never fired. Either pointer may be
+// NULL.
+void          ruffle_ios_avm_counts(uint64_t* traces, uint64_t* warns);
+
 #ifdef __cplusplus
 }
 #endif
