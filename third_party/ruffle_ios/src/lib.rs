@@ -343,6 +343,53 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_named_child_children(
     n
 }
 
+/// Recursively enumerate a named root child's subtree up to `max_depth`
+/// levels. Output format (pushed to AVM_LOG and copied to `out`): each
+/// line is `<depth spaces><name>\t<class>` so indentation reveals the
+/// tree structure. FJ_Base.GetTextField walks 3 levels from the button,
+/// so max_depth=3 is the useful setting for the label diagnostic.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_enumerate_subtree_of(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    max_depth: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0
+        || out.is_null() || cap == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let Ok(mut p) = handle.player.lock() else { return 0; };
+    let nodes = p.enumerate_subtree_of(child_name, max_depth);
+    drop(p);
+    let rendered: String = nodes
+        .into_iter()
+        .map(|(d, n, c)| {
+            let indent = "  ".repeat(d.saturating_sub(1));
+            format!("{}{}\t{}", indent, if n.is_empty() { "<unnamed>" } else { &n }, c)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    avm_log_push(format!(
+        "[ruffle_ios] subtree of '{}' (depth<={}, {} nodes):\n{}",
+        child_name,
+        max_depth,
+        rendered.lines().count().max(if rendered.is_empty() { 0 } else { 1 }),
+        rendered
+    ));
+    let bytes = rendered.as_bytes();
+    let n = bytes.len().min(cap - 1);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n);
+    *out.add(n) = 0;
+    n
+}
+
 /// Invoke AS3 `childName.methodName(label, id)` on a direct child of the
 /// root clip. Returns 1 on success, 0 on bad args, -1 if the player lock
 /// can't be taken. A human-readable status line is pushed to AVM_LOG
