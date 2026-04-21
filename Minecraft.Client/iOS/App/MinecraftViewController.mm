@@ -75,7 +75,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.statusLabel = [[UILabel alloc] initWithFrame:safeFrame];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textColor = [UIColor colorWithRed:0.95 green:0.25 blue:0.35 alpha:1.0];
-    self.statusLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
+    self.statusLabel.backgroundColor = [UIColor clearColor];
     self.statusLabel.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
     self.statusLabel.text =
         @"Minecraft: Legacy Console Edition (iOS)\n\n"
@@ -294,7 +294,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             if ([line containsString:@"Fallback font not found"]) continue;
             [filtered addObject:line];
         }
-        const NSUInteger kHead = 25;
+        const NSUInteger kHead = 8;
         if (filtered.count > kHead) {
             filtered = [[filtered subarrayWithRange:NSMakeRange(0, kHead)] mutableCopy];
         }
@@ -328,7 +328,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d\n"
         @"Loaded SWF: %@\n"
         @"--- ExtInt (calls + addCallback names) ---\n%@\n"
-        @"--- AVM log (startup, first 25) ---\n%@",
+        @"--- AVM log (startup, first 8) ---\n%@",
         curFrame, movW, movH, tickN, playingStr,
         stage[0], stage[1], stage[2], stage[3], stage[4],
         cfPre, cfMid, cfPost, frameAdvances, burnFirst, burnFinal, burnMax,
