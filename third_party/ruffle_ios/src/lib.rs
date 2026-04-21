@@ -17,7 +17,9 @@ use ruffle_common::tag_utils::SwfMovie;
 use ruffle_core::external::{ExternalInterfaceProvider, FsCommandProvider, Value as ExtValue};
 use ruffle_core::context::UpdateContext;
 use ruffle_core::backend::navigator::{NullExecutor, NullNavigatorBackend};
+use ruffle_core::backend::ui::FontDefinition;
 use ruffle_core::events::{GamepadButton, KeyCode, PlayerEvent};
+use ruffle_core::font::FontFileData;
 use ruffle_core::{Player, PlayerBuilder};
 
 // --- Captured ExternalInterface log -----------------------------------------
@@ -299,6 +301,56 @@ fn to_handle(p: Arc<Mutex<Player>>, executor: NullExecutor) -> *mut PlayerHandle
 
 unsafe fn borrow_handle<'a>(raw: *mut PlayerHandle) -> Option<&'a PlayerHandle> {
     if raw.is_null() { None } else { Some(&*raw) }
+}
+
+/// Register a TTF/OTF font as a Ruffle device font. The Flash SWF can then
+/// pick it up when it asks for a device font by `name`. Returns 1 on success,
+/// 0 on any argument failure, -1 if the player lock can't be acquired.
+///
+/// The iOS shell calls this once after player creation with bytes read from
+/// `Documents/Mojangles7.ttf` (users drop their own LCE font file there via
+/// the Files app, same way they supply the menu SWF).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_register_device_font(
+    raw: *mut PlayerHandle,
+    name_ptr: *const u8,
+    name_len: usize,
+    data_ptr: *const u8,
+    data_len: usize,
+    is_bold: c_int,
+    is_italic: c_int,
+) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    if name_ptr.is_null() || data_ptr.is_null() || name_len == 0 || data_len == 0 {
+        return 0;
+    }
+    let name_bytes = std::slice::from_raw_parts(name_ptr, name_len);
+    let name = match std::str::from_utf8(name_bytes) {
+        Ok(s) => s.to_string(),
+        Err(_) => return 0,
+    };
+    let data = std::slice::from_raw_parts(data_ptr, data_len).to_vec();
+    let ok = if let Ok(mut player) = handle.player.lock() {
+        player.register_device_font(FontDefinition::FontFile {
+            name: name.clone(),
+            is_bold: is_bold != 0,
+            is_italic: is_italic != 0,
+            data: FontFileData::new(data),
+            index: 0,
+        });
+        true
+    } else {
+        false
+    };
+    if ok {
+        avm_log_push(format!(
+            "[ruffle_ios] registered device font '{}' ({} bytes, bold={}, italic={})",
+            name, data_len, is_bold != 0, is_italic != 0
+        ));
+        1
+    } else {
+        -1
+    }
 }
 
 // --- Diagnostic probes (kept so older builds keep building) ------------------

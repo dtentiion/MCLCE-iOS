@@ -81,6 +81,21 @@ int           ruffle_ios_player_movie_height(PlayerHandle* h);
 // Monotonic count of how many times ruffle_ios_player_tick was called.
 uint64_t      ruffle_ios_tick_count(void);
 
+// Register a TTF/OTF font as a Ruffle device font. The SWF can then look it
+// up by `name` when it asks for a device font. Returns 1 on success, 0 on
+// bad arguments, -1 on a player lock failure.
+//   h         : the PlayerHandle
+//   name      : font name as the SWF will request it (e.g. "Mojangles7")
+//   name_len  : byte length of name (not NUL-terminated)
+//   data      : pointer to TTF/OTF bytes
+//   data_len  : length of data
+//   is_bold   : 0 or 1
+//   is_italic : 0 or 1
+int           ruffle_ios_register_device_font(PlayerHandle* h,
+                                              const uint8_t* name, size_t name_len,
+                                              const uint8_t* data, size_t data_len,
+                                              int is_bold, int is_italic);
+
 // Controller input forwarded to the Ruffle player. The button code uses
 // this iOS-side mapping (matches Ruffle's GamepadButton declaration order):
 //   0 South / A,  1 East / B,  2 North / Y,  3 West / X,

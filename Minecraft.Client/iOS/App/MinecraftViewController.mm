@@ -134,6 +134,30 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 fromDocs ? @"Documents" : @"bundled"];
             NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
                   g_ruffle_player, self.loadedSwfName);
+
+            // Register the LCE menu font if the user has dropped Mojangles7.ttf
+            // into Documents. Without this the SWF's device-font request for
+            // "Mojangles7" falls through and every label renders as empty
+            // boxes. LCE ships the file as "Mojang Font_7.ttf"; either name
+            // works (we try both).
+            NSArray<NSString*>* fontCandidates = @[
+                @"Mojangles7.ttf",
+                @"Mojang Font_7.ttf",
+            ];
+            for (NSString* candidate in fontCandidates) {
+                NSString* fontPath = [docsPath stringByAppendingPathComponent:candidate];
+                NSData* fontData = [NSData dataWithContentsOfFile:fontPath];
+                if (!fontData.length) continue;
+                const char* nameCStr = "Mojangles7";
+                int rc = ruffle_ios_register_device_font(
+                    g_ruffle_player,
+                    (const uint8_t*)nameCStr, strlen(nameCStr),
+                    (const uint8_t*)fontData.bytes, fontData.length,
+                    0, 0);
+                NSLog(@"[MinecraftVC] registered device font from %@ rc=%d",
+                      candidate, rc);
+                if (rc == 1) break;
+            }
         }
     }
     if (!self.loadedSwfName) self.loadedSwfName = @"<none>";
