@@ -81,6 +81,16 @@ int           ruffle_ios_player_movie_height(PlayerHandle* h);
 // Monotonic count of how many times ruffle_ios_player_tick was called.
 uint64_t      ruffle_ios_tick_count(void);
 
+// Controller input forwarded to the Ruffle player. The button code uses
+// this iOS-side mapping (matches Ruffle's GamepadButton declaration order):
+//   0 South / A,  1 East / B,  2 North / Y,  3 West / X,
+//   4 Start,      5 Select,
+//   6 DPadUp,     7 DPadDown,  8 DPadLeft,   9 DPadRight,
+//   10 LeftTrigger,   11 RightTrigger,
+//   12 LeftTrigger2,  13 RightTrigger2.
+void          ruffle_ios_player_gamepad_down(PlayerHandle* h, int code);
+void          ruffle_ios_player_gamepad_up(PlayerHandle* h, int code);
+
 // Tick-stage breakdown. out_counters must point to an array of at least 4
 // u64: [lock_ok, after_tick, after_run_frame, after_render]. A fifth slot,
 // if provided (len >= 5), receives the per-handle executor_runs count.

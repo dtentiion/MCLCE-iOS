@@ -22,6 +22,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) UILabel* statusLabel;
 @property (strong, nonatomic) MetalView* metalView;
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
+@property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
 @end
 
 @implementation MinecraftViewController
@@ -164,7 +165,44 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     mcle_game_tick();
 
     extern PlayerHandle* g_ruffle_player;
+
+    // Edge-detect controller buttons and forward press/release events to
+    // Ruffle so the menu's AS3 input handlers fire. Bit layout matches
+    // 4J_Input.h; the int code we pass matches ruffle_ios.h's mapping.
     if (g_ruffle_player) {
+        mcle_ios_pad_state pad;
+        if (mcle_ios_input_poll(0, &pad)) {
+            static const struct { uint32_t mask; int code; } btnMap[] = {
+                { 0x00000001u,  0 },  // A     -> South
+                { 0x00000002u,  1 },  // B     -> East
+                { 0x00000008u,  2 },  // Y     -> North
+                { 0x00000004u,  3 },  // X     -> West
+                { 0x00000010u,  4 },  // START
+                { 0x00000020u,  5 },  // BACK  -> Select
+                { 0x00000400u,  6 },  // DPadUp
+                { 0x00000800u,  7 },  // DPadDown
+                { 0x00001000u,  8 },  // DPadLeft
+                { 0x00002000u,  9 },  // DPadRight
+                { 0x00000080u, 10 },  // LB    -> LeftTrigger
+                { 0x00000040u, 11 },  // RB    -> RightTrigger
+                { 0x00800000u, 12 },  // LT    -> LeftTrigger2
+                { 0x00400000u, 13 },  // RT    -> RightTrigger2
+            };
+            uint32_t now = pad.buttons;
+            uint32_t prev = self.lastPadButtons;
+            uint32_t changed = now ^ prev;
+            for (size_t i = 0; i < sizeof(btnMap)/sizeof(btnMap[0]); ++i) {
+                if (changed & btnMap[i].mask) {
+                    if (now & btnMap[i].mask) {
+                        ruffle_ios_player_gamepad_down(g_ruffle_player, btnMap[i].code);
+                    } else {
+                        ruffle_ios_player_gamepad_up(g_ruffle_player, btnMap[i].code);
+                    }
+                }
+            }
+            self.lastPadButtons = now;
+        }
+
         // Ruffle owns the frame: advance the player, wgpu draws + presents.
         ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
     } else {
