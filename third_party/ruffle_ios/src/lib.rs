@@ -79,7 +79,16 @@ impl ExternalInterfaceProvider for LoggingExternalInterface {
         ExtValue::Null
     }
 
-    fn on_callback_available(&self, _name: &str) {}
+    fn on_callback_available(&self, name: &str) {
+        // SWF registered an AS3 callback the host can invoke. For LCE we
+        // almost certainly never invoke these, but seeing their names is
+        // how we learn what host-side methods the menu expects to exist.
+        let line = format!("addCallback({name})");
+        if let Ok(mut log) = EXTINT_LOG.lock() {
+            if log.len() >= 256 { log.remove(0); }
+            log.push(line);
+        }
+    }
 
     fn get_id(&self) -> Option<String> { None }
 }
