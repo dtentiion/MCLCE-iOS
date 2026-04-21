@@ -22,6 +22,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) UILabel* statusLabel;
 @property (strong, nonatomic) MetalView* metalView;
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
+@property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
 @end
 
@@ -139,15 +140,36 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             // into Documents. Without this the SWF's device-font request for
             // "Mojangles7" falls through and every label renders as empty
             // boxes. LCE ships the file as "Mojang Font_7.ttf"; either name
-            // works (we try both).
-            NSArray<NSString*>* fontCandidates = @[
+            // works. We also walk common subfolders in case the user created
+            // one in Files app.
+            NSArray<NSString*>* fontNames = @[
                 @"Mojangles7.ttf",
                 @"Mojang Font_7.ttf",
             ];
-            for (NSString* candidate in fontCandidates) {
-                NSString* fontPath = [docsPath stringByAppendingPathComponent:candidate];
-                NSData* fontData = [NSData dataWithContentsOfFile:fontPath];
-                if (!fontData.length) continue;
+            NSArray<NSString*>* fontSubdirs = @[
+                @"",
+                @"fonts",
+                @"font",
+                @"Fonts",
+                @"Font",
+            ];
+            NSFileManager* fm = [NSFileManager defaultManager];
+            NSString* foundAt = nil;
+            NSData* fontData = nil;
+            for (NSString* subdir in fontSubdirs) {
+                NSString* dir = subdir.length
+                    ? [docsPath stringByAppendingPathComponent:subdir]
+                    : docsPath;
+                for (NSString* name in fontNames) {
+                    NSString* p = [dir stringByAppendingPathComponent:name];
+                    if ([fm fileExistsAtPath:p]) {
+                        fontData = [NSData dataWithContentsOfFile:p];
+                        if (fontData.length) { foundAt = p; break; }
+                    }
+                }
+                if (fontData.length) break;
+            }
+            if (fontData.length) {
                 const char* nameCStr = "Mojangles7";
                 int rc = ruffle_ios_register_device_font(
                     g_ruffle_player,
@@ -155,8 +177,29 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     (const uint8_t*)fontData.bytes, fontData.length,
                     0, 0);
                 NSLog(@"[MinecraftVC] registered device font from %@ rc=%d",
-                      candidate, rc);
-                if (rc == 1) break;
+                      foundAt, rc);
+                if (rc == 1) {
+                    self.fontStatus = [NSString stringWithFormat:
+                        @"Mojangles7 ok (%luk) from %@",
+                        (unsigned long)(fontData.length / 1024),
+                        [foundAt stringByReplacingOccurrencesOfString:docsPath
+                                                           withString:@"Docs"]];
+                } else {
+                    self.fontStatus = [NSString stringWithFormat:
+                        @"Mojangles7 register rc=%d", rc];
+                }
+            } else {
+                // List what's actually in Documents so the user can see
+                // whether the file even landed where we expect.
+                NSError* err = nil;
+                NSArray<NSString*>* entries =
+                    [fm contentsOfDirectoryAtPath:docsPath error:&err];
+                NSString* summary = err
+                    ? [NSString stringWithFormat:@"err=%@", err.localizedDescription]
+                    : [[entries subarrayWithRange:NSMakeRange(0, MIN((NSUInteger)6, entries.count))]
+                        componentsJoinedByString:@","];
+                self.fontStatus = [NSString stringWithFormat:
+                    @"Mojangles7 missing; Docs has: %@", summary];
             }
         }
     }
@@ -352,6 +395,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"frame pre/mid/post=%d/%d/%d  advances=%llu  burn first=%d final=%d max=%d\n"
         @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d\n"
         @"Loaded SWF: %@\n"
+        @"font: %@\n"
         @"--- ExtInt (calls + addCallback names) ---\n%@\n"
         @"--- AVM log (latest 8) ---\n%@",
         curFrame, movW, movH, tickN, playingStr,
@@ -364,6 +408,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         g_ruffle_surface_probe,
         g_ruffle_swf_version,
         self.loadedSwfName ?: @"<none>",
+        self.fontStatus ?: @"<not probed>",
         extintLog,
         avmLog];
     // Drop-on-floor for readouts we pulled but no longer surface on screen.
