@@ -701,8 +701,13 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
     handle.executor.borrow_mut().run();
     handle.executor_runs.fetch_add(1, Relaxed);
 
-    // Step 2: take the lock, sample state, tick, run_frame, render, release.
-    let (cf_pre, cf_mid, cf_post) = {
+    // Step 2: take the lock, sample state, tick, render, release.
+    // Player::tick is the full per-frame driver (it runs run_frame when
+    // the accumulator crosses a frame boundary, and also drives
+    // update_timers / stream manager / audio). Calling run_frame here
+    // would be a second advance on top and desyncs AS3's timer and stream
+    // state. Ruffle's test runner calls one or the other, never both.
+    let (cf_pre, cf_post) = {
         let Ok(mut p) = handle.player.lock() else { return; };
         TICK_LOCK_OK.fetch_add(1, Relaxed);
         IS_PLAYING_SAMPLE.store(if p.is_playing() { 1 } else { 2 }, Relaxed);
@@ -711,19 +716,19 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
         let pre = p.current_frame().map(|n| n as i32).unwrap_or(-1);
         p.tick(dt);
         TICK_AFTER_TICK.fetch_add(1, Relaxed);
-        let mid = p.current_frame().map(|n| n as i32).unwrap_or(-1);
-        p.run_frame();
         TICK_AFTER_RUNFRAME.fetch_add(1, Relaxed);
         let post = p.current_frame().map(|n| n as i32).unwrap_or(-1);
         p.render();
         TICK_AFTER_RENDER.fetch_add(1, Relaxed);
-        (pre, mid, post)
+        (pre, post)
     };
 
     // Step 3: publish samples and run the executor one more time so any
-    // futures tick/run_frame queued start resolving before the next tick.
+    // futures tick queued start resolving before the next tick. cf_mid is
+    // now the same as cf_post (we no longer call run_frame separately);
+    // kept as a field in the diag for overlay compatibility.
     LATEST_CF_PRE.store(cf_pre, Relaxed);
-    LATEST_CF_MID.store(cf_mid, Relaxed);
+    LATEST_CF_MID.store(cf_post, Relaxed);
     LATEST_CF_POST.store(cf_post, Relaxed);
     if cf_post != cf_pre && cf_pre >= 0 && cf_post >= 0 {
         FRAME_ADVANCES.fetch_add(1, Relaxed);
