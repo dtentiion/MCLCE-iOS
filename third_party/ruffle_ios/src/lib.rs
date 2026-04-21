@@ -88,8 +88,13 @@ impl ExternalInterfaceProvider for LoggingExternalInterface {
             if log.len() >= 256 {
                 log.remove(0);
             }
-            log.push(line);
+            log.push(line.clone());
         }
+        // Mirror to AVM_LOG so the line lands in crash_log.txt too. The
+        // overlay has its own ExtInt panel, but crash_log.txt only sees
+        // what goes through avm_log_push, and we need those calls in the
+        // persisted log when diagnosing why text fields never populate.
+        avm_log_push(format!("[extint] call {line}"));
         // For now, every call returns Null. Specific menus may need better
         // responses; we wire those once we know what the names are.
         ExtValue::Null
@@ -102,8 +107,9 @@ impl ExternalInterfaceProvider for LoggingExternalInterface {
         let line = format!("addCallback({name})");
         if let Ok(mut log) = EXTINT_LOG.lock() {
             if log.len() >= 256 { log.remove(0); }
-            log.push(line);
+            log.push(line.clone());
         }
+        avm_log_push(format!("[extint] {line}"));
     }
 
     fn get_id(&self) -> Option<String> { None }
@@ -116,8 +122,9 @@ impl FsCommandProvider for LoggingFsCommands {
         let line = format!("fscommand::{command}({args})");
         if let Ok(mut log) = EXTINT_LOG.lock() {
             if log.len() >= 256 { log.remove(0); }
-            log.push(line);
+            log.push(line.clone());
         }
+        avm_log_push(format!("[extint] {line}"));
         true
     }
 }
@@ -221,13 +228,39 @@ fn init_tracing_subscriber_once() {
 
 pub struct CapturingLogBackend;
 
+// Count of AS3 trace() calls seen so far. Surfaced via FFI so the overlay
+// can show live evidence that AS3 is still running past the constructor.
+// If this stays at 1 across many seconds of ticks, AS3 execution stalled
+// after the initial Document-class constructor and no event handler
+// (enterFrame, added_to_stage, activate) is waking it up.
+static AVM_TRACE_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+static AVM_WARN_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 impl ruffle_core::backend::log::LogBackend for CapturingLogBackend {
     fn avm_trace(&self, message: &str) {
+        AVM_TRACE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         avm_log_push(format!("TRACE {message}"));
     }
     fn avm_warning(&self, message: &str) {
+        AVM_WARN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         avm_log_push(format!("WARN {message}"));
     }
+}
+
+/// Return (trace_count, warn_count) through out params.
+/// trace_count is the number of AS3 `trace()` calls the player has made so
+/// far; warn_count counts AVM warnings. If both stay low and flat across
+/// many ticks, AS3 is not executing past whatever it ran at startup.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_avm_counts(
+    traces: *mut u64,
+    warns: *mut u64,
+) {
+    use std::sync::atomic::Ordering::Relaxed;
+    if !traces.is_null() { *traces = AVM_TRACE_COUNT.load(Relaxed); }
+    if !warns.is_null()  { *warns  = AVM_WARN_COUNT.load(Relaxed); }
 }
 
 #[no_mangle]

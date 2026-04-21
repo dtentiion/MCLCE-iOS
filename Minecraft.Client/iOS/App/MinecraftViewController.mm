@@ -403,11 +403,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int burnDone = 0, burnFirst = 0, burnFinal = 0, burnMax = 0, burnUnique = 0;
     ruffle_ios_burn_diag(&burnDone, &burnFirst, &burnFinal, &burnMax, &burnUnique);
 
+    uint64_t avmTraces = 0, avmWarns = 0;
+    ruffle_ios_avm_counts(&avmTraces, &avmWarns);
+
     NSString* swfLine = [NSString stringWithFormat:
         @"cur_frame=%d  movie=%dx%d  ticks=%llu  is_playing=%s\n"
         @"stages  lock=%llu tick=%llu run=%llu render=%llu  exec=%llu\n"
         @"frame pre/mid/post=%d/%d/%d  advances=%llu  burn first=%d final=%d max=%d\n"
-        @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d\n"
+        @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d  traces=%llu  warns=%llu\n"
         @"Loaded SWF: %@\n"
         @"font: %@\n"
         @"--- ExtInt (calls + addCallback names) ---\n%@\n"
@@ -421,6 +424,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
          wgpuProbe == -2 ? "no device" : "??"),
         g_ruffle_surface_probe,
         g_ruffle_swf_version,
+        avmTraces,
+        avmWarns,
         self.loadedSwfName ?: @"<none>",
         self.fontStatus ?: @"<not probed>",
         extintLog,
