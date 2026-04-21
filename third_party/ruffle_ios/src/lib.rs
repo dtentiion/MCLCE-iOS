@@ -17,7 +17,7 @@ use ruffle_common::tag_utils::SwfMovie;
 use ruffle_core::external::{ExternalInterfaceProvider, FsCommandProvider, Value as ExtValue};
 use ruffle_core::context::UpdateContext;
 use ruffle_core::backend::navigator::{NullExecutor, NullNavigatorBackend};
-use ruffle_core::events::{GamepadButton, PlayerEvent};
+use ruffle_core::events::{GamepadButton, KeyCode, PlayerEvent};
 use ruffle_core::{Player, PlayerBuilder};
 
 // --- Captured ExternalInterface log -----------------------------------------
@@ -577,6 +577,24 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         }
     };
 
+    // Translate controller buttons into keyboard events. Without this
+    // mapping Ruffle's InputManager silently drops GamepadButtonDown /
+    // GamepadButtonUp events; AS3 menus listen on KeyboardEvent, not
+    // gamepad events, so the menu would look dead to controller input
+    // even with our FFI plumbing working.
+    let mut gamepad_map: std::collections::HashMap<GamepadButton, KeyCode> =
+        std::collections::HashMap::new();
+    gamepad_map.insert(GamepadButton::South, KeyCode::ENTER);
+    gamepad_map.insert(GamepadButton::East, KeyCode::ESCAPE);
+    gamepad_map.insert(GamepadButton::North, KeyCode::SPACE);
+    gamepad_map.insert(GamepadButton::West, KeyCode::SPACE);
+    gamepad_map.insert(GamepadButton::Start, KeyCode::ENTER);
+    gamepad_map.insert(GamepadButton::Select, KeyCode::ESCAPE);
+    gamepad_map.insert(GamepadButton::DPadUp, KeyCode::UP);
+    gamepad_map.insert(GamepadButton::DPadDown, KeyCode::DOWN);
+    gamepad_map.insert(GamepadButton::DPadLeft, KeyCode::LEFT);
+    gamepad_map.insert(GamepadButton::DPadRight, KeyCode::RIGHT);
+
     let player = PlayerBuilder::new()
         .with_renderer(backend)
         .with_navigator(navigator)
@@ -586,6 +604,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         .with_external_interface(Box::new(LoggingExternalInterface))
         .with_fs_commands(Box::new(LoggingFsCommands))
         .with_log(CapturingLogBackend)
+        .with_gamepad_button_mapping(gamepad_map)
         .build();
 
     // Drive preload and executor alternately. `preload(limit)` advances all
