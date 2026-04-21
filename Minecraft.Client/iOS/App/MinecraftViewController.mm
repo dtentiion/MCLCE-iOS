@@ -219,6 +219,31 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                                              encoding:NSUTF8StringEncoding]
                     : @"<empty>";
                 NSLog(@"[MinecraftVC] root children:\n%@", childList);
+
+                // Populate the main menu buttons. Mirrors UIScene_MainMenu on
+                // console: each button's AS3 Init(label, id) sets the visible
+                // label and the handlePress callback id. Mapping taken from
+                // Minecraft.Client/Common/UI/UIScene_MainMenu.{h,cpp}.
+                static const struct { const char* name; const char* label; double id; } mainMenuButtons[] = {
+                    { "Button1", "Play Game",            0.0 },  // eControl_PlayGame
+                    { "Button2", "Leaderboards",         1.0 },  // eControl_Leaderboards
+                    { "Button3", "Achievements",         2.0 },  // eControl_Achievements
+                    { "Button4", "Help & Options",       3.0 },  // eControl_HelpAndOptions
+                    { "Button5", "Downloadable Content", 4.0 },  // eControl_UnlockOrDLC
+                    { "Button6", "Exit Game",            5.0 },  // eControl_Exit
+                };
+                for (size_t i = 0; i < sizeof(mainMenuButtons)/sizeof(mainMenuButtons[0]); ++i) {
+                    const char* name = mainMenuButtons[i].name;
+                    const char* label = mainMenuButtons[i].label;
+                    int r = ruffle_ios_call_init_on_named_child(
+                        g_ruffle_player,
+                        (const uint8_t*)name,  strlen(name),
+                        (const uint8_t*)"Init", 4,
+                        (const uint8_t*)label, strlen(label),
+                        mainMenuButtons[i].id);
+                    NSLog(@"[MinecraftVC] Init(%s, %s, %.0f) -> %d",
+                          name, label, mainMenuButtons[i].id, r);
+                }
             }
         }
     }
