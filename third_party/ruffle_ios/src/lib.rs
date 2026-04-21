@@ -751,7 +751,17 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
     // the player lock. The futures lock the player themselves; holding our
     // own lock here would deadlock.
     handle.executor.borrow_mut().run();
-    handle.executor_runs.fetch_add(1, Relaxed);
+    let nth_executor = handle.executor_runs.fetch_add(1, Relaxed) + 1;
+
+    // Every 60 ticks drop a heartbeat marker into AVM_LOG so the overlay
+    // proves our avm_log_push path still delivers even when Ruffle itself
+    // emits no further tracing events.
+    if nth_executor % 60 == 0 {
+        avm_log_push(format!(
+            "[ruffle_ios] heartbeat tick={} exec={}",
+            TICK_COUNT.load(Relaxed), nth_executor
+        ));
+    }
 
     // Step 2: take the lock, sample state, tick, render, release.
     // Player::tick is the full per-frame driver (it runs run_frame when
