@@ -279,11 +279,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     // inside sprite 46 (class="FJ_Label", no char id) is
                     // the level that isn't cloning its bound content.
                     if (i == 0) {
-                        char subtree[4096] = {0};
+                        // Button1 subtree: 6 levels is deep enough to reach
+                        // the TextField even if we're stacking two wrapper
+                        // sprites (expected path is button -> FJ_TextContainer
+                        // -> FJ_Label -> TextField; our last tree went one
+                        // past, so we need at least 4 to confirm a TextField
+                        // finally appears, 6 to show if the nesting is
+                        // unbounded).
+                        char subtree[8192] = {0};
                         ruffle_ios_enumerate_subtree_of(
                             g_ruffle_player,
                             (const uint8_t*)name, strlen(name),
-                            3,
+                            6,
                             (uint8_t*)subtree, sizeof(subtree));
                         NSLog(@"[MinecraftVC] %s subtree:\n%s", name, subtree);
                     }
