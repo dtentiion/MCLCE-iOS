@@ -112,10 +112,39 @@ impl FsCommandProvider for LoggingFsCommands {
 // while the menu SWF runs.
 static AVM_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+// Persistent log file in iOS Documents. Opened once at player init,
+// appended on every push, flushed immediately so the trail survives a
+// crash. User can read crash_log.txt via iOS Files app after the app
+// dies. Keeps a mirror of AVM_LOG plus [ruffle_ios] markers so the
+// whole startup cascade is visible post-mortem.
+static LOG_FILE: std::sync::Mutex<Option<std::fs::File>> =
+    std::sync::Mutex::new(None);
+
+fn init_crash_log_file(base_path: &std::path::Path) {
+    let path = base_path.join("crash_log.txt");
+    if let Ok(mut guard) = LOG_FILE.lock() {
+        *guard = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .ok();
+    }
+}
+
 fn avm_log_push(line: String) {
     if let Ok(mut log) = AVM_LOG.lock() {
-        if log.len() >= 256 { log.remove(0); }
-        log.push(line);
+        if log.len() >= 256 {
+            log.remove(0);
+        }
+        log.push(line.clone());
+    }
+    if let Ok(mut guard) = LOG_FILE.lock() {
+        if let Some(ref mut f) = *guard {
+            use std::io::Write;
+            let _ = writeln!(f, "{}", line);
+            let _ = f.flush();
+        }
     }
 }
 
@@ -571,6 +600,13 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
             Err(_) => std::env::temp_dir(),
         }
     };
+    // Persistent crash log in Documents so trace output survives
+    // abort() / SIGABRT and can be retrieved via iOS Files app.
+    init_crash_log_file(&base_path);
+    avm_log_push(format!(
+        "[ruffle_ios] crash_log_file opened at {}",
+        base_path.join("crash_log.txt").display()
+    ));
     let navigator = match NullNavigatorBackend::with_base_path(&base_path, &executor) {
         Ok(nav) => nav,
         Err(e) => {
