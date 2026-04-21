@@ -32,6 +32,19 @@ use ruffle_core::{Player, PlayerBuilder};
 static EXTINT_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+// Device fonts the iOS app stages *before* player creation so they can be
+// registered between PlayerBuilder::build() and the preload/class-construct
+// pass inside ruffle_ios_player_create_wgpu. Registering after create returns
+// is too late: text fields lookup font "Mojangles7" during AS3 construction
+// and cache a miss.
+struct StagedFont {
+    name: String,
+    is_bold: bool,
+    is_italic: bool,
+    data: Vec<u8>,
+}
+static STAGED_FONTS: std::sync::Mutex<Vec<StagedFont>> = std::sync::Mutex::new(Vec::new());
+
 // Stage counters for tick diagnostics. If `ticks` climbs but `cur_frame`
 // stays at 0, comparing these tells us which stage of the tick path is
 // dropping out silently.
@@ -303,13 +316,53 @@ unsafe fn borrow_handle<'a>(raw: *mut PlayerHandle) -> Option<&'a PlayerHandle> 
     if raw.is_null() { None } else { Some(&*raw) }
 }
 
+/// Stage a TTF/OTF font for registration during the *next* call to
+/// `ruffle_ios_player_create_wgpu`. Unlike `ruffle_ios_register_device_font`,
+/// this can be called before a player exists, and the font lands in time
+/// for the preload pass so text fields find their device font on first
+/// layout instead of caching a miss.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_stage_device_font(
+    name_ptr: *const u8,
+    name_len: usize,
+    data_ptr: *const u8,
+    data_len: usize,
+    is_bold: c_int,
+    is_italic: c_int,
+) -> c_int {
+    if name_ptr.is_null() || data_ptr.is_null() || name_len == 0 || data_len == 0 {
+        return 0;
+    }
+    let name_bytes = std::slice::from_raw_parts(name_ptr, name_len);
+    let name = match std::str::from_utf8(name_bytes) {
+        Ok(s) => s.to_string(),
+        Err(_) => return 0,
+    };
+    let data = std::slice::from_raw_parts(data_ptr, data_len).to_vec();
+    let mut fonts = match STAGED_FONTS.lock() {
+        Ok(f) => f,
+        Err(_) => return -1,
+    };
+    fonts.push(StagedFont {
+        name: name.clone(),
+        is_bold: is_bold != 0,
+        is_italic: is_italic != 0,
+        data,
+    });
+    avm_log_push(format!(
+        "[ruffle_ios] staged device font '{}' ({} bytes, bold={}, italic={}), pending={}",
+        name, data_len, is_bold != 0, is_italic != 0, fonts.len()
+    ));
+    1
+}
+
 /// Register a TTF/OTF font as a Ruffle device font. The Flash SWF can then
 /// pick it up when it asks for a device font by `name`. Returns 1 on success,
 /// 0 on any argument failure, -1 if the player lock can't be acquired.
 ///
-/// The iOS shell calls this once after player creation with bytes read from
-/// `Documents/Mojangles7.ttf` (users drop their own LCE font file there via
-/// the Files app, same way they supply the menu SWF).
+/// Prefer `ruffle_ios_stage_device_font` for normal use: registering through
+/// this function after player creation is too late for text fields that
+/// already did their first glyph lookup during preload.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_register_device_font(
     raw: *mut PlayerHandle,
@@ -711,6 +764,37 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     // or we deadlock against ourselves.
     let mut executor = executor;
     {
+        // Apply any fonts staged by the iOS shell BEFORE preload. Registering
+        // after preload is too late: text fields lookup device fonts during
+        // their first glyph layout and cache a miss if the font isn't ready.
+        let staged: Vec<StagedFont> = {
+            let mut guard = match STAGED_FONTS.lock() {
+                Ok(g) => g,
+                Err(_) => {
+                    avm_log_push("[ruffle_ios] STAGED_FONTS lock poisoned, skipping".into());
+                    return std::ptr::null_mut();
+                }
+            };
+            std::mem::take(&mut *guard)
+        };
+        if !staged.is_empty() {
+            let mut p = player.lock().expect("player lock");
+            for font in staged {
+                let len = font.data.len();
+                p.register_device_font(FontDefinition::FontFile {
+                    name: font.name.clone(),
+                    is_bold: font.is_bold,
+                    is_italic: font.is_italic,
+                    data: FontFileData::new(font.data),
+                    index: 0,
+                });
+                avm_log_push(format!(
+                    "[ruffle_ios] applied staged font '{}' ({} bytes) before preload",
+                    font.name, len
+                ));
+            }
+        }
+
         use ruffle_core::limits::ExecutionLimit;
         let mut limit = ExecutionLimit::none();
         let mut guard = 0;
