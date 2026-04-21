@@ -233,22 +233,45 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern int g_ruffle_surface_probe;
 
     // Pull the ExternalInterface call log Ruffle has captured so far.
-    static uint8_t extintBuf[2048];
+    static uint8_t extintBuf[4096];
     size_t extintLen = ruffle_ios_extint_log(extintBuf, sizeof(extintBuf));
-    NSString* extintLog = extintLen
-        ? [[NSString alloc] initWithBytes:extintBuf length:extintLen encoding:NSUTF8StringEncoding]
-        : @"<no ExternalInterface calls yet>";
+    NSString* extintLog;
+    if (extintLen) {
+        NSString* full = [[NSString alloc] initWithBytes:extintBuf
+                                                   length:extintLen
+                                                 encoding:NSUTF8StringEncoding];
+        NSArray<NSString*>* lines = [full componentsSeparatedByString:@"\n"];
+        const NSUInteger kMaxLines = 10;
+        if (lines.count > kMaxLines) {
+            lines = [lines subarrayWithRange:
+                NSMakeRange(lines.count - kMaxLines, kMaxLines)];
+        }
+        extintLog = [lines componentsJoinedByString:@"\n"];
+    } else {
+        extintLog = @"<no ExternalInterface calls yet>";
+    }
 
-    // Ruffle's AVM trace/warning output - this is usually the more useful
-    // signal about what Ruffle thinks is broken in the SWF. 16 KB is enough
-    // to see all 256 ring-buffer lines at typical sizes without punishing
-    // the overlay layout; the Rust side returns the TAIL so live errors
-    // stay visible as older noise scrolls off.
+    // Ruffle's AVM trace/warning output. Rust returns the tail of the
+    // ring buffer; we then keep only the last 10 lines so the label's
+    // fixed frame on iPhone doesn't clip the newest events off the
+    // bottom of the screen.
     static uint8_t avmBuf[16384];
     size_t avmLen = ruffle_ios_avm_log(avmBuf, sizeof(avmBuf));
-    NSString* avmLog = avmLen
-        ? [[NSString alloc] initWithBytes:avmBuf length:avmLen encoding:NSUTF8StringEncoding]
-        : @"<no AVM output>";
+    NSString* avmLog;
+    if (avmLen) {
+        NSString* full = [[NSString alloc] initWithBytes:avmBuf
+                                                   length:avmLen
+                                                 encoding:NSUTF8StringEncoding];
+        NSArray<NSString*>* lines = [full componentsSeparatedByString:@"\n"];
+        const NSUInteger kMaxLines = 10;
+        if (lines.count > kMaxLines) {
+            lines = [lines subarrayWithRange:
+                NSMakeRange(lines.count - kMaxLines, kMaxLines)];
+        }
+        avmLog = [lines componentsJoinedByString:@"\n"];
+    } else {
+        avmLog = @"<no AVM output>";
+    }
 
     int curFrame = g_ruffle_player ? ruffle_ios_player_current_frame(g_ruffle_player) : -99;
     int movW = g_ruffle_player ? ruffle_ios_player_movie_width(g_ruffle_player) : -99;
@@ -269,38 +292,30 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     ruffle_ios_burn_diag(&burnDone, &burnFirst, &burnFinal, &burnMax, &burnUnique);
 
     NSString* swfLine = [NSString stringWithFormat:
-        @"Ruffle magic: 0x%08X  render_probe=%d  cur_frame=%d  movie=%dx%d  ticks=%llu\n"
-        @"tick stages  lock=%llu tick=%llu run=%llu render=%llu  is_playing=%s\n"
-        @"executor_runs=%llu\n"
-        @"frame samples  pre=%d mid=%d post=%d  advances=%llu\n"
-        @"burn_frames(100)  done=%d first=%d final=%d max=%d unique=%d\n"
+        @"cur_frame=%d  movie=%dx%d  ticks=%llu  is_playing=%s\n"
+        @"stages  lock=%llu tick=%llu run=%llu render=%llu  exec=%llu\n"
+        @"frame pre/mid/post=%d/%d/%d  advances=%llu  burn first=%d final=%d max=%d\n"
+        @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d\n"
         @"Loaded SWF: %@\n"
-        @"--- SWF ExternalInterface calls ---\n%@\n"
-        @"--- Ruffle AVM log (trace/warn) ---\n%@\n"
-        @"wgpu on Metal: %s (%d)  surface_on_CAMetalLayer=%d\n"
-        @"Ruffle SWF parse of test_rect.swf -> v%d (want 6)\n"
-        @"Ruffle Player: %s  declared_fps=%.3f\n"
-        @"GameSWF (legacy): ready=%d movie=%d frames=%llu\n"
-        @"  %@",
-        rustMagic, renderProbe, curFrame, movW, movH, tickN,
-        stage[0], stage[1], stage[2], stage[3], playingStr,
-        stage[4],
-        cfPre, cfMid, cfPost, frameAdvances,
-        burnDone, burnFirst, burnFinal, burnMax, burnUnique,
-        self.loadedSwfName ?: @"<none>",
-        extintLog,
-        avmLog,
+        @"--- ExtInt (calls + addCallback names) ---\n%@\n"
+        @"--- AVM log tail (last 10 lines) ---\n%@",
+        curFrame, movW, movH, tickN, playingStr,
+        stage[0], stage[1], stage[2], stage[3], stage[4],
+        cfPre, cfMid, cfPost, frameAdvances, burnFirst, burnFinal, burnMax,
+        wgpuProbe,
         (wgpuProbe == 1 ? "OK" :
          wgpuProbe == -1 ? "no adapter" :
          wgpuProbe == -2 ? "no device" : "??"),
-        wgpuProbe,
         g_ruffle_surface_probe,
         g_ruffle_swf_version,
-        (g_ruffle_player_ok == 1 ? "INSTANTIATED" :
-         g_ruffle_player_ok == 0 ? "FAILED" : "not probed"),
-        g_ruffle_framerate_mHz / 1000.0,
-        swfReady, swfHas, swfFrames,
-        swfStatus];
+        self.loadedSwfName ?: @"<none>",
+        extintLog,
+        avmLog];
+    // Drop-on-floor for readouts we pulled but no longer surface on screen.
+    (void)rustMagic; (void)renderProbe;
+    (void)burnDone; (void)burnUnique;
+    (void)g_ruffle_player_ok; (void)g_ruffle_framerate_mHz;
+    (void)swfReady; (void)swfHas; (void)swfFrames; (void)swfStatus;
     (void)swfStrips; (void)swfTris;
     (void)swfBitmaps; (void)swfLines; (void)swfMasks; (void)swfFillBmp;
 
