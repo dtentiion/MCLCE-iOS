@@ -147,6 +147,26 @@ void          ruffle_ios_burn_diag(int* done, int* first, int* final_cf,
 // NULL.
 void          ruffle_ios_avm_counts(uint64_t* traces, uint64_t* warns);
 
+// Fill `out` (UTF-8, NUL-terminated) with `name\tclass\n` for each direct
+// child of the root clip. Also pushes the full list to AVM_LOG so it
+// appears in crash_log.txt. Returns bytes written (excluding NUL).
+size_t        ruffle_ios_enumerate_root_children(PlayerHandle* h,
+                                                 uint8_t* out, size_t cap);
+
+// Invoke `childName.methodName(label, id)` on a direct child of the root
+// clip, mirroring the console LCE's IggyPlayerCallMethodRS pattern. The
+// status string produced by the call is always pushed to AVM_LOG.
+// Returns:  1  ok
+//           0  bad args (null/empty name, bad UTF-8)
+//          -1  could not take player lock
+//          -2  call itself failed (AS3 exception, no such child, etc.);
+//              see AVM_LOG for the specific status line.
+int           ruffle_ios_call_init_on_named_child(PlayerHandle* h,
+                                                  const uint8_t* child_name, size_t child_name_len,
+                                                  const uint8_t* method_name, size_t method_name_len,
+                                                  const uint8_t* label, size_t label_len,
+                                                  double id);
+
 #ifdef __cplusplus
 }
 #endif

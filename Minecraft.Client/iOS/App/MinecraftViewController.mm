@@ -204,6 +204,22 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 fromDocs ? @"Documents" : @"bundled"];
             NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
                   g_ruffle_player, self.loadedSwfName);
+
+            // One-shot discovery dump. LCE SWFs are driven by the host calling
+            // AS3 methods on named button instances (IggyPlayerCallMethodRS
+            // on console). We don't know the instance names ahead of time, so
+            // enumerate the root's direct children and write them into the
+            // persistent log where we can read them off-device.
+            if (g_ruffle_player) {
+                static uint8_t childBuf[8192];
+                size_t n = ruffle_ios_enumerate_root_children(
+                    g_ruffle_player, childBuf, sizeof(childBuf));
+                NSString* childList = n
+                    ? [[NSString alloc] initWithBytes:childBuf length:n
+                                             encoding:NSUTF8StringEncoding]
+                    : @"<empty>";
+                NSLog(@"[MinecraftVC] root children:\n%@", childList);
+            }
         }
     }
     if (!self.loadedSwfName) self.loadedSwfName = @"<none>";

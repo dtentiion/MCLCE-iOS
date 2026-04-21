@@ -263,6 +263,90 @@ pub unsafe extern "C" fn ruffle_ios_avm_counts(
     if !warns.is_null()  { *warns  = AVM_WARN_COUNT.load(Relaxed); }
 }
 
+/// Fill `out` (UTF-8, NUL-terminated, up to `cap` bytes) with a listing of
+/// the root clip's direct children as `instance_name\tclass_name\n` lines.
+/// Intended as a discovery pass for the LCE host bootstrap: the menu SWFs
+/// expect the host to invoke `Init(label, id)` on each button by instance
+/// name, and we don't know those names until we see them.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
+    raw: *mut PlayerHandle,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    if raw.is_null() || out.is_null() || cap == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return 0; };
+    let children = p.enumerate_root_children();
+    drop(p);
+    let rendered: String = children
+        .into_iter()
+        .map(|(n, c)| format!("{}\t{}", if n.is_empty() { "<unnamed>" } else { &n }, c))
+        .collect::<Vec<_>>()
+        .join("\n");
+    // Also drop it into the persistent log so we can grep later.
+    avm_log_push(format!(
+        "[ruffle_ios] root children ({} total):\n{}",
+        rendered.lines().count(),
+        rendered
+    ));
+    let bytes = rendered.as_bytes();
+    let n = bytes.len().min(cap - 1);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n);
+    *out.add(n) = 0;
+    n
+}
+
+/// Invoke AS3 `childName.methodName(label, id)` on a direct child of the
+/// root clip. Returns 1 on success, 0 on bad args, -1 if the player lock
+/// can't be taken. A human-readable status line is pushed to AVM_LOG
+/// (visible in the overlay and crash_log.txt) regardless of outcome, so
+/// the host can see exactly what happened without needing a second FFI
+/// call for the result.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_init_on_named_child(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    method_name_ptr: *const u8,
+    method_name_len: usize,
+    label_ptr: *const u8,
+    label_len: usize,
+    id: f64,
+) -> c_int {
+    if raw.is_null()
+        || child_name_ptr.is_null() || child_name_len == 0
+        || method_name_ptr.is_null() || method_name_len == 0
+    {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let method_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(method_name_ptr, method_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let label = if label_ptr.is_null() || label_len == 0 {
+        ""
+    } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_init_on_named_child(child_name, method_name, label, id);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_init_on_named_child('{}', '{}', '{}', {}) -> {}",
+        child_name, method_name, label, id, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_avm_log(out: *mut u8, cap: usize) -> usize {
     if out.is_null() || cap == 0 { return 0; }
