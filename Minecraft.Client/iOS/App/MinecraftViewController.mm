@@ -76,7 +76,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textColor = [UIColor colorWithRed:0.95 green:0.25 blue:0.35 alpha:1.0];
     self.statusLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
-    self.statusLabel.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
+    self.statusLabel.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
     self.statusLabel.text =
         @"Minecraft: Legacy Console Edition (iOS)\n\n"
         @"Early scaffold build. Renderer: Metal (triangle test).\n"
@@ -284,16 +284,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     withTemplate:pair[1]];
             }
         }
-        NSArray<NSString*>* lines = [full componentsSeparatedByString:@"\n"];
-        // Show the first kHead lines (startup import cascade). Tail is
-        // almost always heartbeats right now; skipping it gives us more
-        // room for the diagnostics that actually matter on a phone
-        // that only lets us scroll the overlay by a single line.
-        const NSUInteger kHead = 25;
-        if (lines.count > kHead) {
-            lines = [lines subarrayWithRange:NSMakeRange(0, kHead)];
+        NSArray<NSString*>* allLines = [full componentsSeparatedByString:@"\n"];
+        // Filter out the Mojangles7 font noise. It's a known
+        // outstanding issue and spams the ring, hiding the
+        // preload/drain cascade diagnostics we actually need.
+        NSMutableArray<NSString*>* filtered = [NSMutableArray new];
+        for (NSString* line in allLines) {
+            if ([line containsString:@"Mojangles7"]) continue;
+            if ([line containsString:@"Fallback font not found"]) continue;
+            [filtered addObject:line];
         }
-        avmLog = [lines componentsJoinedByString:@"\n"];
+        const NSUInteger kHead = 25;
+        if (filtered.count > kHead) {
+            filtered = [[filtered subarrayWithRange:NSMakeRange(0, kHead)] mutableCopy];
+        }
+        avmLog = [filtered componentsJoinedByString:@"\n"];
     } else {
         avmLog = @"<no AVM output>";
     }
