@@ -168,6 +168,16 @@ int           ruffle_ios_instantiate_class_on_root(PlayerHandle* h,
                                                    const uint8_t* class_name, size_t class_name_len,
                                                    int depth);
 
+// Register a PNG as a Bitmap character keyed by an AS3 class name.
+// Ports 4J's Iggy XUI texture-import mechanism: when a SWF places a
+// class like `Panorama_Background_S` that exists only as a PNG on
+// disc (not an AS3 class), we register it here and the resolver's
+// XUI fallback finds it. Returns 1 ok, 0 bad args, -1 lock fail,
+// -2 decode / register failure.
+int           ruffle_ios_register_xui_bitmap(PlayerHandle* h,
+                                             const uint8_t* class_name, size_t class_name_len,
+                                             const uint8_t* png,        size_t png_len);
+
 // Load a sibling SWF (Panorama1080.swf / ComponentLogo1080.swf etc.)
 // from bytes and attach as a child of the current root clip at the
 // given depth. Matches console Iggy's multi-movie compositing model.
