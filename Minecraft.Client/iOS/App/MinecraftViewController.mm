@@ -302,11 +302,32 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (attachPanorama) {
         // Console Iggy layers each scene as its own movie. Panorama
         // is Panorama1080.swf, a sibling of MainMenu1080.swf that the
-        // host composites beneath it. Load it from Documents and
-        // attach as a child of root at depth 0 (below MainMenu's
-        // content which starts at depth 1).
+        // host composites beneath it. Before loading the SWF, register
+        // any matching PNGs in Documents as Ruffle Bitmap characters
+        // keyed by class name - this mirrors 4J's Iggy XUI texture-
+        // import mechanism where skin_Minecraft.xui maps AS3 class
+        // names (Panorama_Background_S etc.) to external PNG paths.
         NSString* docs = [NSSearchPathForDirectoriesInDomains(
             NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+        NSArray<NSString*>* xuiAssets = @[
+            @"Panorama_Background_S",
+            @"Panorama_Background_N",
+        ];
+        for (NSString* className in xuiAssets) {
+            NSString* pngPath = [docs stringByAppendingPathComponent:
+                                 [className stringByAppendingString:@".png"]];
+            NSData* pngData = [NSData dataWithContentsOfFile:pngPath];
+            if (!pngData.length) {
+                NSLog(@"[MinecraftVC] XUI %@ missing at %@", className, pngPath);
+                continue;
+            }
+            int rc = ruffle_ios_register_xui_bitmap(
+                g_ruffle_player,
+                (const uint8_t*)className.UTF8String, strlen(className.UTF8String),
+                (const uint8_t*)pngData.bytes, pngData.length);
+            NSLog(@"[MinecraftVC] register_xui_bitmap %@ -> %d", className, rc);
+        }
+
         NSString* panoPath = [docs stringByAppendingPathComponent:@"Panorama1080.swf"];
         NSData* panoData = [NSData dataWithContentsOfFile:panoPath];
         if (panoData.length) {
