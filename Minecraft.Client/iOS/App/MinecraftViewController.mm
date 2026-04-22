@@ -516,6 +516,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
     NSString* url = [NSString stringWithFormat:@"file://%@",
                      [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+    // Snapshot panorama/logo/tooltips matrices before the whole
+    // transition sequence. A per-tick restore inside the 30-tick
+    // headless burst wasn't enough: the ~15 call_init_on_named_child
+    // calls that follow each advance the executor by a few px, adding
+    // up to ~45 authored px of scroll (the visible jump). Snapshot
+    // once here, restore once at the end, and everything in between
+    // (replace_swf, 30 ticks, applyMenuButtonConfig) can drift freely
+    // without affecting the final panorama position.
+    ruffle_ios_player_snapshot_xui_matrices(g_ruffle_player);
+
     int rc = ruffle_ios_player_replace_swf(
         g_ruffle_player,
         (const uint8_t*)data.bytes, data.length,
@@ -532,13 +542,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // with Flash authoring-time placeholder text ("FJ_Label") for
         // the ~500ms it takes our Init calls to land.
         for (int i = 0; i < 30; ++i) {
-            // Use the preserve-xui variant so the panorama, logo, and
-            // tooltips don't advance during the 30-tick burst that lets
-            // the new scene's init chain settle. Without this the
-            // panorama visibly jumped ~22 authored px leftward each
-            // time the user entered or exited a sub-menu.
-            ruffle_ios_player_tick_headless_preserve_xui(
-                g_ruffle_player, 1.0f / 60.0f);
+            ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
         }
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];
@@ -557,6 +561,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             : @"<empty>";
         NSLog(@"[MinecraftVC] %@ root children:\n%@", swfName, childList);
     }
+    // Restore the panorama/logo/tooltips matrices we stashed at the
+    // start of this method. Anything that advanced the XUI bitmap
+    // tx during the transition gets wiped; normal scroll resumes
+    // from where it was visible before the A-press.
+    ruffle_ios_player_restore_xui_matrices(g_ruffle_player);
 }
 
 - (void)tick:(CADisplayLink*)link {

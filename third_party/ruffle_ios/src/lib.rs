@@ -1441,6 +1441,28 @@ pub unsafe extern "C" fn ruffle_ios_player_tick_headless_preserve_xui(
     handle.executor.borrow_mut().run();
 }
 
+/// Stash the current matrix of every XUI-origin Bitmap. Pair with
+/// ruffle_ios_player_restore_xui_matrices: call snapshot before a
+/// scene transition starts (replace_swf + headless ticks + button
+/// init), call restore after, and the panorama/logo/tooltips stay
+/// visually locked through the entire sequence. Needed because the
+/// 30 headless ticks aren't the only source of scroll drift; the
+/// ~15 call_init_on_named_child calls after the burst each advance
+/// the executor by a small amount that adds up.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_snapshot_xui_matrices(raw: *mut PlayerHandle) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Ok(mut p) = handle.player.lock() else { return; };
+    p.snapshot_xui_matrices();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_restore_xui_matrices(raw: *mut PlayerHandle) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Ok(mut p) = handle.player.lock() else { return; };
+    p.restore_xui_matrices();
+}
+
 /// Burn-frames diag: stats from the back-to-back run_frame loop we
 /// performed at player create time. Answers whether the root clip can
 /// advance at all under a tight loop, independent of per-tick dt timing.
