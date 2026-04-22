@@ -362,8 +362,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // the panorama doesn't reach (panorama is authored at 5x
         // scale => 720/1080 vertical coverage; the gap is the
         // tooltips overlay slot on console).
+        // Stage depth 0 is reserved for the root clip (set by
+        // replace_root_movie every scene swap). Panorama lives BELOW
+        // the root at depth -1 so it survives root swaps and renders
+        // behind. Tooltips/logo at 100/101 render above everything.
+        // Putting panorama at 0 instead of -1 replaces the root on
+        // attach (buttons vanish) and gets itself replaced on the
+        // next scene transition.
         NSDictionary* siblings = @{
-            @"Panorama1080.swf":     @(0),
+            @"Panorama1080.swf":     @(-1),
             @"ToolTips1080.swf":     @(100),
             @"ComponentLogo1080.swf": @(101),
         };
