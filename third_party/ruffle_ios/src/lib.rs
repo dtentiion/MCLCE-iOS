@@ -349,6 +349,8 @@ pub unsafe extern "C" fn ruffle_ios_register_xui_bitmap(
     class_name_len: usize,
     png_ptr: *const u8,
     png_len: usize,
+    display_scale_x: f32,
+    display_scale_y: f32,
 ) -> c_int {
     if raw.is_null() || class_name_ptr.is_null() || class_name_len == 0
         || png_ptr.is_null() || png_len == 0 {
@@ -360,12 +362,12 @@ pub unsafe extern "C" fn ruffle_ios_register_xui_bitmap(
     ) { Ok(s) => s, Err(_) => return 0 };
     let png = std::slice::from_raw_parts(png_ptr, png_len).to_vec();
     let Ok(mut p) = handle.player.lock() else { return -1; };
-    match p.register_xui_bitmap(class_name, png) {
+    match p.register_xui_bitmap(class_name, png, display_scale_x, display_scale_y) {
         Ok(chid) => {
             drop(p);
             avm_log_push(format!(
-                "[ruffle_ios] register_xui_bitmap('{}') -> chid={}",
-                class_name, chid
+                "[ruffle_ios] register_xui_bitmap('{}') -> chid={} scale={}x{}",
+                class_name, chid, display_scale_x, display_scale_y
             ));
             1
         }

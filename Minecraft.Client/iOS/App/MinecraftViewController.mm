@@ -333,12 +333,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // names (Panorama_Background_S etc.) to external PNG paths.
         NSString* docs = [NSSearchPathForDirectoriesInDomains(
             NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        NSArray<NSString*>* xuiAssets = @[
-            @"Panorama_Background_S",
-            @"Panorama_Background_N",
-            @"MenuTitle",
+        // XUI import scale matches skin_Minecraft.xui <Scale> elements.
+        // Panorama_Background_S/N carry Scale=5.0 there so the 820x144
+        // tile renders as 4100x720; without that, two tiles side-by-side
+        // don't cover the stage and a large gap appears between end and
+        // start. MenuTitle has no XUI scale entry, it's drawn at native.
+        NSArray* xuiAssets = @[
+            @[@"Panorama_Background_S", @(5.0f), @(5.0f)],
+            @[@"Panorama_Background_N", @(5.0f), @(5.0f)],
+            @[@"MenuTitle",             @(1.0f), @(1.0f)],
         ];
-        for (NSString* className in xuiAssets) {
+        for (NSArray* entry in xuiAssets) {
+            NSString* className = entry[0];
+            float sx = [entry[1] floatValue];
+            float sy = [entry[2] floatValue];
             NSString* pngPath = [docs stringByAppendingPathComponent:
                                  [className stringByAppendingString:@".png"]];
             NSData* pngData = [NSData dataWithContentsOfFile:pngPath];
@@ -349,8 +357,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             int rc = ruffle_ios_register_xui_bitmap(
                 g_ruffle_player,
                 (const uint8_t*)className.UTF8String, strlen(className.UTF8String),
-                (const uint8_t*)pngData.bytes, pngData.length);
-            NSLog(@"[MinecraftVC] register_xui_bitmap %@ -> %d", className, rc);
+                (const uint8_t*)pngData.bytes, pngData.length,
+                sx, sy);
+            NSLog(@"[MinecraftVC] register_xui_bitmap %@ scale=%.1fx%.1f -> %d",
+                  className, sx, sy, rc);
         }
 
         // Load the same sibling movies UIScene_MainMenu composites on
