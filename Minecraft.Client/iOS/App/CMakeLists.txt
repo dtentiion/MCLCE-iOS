@@ -10,6 +10,8 @@ set(APP_SOURCES
   MetalView.h
   MetalView.mm
   GameBootstrap.cpp
+  MCLE_iOS_Audio.h
+  MCLE_iOS_Audio.mm
 )
 
 set(APP_RESOURCES
@@ -41,6 +43,7 @@ target_link_libraries(Minecraft.LCE PRIVATE
   "-framework Foundation"
   "-framework CoreGraphics"
   "-framework QuartzCore"
+  "-framework AVFoundation"
   # zlib required by GameSWF and Ruffle alike.
   "-lz"
 )

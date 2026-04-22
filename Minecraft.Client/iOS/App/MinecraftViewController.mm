@@ -7,6 +7,7 @@
 #include "INP_iOS_Bridge.h"
 #include "mcle_swf_bridge.h"
 #include "ruffle_ios.h"
+#include "MCLE_iOS_Audio.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -326,10 +327,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+
+    // Start menu music if the user has a supported audio file in
+    // Documents. Silent no-op otherwise.
+    int mrc = mcle_audio_start_menu_music();
+    NSLog(@"[MinecraftVC] menu music start rc=%d", mrc);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
+    mcle_audio_stop_menu_music();
     [self.displayLink invalidate];
     self.displayLink = nil;
     mcle_render_shutdown();
