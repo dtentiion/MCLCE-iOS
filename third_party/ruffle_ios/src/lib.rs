@@ -299,6 +299,37 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
     n
 }
 
+/// Toggle the `visible` flag on a named direct child of the root clip.
+/// Used to hide 4J's `iggy_Splash` loading placeholder, which the
+/// console engine hides the moment a scene is ready but our port
+/// leaves in the display list as a permanent gray strip.
+/// Returns 1 if the child was found and updated, 0 on bad args or
+/// not found, -1 on player lock failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_root_child_visible(
+    raw: *mut PlayerHandle,
+    name_ptr: *const u8,
+    name_len: usize,
+    visible: c_int,
+) -> c_int {
+    if raw.is_null() || name_ptr.is_null() || name_len == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let name = match std::str::from_utf8(std::slice::from_raw_parts(name_ptr, name_len)) {
+        Ok(s) => s.to_string(),
+        Err(_) => return 0,
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let found = p.set_root_child_visible(&name, visible != 0);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] set_root_child_visible('{}', {}) -> {}",
+        name, visible != 0, found
+    ));
+    if found { 1 } else { 0 }
+}
+
 /// Instantiate an AS3 class by name (looked up in the root movie's
 /// domain) and attach its resulting DisplayObject to the root clip at
 /// the specified depth. Used by the iOS host to add the menu panorama
