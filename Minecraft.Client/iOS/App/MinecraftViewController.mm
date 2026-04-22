@@ -389,17 +389,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // fixes the aspect. ty stays 0 so the bottom still touches
         // the stage floor the way it did at sx=1,sy=1.5.
         //
-        // Logo: scale-from-origin shifts authored content right by
-        // (sx-1)*authored_x. MenuTitle is placed near stage center
-        // (x=960) inside ComponentLogo1080, so 1.5x puts the center
-        // at 1440. tx=-480 pulls it back to 960 (stage center).
+        // Logo: 1.0x with the 1080.png MenuTitle (857x207) dropped into
+        // Documents. The SWF is authored to center that asset on the
+        // 1920x1080 stage, so no scale and no translate is needed.
+        // Using the 720.png (571x138) asset instead looks small AND
+        // scaling it 1.5x shifts the content because scale-from-origin
+        // multiplies every authored x by sx. Stick with the native
+        // size and let the SWF do its own layout.
         //
         // Tooltips: keep 1.0x until FJ_Tooltips is fleshed out.
         struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
         NSArray* siblings = @[
-            @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(0.0f),    @(0.0f)],
-            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
-            @[@"ComponentLogo1080.swf",@(101), @(1.5f), @(1.5f), @(-480.0f), @(0.0f)],
+            @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(0.0f), @(0.0f)],
+            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f), @(0.0f)],
+            @[@"ComponentLogo1080.swf",@(101), @(1.0f), @(1.0f), @(0.0f), @(0.0f)],
         ];
         for (NSArray* entry in siblings) {
             NSString* swfName = entry[0];
