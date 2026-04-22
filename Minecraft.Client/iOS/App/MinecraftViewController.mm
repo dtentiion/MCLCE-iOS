@@ -300,11 +300,27 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             0.0);
     }
     if (attachPanorama) {
-        int panoRc = ruffle_ios_instantiate_class_on_root(
-            g_ruffle_player,
-            (const uint8_t*)"Panorama", 8,
-            0);
-        NSLog(@"[MinecraftVC] panorama -> %d", panoRc);
+        // Console Iggy layers each scene as its own movie. Panorama
+        // is Panorama1080.swf, a sibling of MainMenu1080.swf that the
+        // host composites beneath it. Load it from Documents and
+        // attach as a child of root at depth 0 (below MainMenu's
+        // content which starts at depth 1).
+        NSString* docs = [NSSearchPathForDirectoriesInDomains(
+            NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+        NSString* panoPath = [docs stringByAppendingPathComponent:@"Panorama1080.swf"];
+        NSData* panoData = [NSData dataWithContentsOfFile:panoPath];
+        if (panoData.length) {
+            NSString* url = [NSString stringWithFormat:@"file://%@",
+                [panoPath stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+            int rc = ruffle_ios_add_sibling_swf_to_root(
+                g_ruffle_player,
+                (const uint8_t*)panoData.bytes, panoData.length,
+                (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
+                0);
+            NSLog(@"[MinecraftVC] Panorama1080.swf -> %d", rc);
+        } else {
+            NSLog(@"[MinecraftVC] Panorama1080.swf missing at %@", panoPath);
+        }
     }
     self.menuFocusIndex = 0;
 }
