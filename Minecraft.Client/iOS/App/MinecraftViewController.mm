@@ -328,19 +328,36 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             NSLog(@"[MinecraftVC] register_xui_bitmap %@ -> %d", className, rc);
         }
 
-        NSString* panoPath = [docs stringByAppendingPathComponent:@"Panorama1080.swf"];
-        NSData* panoData = [NSData dataWithContentsOfFile:panoPath];
-        if (panoData.length) {
+        // Load the same sibling movies UIScene_MainMenu composites on
+        // console (UIScene_MainMenu.cpp:29-30 adds eUIComponent_Panorama
+        // + eUIComponent_Logo; UIGroup.cpp:28 adds Tooltips via the
+        // tooltips layer). Depths: panorama beneath everything (0),
+        // logo and tooltips above MainMenu's button depths (3..9) so
+        // they overlay. Tooltips specifically covers the bottom area
+        // the panorama doesn't reach (panorama is authored at 5x
+        // scale => 720/1080 vertical coverage; the gap is the
+        // tooltips overlay slot on console).
+        NSDictionary* siblings = @{
+            @"Panorama1080.swf":     @(0),
+            @"ToolTips1080.swf":     @(100),
+            @"ComponentLogo1080.swf": @(101),
+        };
+        for (NSString* swfName in siblings) {
+            int depth = [siblings[swfName] intValue];
+            NSString* path = [docs stringByAppendingPathComponent:swfName];
+            NSData* data = [NSData dataWithContentsOfFile:path];
+            if (!data.length) {
+                NSLog(@"[MinecraftVC] %@ missing at %@", swfName, path);
+                continue;
+            }
             NSString* url = [NSString stringWithFormat:@"file://%@",
-                [panoPath stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+                [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
             int rc = ruffle_ios_add_sibling_swf_to_root(
                 g_ruffle_player,
-                (const uint8_t*)panoData.bytes, panoData.length,
+                (const uint8_t*)data.bytes, data.length,
                 (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
-                0);
-            NSLog(@"[MinecraftVC] Panorama1080.swf -> %d", rc);
-        } else {
-            NSLog(@"[MinecraftVC] Panorama1080.swf missing at %@", panoPath);
+                depth);
+            NSLog(@"[MinecraftVC] %@ (depth %d) -> %d", swfName, depth, rc);
         }
     }
     self.menuFocusIndex = 0;
