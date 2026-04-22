@@ -2,6 +2,7 @@
 #import "MetalView.h"
 
 #import <QuartzCore/CADisplayLink.h>
+#import <CoreText/CoreText.h>
 
 #include "RND_iOS_Stub.h"
 #include "INP_iOS_Bridge.h"
@@ -132,26 +133,38 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         self.splashText = @"Now Java-free!";
     }
 
+    // Register the Mojangles TTF with CoreText so UIFont can find it
+    // by name. We already load it for Ruffle via ruffle_ios_stage_
+    // device_font; UIKit has its own font registry that needs the
+    // file separately. Font file is Mojang Font_7.ttf in Documents.
+    NSString* fontPath = [docsDir stringByAppendingPathComponent:@"Mojang Font_7.ttf"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:fontPath]) {
+        CFURLRef url = (__bridge_retained CFURLRef)[NSURL fileURLWithPath:fontPath];
+        CFErrorRef err = NULL;
+        CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess, &err);
+        if (err) { CFRelease(err); }
+        CFRelease(url);
+    }
+
     // Splash label: yellow, rotated -17 degrees, positioned next to
     // the title logo. Authored XUI position is (612, 126) on the
-    // 720p menu stage; for our 1080 stage scale 1.5x that's (918,
-    // 189). We convert to screen coords later using the same
-    // viewport transform the panorama uses (composed.d=8.125/5 and
-    // tx offset 226 we measured earlier).
+    // 1920x1080 stage; we convert to view points in the tick method
+    // using self.view.bounds so the stage fit math stays dynamic.
     self.splashLabel = [[UILabel alloc] init];
     self.splashLabel.text = self.splashText;
     self.splashLabel.textColor = [UIColor colorWithRed:1.0 green:1.0
                                                   blue:0.0 alpha:1.0];
-    self.splashLabel.font = [UIFont fontWithName:@"Mojangles7" size:36]
-        ?: [UIFont boldSystemFontOfSize:36];
+    self.splashLabel.font = [UIFont fontWithName:@"Mojangles7" size:18]
+        ?: [UIFont fontWithName:@"Mojangles 7" size:18]
+        ?: [UIFont boldSystemFontOfSize:18];
     self.splashLabel.backgroundColor = UIColor.clearColor;
     self.splashLabel.textAlignment = NSTextAlignmentCenter;
     self.splashLabel.shadowColor = [UIColor colorWithWhite:0 alpha:0.8];
-    self.splashLabel.shadowOffset = CGSizeMake(2, 2);
+    self.splashLabel.shadowOffset = CGSizeMake(1, 1);
     [self.splashLabel sizeToFit];
-    // Position later in viewSafeAreaInsetsDidChange once we know
-    // the final view bounds.
     [self.view addSubview:self.splashLabel];
+    NSLog(@"[MinecraftVC] splash font=%@ text=%@",
+          self.splashLabel.font.fontName, self.splashText);
 }
 
 - (void)viewSafeAreaInsetsDidChange {
@@ -633,7 +646,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // Splash text pulse + position. Mirrors CXuiCtrlSplashPulser::
     // OnRender (Common/XUI/XUI_Ctrl_SplashPulser.cpp): pulses with
     // sin(currentTimeMillis), rotated -17 degrees, centered at the
-    // authored (918, 189) position on the 1920x1080 stage. Only
+    // authored (612, 126) position on the 1920x1080 stage. Only
     // visible on MainMenu; hidden on sub-scenes to match console.
     if (self.splashLabel) {
         BOOL onMainMenu = [self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"];
@@ -641,12 +654,19 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         if (onMainMenu) {
             uint64_t nowMs = (uint64_t)(CACurrentMediaTime() * 1000.0);
             double phase = (double)(nowMs % 1000) / 1000.0 * M_PI * 2.0;
-            double pulse = 1.8 - fabs(sin(phase)) * 0.1;
-            // Stage-to-screen transform the panorama uses:
-            // screen_x = authored_x * 1.0833 + 226
-            // screen_y = authored_y * 1.0833 (no letterbox on vertical)
-            CGFloat sx = 918.0 * 1.0833 + 226.0;
-            CGFloat sy = 189.0 * 1.0833;
+            double pulse = 1.0 - fabs(sin(phase)) * 0.05;
+            // Stage fits 1920x1080 inside view by height, centered
+            // horizontally. Compute in UIKit points from view bounds
+            // so this follows screen rotation, safe area, anything.
+            CGSize vb = self.view.bounds.size;
+            CGFloat stageH = vb.height;
+            CGFloat stageW = stageH * (1920.0 / 1080.0);
+            CGFloat stageX = (vb.width - stageW) * 0.5;
+            CGFloat authoredScale = stageH / 1080.0;
+            // XUI Position is top-left of the XuiLabel. Width 500,
+            // Height 50, so the center is (612+250, 126+25).
+            CGFloat sx = stageX + (612.0 + 250.0) * authoredScale;
+            CGFloat sy = (126.0 + 25.0) * authoredScale;
             CGFloat rot = -17.0 * M_PI / 180.0;
             self.splashLabel.transform = CGAffineTransformIdentity;
             [self.splashLabel sizeToFit];
