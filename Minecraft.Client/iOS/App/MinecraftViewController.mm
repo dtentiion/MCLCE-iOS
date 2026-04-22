@@ -303,6 +303,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     (const uint8_t*)"ChangeState", 11,
                     (const uint8_t*)"", 0,
                     0.0);
+
+                // Drop the rotating world panorama behind the menu. The
+                // Panorama AS3 class is bound in skinHD's SymbolClass
+                // (chid 174) and the sprite is 4100 frames of self-
+                // contained timeline animation, so it runs under
+                // Ruffle's normal frame pump with no further driving.
+                int panoRc = ruffle_ios_instantiate_class_on_root(
+                    g_ruffle_player,
+                    (const uint8_t*)"Panorama", 8,
+                    0);
+                NSLog(@"[MinecraftVC] panorama -> %d", panoRc);
             }
         }
     }
@@ -364,6 +375,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         (const uint8_t*)"ChangeState", 11,
         (const uint8_t*)"", 0,
         0.0);
+    // Re-attach panorama behind the buttons. replace_root_movie tears
+    // down the old root's display list, so every time we return to
+    // MainMenu we need to place the panorama fresh.
+    int panoRc = ruffle_ios_instantiate_class_on_root(
+        g_ruffle_player,
+        (const uint8_t*)"Panorama", 8,
+        0);
+    NSLog(@"[MinecraftVC] panorama (re-init) -> %d", panoRc);
     self.menuFocusIndex = 0;
 }
 

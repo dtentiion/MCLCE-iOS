@@ -299,6 +299,40 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
     n
 }
 
+/// Instantiate an AS3 class by name (looked up in the root movie's
+/// domain) and attach its resulting DisplayObject to the root clip at
+/// the specified depth. Used by the iOS host to add the menu panorama
+/// under the MainMenu buttons without modifying the MainMenu SWF.
+///
+/// Depth tip: MainMenu's own buttons live at depths 3..8; pass depth=0
+/// or a negative number to place the panorama beneath them.
+///
+/// Returns 1 on success, 0 on bad args, -1 on player lock failure,
+/// -2 on AS3/domain resolution failure (see AVM_LOG for details).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_instantiate_class_on_root(
+    raw: *mut PlayerHandle,
+    class_name_ptr: *const u8,
+    class_name_len: usize,
+    depth: c_int,
+) -> c_int {
+    if raw.is_null() || class_name_ptr.is_null() || class_name_len == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let class_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(class_name_ptr, class_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.instantiate_class_on_root(class_name, depth);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] instantiate_class_on_root('{}', depth={}) -> {}",
+        class_name, depth, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 /// Replace the root movie on an existing player. Used by the iOS host
 /// for menu scene transitions (MainMenu -> HelpAndOptions etc.) without
 /// tearing down the wgpu surface. Returns 1 on success, 0 on bad args,
