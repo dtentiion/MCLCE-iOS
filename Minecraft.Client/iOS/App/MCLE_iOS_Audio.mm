@@ -13,6 +13,13 @@
 
 #include "MCLE_iOS_Audio.h"
 
+// Include stb_vorbis BEFORE miniaudio's implementation. miniaudio's
+// OGG Vorbis path is enabled only when stb_vorbis is visible at
+// implementation compile time; without this, ma_sound_init_from_file
+// on a .ogg fails with MA_INVALID_FILE (-10). Matches how console
+// LCE's SoundEngine.cpp wires the two together.
+#include "stb_vorbis.h"
+
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
