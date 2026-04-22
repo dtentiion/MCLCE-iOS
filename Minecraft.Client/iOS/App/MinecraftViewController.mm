@@ -32,6 +32,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // eControl_* enum). Configured per-menu by initXxxButtons methods so
 // the focus state machine can drive any menu uniformly.
 @property (strong, nonatomic) NSArray<NSDictionary*>* menuButtonConfig;
+// Sibling scenery (panorama / logo / tooltips) is attached to the
+// Stage once and persists across replace_root_movie calls, matching
+// how console UIComponent_Panorama lives on the parent layer rather
+// than the scene. This flag guards against re-attach on every menu
+// transition.
+@property (nonatomic) BOOL scenerAttached;
 @end
 
 @implementation MinecraftViewController
@@ -302,14 +308,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 - (void)attachMenuScenery {
     // Mirrors UIScene_MainMenu.cpp:29-30 + UIGroup.cpp:28 on console
-    // which composite Panorama + Logo + Tooltips as sibling movies on
-    // every menu scene. Our replace_root_movie tears down the old
-    // root's children on transition, so we re-attach on every scene
-    // (MainMenu, HelpAndOptions, eventually others) - not just the
-    // first one. Previously this only fired for MainMenu which is
-    // why Help & Options went blank-white.
+    // which composite Panorama + Logo + Tooltips as sibling movies
+    // attached to the parent UILayer (not the scene). The layer
+    // outlives scene transitions, so the panorama timeline keeps
+    // playing smoothly as menus swap.
+    //
+    // Our Ruffle side now attaches these to the Stage at non-zero
+    // depths (Stage.replace_root_movie only touches depth 0, so
+    // Stage-level children at other depths survive scene swaps).
+    // That means we should attach ONCE at startup, NOT on every
+    // scene init - otherwise each transition would create duplicate
+    // siblings and reset the panorama's playhead to frame 1.
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
+    if (self.scenerAttached) return;
+    self.scenerAttached = YES;
     {
         // Console Iggy layers each scene as its own movie. Panorama
         // is Panorama1080.swf, a sibling of MainMenu1080.swf that the
@@ -323,6 +336,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         NSArray<NSString*>* xuiAssets = @[
             @"Panorama_Background_S",
             @"Panorama_Background_N",
+            @"MenuTitle",
         ];
         for (NSString* className in xuiAssets) {
             NSString* pngPath = [docs stringByAppendingPathComponent:
