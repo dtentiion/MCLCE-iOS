@@ -1,118 +1,137 @@
-// Minimal iOS audio backend. Scans the app's Documents directory for
-// any supported audio file, picks one at random, plays it once, then
-// picks a different one when it ends - mirroring the console menu
-// music behaviour (shuffle across menu1..menu4). Single-track case
-// still works: if there's only one file, it just repeats.
+// iOS audio backend. Uses miniaudio (same library the console LCE
+// uses in SoundEngine.cpp) so we can play the stock .ogg tracks from
+// the console build directly without transcoding. Scans Documents for
+// menu1.ogg..menu4.ogg (or anything else supported) and shuffles
+// across them on loop.
 //
-// Supported extensions are whatever AVAudioPlayer can decode out of
-// the box: mp3, m4a, aac, wav, aiff, caf. OGG needs a third-party
-// decoder; transcode with ffmpeg first.
+// miniaudio supports ogg/mp3/wav/flac out of the box, handles iOS
+// AVAudioSession internally, and is a single-header library
+// (third_party/miniaudio/miniaudio.h).
 
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
 
 #include "MCLE_iOS_Audio.h"
 
-@interface MCLE_AudioShuffler : NSObject <AVAudioPlayerDelegate>
-@property (strong, nonatomic) NSArray<NSString*>* tracks;
-@property (strong, nonatomic) AVAudioPlayer* current;
-@property (strong, nonatomic) NSString* currentPath;
-- (void)playRandom;
-@end
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
 
-@implementation MCLE_AudioShuffler
+#include <atomic>
+#include <mutex>
+#include <string>
+#include <vector>
 
-- (void)playRandom {
-    if (self.tracks.count == 0) return;
-    // Pick a path that isn't the one we just played (when >1 option).
-    NSString* next = nil;
+namespace {
+
+ma_engine g_engine;
+bool g_engine_ok = false;
+ma_sound g_sound;
+bool g_sound_loaded = false;
+std::string g_current_path;
+std::vector<std::string> g_tracks;
+std::mutex g_mu;
+std::atomic<bool> g_shuffle_stop{false};
+
+std::vector<std::string> findAllMenuTracks() {
+    std::vector<std::string> out;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    if (!docs) return out;
+    NSFileManager* fm = [NSFileManager defaultManager];
+    NSArray<NSString*>* extsAllowed = @[@"ogg", @"mp3", @"m4a", @"aac",
+                                         @"wav", @"aiff", @"caf", @"flac"];
+    NSArray<NSString*>* preferredPrefixes = @[@"menu", @"calm", @"minecraft",
+                                               @"hal", @"piano"];
+
+    NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
+    std::vector<std::string> preferred;
+    std::vector<std::string> fallback;
+    for (NSString* e in entries) {
+        NSString* ext = e.pathExtension.lowercaseString;
+        if (![extsAllowed containsObject:ext]) continue;
+        NSString* full = [docs stringByAppendingPathComponent:e];
+        std::string s = full.UTF8String;
+        NSString* lower = e.lowercaseString;
+        BOOL isPreferred = NO;
+        for (NSString* p in preferredPrefixes) {
+            if ([lower hasPrefix:p]) { isPreferred = YES; break; }
+        }
+        if (isPreferred) preferred.push_back(s);
+        else fallback.push_back(s);
+    }
+    if (!preferred.empty()) return preferred;
+    return fallback;
+}
+
+// Forward decl.
+void startRandomTrack();
+
+// miniaudio end-of-sound callback. Fires on the audio thread; we
+// defer the actual next-track selection to the main thread so we
+// don't do file I/O inside the callback.
+void onSoundEnd(void* pUserData, ma_sound* pSound) {
+    (void)pUserData; (void)pSound;
+    if (g_shuffle_stop.load()) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        startRandomTrack();
+    });
+}
+
+void startRandomTrack() {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_shuffle_stop.load()) return;
+    if (g_tracks.empty() || !g_engine_ok) return;
+
+    // Unload the previous sound if any.
+    if (g_sound_loaded) {
+        ma_sound_uninit(&g_sound);
+        g_sound_loaded = false;
+    }
+
+    // Pick a track that isn't the one we just played (when >1).
+    std::string next;
     for (int tries = 0; tries < 8; ++tries) {
-        NSUInteger idx = arc4random_uniform((uint32_t)self.tracks.count);
-        NSString* pick = self.tracks[idx];
-        if (self.tracks.count == 1 || ![pick isEqualToString:self.currentPath]) {
+        uint32_t idx = arc4random_uniform((uint32_t)g_tracks.size());
+        const std::string& pick = g_tracks[idx];
+        if (g_tracks.size() == 1 || pick != g_current_path) {
             next = pick;
             break;
         }
     }
-    if (!next) next = self.tracks.firstObject;
-    NSURL* url = [NSURL fileURLWithPath:next];
-    NSError* err = nil;
-    AVAudioPlayer* p = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&err];
-    if (!p || err) {
-        NSLog(@"[mcle_audio] init player failed for %@: %@", next, err);
+    if (next.empty()) next = g_tracks.front();
+
+    ma_result r = ma_sound_init_from_file(
+        &g_engine, next.c_str(), 0, NULL, NULL, &g_sound);
+    if (r != MA_SUCCESS) {
+        NSLog(@"[mcle_audio] ma_sound_init_from_file(%s) failed: %d",
+              next.c_str(), r);
         return;
     }
-    p.delegate = self;
-    p.numberOfLoops = 0;   // single play; delegate picks the next one
-    p.volume = 1.0f;
-    [p prepareToPlay];
-    if (![p play]) {
-        NSLog(@"[mcle_audio] play failed for %@", next);
+    g_sound_loaded = true;
+    g_current_path = next;
+    ma_sound_set_end_callback(&g_sound, onSoundEnd, NULL);
+    ma_sound_set_volume(&g_sound, 1.0f);
+    if (ma_sound_start(&g_sound) != MA_SUCCESS) {
+        NSLog(@"[mcle_audio] ma_sound_start failed for %s", next.c_str());
         return;
     }
-    self.current = p;
-    self.currentPath = next;
-    NSLog(@"[mcle_audio] playing %@ (%lu tracks available)",
-          next.lastPathComponent, (unsigned long)self.tracks.count);
+    NSLog(@"[mcle_audio] playing %s (%zu tracks available)",
+          [[NSString stringWithUTF8String:next.c_str()] lastPathComponent].UTF8String,
+          g_tracks.size());
 }
 
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer*)player successfully:(BOOL)flag {
-    // On success, pick another random track. On failure, don't loop
-    // forever on a bad file - bail out.
-    if (flag) {
-        [self playRandom];
-    } else {
-        NSLog(@"[mcle_audio] track ended unsuccessfully, stopping shuffle");
-    }
-}
-
-- (void)stop {
-    [self.current stop];
-    self.current = nil;
-    self.currentPath = nil;
-}
-
-@end
-
-namespace {
-MCLE_AudioShuffler* g_shuffler = nil;
-
-NSArray<NSString*>* findAllMenuTracks(void) {
-    NSString* docs = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    if (!docs) return @[];
-    NSFileManager* fm = [NSFileManager defaultManager];
-    NSArray<NSString*>* extsAllowed = @[@"mp3", @"m4a", @"aac", @"wav", @"aiff", @"caf"];
-    NSMutableArray<NSString*>* out = [NSMutableArray array];
-    NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
-    for (NSString* e in entries) {
-        if (![extsAllowed containsObject:e.pathExtension.lowercaseString]) continue;
-        // Bias toward files whose names look musical: menu*, calm*,
-        // menu_music*, minecraft*. If none of those exist we fall
-        // through to all supported files.
-        NSString* lower = e.lowercaseString;
-        if ([lower hasPrefix:@"menu"] || [lower hasPrefix:@"calm"]
-            || [lower hasPrefix:@"minecraft"] || [lower hasPrefix:@"hal"]
-            || [lower hasPrefix:@"piano"]) {
-            [out addObject:[docs stringByAppendingPathComponent:e]];
-        }
-    }
-    if (out.count > 0) return out;
-    // Fallback: any supported audio file.
-    for (NSString* e in entries) {
-        if ([extsAllowed containsObject:e.pathExtension.lowercaseString]) {
-            [out addObject:[docs stringByAppendingPathComponent:e]];
-        }
-    }
-    return out;
-}
 } // namespace
 
 extern "C" int mcle_audio_start_menu_music(void) {
-    if (g_shuffler && g_shuffler.current.playing) return 1;
+    // Already playing? Nothing to do.
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        if (g_sound_loaded && ma_sound_is_playing(&g_sound)) return 1;
+    }
 
     // Route audio to playback category so it doesn't duck for silent
-    // switch / lock screen music.
+    // switch / lock screen music. miniaudio handles the actual Audio
+    // Unit setup, but the session category is ours to pick.
     NSError* sessionErr = nil;
     [[AVAudioSession sharedInstance]
         setCategory:AVAudioSessionCategoryPlayback
@@ -122,21 +141,41 @@ extern "C" int mcle_audio_start_menu_music(void) {
     }
     [[AVAudioSession sharedInstance] setActive:YES error:nil];
 
-    NSArray<NSString*>* tracks = findAllMenuTracks();
-    if (tracks.count == 0) {
+    // Lazy-init the miniaudio engine on first call.
+    if (!g_engine_ok) {
+        ma_engine_config cfg = ma_engine_config_init();
+        ma_result r = ma_engine_init(&cfg, &g_engine);
+        if (r != MA_SUCCESS) {
+            NSLog(@"[mcle_audio] ma_engine_init failed: %d", r);
+            return -1;
+        }
+        g_engine_ok = true;
+    }
+
+    std::vector<std::string> tracks = findAllMenuTracks();
+    if (tracks.empty()) {
         NSLog(@"[mcle_audio] no supported audio files found in Documents");
         return 0;
     }
-    g_shuffler = [[MCLE_AudioShuffler alloc] init];
-    g_shuffler.tracks = tracks;
-    [g_shuffler playRandom];
-    return g_shuffler.current ? 1 : -1;
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        g_tracks = std::move(tracks);
+        g_shuffle_stop.store(false);
+    }
+    startRandomTrack();
+    return g_sound_loaded ? 1 : -2;
 }
 
 extern "C" void mcle_audio_stop_menu_music(void) {
-    if (g_shuffler) {
-        [g_shuffler stop];
-        g_shuffler = nil;
+    g_shuffle_stop.store(true);
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        if (g_sound_loaded) {
+            ma_sound_stop(&g_sound);
+            ma_sound_uninit(&g_sound);
+            g_sound_loaded = false;
+        }
+        g_current_path.clear();
     }
     [[AVAudioSession sharedInstance] setActive:NO
                                    withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
