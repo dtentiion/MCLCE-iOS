@@ -176,7 +176,8 @@ int           ruffle_ios_instantiate_class_on_root(PlayerHandle* h,
 // -2 decode / register failure.
 int           ruffle_ios_register_xui_bitmap(PlayerHandle* h,
                                              const uint8_t* class_name, size_t class_name_len,
-                                             const uint8_t* png,        size_t png_len);
+                                             const uint8_t* png,        size_t png_len,
+                                             float display_scale_x, float display_scale_y);
 
 // Load a sibling SWF (Panorama1080.swf / ComponentLogo1080.swf etc.)
 // from bytes and attach as a child of the current root clip at the
