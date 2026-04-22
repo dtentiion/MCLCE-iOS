@@ -75,6 +75,13 @@ void          ruffle_ios_player_tick_headless(PlayerHandle* h, float dt_seconds)
 void          ruffle_ios_player_tick_headless_preserve_xui(
                   PlayerHandle* h, float dt_seconds);
 
+// Stash / restore matrices for every XUI-origin Bitmap in one shot.
+// Use around a full scene transition (replace_swf + headless burst +
+// button init) so the panorama stays visually locked across both
+// the ticks and the follow-up init calls that also advance scroll.
+void          ruffle_ios_player_snapshot_xui_matrices(PlayerHandle* h);
+void          ruffle_ios_player_restore_xui_matrices(PlayerHandle* h);
+
 // Diagnostics.
 int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
 
