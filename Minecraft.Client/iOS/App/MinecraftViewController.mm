@@ -267,7 +267,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
 }
 
-- (void)applyMenuButtonConfig:(NSArray<NSDictionary*>*)config attachPanorama:(BOOL)attachPanorama {
+- (void)applyMenuButtonConfig:(NSArray<NSDictionary*>*)config {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
     self.menuButtonConfig = config;
@@ -288,8 +288,6 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)label,     strlen(label),
             0.0);
     }
-    // Kick initial focus onto the first button with FIRST_SELECTED (0)
-    // so it animates the highlight-in transition.
     if (config.count > 0) {
         const char* firstName = [config[0][@"name"] UTF8String];
         ruffle_ios_call_init_on_named_child(
@@ -299,7 +297,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)"", 0,
             0.0);
     }
-    if (attachPanorama) {
+    self.menuFocusIndex = 0;
+}
+
+- (void)attachMenuScenery {
+    // Mirrors UIScene_MainMenu.cpp:29-30 + UIGroup.cpp:28 on console
+    // which composite Panorama + Logo + Tooltips as sibling movies on
+    // every menu scene. Our replace_root_movie tears down the old
+    // root's children on transition, so we re-attach on every scene
+    // (MainMenu, HelpAndOptions, eventually others) - not just the
+    // first one. Previously this only fired for MainMenu which is
+    // why Help & Options went blank-white.
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    {
         // Console Iggy layers each scene as its own movie. Panorama
         // is Panorama1080.swf, a sibling of MainMenu1080.swf that the
         // host composites beneath it. Before loading the SWF, register
@@ -360,7 +371,6 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             NSLog(@"[MinecraftVC] %@ (depth %d) -> %d", swfName, depth, rc);
         }
     }
-    self.menuFocusIndex = 0;
 }
 
 - (void)initMainMenuButtons {
@@ -372,7 +382,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @{ @"name": @"Button5", @"label": @"Downloadable Content", @"id": @(4) },
         @{ @"name": @"Button6", @"label": @"Exit Game",            @"id": @(5) },
     ];
-    [self applyMenuButtonConfig:cfg attachPanorama:YES];
+    [self attachMenuScenery];
+    [self applyMenuButtonConfig:cfg];
 }
 
 - (void)initHelpAndOptionsButtons {
@@ -387,7 +398,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @{ @"name": @"Button4", @"label": @"Settings",     @"id": @(3) },
         @{ @"name": @"Button5", @"label": @"Credits",      @"id": @(4) },
     ];
-    [self applyMenuButtonConfig:cfg attachPanorama:NO];
+    [self attachMenuScenery];
+    [self applyMenuButtonConfig:cfg];
     // Hide the two unused slots (Button6=Reinstall Content,
     // Button7=Debug Settings). Console removeControl()s them in
     // UIScene_HelpAndOptionsMenu's ctor; we call FJ_Button::HideUntilInit
