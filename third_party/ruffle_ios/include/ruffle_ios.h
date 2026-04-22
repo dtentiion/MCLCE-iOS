@@ -187,7 +187,8 @@ int           ruffle_ios_register_xui_bitmap(PlayerHandle* h,
 int           ruffle_ios_add_sibling_swf_to_root(PlayerHandle* h,
                                                  const uint8_t* data, size_t data_len,
                                                  const uint8_t* url,  size_t url_len,
-                                                 int depth);
+                                                 int depth,
+                                                 float scale_x, float scale_y);
 
 // Swap the root movie on an existing player (used for menu scene
 // transitions so the wgpu surface stays alive). url_ptr/url_len may be
