@@ -362,20 +362,38 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // the panorama doesn't reach (panorama is authored at 5x
         // scale => 720/1080 vertical coverage; the gap is the
         // tooltips overlay slot on console).
-        // Stage depth 0 is reserved for the root clip (set by
-        // replace_root_movie every scene swap). Panorama lives BELOW
-        // the root at depth -1 so it survives root swaps and renders
-        // behind. Tooltips/logo at 100/101 render above everything.
-        // Putting panorama at 0 instead of -1 replaces the root on
-        // attach (buttons vanish) and gets itself replaced on the
-        // next scene transition.
-        NSDictionary* siblings = @{
-            @"Panorama1080.swf":     @(-1),
-            @"ToolTips1080.swf":     @(100),
-            @"ComponentLogo1080.swf": @(101),
-        };
-        for (NSString* swfName in siblings) {
-            int depth = [siblings[swfName] intValue];
+        // Each sibling's (depth, scaleX, scaleY). Console renders
+        // each Iggy movie at screen resolution via
+        // IggyPlayerSetDisplaySize so the authored 1920x1080
+        // content fills the screen. Our shared stage means siblings
+        // render at their authored proportions within the 1920x1080
+        // stage, so content authored at less than the stage size
+        // (panorama's 720-tall bitmap, logo's 571x138 PNG) looks
+        // small on iPhone. Apply per-sibling scale to fill out the
+        // visible area, since iPhone-friendly presentation is Path B
+        // of the port direction (faithful to source for architecture,
+        // adapted for device for visuals).
+        //
+        // Panorama: sy=1.5 so the 720-tall strip scales to cover the
+        // full 1080 stage height. sx stays 1.0 so horizontal tile
+        // scrolling geometry keeps working.
+        //
+        // Logo: 1.5x uniform so the 571x138 MenuTitle PNG is more
+        // visible on a phone screen.
+        //
+        // Tooltips: keep 1.0x until we fix the individual button
+        // panel rendering (FJ_Tooltips undefined-class issue).
+        struct SiblingCfg { NSString* swf; int depth; float sx; float sy; };
+        NSArray* siblings = @[
+            @[@"Panorama1080.swf",     @(-1),  @(1.0f), @(1.5f)],
+            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f)],
+            @[@"ComponentLogo1080.swf",@(101), @(1.5f), @(1.5f)],
+        ];
+        for (NSArray* entry in siblings) {
+            NSString* swfName = entry[0];
+            int depth = [entry[1] intValue];
+            float sx = [entry[2] floatValue];
+            float sy = [entry[3] floatValue];
             NSString* path = [docs stringByAppendingPathComponent:swfName];
             NSData* data = [NSData dataWithContentsOfFile:path];
             if (!data.length) {
@@ -388,8 +406,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 g_ruffle_player,
                 (const uint8_t*)data.bytes, data.length,
                 (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
-                depth);
-            NSLog(@"[MinecraftVC] %@ (depth %d) -> %d", swfName, depth, rc);
+                depth, sx, sy);
+            NSLog(@"[MinecraftVC] %@ (depth %d, scale %.1fx%.1f) -> %d",
+                  swfName, depth, sx, sy, rc);
         }
     }
 }
