@@ -24,6 +24,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
 @property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
+@property (nonatomic) int menuFocusIndex;               // 0..5 index into main menu buttons (Button1..Button6)
 @end
 
 @implementation MinecraftViewController
@@ -279,13 +280,6 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     // inside sprite 46 (class="FJ_Label", no char id) is
                     // the level that isn't cloning its bound content.
                     if (i == 0) {
-                        // Button1 subtree: 6 levels is deep enough to reach
-                        // the TextField even if we're stacking two wrapper
-                        // sprites (expected path is button -> FJ_TextContainer
-                        // -> FJ_Label -> TextField; our last tree went one
-                        // past, so we need at least 4 to confirm a TextField
-                        // finally appears, 6 to show if the nesting is
-                        // unbounded).
                         char subtree[8192] = {0};
                         ruffle_ios_enumerate_subtree_of(
                             g_ruffle_player,
@@ -295,6 +289,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                         NSLog(@"[MinecraftVC] %s subtree:\n%s", name, subtree);
                     }
                 }
+
+                // Kick the initial focus onto Button1. FJ_Button.ChangeState
+                // values: 0 = FIRST_SELECTED (plays the animated highlight),
+                // 1 = SELECTED, 2 = UNSELECTED, 3 = PRESSED. Console host
+                // equivalent runs inside Iggy; we drive it ourselves since
+                // the SWF has no controller-focus logic of its own.
+                ruffle_ios_call_init_on_named_child(
+                    g_ruffle_player,
+                    (const uint8_t*)"Button1", 7,
+                    (const uint8_t*)"ChangeState", 11,
+                    (const uint8_t*)"", 0,
+                    0.0);
             }
         }
     }
@@ -363,6 +369,43 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 }
             }
             self.lastPadButtons = now;
+
+            // Main menu focus state machine. FJ_ButtonList (the console
+            // host equivalent) isn't wired because the SWF has no key
+            // handler of its own; AS3's MainMenu only stores neighbor
+            // names as properties (Button1.m_objNavDown = "Button2" etc.).
+            // Drive focus ourselves: edge-detect DPadUp/Down, advance the
+            // index, call ChangeState on the buttons that changed.
+            // 1 = SELECTED (idle highlighted), 2 = UNSELECTED (dim),
+            // 3 = PRESSED (animated press).
+            static const char* kMenuButtons[6] = {
+                "Button1", "Button2", "Button3", "Button4", "Button5", "Button6"
+            };
+            static int kMenuButtonIds[6] = { 0, 1, 2, 3, 4, 5 };
+            uint32_t pressedNow = changed & now;  // buttons that went from 0 -> 1
+            auto changeState = [&](int idx, int state) {
+                ruffle_ios_call_init_on_named_child(
+                    g_ruffle_player,
+                    (const uint8_t*)kMenuButtons[idx], strlen(kMenuButtons[idx]),
+                    (const uint8_t*)"ChangeState", 11,
+                    (const uint8_t*)"", 0,
+                    (double)state);
+            };
+            int cur = self.menuFocusIndex;
+            int next = cur;
+            if (pressedNow & 0x00000400u) next = (cur + 5) % 6;  // DPadUp -> prev
+            if (pressedNow & 0x00000800u) next = (cur + 1) % 6;  // DPadDown -> next
+            if (next != cur) {
+                changeState(cur, 2);      // UNSELECTED
+                changeState(next, 1);     // SELECTED
+                self.menuFocusIndex = next;
+                NSLog(@"[MinecraftVC] menu focus -> %s", kMenuButtons[next]);
+            }
+            if (pressedNow & 0x00000001u) {  // A -> PRESSED
+                changeState(cur, 3);
+                NSLog(@"[MinecraftVC] menu press -> %s (id=%d)",
+                      kMenuButtons[cur], kMenuButtonIds[cur]);
+            }
         }
 
         // Ruffle owns the frame: advance the player, wgpu draws + presents.
