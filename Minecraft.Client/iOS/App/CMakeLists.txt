@@ -43,6 +43,7 @@ target_link_libraries(Minecraft.LCE PRIVATE
   "-framework UIKit"
   "-framework Foundation"
   "-framework CoreGraphics"
+  "-framework CoreText"
   "-framework QuartzCore"
   "-framework AVFoundation"
   "-framework AudioToolbox"
