@@ -304,6 +304,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             0.0);
     }
     self.menuFocusIndex = 0;
+
+    // Hide 4J's loading placeholder on every scene. Iggy on console
+    // hides it automatically when the scene finishes streaming; our
+    // port has no scene-ready hook wired up, so we hide it explicitly
+    // once buttons are wired.
+    const char* splashName = "iggy_Splash";
+    ruffle_ios_set_root_child_visible(
+        g_ruffle_player,
+        (const uint8_t*)splashName, strlen(splashName),
+        0);
 }
 
 - (void)attachMenuScenery {
