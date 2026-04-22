@@ -168,6 +168,17 @@ int           ruffle_ios_instantiate_class_on_root(PlayerHandle* h,
                                                    const uint8_t* class_name, size_t class_name_len,
                                                    int depth);
 
+// Load a sibling SWF (Panorama1080.swf / ComponentLogo1080.swf etc.)
+// from bytes and attach as a child of the current root clip at the
+// given depth. Matches console Iggy's multi-movie compositing model.
+// Panorama typically goes at depth 0 (behind menu), logo at depth
+// 100 (in front). Returns 1 ok, 0 bad args, -1 lock fail, -2 parse
+// or attach failure.
+int           ruffle_ios_add_sibling_swf_to_root(PlayerHandle* h,
+                                                 const uint8_t* data, size_t data_len,
+                                                 const uint8_t* url,  size_t url_len,
+                                                 int depth);
+
 // Swap the root movie on an existing player (used for menu scene
 // transitions so the wgpu surface stays alive). url_ptr/url_len may be
 // empty to default to "file://mcle.swf". Returns 1 ok, 0 bad args,

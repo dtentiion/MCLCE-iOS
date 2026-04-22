@@ -333,6 +333,45 @@ pub unsafe extern "C" fn ruffle_ios_instantiate_class_on_root(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// Load a sibling SWF (Panorama1080.swf, ComponentLogo1080.swf, etc.)
+/// from bytes and attach its root timeline as a child of the current
+/// root clip at the given depth. Mirrors how console LCE layers
+/// multiple Iggy-loaded movies on the same stage.
+///
+/// Typical depths: panorama = 0 (below menu), logo = 100 (above).
+/// Returns 1 ok, 0 bad args, -1 lock fail, -2 parse / attach failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_add_sibling_swf_to_root(
+    raw: *mut PlayerHandle,
+    data: *const u8,
+    data_len: usize,
+    url_ptr: *const u8,
+    url_len: usize,
+    depth: c_int,
+) -> c_int {
+    if raw.is_null() || data.is_null() || data_len == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let bytes = std::slice::from_raw_parts(data, data_len).to_vec();
+    let url = if url_ptr.is_null() || url_len == 0 {
+        String::from("file://sibling.swf")
+    } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(url_ptr, url_len)) {
+            Ok(s) => s.to_string(),
+            Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.add_sibling_swf_to_root(bytes, url, depth);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] add_sibling_swf_to_root(depth={}) -> {}",
+        depth, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 /// Replace the root movie on an existing player. Used by the iOS host
 /// for menu scene transitions (MainMenu -> HelpAndOptions etc.) without
 /// tearing down the wgpu surface. Returns 1 on success, 0 on bad args,
