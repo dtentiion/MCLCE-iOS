@@ -1419,6 +1419,28 @@ pub unsafe extern "C" fn ruffle_ios_player_tick_headless(raw: *mut PlayerHandle,
     handle.executor.borrow_mut().run();
 }
 
+/// Same as ruffle_ios_player_tick_headless but the panorama, logo, and
+/// tooltips (any Bitmap flagged as coming from the 4J XUI import path)
+/// get their matrices snapshotted before the tick and restored after.
+/// That keeps their visible positions locked across the burst of 30
+/// headless ticks used on scene transitions, so the panorama doesn't
+/// appear to jump leftward when you enter/exit a sub-menu.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_tick_headless_preserve_xui(
+    raw: *mut PlayerHandle,
+    dt_seconds: f32,
+) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    handle.executor.borrow_mut().run();
+    {
+        let Ok(mut p) = handle.player.lock() else { return; };
+        use ruffle_common::duration::FloatDuration;
+        let dt = FloatDuration::from_secs(dt_seconds as f64);
+        p.tick_preserving_xui(dt);
+    }
+    handle.executor.borrow_mut().run();
+}
+
 /// Burn-frames diag: stats from the back-to-back run_frame loop we
 /// performed at player create time. Answers whether the root clip can
 /// advance at all under a tight loop, independent of per-tick dt timing.
