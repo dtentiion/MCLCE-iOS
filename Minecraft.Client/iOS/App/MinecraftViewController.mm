@@ -460,9 +460,23 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     NSLog(@"[MinecraftVC] menu press -> %@ (id=%d)",
                           cfg[cur][@"name"], id);
                     // Scene transitions per current menu + pressed id.
-                    if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]
-                        && id == 3) {
-                        [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
+                    if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
+                        if (id == 3) {
+                            [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
+                        } else if (id == 5) {
+                            // Exit Game. iOS apps normally shouldn't
+                            // self-terminate (App Store rejects it) but
+                            // this is a sideloaded dev build; mirrors the
+                            // console LCE where Exit Game fully quits.
+                            // Briefly delay so the press animation shows.
+                            dispatch_after(
+                                dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                                dispatch_get_main_queue(), ^{
+                                    NSLog(@"[MinecraftVC] Exit Game pressed, terminating");
+                                    mcle_audio_stop_menu_music();
+                                    exit(0);
+                                });
+                        }
                     }
                 }
             }
