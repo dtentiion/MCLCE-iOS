@@ -25,6 +25,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
 @property (nonatomic) int menuFocusIndex;               // 0..5 index into main menu buttons (Button1..Button6)
+@property (strong, nonatomic) NSString* currentMenuSwf; // "MainMenu1080.swf", "HelpAndOptionsMenu1080.swf", etc.
 @end
 
 @implementation MinecraftViewController
@@ -199,6 +200,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 pw, ph,
                 (const uint8_t*)data.bytes, data.length,
                 docsPath.UTF8String);
+            self.currentMenuSwf = swfPath.lastPathComponent;
             BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
             self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
                 swfPath.lastPathComponent,
@@ -329,6 +331,42 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
 }
 
+- (void)transitionToMenuNamed:(NSString*)swfName {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    NSString* docsPath = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString* path = [docsPath stringByAppendingPathComponent:swfName];
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data.length) {
+        NSLog(@"[MinecraftVC] transition: %@ not found at %@", swfName, path);
+        return;
+    }
+    NSString* url = [NSString stringWithFormat:@"file://%@",
+                     [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+    int rc = ruffle_ios_player_replace_swf(
+        g_ruffle_player,
+        (const uint8_t*)data.bytes, data.length,
+        (const uint8_t*)url.UTF8String, strlen(url.UTF8String));
+    NSLog(@"[MinecraftVC] transition -> %@ rc=%d", swfName, rc);
+    if (rc == 1) {
+        self.currentMenuSwf = swfName;
+        self.menuFocusIndex = 0;
+        // Dump the new menu's root children so we know what buttons/
+        // named instances to drive next. Labels aren't Init'd yet for
+        // non-MainMenu scenes; that's a per-scene string table we'll
+        // wire up in a follow-up. Visual layout should still render.
+        static uint8_t childBuf[4096];
+        size_t n = ruffle_ios_enumerate_root_children(
+            g_ruffle_player, childBuf, sizeof(childBuf));
+        NSString* childList = n
+            ? [[NSString alloc] initWithBytes:childBuf length:n
+                                     encoding:NSUTF8StringEncoding]
+            : @"<empty>";
+        NSLog(@"[MinecraftVC] %@ root children:\n%@", swfName, childList);
+    }
+}
+
 - (void)tick:(CADisplayLink*)link {
     mcle_game_tick();
 
@@ -403,8 +441,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             }
             if (pressedNow & 0x00000001u) {  // A -> PRESSED
                 changeState(cur, 3);
+                int id = kMenuButtonIds[cur];
                 NSLog(@"[MinecraftVC] menu press -> %s (id=%d)",
-                      kMenuButtons[cur], kMenuButtonIds[cur]);
+                      kMenuButtons[cur], id);
+                // Minimum-viable scene transition: Help & Options (id=3)
+                // swaps the root movie to HelpAndOptionsMenu1080.swf.
+                // Other ids still just log for now.
+                if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]
+                    && id == 3) {
+                    [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
+                }
             }
         }
 
