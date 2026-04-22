@@ -1276,6 +1276,27 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
     handle.executor.borrow_mut().run();
 }
 
+/// Advance the player one simulated frame *without* rendering to the
+/// wgpu surface. Drains async futures, calls Player::tick, but skips
+/// Player::render - so the surface keeps showing whatever was last
+/// drawn. Used by the iOS host during scene transitions so the new
+/// scene can fully construct + run its Init/SetLabel wiring before
+/// the first visible frame. Mirrors the console behaviour where
+/// initialiseMovie + control init happen atomically before the scene
+/// becomes visible.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_tick_headless(raw: *mut PlayerHandle, dt_seconds: f32) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    handle.executor.borrow_mut().run();
+    {
+        let Ok(mut p) = handle.player.lock() else { return; };
+        use ruffle_common::duration::FloatDuration;
+        let dt = FloatDuration::from_secs(dt_seconds as f64);
+        p.tick(dt);
+    }
+    handle.executor.borrow_mut().run();
+}
+
 /// Burn-frames diag: stats from the back-to-back run_frame loop we
 /// performed at player create time. Answers whether the root clip can
 /// advance at all under a tight loop, independent of per-tick dt timing.
