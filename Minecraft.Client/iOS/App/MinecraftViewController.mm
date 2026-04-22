@@ -38,6 +38,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // than the scene. This flag guards against re-attach on every menu
 // transition.
 @property (nonatomic) BOOL scenerAttached;
+// Yellow rotating "splash text" next to the title logo. Matches the
+// console CXuiCtrlSplashPulser (Common/XUI/XUI_Ctrl_SplashPulser.cpp):
+// picks one line from splashes.txt at launch, draws it rotated -17
+// degrees, pulses with sin(currentTimeMillis). Lives as a native
+// UIKit overlay because on console the splash is drawn in native C++
+// outside the Iggy movie too (the XUI entry is only a placeholder
+// XuiLabel with ClassOverride CXuiCtrlSplashPulser, and OnRender
+// draws via raw GL, not through the SWF).
+@property (strong, nonatomic) UILabel* splashLabel;
+@property (strong, nonatomic) NSString* splashText;
 @end
 
 @implementation MinecraftViewController
@@ -100,6 +110,48 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.statusLabel.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.statusLabel];
+
+    // Load a random line from splashes.txt. File ships alongside the
+    // SWFs in Documents. Falls back to a hardcoded line if missing.
+    NSString* docsDir = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString* splashesPath = [docsDir stringByAppendingPathComponent:@"splashes.txt"];
+    NSString* contents = [NSString stringWithContentsOfFile:splashesPath
+                                                   encoding:NSUTF8StringEncoding
+                                                      error:nil];
+    NSArray<NSString*>* lines = nil;
+    if (contents.length) {
+        lines = [[contents componentsSeparatedByCharactersInSet:
+                  [NSCharacterSet newlineCharacterSet]]
+                 filteredArrayUsingPredicate:
+                 [NSPredicate predicateWithFormat:@"length > 0"]];
+    }
+    if (lines.count) {
+        self.splashText = lines[arc4random_uniform((uint32_t)lines.count)];
+    } else {
+        self.splashText = @"Now Java-free!";
+    }
+
+    // Splash label: yellow, rotated -17 degrees, positioned next to
+    // the title logo. Authored XUI position is (612, 126) on the
+    // 720p menu stage; for our 1080 stage scale 1.5x that's (918,
+    // 189). We convert to screen coords later using the same
+    // viewport transform the panorama uses (composed.d=8.125/5 and
+    // tx offset 226 we measured earlier).
+    self.splashLabel = [[UILabel alloc] init];
+    self.splashLabel.text = self.splashText;
+    self.splashLabel.textColor = [UIColor colorWithRed:1.0 green:1.0
+                                                  blue:0.0 alpha:1.0];
+    self.splashLabel.font = [UIFont fontWithName:@"Mojangles7" size:36]
+        ?: [UIFont boldSystemFontOfSize:36];
+    self.splashLabel.backgroundColor = UIColor.clearColor;
+    self.splashLabel.textAlignment = NSTextAlignmentCenter;
+    self.splashLabel.shadowColor = [UIColor colorWithWhite:0 alpha:0.8];
+    self.splashLabel.shadowOffset = CGSizeMake(2, 2);
+    [self.splashLabel sizeToFit];
+    // Position later in viewSafeAreaInsetsDidChange once we know
+    // the final view bounds.
+    [self.view addSubview:self.splashLabel];
 }
 
 - (void)viewSafeAreaInsetsDidChange {
@@ -577,6 +629,33 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 - (void)tick:(CADisplayLink*)link {
     mcle_game_tick();
+
+    // Splash text pulse + position. Mirrors CXuiCtrlSplashPulser::
+    // OnRender (Common/XUI/XUI_Ctrl_SplashPulser.cpp): pulses with
+    // sin(currentTimeMillis), rotated -17 degrees, centered at the
+    // authored (918, 189) position on the 1920x1080 stage. Only
+    // visible on MainMenu; hidden on sub-scenes to match console.
+    if (self.splashLabel) {
+        BOOL onMainMenu = [self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"];
+        self.splashLabel.hidden = !onMainMenu;
+        if (onMainMenu) {
+            uint64_t nowMs = (uint64_t)(CACurrentMediaTime() * 1000.0);
+            double phase = (double)(nowMs % 1000) / 1000.0 * M_PI * 2.0;
+            double pulse = 1.8 - fabs(sin(phase)) * 0.1;
+            // Stage-to-screen transform the panorama uses:
+            // screen_x = authored_x * 1.0833 + 226
+            // screen_y = authored_y * 1.0833 (no letterbox on vertical)
+            CGFloat sx = 918.0 * 1.0833 + 226.0;
+            CGFloat sy = 189.0 * 1.0833;
+            CGFloat rot = -17.0 * M_PI / 180.0;
+            self.splashLabel.transform = CGAffineTransformIdentity;
+            [self.splashLabel sizeToFit];
+            self.splashLabel.center = CGPointMake(sx, sy);
+            self.splashLabel.transform = CGAffineTransformScale(
+                CGAffineTransformMakeRotation(rot),
+                (CGFloat)pulse, (CGFloat)pulse);
+        }
+    }
 
     extern PlayerHandle* g_ruffle_player;
 
