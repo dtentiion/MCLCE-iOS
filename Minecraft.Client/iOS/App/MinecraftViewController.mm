@@ -383,17 +383,31 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         //
         // Tooltips: keep 1.0x until we fix the individual button
         // panel rendering (FJ_Tooltips undefined-class issue).
-        struct SiblingCfg { NSString* swf; int depth; float sx; float sy; };
+        // Panorama: uniform 1.5x (same sx/sy) so authored aspect is
+        // preserved. sx=1, sy=1.5 stretched mountains vertically and
+        // the scene looked squished horizontally; matching sx to sy
+        // fixes the aspect. ty stays 0 so the bottom still touches
+        // the stage floor the way it did at sx=1,sy=1.5.
+        //
+        // Logo: scale-from-origin shifts authored content right by
+        // (sx-1)*authored_x. MenuTitle is placed near stage center
+        // (x=960) inside ComponentLogo1080, so 1.5x puts the center
+        // at 1440. tx=-480 pulls it back to 960 (stage center).
+        //
+        // Tooltips: keep 1.0x until FJ_Tooltips is fleshed out.
+        struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
         NSArray* siblings = @[
-            @[@"Panorama1080.swf",     @(-1),  @(1.0f), @(1.5f)],
-            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f)],
-            @[@"ComponentLogo1080.swf",@(101), @(1.5f), @(1.5f)],
+            @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(0.0f),    @(0.0f)],
+            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
+            @[@"ComponentLogo1080.swf",@(101), @(1.5f), @(1.5f), @(-480.0f), @(0.0f)],
         ];
         for (NSArray* entry in siblings) {
             NSString* swfName = entry[0];
             int depth = [entry[1] intValue];
             float sx = [entry[2] floatValue];
             float sy = [entry[3] floatValue];
+            float tx = [entry[4] floatValue];
+            float ty = [entry[5] floatValue];
             NSString* path = [docs stringByAppendingPathComponent:swfName];
             NSData* data = [NSData dataWithContentsOfFile:path];
             if (!data.length) {
@@ -406,9 +420,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 g_ruffle_player,
                 (const uint8_t*)data.bytes, data.length,
                 (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
-                depth, sx, sy);
-            NSLog(@"[MinecraftVC] %@ (depth %d, scale %.1fx%.1f) -> %d",
-                  swfName, depth, sx, sy, rc);
+                depth, sx, sy, tx, ty);
+            NSLog(@"[MinecraftVC] %@ (depth %d, scale %.1fx%.1f, t=%.0f,%.0f) -> %d",
+                  swfName, depth, sx, sy, tx, ty, rc);
         }
     }
 }
