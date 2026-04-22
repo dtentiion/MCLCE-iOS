@@ -333,6 +333,52 @@ pub unsafe extern "C" fn ruffle_ios_instantiate_class_on_root(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// Register an externally-sourced PNG as a Ruffle Bitmap character
+/// keyed by an AS3 class name. When a subsequently-loaded SWF's
+/// PlaceObject3 references that class name and AVM2 class resolution
+/// fails (e.g. Panorama_Background_S, which lives in a PNG on console
+/// via skin_Minecraft.xui), the resolver's XUI fallback hits this
+/// registry and returns the Bitmap character.
+///
+/// Returns 1 on success, 0 on bad args, -1 on player lock failure,
+/// -2 on PNG decode or registration failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_register_xui_bitmap(
+    raw: *mut PlayerHandle,
+    class_name_ptr: *const u8,
+    class_name_len: usize,
+    png_ptr: *const u8,
+    png_len: usize,
+) -> c_int {
+    if raw.is_null() || class_name_ptr.is_null() || class_name_len == 0
+        || png_ptr.is_null() || png_len == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let class_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(class_name_ptr, class_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let png = std::slice::from_raw_parts(png_ptr, png_len).to_vec();
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    match p.register_xui_bitmap(class_name, png) {
+        Ok(chid) => {
+            drop(p);
+            avm_log_push(format!(
+                "[ruffle_ios] register_xui_bitmap('{}') -> chid={}",
+                class_name, chid
+            ));
+            1
+        }
+        Err(e) => {
+            drop(p);
+            avm_log_push(format!(
+                "[ruffle_ios] register_xui_bitmap('{}') err: {}", class_name, e
+            ));
+            -2
+        }
+    }
+}
+
 /// Load a sibling SWF (Panorama1080.swf, ComponentLogo1080.swf, etc.)
 /// from bytes and attach its root timeline as a child of the current
 /// root clip at the given depth. Mirrors how console LCE layers
