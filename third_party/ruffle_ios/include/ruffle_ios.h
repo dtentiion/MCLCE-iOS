@@ -153,6 +153,15 @@ void          ruffle_ios_avm_counts(uint64_t* traces, uint64_t* warns);
 size_t        ruffle_ios_enumerate_root_children(PlayerHandle* h,
                                                  uint8_t* out, size_t cap);
 
+// Instantiate an AS3 class by name and attach its DisplayObject as a
+// direct child of the root clip at the given depth. Used for things
+// like dropping the menu Panorama under the main menu buttons without
+// editing the MainMenu SWF. Returns 1 ok, 0 bad args, -1 lock fail,
+// -2 resolution failure (see AVM_LOG).
+int           ruffle_ios_instantiate_class_on_root(PlayerHandle* h,
+                                                   const uint8_t* class_name, size_t class_name_len,
+                                                   int depth);
+
 // Swap the root movie on an existing player (used for menu scene
 // transitions so the wgpu surface stays alive). url_ptr/url_len may be
 // empty to default to "file://mcle.swf". Returns 1 ok, 0 bad args,
