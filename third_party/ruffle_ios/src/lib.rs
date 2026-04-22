@@ -394,6 +394,8 @@ pub unsafe extern "C" fn ruffle_ios_add_sibling_swf_to_root(
     url_ptr: *const u8,
     url_len: usize,
     depth: c_int,
+    scale_x: f32,
+    scale_y: f32,
 ) -> c_int {
     if raw.is_null() || data.is_null() || data_len == 0 {
         return 0;
@@ -409,11 +411,11 @@ pub unsafe extern "C" fn ruffle_ios_add_sibling_swf_to_root(
         }
     };
     let Ok(mut p) = handle.player.lock() else { return -1; };
-    let status = p.add_sibling_swf_to_root(bytes, url, depth);
+    let status = p.add_sibling_swf_to_root(bytes, url, depth, scale_x, scale_y);
     drop(p);
     avm_log_push(format!(
-        "[ruffle_ios] add_sibling_swf_to_root(depth={}) -> {}",
-        depth, status
+        "[ruffle_ios] add_sibling_swf_to_root(depth={}, scale={}x{}) -> {}",
+        depth, scale_x, scale_y, status
     ));
     if status.starts_with("ok:") { 1 } else { -2 }
 }
