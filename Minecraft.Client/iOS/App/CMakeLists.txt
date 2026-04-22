@@ -29,6 +29,7 @@ add_executable(Minecraft.LCE MACOSX_BUNDLE
 
 target_include_directories(Minecraft.LCE PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/third_party/miniaudio
 )
 
 target_link_libraries(Minecraft.LCE PRIVATE
@@ -44,6 +45,8 @@ target_link_libraries(Minecraft.LCE PRIVATE
   "-framework CoreGraphics"
   "-framework QuartzCore"
   "-framework AVFoundation"
+  "-framework AudioToolbox"
+  "-framework CoreAudio"
   # zlib required by GameSWF and Ruffle alike.
   "-lz"
 )
