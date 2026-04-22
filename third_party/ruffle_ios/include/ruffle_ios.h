@@ -82,6 +82,12 @@ void          ruffle_ios_player_tick_headless_preserve_xui(
 void          ruffle_ios_player_snapshot_xui_matrices(PlayerHandle* h);
 void          ruffle_ios_player_restore_xui_matrices(PlayerHandle* h);
 
+// Play/stop Timelines on every non-root stage child. Used around the
+// 30-tick transition burst: stop before, play after. Root clip
+// (depth 0) keeps advancing so the new scene constructs normally.
+void          ruffle_ios_player_set_xui_siblings_playing(
+                  PlayerHandle* h, int playing);
+
 // Diagnostics.
 int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
 
