@@ -1,62 +1,118 @@
-// Minimal iOS audio backend. Plays a menu music track via AVAudioPlayer
-// on loop. No Ruffle involvement; this runs fully in parallel with the
-// SWF renderer.
+// Minimal iOS audio backend. Scans the app's Documents directory for
+// any supported audio file, picks one at random, plays it once, then
+// picks a different one when it ends - mirroring the console menu
+// music behaviour (shuffle across menu1..menu4). Single-track case
+// still works: if there's only one file, it just repeats.
 //
-// The player scans the app's Documents directory for common menu-music
-// filenames and plays the first one it finds. Users drop any mp3 / m4a
-// /  aac / wav into Documents alongside MainMenu1080.swf. OGG isn't
-// supported by AVAudioPlayer without a third-party decoder, so the
-// user has to transcode (ffmpeg) if the source is .ogg.
+// Supported extensions are whatever AVAudioPlayer can decode out of
+// the box: mp3, m4a, aac, wav, aiff, caf. OGG needs a third-party
+// decoder; transcode with ffmpeg first.
 
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
 
 #include "MCLE_iOS_Audio.h"
 
-namespace {
-AVAudioPlayer* g_menu_player = nil;
+@interface MCLE_AudioShuffler : NSObject <AVAudioPlayerDelegate>
+@property (strong, nonatomic) NSArray<NSString*>* tracks;
+@property (strong, nonatomic) AVAudioPlayer* current;
+@property (strong, nonatomic) NSString* currentPath;
+- (void)playRandom;
+@end
 
-NSString* findMenuMusic(void) {
-    NSString* docs = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    if (!docs) return nil;
-    NSFileManager* fm = [NSFileManager defaultManager];
-    // Common filename candidates. First match wins. Keep this short; the
-    // point is "drop a music file in Documents and it plays", not a
-    // sophisticated asset system.
-    NSArray<NSString*>* candidates = @[
-        @"menu_music.mp3",
-        @"menu_music.m4a",
-        @"menu_music.aac",
-        @"menu_music.wav",
-        @"menu.mp3",
-        @"menu.m4a",
-        @"calm1.mp3",
-        @"calm1.m4a",
-        @"minecraft.mp3",
-    ];
-    for (NSString* name in candidates) {
-        NSString* p = [docs stringByAppendingPathComponent:name];
-        if ([fm fileExistsAtPath:p]) return p;
-    }
-    // Fallback: first file in Documents matching an iOS-supported
-    // extension. Lets the user drop whatever they have without renaming.
-    NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
-    for (NSString* e in entries) {
-        NSString* ext = e.pathExtension.lowercaseString;
-        if ([@[@"mp3", @"m4a", @"aac", @"wav", @"aiff", @"caf"] containsObject:ext]) {
-            return [docs stringByAppendingPathComponent:e];
+@implementation MCLE_AudioShuffler
+
+- (void)playRandom {
+    if (self.tracks.count == 0) return;
+    // Pick a path that isn't the one we just played (when >1 option).
+    NSString* next = nil;
+    for (int tries = 0; tries < 8; ++tries) {
+        NSUInteger idx = arc4random_uniform((uint32_t)self.tracks.count);
+        NSString* pick = self.tracks[idx];
+        if (self.tracks.count == 1 || ![pick isEqualToString:self.currentPath]) {
+            next = pick;
+            break;
         }
     }
-    return nil;
+    if (!next) next = self.tracks.firstObject;
+    NSURL* url = [NSURL fileURLWithPath:next];
+    NSError* err = nil;
+    AVAudioPlayer* p = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&err];
+    if (!p || err) {
+        NSLog(@"[mcle_audio] init player failed for %@: %@", next, err);
+        return;
+    }
+    p.delegate = self;
+    p.numberOfLoops = 0;   // single play; delegate picks the next one
+    p.volume = 1.0f;
+    [p prepareToPlay];
+    if (![p play]) {
+        NSLog(@"[mcle_audio] play failed for %@", next);
+        return;
+    }
+    self.current = p;
+    self.currentPath = next;
+    NSLog(@"[mcle_audio] playing %@ (%lu tracks available)",
+          next.lastPathComponent, (unsigned long)self.tracks.count);
+}
+
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer*)player successfully:(BOOL)flag {
+    // On success, pick another random track. On failure, don't loop
+    // forever on a bad file - bail out.
+    if (flag) {
+        [self playRandom];
+    } else {
+        NSLog(@"[mcle_audio] track ended unsuccessfully, stopping shuffle");
+    }
+}
+
+- (void)stop {
+    [self.current stop];
+    self.current = nil;
+    self.currentPath = nil;
+}
+
+@end
+
+namespace {
+MCLE_AudioShuffler* g_shuffler = nil;
+
+NSArray<NSString*>* findAllMenuTracks(void) {
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    if (!docs) return @[];
+    NSFileManager* fm = [NSFileManager defaultManager];
+    NSArray<NSString*>* extsAllowed = @[@"mp3", @"m4a", @"aac", @"wav", @"aiff", @"caf"];
+    NSMutableArray<NSString*>* out = [NSMutableArray array];
+    NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
+    for (NSString* e in entries) {
+        if (![extsAllowed containsObject:e.pathExtension.lowercaseString]) continue;
+        // Bias toward files whose names look musical: menu*, calm*,
+        // menu_music*, minecraft*. If none of those exist we fall
+        // through to all supported files.
+        NSString* lower = e.lowercaseString;
+        if ([lower hasPrefix:@"menu"] || [lower hasPrefix:@"calm"]
+            || [lower hasPrefix:@"minecraft"] || [lower hasPrefix:@"hal"]
+            || [lower hasPrefix:@"piano"]) {
+            [out addObject:[docs stringByAppendingPathComponent:e]];
+        }
+    }
+    if (out.count > 0) return out;
+    // Fallback: any supported audio file.
+    for (NSString* e in entries) {
+        if ([extsAllowed containsObject:e.pathExtension.lowercaseString]) {
+            [out addObject:[docs stringByAppendingPathComponent:e]];
+        }
+    }
+    return out;
 }
 } // namespace
 
 extern "C" int mcle_audio_start_menu_music(void) {
-    if (g_menu_player && g_menu_player.playing) return 1;
+    if (g_shuffler && g_shuffler.current.playing) return 1;
 
     // Route audio to playback category so it doesn't duck for silent
-    // switch / lock screen music (and mixes with other audio sources).
+    // switch / lock screen music.
     NSError* sessionErr = nil;
     [[AVAudioSession sharedInstance]
         setCategory:AVAudioSessionCategoryPlayback
@@ -66,34 +122,21 @@ extern "C" int mcle_audio_start_menu_music(void) {
     }
     [[AVAudioSession sharedInstance] setActive:YES error:nil];
 
-    NSString* path = findMenuMusic();
-    if (!path) {
-        NSLog(@"[mcle_audio] no menu music file found in Documents");
+    NSArray<NSString*>* tracks = findAllMenuTracks();
+    if (tracks.count == 0) {
+        NSLog(@"[mcle_audio] no supported audio files found in Documents");
         return 0;
     }
-    NSURL* url = [NSURL fileURLWithPath:path];
-    NSError* err = nil;
-    AVAudioPlayer* p = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&err];
-    if (!p || err) {
-        NSLog(@"[mcle_audio] init player failed for %@: %@", path, err);
-        return -1;
-    }
-    p.numberOfLoops = -1;   // infinite
-    p.volume = 1.0f;
-    [p prepareToPlay];
-    if (![p play]) {
-        NSLog(@"[mcle_audio] play failed for %@", path);
-        return -2;
-    }
-    g_menu_player = p;
-    NSLog(@"[mcle_audio] playing %@", path.lastPathComponent);
-    return 1;
+    g_shuffler = [[MCLE_AudioShuffler alloc] init];
+    g_shuffler.tracks = tracks;
+    [g_shuffler playRandom];
+    return g_shuffler.current ? 1 : -1;
 }
 
 extern "C" void mcle_audio_stop_menu_music(void) {
-    if (g_menu_player) {
-        [g_menu_player stop];
-        g_menu_player = nil;
+    if (g_shuffler) {
+        [g_shuffler stop];
+        g_shuffler = nil;
     }
     [[AVAudioSession sharedInstance] setActive:NO
                                    withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
