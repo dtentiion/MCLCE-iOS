@@ -663,10 +663,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             CGFloat stageW = stageH * (1920.0 / 1080.0);
             CGFloat stageX = (vb.width - stageW) * 0.5;
             CGFloat authoredScale = stageH / 1080.0;
-            // XUI Position is top-left of the XuiLabel. Width 500,
-            // Height 50, so the center is (612+250, 126+25).
-            CGFloat sx = stageX + (612.0 + 250.0) * authoredScale;
-            CGFloat sy = (126.0 + 25.0) * authoredScale;
+            // Authored XUI position is (612, 126) top-left with size
+            // (500, 50) on a 1280x720 stage. MainMenu1080.swf is the
+            // 1.5x-scaled version generated for 1920x1080, so on our
+            // stage the center lands at
+            //   (612*1.5 + 250*1.5, 126*1.5 + 25*1.5)
+            // = (918 + 375, 189 + 37.5) = (1293, 226.5).
+            CGFloat sx = stageX + 1293.0 * authoredScale;
+            CGFloat sy = 226.5 * authoredScale;
             CGFloat rot = -17.0 * M_PI / 180.0;
             self.splashLabel.transform = CGAffineTransformIdentity;
             [self.splashLabel sizeToFit];
