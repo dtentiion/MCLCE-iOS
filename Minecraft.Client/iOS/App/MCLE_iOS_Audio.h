@@ -15,6 +15,11 @@ int  mcle_audio_start_menu_music(void);
 
 void mcle_audio_stop_menu_music(void);
 
+// Human-readable status string for the on-screen overlay. NUL-terminated
+// UTF-8 copied into `out`, up to `cap` bytes. Returns bytes written
+// excluding NUL.
+size_t mcle_audio_status(char* out, size_t cap);
+
 #ifdef __cplusplus
 }
 #endif

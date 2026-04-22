@@ -28,6 +28,7 @@ bool g_engine_ok = false;
 ma_sound g_sound;
 bool g_sound_loaded = false;
 std::string g_current_path;
+std::string g_status = "not started";
 std::vector<std::string> g_tracks;
 // Mirrors SoundEngine::m_bHeardTrackA on console: true means the
 // track at that index has played recently. GetRandomishTrack picks
@@ -126,8 +127,12 @@ void startRandomTrack() {
     ma_result r = ma_sound_init_from_file(
         &g_engine, next.c_str(), 0, NULL, NULL, &g_sound);
     if (r != MA_SUCCESS) {
-        NSLog(@"[mcle_audio] ma_sound_init_from_file(%s) failed: %d",
-              next.c_str(), r);
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "ma_sound_init failed (%d) for %s", r,
+                 [[NSString stringWithUTF8String:next.c_str()] lastPathComponent].UTF8String);
+        g_status = buf;
+        NSLog(@"[mcle_audio] %s", buf);
         return;
     }
     g_sound_loaded = true;
@@ -135,12 +140,18 @@ void startRandomTrack() {
     ma_sound_set_end_callback(&g_sound, onSoundEnd, NULL);
     ma_sound_set_volume(&g_sound, 1.0f);
     if (ma_sound_start(&g_sound) != MA_SUCCESS) {
-        NSLog(@"[mcle_audio] ma_sound_start failed for %s", next.c_str());
+        g_status = std::string("ma_sound_start failed for ") + next;
+        NSLog(@"[mcle_audio] %s", g_status.c_str());
         return;
     }
-    NSLog(@"[mcle_audio] playing %s (%zu tracks available)",
-          [[NSString stringWithUTF8String:next.c_str()] lastPathComponent].UTF8String,
-          g_tracks.size());
+    {
+        NSString* last = [[NSString stringWithUTF8String:next.c_str()] lastPathComponent];
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "playing %s (%zu tracks)", last.UTF8String, g_tracks.size());
+        g_status = buf;
+    }
+    NSLog(@"[mcle_audio] %s", g_status.c_str());
 }
 
 } // namespace
@@ -169,7 +180,10 @@ extern "C" int mcle_audio_start_menu_music(void) {
         ma_engine_config cfg = ma_engine_config_init();
         ma_result r = ma_engine_init(&cfg, &g_engine);
         if (r != MA_SUCCESS) {
-            NSLog(@"[mcle_audio] ma_engine_init failed: %d", r);
+            char buf[128];
+            snprintf(buf, sizeof(buf), "ma_engine_init failed (%d)", r);
+            g_status = buf;
+            NSLog(@"[mcle_audio] %s", buf);
             return -1;
         }
         g_engine_ok = true;
@@ -177,7 +191,8 @@ extern "C" int mcle_audio_start_menu_music(void) {
 
     std::vector<std::string> tracks = findAllMenuTracks();
     if (tracks.empty()) {
-        NSLog(@"[mcle_audio] no supported audio files found in Documents");
+        g_status = "no overworld tracks found in Documents (expected calm/hal/nuance/creative/menu/piano .ogg)";
+        NSLog(@"[mcle_audio] %s", g_status.c_str());
         return 0;
     }
     {
@@ -187,6 +202,16 @@ extern "C" int mcle_audio_start_menu_music(void) {
     }
     startRandomTrack();
     return g_sound_loaded ? 1 : -2;
+}
+
+extern "C" size_t mcle_audio_status(char* out, size_t cap) {
+    if (!out || cap == 0) return 0;
+    std::lock_guard<std::mutex> lk(g_mu);
+    size_t n = g_status.size();
+    if (n > cap - 1) n = cap - 1;
+    memcpy(out, g_status.data(), n);
+    out[n] = 0;
+    return n;
 }
 
 extern "C" void mcle_audio_stop_menu_music(void) {

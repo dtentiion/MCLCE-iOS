@@ -61,6 +61,12 @@ PlayerHandle* ruffle_ios_player_create_wgpu(void* ca_metal_layer,
 void          ruffle_ios_player_destroy(PlayerHandle* h);
 void          ruffle_ios_player_tick(PlayerHandle* h, float dt_seconds);
 
+// Advance one simulated frame WITHOUT rendering. Keeps whatever was
+// last presented on the wgpu surface. Used for scene transitions so
+// a new root movie can construct + be Init'd before the first
+// visible frame, matching console's atomic scene-load semantics.
+void          ruffle_ios_player_tick_headless(PlayerHandle* h, float dt_seconds);
+
 // Diagnostics.
 int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
 

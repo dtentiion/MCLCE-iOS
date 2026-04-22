@@ -334,6 +334,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @{ @"name": @"Button5", @"label": @"Credits",      @"id": @(4) },
     ];
     [self applyMenuButtonConfig:cfg attachPanorama:NO];
+    // Hide the two unused slots (Button6=Reinstall Content,
+    // Button7=Debug Settings). Console removeControl()s them in
+    // UIScene_HelpAndOptionsMenu's ctor; we call FJ_Button::HideUntilInit
+    // which sets .visible=false and marks them non-initialised, same
+    // practical effect of keeping them off the display.
+    extern PlayerHandle* g_ruffle_player;
+    for (NSString* hiddenName in @[@"Button6", @"Button7"]) {
+        const char* n = hiddenName.UTF8String;
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)n, strlen(n),
+            (const uint8_t*)"HideUntilInit", 13,
+            (const uint8_t*)"", 0,
+            0.0);
+    }
 }
 
 - (void)transitionToMenuNamed:(NSString*)swfName {
@@ -357,12 +372,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (rc == 1) {
         self.currentMenuSwf = swfName;
         self.menuFocusIndex = 0;
-        // Burn a handful of ticks so Ruffle's async executor drains the
-        // new movie's imports (skinHD, skinHDGraphics). Without this the
-        // new menu's Button1..ButtonN aren't placed yet when we try to
-        // call Init on them below and the calls error as "no child named".
+        // Advance the scene HEADLESS (no render) so its async imports
+        // finish and Button1..ButtonN get placed, but the surface still
+        // shows the previous frame. This matches console's scene-swap
+        // semantics: initialiseMovie + control init happen before the
+        // scene becomes visible. Without this, the new menu renders
+        // with Flash authoring-time placeholder text ("FJ_Label") for
+        // the ~500ms it takes our Init calls to land.
         for (int i = 0; i < 30; ++i) {
-            ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+            ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
         }
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];
@@ -631,6 +649,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"wgpu=%d(%s)  surface=%d  mov_parse_v=%d  traces=%llu  warns=%llu\n"
         @"Loaded SWF: %@\n"
         @"font: %@\n"
+        @"audio: %@\n"
         @"--- ExtInt (calls + addCallback names) ---\n%@\n"
         @"--- AVM log (latest 8) ---\n%@",
         curFrame, movW, movH, tickN, playingStr,
@@ -646,6 +665,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         avmWarns,
         self.loadedSwfName ?: @"<none>",
         self.fontStatus ?: @"<not probed>",
+        ({
+            char audBuf[256] = {0};
+            mcle_audio_status(audBuf, sizeof(audBuf));
+            [NSString stringWithUTF8String:audBuf] ?: @"<unknown>";
+        }),
         extintLog,
         avmLog];
     // Drop-on-floor for readouts we pulled but no longer surface on screen.
