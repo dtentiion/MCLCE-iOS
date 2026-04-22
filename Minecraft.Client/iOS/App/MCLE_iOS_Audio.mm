@@ -33,6 +33,11 @@ std::mutex g_mu;
 std::atomic<bool> g_shuffle_stop{false};
 
 std::vector<std::string> findAllMenuTracks() {
+    // Menu music on console is exactly menu1..menu4 (see
+    // SoundEngine.cpp's m_szStreamFileA table). calm/hal/piano/nuance
+    // are overworld/gameplay tracks and must NOT play on the menu,
+    // same as on console. Mirror that split here: only menu[1-4].ogg
+    // (or mp3 / flac / wav equivalents) are menu candidates.
     std::vector<std::string> out;
     NSString* docs = [NSSearchPathForDirectoriesInDomains(
         NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
@@ -40,27 +45,20 @@ std::vector<std::string> findAllMenuTracks() {
     NSFileManager* fm = [NSFileManager defaultManager];
     NSArray<NSString*>* extsAllowed = @[@"ogg", @"mp3", @"m4a", @"aac",
                                          @"wav", @"aiff", @"caf", @"flac"];
-    NSArray<NSString*>* preferredPrefixes = @[@"menu", @"calm", @"minecraft",
-                                               @"hal", @"piano"];
-
     NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
-    std::vector<std::string> preferred;
-    std::vector<std::string> fallback;
     for (NSString* e in entries) {
         NSString* ext = e.pathExtension.lowercaseString;
         if (![extsAllowed containsObject:ext]) continue;
-        NSString* full = [docs stringByAppendingPathComponent:e];
-        std::string s = full.UTF8String;
-        NSString* lower = e.lowercaseString;
-        BOOL isPreferred = NO;
-        for (NSString* p in preferredPrefixes) {
-            if ([lower hasPrefix:p]) { isPreferred = YES; break; }
+        NSString* base = [e stringByDeletingPathExtension].lowercaseString;
+        if (!([base isEqualToString:@"menu1"] ||
+              [base isEqualToString:@"menu2"] ||
+              [base isEqualToString:@"menu3"] ||
+              [base isEqualToString:@"menu4"])) {
+            continue;
         }
-        if (isPreferred) preferred.push_back(s);
-        else fallback.push_back(s);
+        out.push_back([docs stringByAppendingPathComponent:e].UTF8String);
     }
-    if (!preferred.empty()) return preferred;
-    return fallback;
+    return out;
 }
 
 // Forward decl.
