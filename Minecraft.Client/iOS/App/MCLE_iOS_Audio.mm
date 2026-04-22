@@ -29,15 +29,33 @@ ma_sound g_sound;
 bool g_sound_loaded = false;
 std::string g_current_path;
 std::vector<std::string> g_tracks;
+// Mirrors SoundEngine::m_bHeardTrackA on console: true means the
+// track at that index has played recently. GetRandomishTrack picks
+// from unheard tracks first, resets the whole array once they're
+// all flagged.
+std::vector<bool> g_heard;
 std::mutex g_mu;
 std::atomic<bool> g_shuffle_stop{false};
 
+// Overworld track base names. On console these are indices
+// eStream_Overworld_Calm1..eStream_Overworld_piano3 (SoundEngine.h:17-41)
+// and SoundEngine::getMusicID returns one at random from this range
+// both on the main menu (pMinecraft==nullptr branch at
+// SoundEngine.cpp:803) and during overworld gameplay. Menu tracks
+// (menu1..menu4) are part of the same pool, not a separate category.
+static NSArray<NSString*>* overworldTrackBaseNames() {
+    return @[
+        @"calm1", @"calm2", @"calm3",
+        @"hal1",  @"hal2",  @"hal3", @"hal4",
+        @"nuance1", @"nuance2",
+        @"creative1", @"creative2", @"creative3",
+        @"creative4", @"creative5", @"creative6",
+        @"menu1", @"menu2", @"menu3", @"menu4",
+        @"piano1", @"piano2", @"piano3",
+    ];
+}
+
 std::vector<std::string> findAllMenuTracks() {
-    // Menu music on console is exactly menu1..menu4 (see
-    // SoundEngine.cpp's m_szStreamFileA table). calm/hal/piano/nuance
-    // are overworld/gameplay tracks and must NOT play on the menu,
-    // same as on console. Mirror that split here: only menu[1-4].ogg
-    // (or mp3 / flac / wav equivalents) are menu candidates.
     std::vector<std::string> out;
     NSString* docs = [NSSearchPathForDirectoriesInDomains(
         NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
@@ -45,17 +63,14 @@ std::vector<std::string> findAllMenuTracks() {
     NSFileManager* fm = [NSFileManager defaultManager];
     NSArray<NSString*>* extsAllowed = @[@"ogg", @"mp3", @"m4a", @"aac",
                                          @"wav", @"aiff", @"caf", @"flac"];
+    NSSet<NSString*>* overworldSet =
+        [NSSet setWithArray:overworldTrackBaseNames()];
     NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
     for (NSString* e in entries) {
         NSString* ext = e.pathExtension.lowercaseString;
         if (![extsAllowed containsObject:ext]) continue;
         NSString* base = [e stringByDeletingPathExtension].lowercaseString;
-        if (!([base isEqualToString:@"menu1"] ||
-              [base isEqualToString:@"menu2"] ||
-              [base isEqualToString:@"menu3"] ||
-              [base isEqualToString:@"menu4"])) {
-            continue;
-        }
+        if (![overworldSet containsObject:base]) continue;
         out.push_back([docs stringByAppendingPathComponent:e].UTF8String);
     }
     return out;
@@ -86,17 +101,27 @@ void startRandomTrack() {
         g_sound_loaded = false;
     }
 
-    // Pick a track that isn't the one we just played (when >1).
-    std::string next;
-    for (int tries = 0; tries < 8; ++tries) {
-        uint32_t idx = arc4random_uniform((uint32_t)g_tracks.size());
-        const std::string& pick = g_tracks[idx];
-        if (g_tracks.size() == 1 || pick != g_current_path) {
-            next = pick;
-            break;
-        }
+    // Mirror SoundEngine::GetRandomishTrack (SoundEngine.cpp:744).
+    // Reset the heard-array when all tracks have been played, then
+    // pick a random track, preferring ones not flagged heard. Gives
+    // up after (range/2) tries and accepts the current pick even if
+    // heard - same as console.
+    if (g_heard.size() != g_tracks.size()) {
+        g_heard.assign(g_tracks.size(), false);
     }
-    if (next.empty()) next = g_tracks.front();
+    bool allHeard = true;
+    for (bool b : g_heard) { if (!b) { allHeard = false; break; } }
+    if (allHeard) {
+        std::fill(g_heard.begin(), g_heard.end(), false);
+    }
+    size_t idx = 0;
+    size_t maxTries = (g_tracks.size() + 1) / 2;
+    for (size_t tries = 0; tries <= maxTries; ++tries) {
+        idx = arc4random_uniform((uint32_t)g_tracks.size());
+        if (!g_heard[idx]) break;
+    }
+    g_heard[idx] = true;
+    std::string next = g_tracks[idx];
 
     ma_result r = ma_sound_init_from_file(
         &g_engine, next.c_str(), 0, NULL, NULL, &g_sound);
