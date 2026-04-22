@@ -49,6 +49,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // draws via raw GL, not through the SWF).
 @property (strong, nonatomic) UILabel* splashLabel;
 @property (strong, nonatomic) NSString* splashText;
+// All lines of splashes.txt cached at launch. pickSplash rolls a
+// fresh entry each time MainMenu becomes the current scene, matching
+// UIScene_MainMenu::UIScene_MainMenu on console where the splash is
+// re-picked on every construction.
+@property (strong, nonatomic) NSArray<NSString*>* splashes;
 @end
 
 @implementation MinecraftViewController
@@ -112,26 +117,22 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.statusLabel];
 
-    // Load a random line from splashes.txt. File ships alongside the
-    // SWFs in Documents. Falls back to a hardcoded line if missing.
+    // Cache splashes.txt at launch. File ships alongside the SWFs
+    // in Documents. Each transition into MainMenu re-rolls via
+    // pickSplash.
     NSString* docsDir = [NSSearchPathForDirectoriesInDomains(
         NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     NSString* splashesPath = [docsDir stringByAppendingPathComponent:@"splashes.txt"];
     NSString* contents = [NSString stringWithContentsOfFile:splashesPath
                                                    encoding:NSUTF8StringEncoding
                                                       error:nil];
-    NSArray<NSString*>* lines = nil;
     if (contents.length) {
-        lines = [[contents componentsSeparatedByCharactersInSet:
-                  [NSCharacterSet newlineCharacterSet]]
-                 filteredArrayUsingPredicate:
-                 [NSPredicate predicateWithFormat:@"length > 0"]];
+        self.splashes = [[contents componentsSeparatedByCharactersInSet:
+                          [NSCharacterSet newlineCharacterSet]]
+                         filteredArrayUsingPredicate:
+                         [NSPredicate predicateWithFormat:@"length > 0"]];
     }
-    if (lines.count) {
-        self.splashText = lines[arc4random_uniform((uint32_t)lines.count)];
-    } else {
-        self.splashText = @"Now Java-free!";
-    }
+    [self pickSplash];
 
     // Register the Mojangles TTF with CoreText so UIFont can find it
     // by name. We already load it for Ruffle via ruffle_ios_stage_
@@ -165,6 +166,45 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     [self.view addSubview:self.splashLabel];
     NSLog(@"[MinecraftVC] splash font=%@ text=%@",
           self.splashLabel.font.fontName, self.splashText);
+}
+
+// Pick a fresh splash string. Mirrors UIScene_MainMenu.cpp
+// lines 195-225 on console: random pool starts at eSplashRandomStart
+// + 1 (index 5, skipping the Happy-Birthday-ex / Notch / Xmas /
+// NewYear overrides plus the "Hobo humping" line legal removed).
+// Date overrides replace the roll on specific days.
+- (void)pickSplash {
+    NSArray<NSString*>* lines = self.splashes;
+    NSString* picked = nil;
+    if (lines.count) {
+        NSDateComponents* dc = [[NSCalendar currentCalendar]
+            components:NSCalendarUnitMonth | NSCalendarUnitDay
+              fromDate:[NSDate date]];
+        NSInteger m = dc.month, d = dc.day;
+        if (m == 11 && d == 9 && lines.count > 0) {
+            picked = lines[0];                 // Happy birthday, ez!
+        } else if (m == 6 && d == 1 && lines.count > 1) {
+            picked = lines[1];                 // Happy birthday, Notch!
+        } else if (m == 12 && d == 24 && lines.count > 2) {
+            picked = lines[2];                 // Merry X-mas!
+        } else if (m == 1 && d == 1 && lines.count > 3) {
+            picked = lines[3];                 // Happy New Year!
+        } else if (lines.count > 5) {
+            // Random pool excludes indexes 0..4.
+            NSUInteger poolCount = lines.count - 5;
+            NSUInteger idx = 5 + arc4random_uniform((uint32_t)poolCount);
+            picked = lines[idx];
+        } else {
+            picked = lines[0];
+        }
+    }
+    if (!picked.length) picked = @"Now Java-free!";
+    self.splashText = picked;
+    if (self.splashLabel) {
+        self.splashLabel.text = picked;
+        [self.splashLabel sizeToFit];
+    }
+    NSLog(@"[MinecraftVC] splash -> %@", picked);
 }
 
 - (void)viewSafeAreaInsetsDidChange {
@@ -599,6 +639,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (rc == 1) {
         self.currentMenuSwf = swfName;
         self.menuFocusIndex = 0;
+        // Re-roll the splash when entering MainMenu. Console does
+        // the same every time UIScene_MainMenu is constructed.
+        if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
+            [self pickSplash];
+        }
         // Advance the scene HEADLESS (no render) so its async imports
         // finish and Button1..ButtonN get placed, but the surface still
         // shows the previous frame. This matches console's scene-swap
