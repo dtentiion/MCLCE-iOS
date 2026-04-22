@@ -331,6 +331,42 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
 }
 
+- (void)initMainMenuButtons {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    static const struct { const char* name; const char* label; double id; } mainMenuButtons[] = {
+        { "Button1", "Play Game",            0.0 },
+        { "Button2", "Leaderboards",         1.0 },
+        { "Button3", "Achievements",         2.0 },
+        { "Button4", "Help & Options",       3.0 },
+        { "Button5", "Downloadable Content", 4.0 },
+        { "Button6", "Exit Game",            5.0 },
+    };
+    for (size_t i = 0; i < sizeof(mainMenuButtons)/sizeof(mainMenuButtons[0]); ++i) {
+        const char* name = mainMenuButtons[i].name;
+        const char* label = mainMenuButtons[i].label;
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)name,  strlen(name),
+            (const uint8_t*)"Init", 4,
+            (const uint8_t*)label, strlen(label),
+            mainMenuButtons[i].id);
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)name,      strlen(name),
+            (const uint8_t*)"SetLabel", 8,
+            (const uint8_t*)label,     strlen(label),
+            0.0);
+    }
+    ruffle_ios_call_init_on_named_child(
+        g_ruffle_player,
+        (const uint8_t*)"Button1", 7,
+        (const uint8_t*)"ChangeState", 11,
+        (const uint8_t*)"", 0,
+        0.0);
+    self.menuFocusIndex = 0;
+}
+
 - (void)transitionToMenuNamed:(NSString*)swfName {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -352,10 +388,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (rc == 1) {
         self.currentMenuSwf = swfName;
         self.menuFocusIndex = 0;
+        // Burn a handful of ticks so Ruffle's async executor drains the
+        // new movie's imports (skinHD, skinHDGraphics). Without this the
+        // new menu's Button1..ButtonN aren't placed yet when we try to
+        // call Init on them below and the calls error as "no child named".
+        for (int i = 0; i < 30; ++i) {
+            ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+        }
+        if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
+            // Re-init MainMenu's six buttons with labels + initial focus.
+            // Console host does this on every scene load; we mirror it.
+            [self initMainMenuButtons];
+        }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
-        // non-MainMenu scenes; that's a per-scene string table we'll
-        // wire up in a follow-up. Visual layout should still render.
+        // non-MainMenu scenes; that's a per-scene string table follow-up.
         static uint8_t childBuf[4096];
         size_t n = ruffle_ios_enumerate_root_children(
             g_ruffle_player, childBuf, sizeof(childBuf));
@@ -451,6 +498,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     && id == 3) {
                     [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
                 }
+            }
+            // B button (code=1, mask 0x00000002) -> back to MainMenu when
+            // we're on any non-MainMenu scene. Mirrors the console's
+            // "Cancel" handler on submenus.
+            if ((pressedNow & 0x00000002u)
+                && ![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
+                NSLog(@"[MinecraftVC] back -> MainMenu1080.swf from %@",
+                      self.currentMenuSwf);
+                [self transitionToMenuNamed:@"MainMenu1080.swf"];
             }
         }
 
