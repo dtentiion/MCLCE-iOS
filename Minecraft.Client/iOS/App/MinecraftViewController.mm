@@ -418,11 +418,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // size and let the SWF do its own layout.
         //
         // Tooltips: keep 1.0x until FJ_Tooltips is fleshed out.
+        // Panorama tx=-208.6: cancels the stage viewport's letterbox
+        // offset. The iPhone screen is wider than the 1920x1080 stage's
+        // 16:9 aspect, so Ruffle's stage->screen transform adds ~226
+        // screen px of left tx to fit-height-center. Metal doesn't
+        // clip to the stage rect, so pre-shifting the panorama sibling
+        // by (-226 / stage_scale) = -208.6 authored stage px lands
+        // tile1 exactly at screen x=0 on frame 0, removing the brief
+        // left-edge strip that showed for the first ~6 seconds while
+        // tile1 scrolled into the letterbox area.
         struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
         NSArray* siblings = @[
-            @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(0.0f), @(0.0f)],
-            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f), @(0.0f)],
-            @[@"ComponentLogo1080.swf",@(101), @(1.0f), @(1.0f), @(0.0f), @(0.0f)],
+            @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
+            @[@"ComponentLogo1080.swf",@(101), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
         ];
         for (NSArray* entry in siblings) {
             NSString* swfName = entry[0];
