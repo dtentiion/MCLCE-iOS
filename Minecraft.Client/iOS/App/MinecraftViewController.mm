@@ -541,8 +541,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // scene becomes visible. Without this, the new menu renders
         // with Flash authoring-time placeholder text ("FJ_Label") for
         // the ~500ms it takes our Init calls to land.
+        // Use a tiny dt instead of 1/60 so the panorama's internal
+        // scroll accumulator barely advances. The 30 iterations still
+        // run so the executor drains, async imports settle, and the
+        // new root's construction chain completes, but time-driven
+        // state (AS3 enter_frame handlers reading getTimer(), Timeline
+        // keyframes) sees only 0.3 ms per iteration instead of 16.67
+        // ms. Even with the snapshot/restore in place, some of the
+        // scroll is driven by an AS3 accumulator we can't reach from
+        // the matrix side, so minimising the dt is the cleaner lever.
         for (int i = 0; i < 30; ++i) {
-            ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
+            ruffle_ios_player_tick_headless(g_ruffle_player, 0.0003f);
         }
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];
