@@ -532,7 +532,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // with Flash authoring-time placeholder text ("FJ_Label") for
         // the ~500ms it takes our Init calls to land.
         for (int i = 0; i < 30; ++i) {
-            ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
+            // Use the preserve-xui variant so the panorama, logo, and
+            // tooltips don't advance during the 30-tick burst that lets
+            // the new scene's init chain settle. Without this the
+            // panorama visibly jumped ~22 authored px leftward each
+            // time the user entered or exited a sub-menu.
+            ruffle_ios_player_tick_headless_preserve_xui(
+                g_ruffle_player, 1.0f / 60.0f);
         }
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];

@@ -67,6 +67,14 @@ void          ruffle_ios_player_tick(PlayerHandle* h, float dt_seconds);
 // visible frame, matching console's atomic scene-load semantics.
 void          ruffle_ios_player_tick_headless(PlayerHandle* h, float dt_seconds);
 
+// Same as tick_headless, but snapshots every XUI-origin Bitmap's
+// matrix before the tick and restores it after. Prevents the panorama
+// / logo / tooltips from appearing to jump during a 30-tick transition
+// burst while still letting everything else (new scene init chain,
+// button wiring) advance normally.
+void          ruffle_ios_player_tick_headless_preserve_xui(
+                  PlayerHandle* h, float dt_seconds);
+
 // Diagnostics.
 int           ruffle_ios_player_framerate_mHz(PlayerHandle* h);
 
