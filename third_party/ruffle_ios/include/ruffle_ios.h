@@ -159,6 +159,15 @@ void          ruffle_ios_avm_counts(uint64_t* traces, uint64_t* warns);
 size_t        ruffle_ios_enumerate_root_children(PlayerHandle* h,
                                                  uint8_t* out, size_t cap);
 
+// Toggle the `visible` flag on a named direct child of the root clip.
+// Used to hide `iggy_Splash`, 4J's loading placeholder that the console
+// engine hides once a scene is ready but our port leaves as a gray
+// strip. Returns 1 if found and updated, 0 on bad args or not found,
+// -1 on player lock failure.
+int           ruffle_ios_set_root_child_visible(PlayerHandle* h,
+                                                const uint8_t* name, size_t name_len,
+                                                int visible);
+
 // Instantiate an AS3 class by name and attach its DisplayObject as a
 // direct child of the root clip at the given depth. Used for things
 // like dropping the menu Panorama under the main menu buttons without
