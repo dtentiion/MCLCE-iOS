@@ -299,6 +299,46 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
     n
 }
 
+/// Replace the root movie on an existing player. Used by the iOS host
+/// for menu scene transitions (MainMenu -> HelpAndOptions etc.) without
+/// tearing down the wgpu surface. Returns 1 on success, 0 on bad args,
+/// -1 on player lock failure, -2 on SWF parse failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_replace_swf(
+    raw: *mut PlayerHandle,
+    data: *const u8,
+    data_len: usize,
+    url_ptr: *const u8,
+    url_len: usize,
+) -> c_int {
+    if raw.is_null() || data.is_null() || data_len == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let bytes = std::slice::from_raw_parts(data, data_len).to_vec();
+    let url = if url_ptr.is_null() || url_len == 0 {
+        String::from("file://mcle.swf")
+    } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(url_ptr, url_len)) {
+            Ok(s) => s.to_string(),
+            Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    match p.replace_root_movie_from_bytes(bytes, url) {
+        Ok(()) => {
+            drop(p);
+            avm_log_push(String::from("[ruffle_ios] replace_root_movie ok"));
+            1
+        }
+        Err(e) => {
+            drop(p);
+            avm_log_push(format!("[ruffle_ios] replace_root_movie err: {}", e));
+            -2
+        }
+    }
+}
+
 /// One level deeper than `ruffle_ios_enumerate_root_children`: list the
 /// direct children of a named root child, e.g. what `Button1` actually
 /// contains. Hypothesis we're chasing: PlaceObject places Button1 by class

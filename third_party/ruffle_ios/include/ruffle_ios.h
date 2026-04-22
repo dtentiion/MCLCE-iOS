@@ -153,6 +153,14 @@ void          ruffle_ios_avm_counts(uint64_t* traces, uint64_t* warns);
 size_t        ruffle_ios_enumerate_root_children(PlayerHandle* h,
                                                  uint8_t* out, size_t cap);
 
+// Swap the root movie on an existing player (used for menu scene
+// transitions so the wgpu surface stays alive). url_ptr/url_len may be
+// empty to default to "file://mcle.swf". Returns 1 ok, 0 bad args,
+// -1 lock failure, -2 parse failure.
+int           ruffle_ios_player_replace_swf(PlayerHandle* h,
+                                            const uint8_t* data, size_t data_len,
+                                            const uint8_t* url,  size_t url_len);
+
 // One level deeper: list `childName`'s own direct children (the inner
 // display list of a named root child, e.g. what Button1 actually
 // contains). Same output shape as ruffle_ios_enumerate_root_children,
