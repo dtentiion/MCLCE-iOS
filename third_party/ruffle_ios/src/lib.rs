@@ -1463,6 +1463,22 @@ pub unsafe extern "C" fn ruffle_ios_player_restore_xui_matrices(raw: *mut Player
     p.restore_xui_matrices();
 }
 
+/// Toggle play/stop on every stage child that isn't the root scene
+/// clip (depth != 0). Used around scene-transition headless bursts
+/// so the panorama, logo, and tooltips freeze their Timelines while
+/// the new scene's construction chain runs at full dt. Without this,
+/// 30 ticks at 1/60 dt advance the panorama scroll ~22 authored px
+/// which reads as a visible leftward jump.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_set_xui_siblings_playing(
+    raw: *mut PlayerHandle,
+    playing: c_int,
+) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Ok(mut p) = handle.player.lock() else { return; };
+    p.set_xui_siblings_playing(playing != 0);
+}
+
 /// Burn-frames diag: stats from the back-to-back run_frame loop we
 /// performed at player create time. Answers whether the root clip can
 /// advance at all under a tight loop, independent of per-tick dt timing.
