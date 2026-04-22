@@ -25,8 +25,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
 @property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
-@property (nonatomic) int menuFocusIndex;               // 0..5 index into main menu buttons (Button1..Button6)
+@property (nonatomic) int menuFocusIndex;               // index into menuButtonConfig
 @property (strong, nonatomic) NSString* currentMenuSwf; // "MainMenu1080.swf", "HelpAndOptionsMenu1080.swf", etc.
+// Array of NSDictionary entries with keys "name" (e.g. "Button1"),
+// "label" (display text), "id" (NSNumber int matching the console's
+// eControl_* enum). Configured per-menu by initXxxButtons methods so
+// the focus state machine can drive any menu uniformly.
+@property (strong, nonatomic) NSArray<NSDictionary*>* menuButtonConfig;
 @end
 
 @implementation MinecraftViewController
@@ -224,97 +229,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     : @"<empty>";
                 NSLog(@"[MinecraftVC] root children:\n%@", childList);
 
-                // Populate the main menu buttons. Mirrors UIScene_MainMenu on
-                // console: each button's AS3 Init(label, id) sets the visible
-                // label and the handlePress callback id. Mapping taken from
-                // Minecraft.Client/Common/UI/UIScene_MainMenu.{h,cpp}.
-                static const struct { const char* name; const char* label; double id; } mainMenuButtons[] = {
-                    { "Button1", "Play Game",            0.0 },  // eControl_PlayGame
-                    { "Button2", "Leaderboards",         1.0 },  // eControl_Leaderboards
-                    { "Button3", "Achievements",         2.0 },  // eControl_Achievements
-                    { "Button4", "Help & Options",       3.0 },  // eControl_HelpAndOptions
-                    { "Button5", "Downloadable Content", 4.0 },  // eControl_UnlockOrDLC
-                    { "Button6", "Exit Game",            5.0 },  // eControl_Exit
-                };
-                for (size_t i = 0; i < sizeof(mainMenuButtons)/sizeof(mainMenuButtons[0]); ++i) {
-                    const char* name = mainMenuButtons[i].name;
-                    const char* label = mainMenuButtons[i].label;
-                    int r = ruffle_ios_call_init_on_named_child(
-                        g_ruffle_player,
-                        (const uint8_t*)name,  strlen(name),
-                        (const uint8_t*)"Init", 4,
-                        (const uint8_t*)label, strlen(label),
-                        mainMenuButtons[i].id);
-                    NSLog(@"[MinecraftVC] Init(%s, %s, %.0f) -> %d",
-                          name, label, mainMenuButtons[i].id, r);
-                    // Init on FJ_MenuButton traces "This component doesn't
-                    // seem to have a Text Field" because the AS3 Init runs
-                    // before the inner TextField is auto-wired. On console
-                    // UIControl_Base::tick calls SetLabel every frame once
-                    // m_label is dirty, which is what actually paints the
-                    // visible text. Mirror that here with a follow-up call
-                    // so the label has another chance to land.
-                    int s = ruffle_ios_call_init_on_named_child(
-                        g_ruffle_player,
-                        (const uint8_t*)name,      strlen(name),
-                        (const uint8_t*)"SetLabel", 8,
-                        (const uint8_t*)label,     strlen(label),
-                        0.0);
-                    NSLog(@"[MinecraftVC] SetLabel(%s, %s) -> %d", name, label, s);
-
-                    // Diag: dump Button<i>'s own children. FJ_Base.GetTextField
-                    // walks getChildByName("FJ_TextContainer") -> getChildAt(0)
-                    // -> getChildAt(0) as TextField. If the button's direct
-                    // child list is empty (or missing FJ_TextContainer), the
-                    // class-only PlaceObject in MainMenu.swf never cloned
-                    // skinHD sprite 136's frame-1 tags into the instance, and
-                    // the fix has to land in the Ruffle PlaceObject path.
-                    char kids[1024] = {0};
-                    ruffle_ios_enumerate_named_child_children(
-                        g_ruffle_player,
-                        (const uint8_t*)name, strlen(name),
-                        (uint8_t*)kids, sizeof(kids));
-                    NSLog(@"[MinecraftVC] %s children:\n%s", name, kids);
-
-                    // Only for Button1: walk 3 levels (Button1 ->
-                    // FJ_TextContainer -> inner MovieClip -> TextField).
-                    // That's what FJ_Base.GetTextField traverses; if any
-                    // level comes up empty the class-only PlaceObject
-                    // inside sprite 46 (class="FJ_Label", no char id) is
-                    // the level that isn't cloning its bound content.
-                    if (i == 0) {
-                        char subtree[8192] = {0};
-                        ruffle_ios_enumerate_subtree_of(
-                            g_ruffle_player,
-                            (const uint8_t*)name, strlen(name),
-                            6,
-                            (uint8_t*)subtree, sizeof(subtree));
-                        NSLog(@"[MinecraftVC] %s subtree:\n%s", name, subtree);
-                    }
-                }
-
-                // Kick the initial focus onto Button1. FJ_Button.ChangeState
-                // values: 0 = FIRST_SELECTED (plays the animated highlight),
-                // 1 = SELECTED, 2 = UNSELECTED, 3 = PRESSED. Console host
-                // equivalent runs inside Iggy; we drive it ourselves since
-                // the SWF has no controller-focus logic of its own.
-                ruffle_ios_call_init_on_named_child(
-                    g_ruffle_player,
-                    (const uint8_t*)"Button1", 7,
-                    (const uint8_t*)"ChangeState", 11,
-                    (const uint8_t*)"", 0,
-                    0.0);
-
-                // Drop the rotating world panorama behind the menu. The
-                // Panorama AS3 class is bound in skinHD's SymbolClass
-                // (chid 174) and the sprite is 4100 frames of self-
-                // contained timeline animation, so it runs under
-                // Ruffle's normal frame pump with no further driving.
-                int panoRc = ruffle_ios_instantiate_class_on_root(
-                    g_ruffle_player,
-                    (const uint8_t*)"Panorama", 8,
-                    0);
-                NSLog(@"[MinecraftVC] panorama -> %d", panoRc);
+                // Populate the main menu buttons + attach panorama via
+                // the shared -initMainMenuButtons path (also used on
+                // transition back from submenus).
+                [self initMainMenuButtons];
             }
         }
     }
@@ -349,26 +267,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
 }
 
-- (void)initMainMenuButtons {
+- (void)applyMenuButtonConfig:(NSArray<NSDictionary*>*)config attachPanorama:(BOOL)attachPanorama {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
-    static const struct { const char* name; const char* label; double id; } mainMenuButtons[] = {
-        { "Button1", "Play Game",            0.0 },
-        { "Button2", "Leaderboards",         1.0 },
-        { "Button3", "Achievements",         2.0 },
-        { "Button4", "Help & Options",       3.0 },
-        { "Button5", "Downloadable Content", 4.0 },
-        { "Button6", "Exit Game",            5.0 },
-    };
-    for (size_t i = 0; i < sizeof(mainMenuButtons)/sizeof(mainMenuButtons[0]); ++i) {
-        const char* name = mainMenuButtons[i].name;
-        const char* label = mainMenuButtons[i].label;
+    self.menuButtonConfig = config;
+    for (NSDictionary* entry in config) {
+        const char* name = [entry[@"name"] UTF8String];
+        const char* label = [entry[@"label"] UTF8String];
+        double id = [entry[@"id"] doubleValue];
         ruffle_ios_call_init_on_named_child(
             g_ruffle_player,
             (const uint8_t*)name,  strlen(name),
             (const uint8_t*)"Init", 4,
             (const uint8_t*)label, strlen(label),
-            mainMenuButtons[i].id);
+            id);
         ruffle_ios_call_init_on_named_child(
             g_ruffle_player,
             (const uint8_t*)name,      strlen(name),
@@ -376,21 +288,52 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)label,     strlen(label),
             0.0);
     }
-    ruffle_ios_call_init_on_named_child(
-        g_ruffle_player,
-        (const uint8_t*)"Button1", 7,
-        (const uint8_t*)"ChangeState", 11,
-        (const uint8_t*)"", 0,
-        0.0);
-    // Re-attach panorama behind the buttons. replace_root_movie tears
-    // down the old root's display list, so every time we return to
-    // MainMenu we need to place the panorama fresh.
-    int panoRc = ruffle_ios_instantiate_class_on_root(
-        g_ruffle_player,
-        (const uint8_t*)"Panorama", 8,
-        0);
-    NSLog(@"[MinecraftVC] panorama (re-init) -> %d", panoRc);
+    // Kick initial focus onto the first button with FIRST_SELECTED (0)
+    // so it animates the highlight-in transition.
+    if (config.count > 0) {
+        const char* firstName = [config[0][@"name"] UTF8String];
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)firstName, strlen(firstName),
+            (const uint8_t*)"ChangeState", 11,
+            (const uint8_t*)"", 0,
+            0.0);
+    }
+    if (attachPanorama) {
+        int panoRc = ruffle_ios_instantiate_class_on_root(
+            g_ruffle_player,
+            (const uint8_t*)"Panorama", 8,
+            0);
+        NSLog(@"[MinecraftVC] panorama -> %d", panoRc);
+    }
     self.menuFocusIndex = 0;
+}
+
+- (void)initMainMenuButtons {
+    NSArray<NSDictionary*>* cfg = @[
+        @{ @"name": @"Button1", @"label": @"Play Game",            @"id": @(0) },
+        @{ @"name": @"Button2", @"label": @"Leaderboards",         @"id": @(1) },
+        @{ @"name": @"Button3", @"label": @"Achievements",         @"id": @(2) },
+        @{ @"name": @"Button4", @"label": @"Help & Options",       @"id": @(3) },
+        @{ @"name": @"Button5", @"label": @"Downloadable Content", @"id": @(4) },
+        @{ @"name": @"Button6", @"label": @"Exit Game",            @"id": @(5) },
+    ];
+    [self applyMenuButtonConfig:cfg attachPanorama:YES];
+}
+
+- (void)initHelpAndOptionsButtons {
+    // Mirrors UIScene_HelpAndOptionsMenu constructor on console: only the
+    // five universally-visible buttons are configured (Reinstall and
+    // Debug are runtime-removed in the console release build). BUTTON_HAO_*
+    // ids match the enum on console.
+    NSArray<NSDictionary*>* cfg = @[
+        @{ @"name": @"Button1", @"label": @"Change Skin",  @"id": @(0) },
+        @{ @"name": @"Button2", @"label": @"How to Play",  @"id": @(1) },
+        @{ @"name": @"Button3", @"label": @"Controls",     @"id": @(2) },
+        @{ @"name": @"Button4", @"label": @"Settings",     @"id": @(3) },
+        @{ @"name": @"Button5", @"label": @"Credits",      @"id": @(4) },
+    ];
+    [self applyMenuButtonConfig:cfg attachPanorama:NO];
 }
 
 - (void)transitionToMenuNamed:(NSString*)swfName {
@@ -422,9 +365,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
         }
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
-            // Re-init MainMenu's six buttons with labels + initial focus.
-            // Console host does this on every scene load; we mirror it.
             [self initMainMenuButtons];
+        } else if ([swfName isEqualToString:@"HelpAndOptionsMenu1080.swf"]) {
+            [self initHelpAndOptionsButtons];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
@@ -481,48 +424,46 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             }
             self.lastPadButtons = now;
 
-            // Main menu focus state machine. FJ_ButtonList (the console
-            // host equivalent) isn't wired because the SWF has no key
-            // handler of its own; AS3's MainMenu only stores neighbor
-            // names as properties (Button1.m_objNavDown = "Button2" etc.).
-            // Drive focus ourselves: edge-detect DPadUp/Down, advance the
-            // index, call ChangeState on the buttons that changed.
-            // 1 = SELECTED (idle highlighted), 2 = UNSELECTED (dim),
-            // 3 = PRESSED (animated press).
-            static const char* kMenuButtons[6] = {
-                "Button1", "Button2", "Button3", "Button4", "Button5", "Button6"
-            };
-            static int kMenuButtonIds[6] = { 0, 1, 2, 3, 4, 5 };
-            uint32_t pressedNow = changed & now;  // buttons that went from 0 -> 1
-            auto changeState = [&](int idx, int state) {
+            // Menu focus state machine, driven from the per-scene
+            // menuButtonConfig. Each entry has a "name"/"label"/"id".
+            // FJ_Button.ChangeState codes: 1=SELECTED, 2=UNSELECTED,
+            // 3=PRESSED. We edge-detect DPadUp/Down to walk the list and
+            // A to fire the press animation + any scene action.
+            NSArray<NSDictionary*>* cfg = self.menuButtonConfig;
+            int count = (int)cfg.count;
+            uint32_t pressedNow = changed & now;  // buttons that went 0 -> 1
+            auto changeState = ^(int idx, int state) {
+                if (idx < 0 || idx >= count) return;
+                const char* name = [cfg[idx][@"name"] UTF8String];
                 ruffle_ios_call_init_on_named_child(
                     g_ruffle_player,
-                    (const uint8_t*)kMenuButtons[idx], strlen(kMenuButtons[idx]),
+                    (const uint8_t*)name, strlen(name),
                     (const uint8_t*)"ChangeState", 11,
                     (const uint8_t*)"", 0,
                     (double)state);
             };
-            int cur = self.menuFocusIndex;
-            int next = cur;
-            if (pressedNow & 0x00000400u) next = (cur + 5) % 6;  // DPadUp -> prev
-            if (pressedNow & 0x00000800u) next = (cur + 1) % 6;  // DPadDown -> next
-            if (next != cur) {
-                changeState(cur, 2);      // UNSELECTED
-                changeState(next, 1);     // SELECTED
-                self.menuFocusIndex = next;
-                NSLog(@"[MinecraftVC] menu focus -> %s", kMenuButtons[next]);
-            }
-            if (pressedNow & 0x00000001u) {  // A -> PRESSED
-                changeState(cur, 3);
-                int id = kMenuButtonIds[cur];
-                NSLog(@"[MinecraftVC] menu press -> %s (id=%d)",
-                      kMenuButtons[cur], id);
-                // Minimum-viable scene transition: Help & Options (id=3)
-                // swaps the root movie to HelpAndOptionsMenu1080.swf.
-                // Other ids still just log for now.
-                if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]
-                    && id == 3) {
-                    [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
+            if (count > 0) {
+                int cur = self.menuFocusIndex;
+                int next = cur;
+                if (pressedNow & 0x00000400u) next = (cur + count - 1) % count;  // DPadUp
+                if (pressedNow & 0x00000800u) next = (cur + 1) % count;          // DPadDown
+                if (next != cur) {
+                    changeState(cur, 2);      // UNSELECTED
+                    changeState(next, 1);     // SELECTED
+                    self.menuFocusIndex = next;
+                    NSLog(@"[MinecraftVC] menu focus -> %@",
+                          cfg[next][@"name"]);
+                }
+                if (pressedNow & 0x00000001u) {  // A -> PRESSED
+                    changeState(cur, 3);
+                    int id = [cfg[cur][@"id"] intValue];
+                    NSLog(@"[MinecraftVC] menu press -> %@ (id=%d)",
+                          cfg[cur][@"name"], id);
+                    // Scene transitions per current menu + pressed id.
+                    if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]
+                        && id == 3) {
+                        [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
+                    }
                 }
             }
             // B button (code=1, mask 0x00000002) -> back to MainMenu when
