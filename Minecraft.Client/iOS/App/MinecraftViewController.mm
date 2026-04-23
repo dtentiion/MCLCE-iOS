@@ -370,6 +370,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // Documents. Silent no-op otherwise.
     int mrc = mcle_audio_start_menu_music();
     NSLog(@"[MinecraftVC] menu music start rc=%d", mrc);
+    // Preload the six UI SFX oggs so menu interactions are audible.
+    // Files ship in Documents/UI/<name>.ogg, same layout as console's
+    // Windows64Media/Sound/Minecraft/UI folder.
+    mcle_audio_load_ui_sfx();
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -879,9 +883,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     self.menuFocusIndex = next;
                     NSLog(@"[MinecraftVC] menu focus -> %@",
                           cfg[next][@"name"]);
+                    // Console UIController::PlayUISFX pitches Focus
+                    // by +-0.05 randomly so repeat navigation doesn't
+                    // fatigue. Matches Common/UI/UIController.cpp:2533.
+                    float jitter = ((float)arc4random_uniform(1000) / 1000.0f - 0.5f) * 0.1f;
+                    mcle_audio_play_ui_sfx("focus", 1.0f, 1.0f + jitter);
                 }
                 if (pressedNow & 0x00000001u) {  // A -> PRESSED
                     changeState(cur, 3);
+                    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
                     int id = [cfg[cur][@"id"] intValue];
                     NSLog(@"[MinecraftVC] menu press -> %@ (id=%d)",
                           cfg[cur][@"name"], id);
@@ -950,6 +960,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 NSLog(@"[MinecraftVC] back from %@ (stack depth %lu)",
                       self.currentMenuSwf,
                       (unsigned long)self.menuStack.count);
+                mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
                 [self navigateBack];
             }
         }
