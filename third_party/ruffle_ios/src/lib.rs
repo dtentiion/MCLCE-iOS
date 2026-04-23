@@ -705,6 +705,19 @@ pub unsafe extern "C" fn ruffle_ios_call_init_on_named_child(
 /// DPad) go to no DisplayObject and sliders/checkboxes look
 /// frozen. Mirrors UIScene::sendInputToMovie's null-focus recovery
 /// block on console (Common/UI/UIScene.cpp:1066-1081).
+/// Toggle Ruffle's built-in Flash Player yellow focus rectangle.
+/// LCE supplies its own focus outline art (FJ_Slider_Outline etc),
+/// so the host turns Ruffle's auto rectangle off at startup.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_suppress_auto_focus_highlight(
+    raw: *mut PlayerHandle,
+    suppress: c_int,
+) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Ok(mut p) = handle.player.lock() else { return; };
+    p.set_suppress_auto_highlight(suppress != 0);
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_clear_focus(raw: *mut PlayerHandle) {
     let Some(handle) = borrow_handle(raw) else { return; };
