@@ -1192,8 +1192,24 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                           cfg[cur][@"name"], id);
                     // Scene transitions per current menu + pressed id.
                     if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
-                        if (id == 3) {
+                        // Mirrors UIScene_MainMenu::handlePress
+                        // (Common/UI/UIScene_MainMenu.cpp:301).
+                        // PlayGame opens a sign-in flow then
+                        // CreateLoad/LoadOrJoin; we skip sign-in and
+                        // go straight to the load/join picker.
+                        // Achievements on console opens the Xbox
+                        // Live platform overlay, not a game SWF, so
+                        // there's nothing to transition to on iOS.
+                        if (id == 0) {
+                            [self navigateForwardTo:@"LoadOrJoinMenu1080.swf"];
+                        } else if (id == 1) {
+                            [self navigateForwardTo:@"LeaderboardMenu1080.swf"];
+                        } else if (id == 2) {
+                            NSLog(@"[MinecraftVC] Achievements pressed (no LCE scene on this platform)");
+                        } else if (id == 3) {
                             [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"];
+                        } else if (id == 4) {
+                            [self navigateForwardTo:@"DLCMainMenu1080.swf"];
                         } else if (id == 5) {
                             // Exit Game. iOS apps normally shouldn't
                             // self-terminate (App Store rejects it) but
