@@ -1502,9 +1502,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                         // Mirrors UIScene_SettingsMenu::handlePress
                         // (Common/UI/UIScene_SettingsMenu.cpp:117). ids
                         // jump from 2 to 4 on console because BUTTON_ALL
-                        // slot 3 is reserved; ResetToDefaults on id 6
-                        // opens a confirm dialog rather than a scene,
-                        // which we defer until we have a dialog system.
+                        // slot 3 is reserved. Reset to Defaults on id 6
+                        // opens a confirm dialog on console and calls
+                        // CMinecraftApp::SetDefaultOptions on OK
+                        // (Consoles_App.cpp:857+ sets MusicVolume=100,
+                        // SoundFXVolume=100, RenderDistance=16, Gamma=
+                        // 50, Difficulty=1, Autosave=2, Clouds=1, ...
+                        // across ~30 settings). We skip the confirm
+                        // dialog for now and run the reset immediately.
                         NSString* target = nil;
                         switch (id) {
                             case 0: target = @"SettingsOptionsMenu1080.swf"; break;
@@ -1512,7 +1517,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                             case 2: target = @"SettingsControlMenu1080.swf"; break;
                             case 4: target = @"SettingsGraphicsMenu1080.swf"; break;
                             case 5: target = @"SettingsUIMenu1080.swf"; break;
-                            // case 6: reset-to-defaults dialog (TBD)
+                            case 6:
+                                mcle_settings_reset_to_defaults();
+                                // Audio is the one setting that's
+                                // live-applied, so push it through
+                                // immediately. Everything else is
+                                // read from the store next time the
+                                // relevant scene opens.
+                                mcle_audio_set_music_volume(
+                                    mcle_settings_get(MCLE_SETTING_MusicVolume));
+                                mcle_audio_set_sfx_volume(
+                                    mcle_settings_get(MCLE_SETTING_SoundFXVolume));
+                                break;
                         }
                         if (target) [self navigateForwardTo:target];
                     }
