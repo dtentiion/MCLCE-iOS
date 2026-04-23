@@ -557,6 +557,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // first run). Mirrors CMinecraftApp::InitGameSettings path:
     // load settings.dat, fall through to defaults otherwise.
     mcle_settings_load();
+    // Suppress Ruffle's auto-drawn yellow focus rectangle.
+    // LCE's FJ_Slider and FJ_CheckBox include their own authored
+    // outline MovieClips (FJ_Slider_Outline etc) so the default
+    // Flash Player focus indicator draws on top of the authored
+    // one, producing a double yellow frame.
+    ruffle_ios_suppress_auto_focus_highlight(g_ruffle_player, 1);
     // Register the AS3-side event bridge. ExternalInterface calls
     // to handleCheckboxToggled / handleSliderMove route through
     // this callback, which maps (current scene, control id) to an
@@ -972,21 +978,6 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     ruffle_ios_focus_named_child(
         g_ruffle_player,
         (const uint8_t*)firstCtl, strlen(firstCtl));
-
-    // Diag: dump FJ_Slider inner subtree so we can figure out which
-    // child of the slider ends up catching focus and producing the
-    // extra yellow box to the right of the focused row.
-    static uint8_t sliderBuf[4096];
-    size_t n = ruffle_ios_enumerate_subtree_of(
-        g_ruffle_player,
-        (const uint8_t*)"Music", 5,
-        6,
-        sliderBuf, sizeof(sliderBuf));
-    if (n > 0) {
-        NSString* dump = [[NSString alloc] initWithBytes:sliderBuf length:n
-                                                encoding:NSUTF8StringEncoding];
-        NSLog(@"[MinecraftVC] Music slider subtree:\n%@", dump);
-    }
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
