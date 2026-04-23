@@ -101,6 +101,80 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         mcle_settings_set(setting, stored);
         NSLog(@"[settings] %@ slider id=%d raw=%g -> setting=%d val=%u",
               g_current_scene_name, (int)id, value, setting, stored);
+
+        // Update the slider's displayed label. Console does this in
+        // UIControl_Slider::handleSliderMove (line 108-111 of
+        // UIControl_Slider.cpp) via setLabel with the format string
+        // the scene registered. Mirror per-control here.
+        extern PlayerHandle* g_ruffle_player;
+        if (!g_ruffle_player) return;
+        NSString* sliderName = nil;
+        NSString* sliderLabel = nil;
+        int raw = (int)value;
+        if ([g_current_scene_name isEqualToString:@"SettingsAudioMenu1080.swf"]) {
+            if ((int)id == 0) {
+                sliderName = @"Music";
+                sliderLabel = [NSString stringWithFormat:@"Music: %d%%", raw];
+            } else if ((int)id == 1) {
+                sliderName = @"Sound";
+                sliderLabel = [NSString stringWithFormat:@"Sound: %d%%", raw];
+            }
+        } else if ([g_current_scene_name isEqualToString:@"SettingsControlMenu1080.swf"]) {
+            if ((int)id == 0) {
+                sliderName = @"SensitivityInGame";
+                sliderLabel = [NSString stringWithFormat:@"Sensitivity In-game: %d%%", raw];
+            } else if ((int)id == 1) {
+                sliderName = @"SensitivityInMenu";
+                sliderLabel = [NSString stringWithFormat:@"Sensitivity In-menu: %d%%", raw];
+            }
+        } else if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
+            if ((int)id == 5) {
+                sliderName = @"Autosave";
+                sliderLabel = (raw == 0)
+                    ? @"Autosave: Off"
+                    : [NSString stringWithFormat:@"Autosave: %d minutes", raw * 15];
+            } else if ((int)id == 7) {
+                static NSArray<NSString*>* kDiff = @[@"Peaceful", @"Easy", @"Normal", @"Hard"];
+                int d = MAX(0, MIN(raw, 3));
+                sliderName = @"Difficulty";
+                sliderLabel = [NSString stringWithFormat:@"Difficulty: %@", kDiff[d]];
+            }
+        } else if ([g_current_scene_name isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
+            if ((int)id == 3) {
+                static const int kDistance[6] = {2, 4, 8, 16, 32, 64};
+                int lvl = MAX(0, MIN(raw, 5));
+                sliderName = @"RenderDistance";
+                sliderLabel = [NSString stringWithFormat:@"Render Distance: %d", kDistance[lvl]];
+            } else if ((int)id == 4) {
+                sliderName = @"Gamma";
+                sliderLabel = [NSString stringWithFormat:@"Gamma: %d%%", raw];
+            } else if ((int)id == 5) {
+                int fovDeg = 70 + (raw * (110 - 70)) / 100;
+                sliderName = @"FOV";
+                sliderLabel = [NSString stringWithFormat:@"FOV: %d", fovDeg];
+            } else if ((int)id == 6) {
+                sliderName = @"InterfaceOpacity";
+                sliderLabel = [NSString stringWithFormat:@"Interface opacity: %d%%", raw];
+            }
+        } else if ([g_current_scene_name isEqualToString:@"SettingsUIMenu1080.swf"]) {
+            if ((int)id == 6) {
+                sliderName = @"UISize";
+                sliderLabel = [NSString stringWithFormat:@"UI Size: %d", raw];
+            } else if ((int)id == 7) {
+                sliderName = @"UISizeSplitscreen";
+                sliderLabel = [NSString stringWithFormat:@"UI Size Split-screen: %d", raw];
+            }
+        }
+        if (sliderName.length && sliderLabel.length) {
+            const char* n = sliderName.UTF8String;
+            const char* l = sliderLabel.UTF8String;
+            ruffle_ios_call_init_on_named_child(
+                g_ruffle_player,
+                (const uint8_t*)n, strlen(n),
+                (const uint8_t*)"SetLabel", 8,
+                (const uint8_t*)l, strlen(l),
+                0.0);
+        }
     }
 }
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -1137,6 +1211,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
     NSString* url = [NSString stringWithFormat:@"file://%@",
                      [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+    // Clear AS3 stage focus so the previous scene's focus highlight
+    // doesn't paint on top of the new scene. Settings scenes call
+    // ruffle_ios_focus_named_child inside their init methods to
+    // re-establish a scene-local focus.
+    ruffle_ios_clear_focus(g_ruffle_player);
+
     // Snapshot panorama/logo/tooltips matrices before the whole
     // transition sequence. A per-tick restore inside the 30-tick
     // headless burst wasn't enough: the ~15 call_init_on_named_child

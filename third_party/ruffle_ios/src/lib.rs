@@ -96,6 +96,7 @@ static SETTINGS_EVENT_CB: Mutex<Option<SettingsEventCallback>> = Mutex::new(None
 pub unsafe extern "C" fn ruffle_ios_set_settings_event_callback(cb: SettingsEventCallback) {
     if let Ok(mut slot) = SETTINGS_EVENT_CB.lock() {
         *slot = Some(cb);
+        avm_log_push("[ruffle_ios] settings_event_callback registered".to_string());
     }
 }
 
@@ -119,11 +120,22 @@ fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
         }
         _ => return,
     };
-    if let Ok(slot) = SETTINGS_EVENT_CB.lock() {
-        if let Some(cb) = *slot {
+    let cb_opt = SETTINGS_EVENT_CB.lock().ok().and_then(|s| *s);
+    match cb_opt {
+        Some(cb) => {
             if let Ok(c_name) = std::ffi::CString::new(name) {
+                avm_log_push(format!(
+                    "[ruffle_ios] dispatch_settings_event firing: {} id={} value={}",
+                    name, id_val, value_val
+                ));
                 cb(c_name.as_ptr(), id_val, value_val);
             }
+        }
+        None => {
+            avm_log_push(format!(
+                "[ruffle_ios] dispatch_settings_event {} but callback is None",
+                name
+            ));
         }
     }
 }
@@ -693,6 +705,13 @@ pub unsafe extern "C" fn ruffle_ios_call_init_on_named_child(
 /// DPad) go to no DisplayObject and sliders/checkboxes look
 /// frozen. Mirrors UIScene::sendInputToMovie's null-focus recovery
 /// block on console (Common/UI/UIScene.cpp:1066-1081).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_clear_focus(raw: *mut PlayerHandle) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Ok(mut p) = handle.player.lock() else { return; };
+    p.clear_focus();
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_focus_named_child(
     raw: *mut PlayerHandle,
