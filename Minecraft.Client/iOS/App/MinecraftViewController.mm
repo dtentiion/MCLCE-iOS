@@ -728,6 +728,43 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.menuFocusIndex = 0;
 }
 
+// Ports UIScene_SettingsAudioMenu (Common/UI/UIScene_SettingsAudioMenu.cpp).
+// Two FJ_Slider controls, ranges 0..100, labels formatted "X: N%".
+// Defaults match console's Options profile: music 100, sound 100.
+// Real values need the iOS game-settings store (follow-up round).
+- (void)initSettingsAudioMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    int music = 100;
+    int sound = 100;
+    NSArray<NSDictionary*>* sliders = @[
+        @{ @"name":  @"Music",
+           @"label": [NSString stringWithFormat:@"Music: %d%%", music],
+           @"id":    @(0), @"min": @(0), @"max": @(100), @"cur": @(music) },
+        @{ @"name":  @"Sound",
+           @"label": [NSString stringWithFormat:@"Sound: %d%%", sound],
+           @"id":    @(1), @"min": @(0), @"max": @(100), @"cur": @(sound) },
+    ];
+    for (NSDictionary* s in sliders) {
+        const char* name  = [s[@"name"]  UTF8String];
+        const char* label = [s[@"label"] UTF8String];
+        ruffle_ios_call_init_slider(
+            g_ruffle_player,
+            (const uint8_t*)name,  strlen(name),
+            (const uint8_t*)label, strlen(label),
+            [s[@"id"]  doubleValue],
+            [s[@"min"] intValue],
+            [s[@"max"] intValue],
+            [s[@"cur"] intValue]);
+    }
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -843,6 +880,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initSettingsMenuButtons];
         } else if ([swfName isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
             [self initSettingsOptionsMenu];
+        } else if ([swfName isEqualToString:@"SettingsAudioMenu1080.swf"]) {
+            [self initSettingsAudioMenu];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
