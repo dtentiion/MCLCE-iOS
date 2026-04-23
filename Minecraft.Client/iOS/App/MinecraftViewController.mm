@@ -54,12 +54,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // UIScene_MainMenu::UIScene_MainMenu on console where the splash is
 // re-picked on every construction.
 @property (strong, nonatomic) NSArray<NSString*>* splashes;
-// Ordered stack of SWFs the player navigated through, oldest at
-// index 0. Pushed when A-pressing a button that opens a sub-scene,
-// popped on B. Mirrors how UIController::NavigateBack walks the
-// scene group stack on console (Common/UI/UIController.cpp:2006)
-// without porting the full UIGroup machinery.
-@property (strong, nonatomic) NSMutableArray<NSString*>* menuStack;
+// Ordered stack of scene entries the player navigated through,
+// oldest at index 0. Each entry is a dict with @"swf" (NSString)
+// and @"focus" (NSNumber int) so B-back restores both the scene
+// and which button the user had selected before going deeper.
+// Mirrors how UIController::NavigateBack walks the scene group
+// stack on console (Common/UI/UIController.cpp:2006) without
+// porting the full UIGroup machinery.
+@property (strong, nonatomic) NSMutableArray<NSDictionary*>* menuStack;
 @end
 
 @implementation MinecraftViewController
@@ -324,7 +326,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 (const uint8_t*)data.bytes, data.length,
                 docsPath.UTF8String);
             self.currentMenuSwf = swfPath.lastPathComponent;
-            self.menuStack = [NSMutableArray arrayWithObject:self.currentMenuSwf];
+            self.menuStack = [NSMutableArray array];
             BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
             self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
                 swfPath.lastPathComponent,
@@ -615,6 +617,27 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
 }
 
+// Mark self.menuFocusIndex as SELECTED on the buttons of the
+// current menu, everything else UNSELECTED. Used after
+// navigateBack so the focused button is the one the user left on,
+// not always Button1. State codes 1=SELECTED, 2=UNSELECTED match
+// the console FJ_Button states we drive from the input handler.
+- (void)refreshFocusState {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player || !self.menuButtonConfig.count) return;
+    int focus = self.menuFocusIndex;
+    for (NSUInteger i = 0; i < self.menuButtonConfig.count; ++i) {
+        const char* name = [self.menuButtonConfig[i][@"name"] UTF8String];
+        int state = ((int)i == focus) ? 1 : 2;
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)name, strlen(name),
+            (const uint8_t*)"ChangeState", 11,
+            (const uint8_t*)"", 0,
+            (double)state);
+    }
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -632,30 +655,41 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     [self applyMenuButtonConfig:cfg];
 }
 
-// Forward navigation: push the current menu onto the back stack
-// before swapping to the new one, so a later B-press returns here.
-// Mirrors UIController::PushScene + NavigateToScene on console; we
-// just use the SWF name as the stack token.
+// Forward navigation: push the current menu + its focus index onto
+// the back stack before swapping to the new one, so a later B-press
+// returns here with the same button highlighted. Mirrors how console
+// pushes the current scene state before NavigateToScene.
 - (void)navigateForwardTo:(NSString*)swfName {
     if (self.currentMenuSwf.length) {
         if (!self.menuStack) self.menuStack = [NSMutableArray array];
-        [self.menuStack addObject:self.currentMenuSwf];
+        [self.menuStack addObject:@{
+            @"swf":   self.currentMenuSwf,
+            @"focus": @(self.menuFocusIndex),
+        }];
     }
     [self transitionToMenuNamed:swfName];
 }
 
-// Back navigation: pop the stack and swap to the previous scene.
-// Mirrors UIController::NavigateBack (Common/UI/UIController.cpp).
-// If the stack is empty (shouldn't happen once app is running) we
-// fall back to MainMenu so the user never gets stranded.
+// Back navigation: pop the stack and restore the previous scene
+// plus its focus index. Mirrors UIController::NavigateBack
+// (Common/UI/UIController.cpp). Empty stack falls back to MainMenu
+// focus 0 so the user never gets stranded.
 - (void)navigateBack {
     NSString* target = nil;
+    int restoreFocus = 0;
     if (self.menuStack.count > 0) {
-        target = self.menuStack.lastObject;
+        NSDictionary* entry = self.menuStack.lastObject;
+        target = entry[@"swf"];
+        restoreFocus = [entry[@"focus"] intValue];
         [self.menuStack removeLastObject];
     }
     if (!target.length) target = @"MainMenu1080.swf";
     [self transitionToMenuNamed:target];
+    // transitionToMenuNamed resets menuFocusIndex to 0 inside its
+    // init-buttons callback. Override after it runs so the focused
+    // button is the one the user left on.
+    [self setMenuFocusIndex:restoreFocus];
+    [self refreshFocusState];
 }
 
 - (void)transitionToMenuNamed:(NSString*)swfName {
