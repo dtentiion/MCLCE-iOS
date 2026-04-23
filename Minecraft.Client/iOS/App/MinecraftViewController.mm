@@ -615,6 +615,23 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
 }
 
+- (void)initSettingsMenuButtons {
+    // Mirrors UIScene_SettingsMenu constructor on console
+    // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
+    // sequence skips 3 - console leaves BUTTON_ALL index 3 reserved
+    // and numbers Graphics=4, UI=5, ResetToDefaults=6.
+    NSArray<NSDictionary*>* cfg = @[
+        @{ @"name": @"Button1", @"label": @"Options",            @"id": @(0) },
+        @{ @"name": @"Button2", @"label": @"Audio",              @"id": @(1) },
+        @{ @"name": @"Button3", @"label": @"Control",            @"id": @(2) },
+        @{ @"name": @"Button4", @"label": @"Graphics",           @"id": @(4) },
+        @{ @"name": @"Button5", @"label": @"User Interface",     @"id": @(5) },
+        @{ @"name": @"Button6", @"label": @"Reset to Defaults",  @"id": @(6) },
+    ];
+    [self attachMenuScenery];
+    [self applyMenuButtonConfig:cfg];
+}
+
 // Forward navigation: push the current menu onto the back stack
 // before swapping to the new one, so a later B-press returns here.
 // Mirrors UIController::PushScene + NavigateToScene on console; we
@@ -698,6 +715,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initMainMenuButtons];
         } else if ([swfName isEqualToString:@"HelpAndOptionsMenu1080.swf"]) {
             [self initHelpAndOptionsButtons];
+        } else if ([swfName isEqualToString:@"SettingsMenu1080.swf"]) {
+            [self initSettingsMenuButtons];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
@@ -866,6 +885,24 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                             case 2: target = @"Controls1080.swf"; break;
                             case 3: target = @"SettingsMenu1080.swf"; break;
                             case 4: target = @"Credits1080.swf"; break;
+                        }
+                        if (target) [self navigateForwardTo:target];
+                    } else if ([self.currentMenuSwf isEqualToString:
+                                @"SettingsMenu1080.swf"]) {
+                        // Mirrors UIScene_SettingsMenu::handlePress
+                        // (Common/UI/UIScene_SettingsMenu.cpp:117). ids
+                        // jump from 2 to 4 on console because BUTTON_ALL
+                        // slot 3 is reserved; ResetToDefaults on id 6
+                        // opens a confirm dialog rather than a scene,
+                        // which we defer until we have a dialog system.
+                        NSString* target = nil;
+                        switch (id) {
+                            case 0: target = @"SettingsOptionsMenu1080.swf"; break;
+                            case 1: target = @"SettingsAudioMenu1080.swf"; break;
+                            case 2: target = @"SettingsControlMenu1080.swf"; break;
+                            case 4: target = @"SettingsGraphicsMenu1080.swf"; break;
+                            case 5: target = @"SettingsUIMenu1080.swf"; break;
+                            // case 6: reset-to-defaults dialog (TBD)
                         }
                         if (target) [self navigateForwardTo:target];
                     }
