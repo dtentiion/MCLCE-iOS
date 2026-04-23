@@ -662,35 +662,54 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (!g_ruffle_player) return;
 
     [self attachMenuScenery];
-    // Labels + console ids match the EControls enum in
-    // UIScene_SettingsOptionsMenu.h: ViewBob=0..Difficulty=7.
-    NSArray<NSDictionary*>* cfg = @[
-        @{ @"name": @"ViewBob",          @"label": @"View Bobbing",         @"id": @(0) },
-        @{ @"name": @"ShowHints",        @"label": @"Hints",                @"id": @(1) },
-        @{ @"name": @"ShowTooltips",     @"label": @"In-game Tooltips",     @"id": @(2) },
-        @{ @"name": @"InGameGamertags",  @"label": @"In-game Gamertags",    @"id": @(3) },
-        @{ @"name": @"ShowMashUpWorlds", @"label": @"Unhide Mashup Worlds", @"id": @(4) },
-        @{ @"name": @"Autosave",         @"label": @"Autosave: Off",        @"id": @(5) },
-        @{ @"name": @"Difficulty",       @"label": @"Difficulty: Normal",   @"id": @(7) },
-        @{ @"name": @"Languages",        @"label": @"Language Selector",    @"id": @(6) },
-    ];
-    for (NSDictionary* entry in cfg) {
-        const char* name  = [entry[@"name"]  UTF8String];
-        const char* label = [entry[@"label"] UTF8String];
-        double      id    = [entry[@"id"] doubleValue];
-        ruffle_ios_call_init_on_named_child(
+
+    // 5 checkboxes: Init(label, id, checked). Default all to unchecked
+    // until the iOS game-settings store exists to read real values
+    // from. Mirrors UIControl_CheckBox::init (3 args).
+    struct Cb { const char* name; const char* label; int id; BOOL checked; };
+    Cb checkboxes[] = {
+        {"ViewBob",          "View Bobbing",         0, NO},
+        {"ShowHints",        "Hints",                1, NO},
+        {"ShowTooltips",     "In-game Tooltips",     2, NO},
+        {"InGameGamertags",  "In-game Gamertags",    3, NO},
+        {"ShowMashUpWorlds", "Unhide Mashup Worlds", 4, NO},
+    };
+    for (auto& c : checkboxes) {
+        ruffle_ios_call_init_checkbox(
             g_ruffle_player,
-            (const uint8_t*)name,  strlen(name),
-            (const uint8_t*)"Init", 4,
-            (const uint8_t*)label, strlen(label),
-            id);
-        ruffle_ios_call_init_on_named_child(
-            g_ruffle_player,
-            (const uint8_t*)name,      strlen(name),
-            (const uint8_t*)"SetLabel", 8,
-            (const uint8_t*)label,     strlen(label),
-            0.0);
+            (const uint8_t*)c.name,  strlen(c.name),
+            (const uint8_t*)c.label, strlen(c.label),
+            (double)c.id,
+            c.checked ? 1 : 0);
     }
+
+    // 2 sliders: Init(label, id, min, max, current). Ranges come
+    // straight from UIScene_SettingsOptionsMenu.cpp:69 (autosave
+    // 0..8) and :82 (difficulty 0..3).
+    struct Sl { const char* name; const char* label; int id; int min; int max; int current; };
+    Sl sliders[] = {
+        {"Autosave",   "Autosave: Off",        5, 0, 8, 0},
+        {"Difficulty", "Difficulty: Normal",   7, 0, 3, 2},
+    };
+    for (auto& s : sliders) {
+        ruffle_ios_call_init_slider(
+            g_ruffle_player,
+            (const uint8_t*)s.name,  strlen(s.name),
+            (const uint8_t*)s.label, strlen(s.label),
+            (double)s.id,
+            s.min, s.max, s.current);
+    }
+
+    // 1 button: Init(label, id) via the FJ_Button path.
+    const char* lang = "Languages";
+    const char* langLabel = "Language Selector";
+    ruffle_ios_call_init_on_named_child(
+        g_ruffle_player,
+        (const uint8_t*)lang, strlen(lang),
+        (const uint8_t*)"Init", 4,
+        (const uint8_t*)langLabel, strlen(langLabel),
+        6.0);
+
     // Hide ShowMashUpWorlds by default: console only shows it if
     // there are hidden mashup packs to re-expose, which doesn't
     // apply on a sideloaded iOS build.
@@ -701,6 +720,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         (const uint8_t*)"HideUntilInit", 13,
         (const uint8_t*)"", 0,
         0.0);
+
     // menuButtonConfig stays unset for this scene so the DPad state
     // machine doesn't fight the SWF's internal focus handling
     // (mixed control types, not a flat button list).
