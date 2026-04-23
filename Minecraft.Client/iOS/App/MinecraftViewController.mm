@@ -765,6 +765,43 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.menuFocusIndex = 0;
 }
 
+// Ports UIScene_SettingsControlMenu (Common/UI/UIScene_SettingsControlMenu.cpp).
+// Two stick-sensitivity sliders named SensitivityInGame and
+// SensitivityInMenu, each a FJ_Slider with range 0..200. Default
+// 100 (no multiplier) until the iOS game-settings store lands.
+- (void)initSettingsControlMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    int ingame = 100;
+    int inmenu = 100;
+    NSArray<NSDictionary*>* sliders = @[
+        @{ @"name":  @"SensitivityInGame",
+           @"label": [NSString stringWithFormat:@"Sensitivity In-game: %d%%", ingame],
+           @"id":    @(0), @"min": @(0), @"max": @(200), @"cur": @(ingame) },
+        @{ @"name":  @"SensitivityInMenu",
+           @"label": [NSString stringWithFormat:@"Sensitivity In-menu: %d%%", inmenu],
+           @"id":    @(1), @"min": @(0), @"max": @(200), @"cur": @(inmenu) },
+    ];
+    for (NSDictionary* s in sliders) {
+        const char* name  = [s[@"name"]  UTF8String];
+        const char* label = [s[@"label"] UTF8String];
+        ruffle_ios_call_init_slider(
+            g_ruffle_player,
+            (const uint8_t*)name,  strlen(name),
+            (const uint8_t*)label, strlen(label),
+            [s[@"id"]  doubleValue],
+            [s[@"min"] intValue],
+            [s[@"max"] intValue],
+            [s[@"cur"] intValue]);
+    }
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -882,6 +919,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initSettingsOptionsMenu];
         } else if ([swfName isEqualToString:@"SettingsAudioMenu1080.swf"]) {
             [self initSettingsAudioMenu];
+        } else if ([swfName isEqualToString:@"SettingsControlMenu1080.swf"]) {
+            [self initSettingsControlMenu];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
