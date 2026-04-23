@@ -145,7 +145,9 @@ void startRandomTrack() {
     g_sound_loaded = true;
     g_current_path = next;
     ma_sound_set_end_callback(&g_sound, onSoundEnd, NULL);
-    ma_sound_set_volume(&g_sound, 1.0f);
+    // Pick up the current user-chosen music volume so newly started
+    // tracks don't reset to 100% after the user turned it down.
+    ma_sound_set_volume(&g_sound, g_music_volume.load());
     if (ma_sound_start(&g_sound) != MA_SUCCESS) {
         g_status = std::string("ma_sound_start failed for ") + next;
         NSLog(@"[mcle_audio] %s", g_status.c_str());
@@ -269,6 +271,28 @@ extern "C" void mcle_audio_load_ui_sfx(void) {
     }
 }
 
+// Cached live volumes. 0..1 floats applied to ma_sound instances.
+// Music goes on the main track sound; SFX goes on each preloaded
+// UI oneshot. Console stores these 0..100 and divides at play time.
+namespace {
+std::atomic<float> g_music_volume{1.0f};
+std::atomic<float> g_sfx_volume{1.0f};
+}
+
+extern "C" void mcle_audio_set_music_volume(int volume_0_100) {
+    int v = volume_0_100;
+    if (v < 0) v = 0; if (v > 100) v = 100;
+    g_music_volume.store((float)v / 100.0f);
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_sound_loaded) ma_sound_set_volume(&g_sound, g_music_volume.load());
+}
+
+extern "C" void mcle_audio_set_sfx_volume(int volume_0_100) {
+    int v = volume_0_100;
+    if (v < 0) v = 0; if (v > 100) v = 100;
+    g_sfx_volume.store((float)v / 100.0f);
+}
+
 extern "C" void mcle_audio_play_ui_sfx(const char* name, float volume, float pitch) {
     if (!g_engine_ok || !name) return;
     uint64_t now = now_ms();
@@ -283,7 +307,10 @@ extern "C" void mcle_audio_play_ui_sfx(const char* name, float volume, float pit
     if (idx < 0 || !g_ui_loaded[idx]) return;
 
     ma_sound* s = &g_ui_sounds[idx];
-    ma_sound_set_volume(s, volume);
+    // Scale caller's volume by the user's settings.dat value so the
+    // Sound slider on SettingsAudioMenu actually affects UI SFX.
+    float effective = volume * g_sfx_volume.load();
+    ma_sound_set_volume(s, effective);
     ma_sound_set_pitch(s, pitch);
     ma_sound_seek_to_pcm_frame(s, 0);
     ma_sound_start(s);

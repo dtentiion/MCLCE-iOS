@@ -33,6 +33,13 @@ void   mcle_audio_load_ui_sfx(void);
 // pile of clicks.
 void   mcle_audio_play_ui_sfx(const char* name, float volume, float pitch);
 
+// Set music and UI-SFX volumes, each 0..100 matching console's
+// eGameSetting_MusicVolume / eGameSetting_SoundFXVolume scale. Any
+// currently playing track or future SFX picks up the new level on
+// the next frame.
+void   mcle_audio_set_music_volume(int volume_0_100);
+void   mcle_audio_set_sfx_volume(int volume_0_100);
+
 #ifdef __cplusplus
 }
 #endif
