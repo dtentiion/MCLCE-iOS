@@ -221,6 +221,74 @@ extern "C" size_t mcle_audio_status(char* out, size_t cap) {
     return n;
 }
 
+// --- UI SFX (back, press, focus, scroll, craft, craftfail) --------------
+//
+// Preloaded at app launch and held in g_ui_sounds[]. Names match
+// console: see Common/Audio/SoundNames.cpp wchUISoundNames[]. Each
+// file lives at Documents/UI/<name>.ogg. The console SoundEngine also
+// rate-limits simultaneous UI SFX to one per 10 ms window
+// (Common/UI/UIController.cpp:2529) to stop checkbox cascades etc
+// from blasting audio; we mirror that.
+namespace {
+static const char* const g_ui_names[] = {
+    "back", "craft", "craftfail", "focus", "press", "scroll",
+};
+static constexpr size_t kNumUiSfx = 6;
+ma_sound g_ui_sounds[kNumUiSfx];
+bool     g_ui_loaded[kNumUiSfx] = {};
+std::atomic<uint64_t> g_ui_last_play_ms{0};
+
+uint64_t now_ms() {
+    return (uint64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
+}
+}
+
+extern "C" void mcle_audio_load_ui_sfx(void) {
+    if (!g_engine_ok) return;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    if (!docs.length) return;
+    for (size_t i = 0; i < kNumUiSfx; ++i) {
+        if (g_ui_loaded[i]) continue;
+        NSString* path = [docs stringByAppendingPathComponent:
+            [NSString stringWithFormat:@"UI/%s.ogg", g_ui_names[i]]];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+            NSLog(@"[audio] UI sfx missing: %@", path);
+            continue;
+        }
+        ma_result r = ma_sound_init_from_file(
+            &g_engine, path.UTF8String,
+            MA_SOUND_FLAG_DECODE, NULL, NULL, &g_ui_sounds[i]);
+        if (r == MA_SUCCESS) {
+            g_ui_loaded[i] = true;
+            NSLog(@"[audio] UI sfx loaded: %s", g_ui_names[i]);
+        } else {
+            NSLog(@"[audio] UI sfx load failed '%s' rc=%d",
+                  g_ui_names[i], (int)r);
+        }
+    }
+}
+
+extern "C" void mcle_audio_play_ui_sfx(const char* name, float volume, float pitch) {
+    if (!g_engine_ok || !name) return;
+    uint64_t now = now_ms();
+    uint64_t last = g_ui_last_play_ms.load(std::memory_order_relaxed);
+    if (now - last < 10) return;
+    g_ui_last_play_ms.store(now, std::memory_order_relaxed);
+
+    int idx = -1;
+    for (size_t i = 0; i < kNumUiSfx; ++i) {
+        if (strcmp(name, g_ui_names[i]) == 0) { idx = (int)i; break; }
+    }
+    if (idx < 0 || !g_ui_loaded[idx]) return;
+
+    ma_sound* s = &g_ui_sounds[idx];
+    ma_sound_set_volume(s, volume);
+    ma_sound_set_pitch(s, pitch);
+    ma_sound_seek_to_pcm_frame(s, 0);
+    ma_sound_start(s);
+}
+
 extern "C" void mcle_audio_stop_menu_music(void) {
     g_shuffle_stop.store(true);
     {
