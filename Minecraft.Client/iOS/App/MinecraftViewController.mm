@@ -973,6 +973,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         g_ruffle_player,
         (const uint8_t*)firstCtl, strlen(firstCtl));
 
+    // Diag: dump FJ_Slider inner subtree so we can figure out which
+    // child of the slider ends up catching focus and producing the
+    // extra yellow box to the right of the focused row.
+    static uint8_t sliderBuf[4096];
+    size_t n = ruffle_ios_enumerate_subtree_of(
+        g_ruffle_player,
+        (const uint8_t*)"Music", 5,
+        6,
+        sliderBuf, sizeof(sliderBuf));
+    if (n > 0) {
+        NSString* dump = [[NSString alloc] initWithBytes:sliderBuf length:n
+                                                encoding:NSUTF8StringEncoding];
+        NSLog(@"[MinecraftVC] Music slider subtree:\n%@", dump);
+    }
+
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 }
