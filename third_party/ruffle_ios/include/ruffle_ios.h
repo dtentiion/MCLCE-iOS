@@ -278,6 +278,14 @@ int           ruffle_ios_call_init_slider(PlayerHandle* h,
                                           const uint8_t* label, size_t label_len,
                                           double id, int min, int max, int current);
 
+// Set AS3 stage focus to a named direct child of the root clip.
+// Needed on Settings sub-scenes so keyboard-mapped gamepad input
+// routes to a control instead of vanishing into a null-focus
+// stage. Returns 1 ok, 0 bad args, -1 lock fail, -2 child not
+// found or not InteractiveObject.
+int           ruffle_ios_focus_named_child(PlayerHandle* h,
+                                           const uint8_t* name, size_t name_len);
+
 // Register a callback that fires when LCE AS3 reports a setting
 // change via ExternalInterface. The two method names currently
 // routed are "handleCheckboxToggled" (id=control id, value=1.0 for

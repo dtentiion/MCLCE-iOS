@@ -837,6 +837,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         (const uint8_t*)"", 0,
         0.0);
 
+    const char* firstCtl = "ViewBob";
+    ruffle_ios_focus_named_child(
+        g_ruffle_player,
+        (const uint8_t*)firstCtl, strlen(firstCtl));
+
     // menuButtonConfig stays unset for this scene so the DPad state
     // machine doesn't fight the SWF's internal focus handling
     // (mixed control types, not a flat button list).
@@ -877,6 +882,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"cur"] intValue]);
     }
 
+    const char* firstCtl = "Music";
+    ruffle_ios_focus_named_child(
+        g_ruffle_player,
+        (const uint8_t*)firstCtl, strlen(firstCtl));
+
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 }
@@ -913,6 +923,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"max"] intValue],
             [s[@"cur"] intValue]);
     }
+
+    const char* firstCtl = "SensitivityInGame";
+    ruffle_ios_focus_named_child(
+        g_ruffle_player,
+        (const uint8_t*)firstCtl, strlen(firstCtl));
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
@@ -984,6 +999,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"cur"] intValue]);
     }
 
+    const char* firstCtl = "Clouds";
+    ruffle_ios_focus_named_child(
+        g_ruffle_player,
+        (const uint8_t*)firstCtl, strlen(firstCtl));
+
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 }
@@ -1040,6 +1060,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"max"] intValue],
             [s[@"cur"] intValue]);
     }
+
+    const char* firstCtl = "DisplayHUD";
+    ruffle_ios_focus_named_child(
+        g_ruffle_player,
+        (const uint8_t*)firstCtl, strlen(firstCtl));
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
