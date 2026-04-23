@@ -102,6 +102,15 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         NSLog(@"[settings] %@ slider id=%d raw=%g -> setting=%d val=%u",
               g_current_scene_name, (int)id, value, setting, stored);
 
+        // Apply live for the settings the audio engine cares about
+        // so the Music / Sound sliders actually fade the playing
+        // track rather than just writing to disk.
+        if (setting == MCLE_SETTING_MusicVolume) {
+            mcle_audio_set_music_volume(stored);
+        } else if (setting == MCLE_SETTING_SoundFXVolume) {
+            mcle_audio_set_sfx_volume(stored);
+        }
+
         // Update the slider's displayed label. Console does this in
         // UIControl_Slider::handleSliderMove (line 108-111 of
         // UIControl_Slider.cpp) via setLabel with the format string
@@ -557,6 +566,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // first run). Mirrors CMinecraftApp::InitGameSettings path:
     // load settings.dat, fall through to defaults otherwise.
     mcle_settings_load();
+    // Seed live audio volumes from the settings store so first-run
+    // or a pre-existing settings.dat applies immediately.
+    mcle_audio_set_music_volume(mcle_settings_get(MCLE_SETTING_MusicVolume));
+    mcle_audio_set_sfx_volume(mcle_settings_get(MCLE_SETTING_SoundFXVolume));
     // Suppress Ruffle's auto-drawn yellow focus rectangle.
     // LCE's FJ_Slider and FJ_CheckBox include their own authored
     // outline MovieClips (FJ_Slider_Outline etc) so the default
