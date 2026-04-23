@@ -278,6 +278,10 @@ int           ruffle_ios_call_init_slider(PlayerHandle* h,
                                           const uint8_t* label, size_t label_len,
                                           double id, int min, int max, int current);
 
+// Clear AS3 stage focus. Call on scene exit so the focus highlight
+// from the previous scene doesn't bleed into the next.
+void          ruffle_ios_clear_focus(PlayerHandle* h);
+
 // Set AS3 stage focus to a named direct child of the root clip.
 // Needed on Settings sub-scenes so keyboard-mapped gamepad input
 // routes to a control instead of vanishing into a null-focus
