@@ -817,6 +817,24 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                                     exit(0);
                                 });
                         }
+                    } else if ([self.currentMenuSwf isEqualToString:
+                                @"HelpAndOptionsMenu1080.swf"]) {
+                        // Mirrors UIScene_HelpAndOptionsMenu::handlePress
+                        // (Common/UI/UIScene_HelpAndOptionsMenu.cpp:208).
+                        // BUTTON_HAO_CHANGESKIN=0, HOWTOPLAY=1, CONTROLS=2,
+                        // SETTINGS=3, CREDITS=4. Each navigates to its own
+                        // UIScene whose getMoviePath returns the SWF
+                        // basename below (non-splitscreen, single-player
+                        // path, matching single-player iOS case).
+                        NSString* target = nil;
+                        switch (id) {
+                            case 0: target = @"SkinSelectMenu1080.swf"; break;
+                            case 1: target = @"HowToPlayMenu1080.swf"; break;
+                            case 2: target = @"Controls1080.swf"; break;
+                            case 3: target = @"SettingsMenu1080.swf"; break;
+                            case 4: target = @"Credits1080.swf"; break;
+                        }
+                        if (target) [self transitionToMenuNamed:target];
                     }
                 }
             }
