@@ -45,6 +45,14 @@ std::vector<bool> g_heard;
 std::mutex g_mu;
 std::atomic<bool> g_shuffle_stop{false};
 
+// Live audio volumes sourced from MCLE_SETTING_MusicVolume /
+// _SoundFXVolume. 0..1 floats applied to ma_sound instances.
+// Declared here (ahead of startNextTrack's music-sound init) so
+// newly-played tracks can pick up the user's stored volume
+// instead of snapping to 100%.
+std::atomic<float> g_music_volume{1.0f};
+std::atomic<float> g_sfx_volume{1.0f};
+
 // Overworld track base names. On console these are indices
 // eStream_Overworld_Calm1..eStream_Overworld_piano3 (SoundEngine.h:17-41)
 // and SoundEngine::getMusicID returns one at random from this range
@@ -269,14 +277,6 @@ extern "C" void mcle_audio_load_ui_sfx(void) {
                   g_ui_names[i], (int)r);
         }
     }
-}
-
-// Cached live volumes. 0..1 floats applied to ma_sound instances.
-// Music goes on the main track sound; SFX goes on each preloaded
-// UI oneshot. Console stores these 0..100 and divides at play time.
-namespace {
-std::atomic<float> g_music_volume{1.0f};
-std::atomic<float> g_sfx_volume{1.0f};
 }
 
 extern "C" void mcle_audio_set_music_volume(int volume_0_100) {
