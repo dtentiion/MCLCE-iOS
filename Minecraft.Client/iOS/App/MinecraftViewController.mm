@@ -802,6 +802,131 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.menuFocusIndex = 0;
 }
 
+// Ports UIScene_SettingsGraphicsMenu (Common/UI/UIScene_SettingsGraphicsMenu.cpp).
+// Three FJ_CheckBoxes (Clouds, BedrockFog, CustomSkinAnim) and four
+// FJ_Sliders (RenderDistance, Gamma, FOV, InterfaceOpacity).
+//
+// Render Distance slider is 0..5 mapping to block counts {2, 4, 8,
+// 16, 32, 64}. FOV slider is 0..100 mapping to 70..110 degrees via
+// FOV_MIN + sliderVal*(FOV_MAX-FOV_MIN)/100. Defaults here are
+// console's "medium" profile until the iOS game-settings store
+// exists and we can read real values.
+- (void)initSettingsGraphicsMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    struct Cb { const char* name; const char* label; int id; BOOL checked; };
+    Cb checkboxes[] = {
+        {"Clouds",         "Render clouds",        0, YES},
+        {"BedrockFog",     "Bedrock fog",          1, YES},
+        {"CustomSkinAnim", "Custom skin animation", 2, YES},
+    };
+    for (auto& c : checkboxes) {
+        ruffle_ios_call_init_checkbox(
+            g_ruffle_player,
+            (const uint8_t*)c.name,  strlen(c.name),
+            (const uint8_t*)c.label, strlen(c.label),
+            (double)c.id,
+            c.checked ? 1 : 0);
+    }
+
+    int renderLevel = 3;            // = 16 blocks
+    int renderBlocks = 16;
+    int gamma = 50;
+    int fovSlider = 50;             // slider 50 -> 90 degrees
+    int fovDeg = 70 + (fovSlider * (110 - 70)) / 100;
+    int opacity = 100;
+
+    NSArray<NSDictionary*>* sliders = @[
+        @{ @"name":  @"RenderDistance",
+           @"label": [NSString stringWithFormat:@"Render Distance: %d", renderBlocks],
+           @"id":    @(3), @"min": @(0), @"max": @(5), @"cur": @(renderLevel) },
+        @{ @"name":  @"Gamma",
+           @"label": [NSString stringWithFormat:@"Gamma: %d%%", gamma],
+           @"id":    @(4), @"min": @(0), @"max": @(100), @"cur": @(gamma) },
+        @{ @"name":  @"FOV",
+           @"label": [NSString stringWithFormat:@"FOV: %d", fovDeg],
+           @"id":    @(5), @"min": @(0), @"max": @(100), @"cur": @(fovSlider) },
+        @{ @"name":  @"InterfaceOpacity",
+           @"label": [NSString stringWithFormat:@"Interface opacity: %d%%", opacity],
+           @"id":    @(6), @"min": @(0), @"max": @(100), @"cur": @(opacity) },
+    ];
+    for (NSDictionary* s in sliders) {
+        const char* name  = [s[@"name"]  UTF8String];
+        const char* label = [s[@"label"] UTF8String];
+        ruffle_ios_call_init_slider(
+            g_ruffle_player,
+            (const uint8_t*)name,  strlen(name),
+            (const uint8_t*)label, strlen(label),
+            [s[@"id"]  doubleValue],
+            [s[@"min"] intValue],
+            [s[@"max"] intValue],
+            [s[@"cur"] intValue]);
+    }
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// Ports UIScene_SettingsUIMenu (Common/UI/UIScene_SettingsUIMenu.cpp).
+// Six FJ_CheckBoxes + two FJ_Sliders. UISize sliders have a
+// non-standard range (1..3) because console uses them as direct
+// labels rather than an index. Splitscreen-related controls stay
+// visible for parity, but splitscreen toggling does nothing on
+// iOS since there's no second-controller path.
+- (void)initSettingsUIMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    struct Cb { const char* name; const char* label; int id; BOOL checked; };
+    Cb checkboxes[] = {
+        {"DisplayHUD",               "Display HUD",                 0, YES},
+        {"DisplayHand",              "Display Hand",                1, YES},
+        {"DisplayDeathMessages",     "Display Death Messages",      2, YES},
+        {"DisplayAnimatedCharacter", "Display Animated Character",  3, YES},
+        {"Splitscreen",              "Vertical split-screen",       4, NO},
+        {"ShowSplitscreenGamertags", "Display split-screen gamertags", 5, YES},
+    };
+    for (auto& c : checkboxes) {
+        ruffle_ios_call_init_checkbox(
+            g_ruffle_player,
+            (const uint8_t*)c.name,  strlen(c.name),
+            (const uint8_t*)c.label, strlen(c.label),
+            (double)c.id,
+            c.checked ? 1 : 0);
+    }
+
+    int uiSize = 2;                 // console default UI size
+    int uiSizeSplit = 2;
+    NSArray<NSDictionary*>* sliders = @[
+        @{ @"name":  @"UISize",
+           @"label": [NSString stringWithFormat:@"UI Size: %d", uiSize],
+           @"id":    @(6), @"min": @(1), @"max": @(3), @"cur": @(uiSize) },
+        @{ @"name":  @"UISizeSplitscreen",
+           @"label": [NSString stringWithFormat:@"UI Size Split-screen: %d", uiSizeSplit],
+           @"id":    @(7), @"min": @(1), @"max": @(3), @"cur": @(uiSizeSplit) },
+    ];
+    for (NSDictionary* s in sliders) {
+        const char* name  = [s[@"name"]  UTF8String];
+        const char* label = [s[@"label"] UTF8String];
+        ruffle_ios_call_init_slider(
+            g_ruffle_player,
+            (const uint8_t*)name,  strlen(name),
+            (const uint8_t*)label, strlen(label),
+            [s[@"id"]  doubleValue],
+            [s[@"min"] intValue],
+            [s[@"max"] intValue],
+            [s[@"cur"] intValue]);
+    }
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -921,6 +1046,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initSettingsAudioMenu];
         } else if ([swfName isEqualToString:@"SettingsControlMenu1080.swf"]) {
             [self initSettingsControlMenu];
+        } else if ([swfName isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
+            [self initSettingsGraphicsMenu];
+        } else if ([swfName isEqualToString:@"SettingsUIMenu1080.swf"]) {
+            [self initSettingsUIMenu];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
