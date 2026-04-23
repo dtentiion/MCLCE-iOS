@@ -125,3 +125,10 @@ extern "C" void mcle_settings_set(int setting, unsigned char value) {
     g_values[setting] = value;
     save_locked();
 }
+
+extern "C" void mcle_settings_reset_to_defaults(void) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    apply_defaults();
+    save_locked();
+    NSLog(@"[settings] reset to defaults (console SetDefaultOptions parity)");
+}

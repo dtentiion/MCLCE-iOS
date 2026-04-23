@@ -64,6 +64,13 @@ void mcle_settings_load(void);
 unsigned char mcle_settings_get(int setting);
 void          mcle_settings_set(int setting, unsigned char value);
 
+// Reset every persisted setting to the console defaults from
+// CMinecraftApp::SetDefaultOptions (Common/Consoles_App.cpp:852-941).
+// Matches the ResetToDefaults button on SettingsMenu: volumes go to
+// 100, render distance 16, gamma 50, difficulty 1 (unless in-game -
+// which we don't track yet so we always reset it), etc.
+void          mcle_settings_reset_to_defaults(void);
+
 #ifdef __cplusplus
 }
 #endif
