@@ -54,6 +54,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // UIScene_MainMenu::UIScene_MainMenu on console where the splash is
 // re-picked on every construction.
 @property (strong, nonatomic) NSArray<NSString*>* splashes;
+// Ordered stack of SWFs the player navigated through, oldest at
+// index 0. Pushed when A-pressing a button that opens a sub-scene,
+// popped on B. Mirrors how UIController::NavigateBack walks the
+// scene group stack on console (Common/UI/UIController.cpp:2006)
+// without porting the full UIGroup machinery.
+@property (strong, nonatomic) NSMutableArray<NSString*>* menuStack;
 @end
 
 @implementation MinecraftViewController
@@ -318,6 +324,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 (const uint8_t*)data.bytes, data.length,
                 docsPath.UTF8String);
             self.currentMenuSwf = swfPath.lastPathComponent;
+            self.menuStack = [NSMutableArray arrayWithObject:self.currentMenuSwf];
             BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
             self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
                 swfPath.lastPathComponent,
@@ -608,6 +615,32 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
 }
 
+// Forward navigation: push the current menu onto the back stack
+// before swapping to the new one, so a later B-press returns here.
+// Mirrors UIController::PushScene + NavigateToScene on console; we
+// just use the SWF name as the stack token.
+- (void)navigateForwardTo:(NSString*)swfName {
+    if (self.currentMenuSwf.length) {
+        if (!self.menuStack) self.menuStack = [NSMutableArray array];
+        [self.menuStack addObject:self.currentMenuSwf];
+    }
+    [self transitionToMenuNamed:swfName];
+}
+
+// Back navigation: pop the stack and swap to the previous scene.
+// Mirrors UIController::NavigateBack (Common/UI/UIController.cpp).
+// If the stack is empty (shouldn't happen once app is running) we
+// fall back to MainMenu so the user never gets stranded.
+- (void)navigateBack {
+    NSString* target = nil;
+    if (self.menuStack.count > 0) {
+        target = self.menuStack.lastObject;
+        [self.menuStack removeLastObject];
+    }
+    if (!target.length) target = @"MainMenu1080.swf";
+    [self transitionToMenuNamed:target];
+}
+
 - (void)transitionToMenuNamed:(NSString*)swfName {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -802,7 +835,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     // Scene transitions per current menu + pressed id.
                     if ([self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
                         if (id == 3) {
-                            [self transitionToMenuNamed:@"HelpAndOptionsMenu1080.swf"];
+                            [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"];
                         } else if (id == 5) {
                             // Exit Game. iOS apps normally shouldn't
                             // self-terminate (App Store rejects it) but
@@ -834,7 +867,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                             case 3: target = @"SettingsMenu1080.swf"; break;
                             case 4: target = @"Credits1080.swf"; break;
                         }
-                        if (target) [self transitionToMenuNamed:target];
+                        if (target) [self navigateForwardTo:target];
                     }
                 }
             }
@@ -843,9 +876,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             // "Cancel" handler on submenus.
             if ((pressedNow & 0x00000002u)
                 && ![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
-                NSLog(@"[MinecraftVC] back -> MainMenu1080.swf from %@",
-                      self.currentMenuSwf);
-                [self transitionToMenuNamed:@"MainMenu1080.swf"];
+                NSLog(@"[MinecraftVC] back from %@ (stack depth %lu)",
+                      self.currentMenuSwf,
+                      (unsigned long)self.menuStack.count);
+                [self navigateBack];
             }
         }
 
