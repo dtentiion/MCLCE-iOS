@@ -634,6 +634,74 @@ pub unsafe extern "C" fn ruffle_ios_call_init_on_named_child(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// Init(label, id, checked) on an FJ_CheckBox child, mirroring
+/// UIControl_CheckBox::init on console. Returns 1 ok, 0 bad args,
+/// -1 lock fail, -2 AVM2 call err.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_init_checkbox(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    label_ptr: *const u8,
+    label_len: usize,
+    id: f64,
+    checked: c_int,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let label = if label_ptr.is_null() || label_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_init_checkbox(child_name, label, id, checked != 0);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_init_checkbox('{}', '{}', {}, {}) -> {}",
+        child_name, label, id, checked != 0, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// Init(label, id, min, max, current) on an FJ_Slider child,
+/// mirroring UIControl_Slider::init on console. Returns 1 ok, 0
+/// bad args, -1 lock fail, -2 AVM2 call err.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_init_slider(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    label_ptr: *const u8,
+    label_len: usize,
+    id: f64,
+    min: i32,
+    max: i32,
+    current: i32,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let label = if label_ptr.is_null() || label_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_init_slider(child_name, label, id, min, max, current);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_init_slider('{}', '{}', id={}, [{}..{}]={}) -> {}",
+        child_name, label, id, min, max, current, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_avm_log(out: *mut u8, cap: usize) -> usize {
     if out.is_null() || cap == 0 { return 0; }
