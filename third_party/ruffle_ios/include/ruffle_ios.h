@@ -278,6 +278,15 @@ int           ruffle_ios_call_init_slider(PlayerHandle* h,
                                           const uint8_t* label, size_t label_len,
                                           double id, int min, int max, int current);
 
+// Register a callback that fires when LCE AS3 reports a setting
+// change via ExternalInterface. The two method names currently
+// routed are "handleCheckboxToggled" (id=control id, value=1.0 for
+// checked / 0.0 for unchecked) and "handleSliderMove" (id=control
+// id, value=slider position). The `method` pointer is a NUL-
+// terminated UTF-8 string valid only for the duration of the call.
+typedef void (*ruffle_ios_settings_event_cb)(const char* method, double id, double value);
+void          ruffle_ios_set_settings_event_callback(ruffle_ios_settings_event_cb cb);
+
 #ifdef __cplusplus
 }
 #endif
