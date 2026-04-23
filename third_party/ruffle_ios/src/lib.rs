@@ -686,6 +686,34 @@ pub unsafe extern "C" fn ruffle_ios_call_init_on_named_child(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// Set AS3 stage focus to a named root child. Needed on scenes
+/// like SettingsOptionsMenu where the SWF expects keyboard input
+/// routing, but no control is auto-focused on scene enter. Without
+/// it, arrow-key events (which our gamepad mapping translates from
+/// DPad) go to no DisplayObject and sliders/checkboxes look
+/// frozen. Mirrors UIScene::sendInputToMovie's null-focus recovery
+/// block on console (Common/UI/UIScene.cpp:1066-1081).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_focus_named_child(
+    raw: *mut PlayerHandle,
+    name_ptr: *const u8,
+    name_len: usize,
+) -> c_int {
+    if raw.is_null() || name_ptr.is_null() || name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let name = match std::str::from_utf8(std::slice::from_raw_parts(name_ptr, name_len)) {
+        Ok(s) => s.to_string(),
+        Err(_) => return 0,
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let ok = p.set_focus_to_named_child(&name);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] focus_named_child('{}') -> {}", name, ok
+    ));
+    if ok { 1 } else { -2 }
+}
+
 /// Init(label, id, checked) on an FJ_CheckBox child, mirroring
 /// UIControl_CheckBox::init on console. Returns 1 ok, 0 bad args,
 /// -1 lock fail, -2 AVM2 call err.
