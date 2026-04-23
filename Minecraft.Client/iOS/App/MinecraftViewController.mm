@@ -166,14 +166,26 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             }
         }
         if (sliderName.length && sliderLabel.length) {
-            const char* n = sliderName.UTF8String;
-            const char* l = sliderLabel.UTF8String;
-            ruffle_ios_call_init_on_named_child(
-                g_ruffle_player,
-                (const uint8_t*)n, strlen(n),
-                (const uint8_t*)"SetLabel", 8,
-                (const uint8_t*)l, strlen(l),
-                0.0);
+            // DO NOT call back into ruffle_ios_* from here: the
+            // ExtInt callback path holds Player::lock already, and
+            // call_init_on_named_child tries to re-acquire it,
+            // deadlocking the whole game. Defer the SetLabel to
+            // the next main-queue run so the player lock releases
+            // first.
+            NSString* capturedName = sliderName;
+            NSString* capturedLabel = sliderLabel;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                extern PlayerHandle* g_ruffle_player;
+                if (!g_ruffle_player) return;
+                const char* n = capturedName.UTF8String;
+                const char* l = capturedLabel.UTF8String;
+                ruffle_ios_call_init_on_named_child(
+                    g_ruffle_player,
+                    (const uint8_t*)n, strlen(n),
+                    (const uint8_t*)"SetLabel", 8,
+                    (const uint8_t*)l, strlen(l),
+                    0.0);
+            });
         }
     }
 }
