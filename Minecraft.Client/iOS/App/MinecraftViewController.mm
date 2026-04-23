@@ -642,6 +642,72 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
 }
 
+// First-pass port of UIScene_SettingsOptionsMenu's init block
+// (Common/UI/UIScene_SettingsOptionsMenu.cpp:25). Control names and
+// ids match the UI_MAP_ELEMENT table on console (ViewBob,
+// ShowHints, ShowTooltips, InGameGamertags, ShowMashUpWorlds,
+// Autosave, Difficulty, DifficultyText, Languages).
+//
+// This round only drives SetLabel + Init so the scene shows readable
+// text instead of FJ_Label placeholders. The full parity port needs
+// two more pieces we don't have yet:
+//   - iOS-side game settings storage so checkbox/slider initial
+//     values and write-through can actually land somewhere.
+//   - Event flow from Ruffle back up when a checkbox toggles or a
+//     slider moves, so we can update the backing value.
+// Both are follow-ups; this at least makes the scene readable and
+// navigable with B back to Settings.
+- (void)initSettingsOptionsMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+    // Labels + console ids match the EControls enum in
+    // UIScene_SettingsOptionsMenu.h: ViewBob=0..Difficulty=7.
+    NSArray<NSDictionary*>* cfg = @[
+        @{ @"name": @"ViewBob",          @"label": @"View Bobbing",         @"id": @(0) },
+        @{ @"name": @"ShowHints",        @"label": @"Hints",                @"id": @(1) },
+        @{ @"name": @"ShowTooltips",     @"label": @"In-game Tooltips",     @"id": @(2) },
+        @{ @"name": @"InGameGamertags",  @"label": @"In-game Gamertags",    @"id": @(3) },
+        @{ @"name": @"ShowMashUpWorlds", @"label": @"Unhide Mashup Worlds", @"id": @(4) },
+        @{ @"name": @"Autosave",         @"label": @"Autosave: Off",        @"id": @(5) },
+        @{ @"name": @"Difficulty",       @"label": @"Difficulty: Normal",   @"id": @(7) },
+        @{ @"name": @"Languages",        @"label": @"Language Selector",    @"id": @(6) },
+    ];
+    for (NSDictionary* entry in cfg) {
+        const char* name  = [entry[@"name"]  UTF8String];
+        const char* label = [entry[@"label"] UTF8String];
+        double      id    = [entry[@"id"] doubleValue];
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)name,  strlen(name),
+            (const uint8_t*)"Init", 4,
+            (const uint8_t*)label, strlen(label),
+            id);
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)name,      strlen(name),
+            (const uint8_t*)"SetLabel", 8,
+            (const uint8_t*)label,     strlen(label),
+            0.0);
+    }
+    // Hide ShowMashUpWorlds by default: console only shows it if
+    // there are hidden mashup packs to re-expose, which doesn't
+    // apply on a sideloaded iOS build.
+    const char* hidden = "ShowMashUpWorlds";
+    ruffle_ios_call_init_on_named_child(
+        g_ruffle_player,
+        (const uint8_t*)hidden, strlen(hidden),
+        (const uint8_t*)"HideUntilInit", 13,
+        (const uint8_t*)"", 0,
+        0.0);
+    // menuButtonConfig stays unset for this scene so the DPad state
+    // machine doesn't fight the SWF's internal focus handling
+    // (mixed control types, not a flat button list).
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -755,6 +821,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initHelpAndOptionsButtons];
         } else if ([swfName isEqualToString:@"SettingsMenu1080.swf"]) {
             [self initSettingsMenuButtons];
+        } else if ([swfName isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
+            [self initSettingsOptionsMenu];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
