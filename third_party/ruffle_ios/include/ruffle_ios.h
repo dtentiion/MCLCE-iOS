@@ -263,6 +263,21 @@ int           ruffle_ios_call_init_on_named_child(PlayerHandle* h,
                                                   const uint8_t* label, size_t label_len,
                                                   double id);
 
+// Init(label, id, checked) on an FJ_CheckBox child. The generic
+// call_init_on_named_child only knows FJ_Button's 2-arg Init shape
+// so checkboxes and sliders stay "Not Initialised!" until these
+// control-type-aware variants are used instead.
+int           ruffle_ios_call_init_checkbox(PlayerHandle* h,
+                                            const uint8_t* child_name, size_t child_name_len,
+                                            const uint8_t* label, size_t label_len,
+                                            double id, int checked);
+
+// Init(label, id, min, max, current) on an FJ_Slider child.
+int           ruffle_ios_call_init_slider(PlayerHandle* h,
+                                          const uint8_t* child_name, size_t child_name_len,
+                                          const uint8_t* label, size_t label_len,
+                                          double id, int min, int max, int current);
+
 #ifdef __cplusplus
 }
 #endif
