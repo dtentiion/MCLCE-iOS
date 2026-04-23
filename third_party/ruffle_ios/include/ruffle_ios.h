@@ -282,6 +282,13 @@ int           ruffle_ios_call_init_slider(PlayerHandle* h,
 // from the previous scene doesn't bleed into the next.
 void          ruffle_ios_clear_focus(PlayerHandle* h);
 
+// Toggle Ruffle's auto-drawn yellow focus rectangle. Pass 1 once
+// at startup so the SWF's authored focus outline art (FJ_Slider_
+// Outline, FJ_CheckBox_Outline) is the only yellow frame on
+// screen. Without this Ruffle paints its own accessibility focus
+// highlight on top, producing a duplicate outline.
+void          ruffle_ios_suppress_auto_focus_highlight(PlayerHandle* h, int suppress);
+
 // Set AS3 stage focus to a named direct child of the root clip.
 // Needed on Settings sub-scenes so keyboard-mapped gamepad input
 // routes to a control instead of vanishing into a null-focus
