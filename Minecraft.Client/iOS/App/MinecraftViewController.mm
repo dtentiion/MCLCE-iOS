@@ -9,6 +9,7 @@
 #include "mcle_swf_bridge.h"
 #include "ruffle_ios.h"
 #include "MCLE_iOS_Audio.h"
+#include "MCLE_iOS_Settings.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -374,6 +375,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // Files ship in Documents/UI/<name>.ogg, same layout as console's
     // Windows64Media/Sound/Minecraft/UI folder.
     mcle_audio_load_ui_sfx();
+    // Load persisted game settings (or seed console defaults on
+    // first run). Mirrors CMinecraftApp::InitGameSettings path:
+    // load settings.dat, fall through to defaults otherwise.
+    mcle_settings_load();
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -663,15 +668,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     [self attachMenuScenery];
 
-    // 5 checkboxes: Init(label, id, checked). Default all to unchecked
-    // until the iOS game-settings store exists to read real values
-    // from. Mirrors UIControl_CheckBox::init (3 args).
+    // 5 checkboxes: Init(label, id, checked). Values read from the
+    // persistent store (see MCLE_iOS_Settings). Mirrors
+    // UIControl_CheckBox::init (3 args).
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"ViewBob",          "View Bobbing",         0, NO},
-        {"ShowHints",        "Hints",                1, NO},
-        {"ShowTooltips",     "In-game Tooltips",     2, NO},
-        {"InGameGamertags",  "In-game Gamertags",    3, NO},
+        {"ViewBob",          "View Bobbing",         0, (BOOL)mcle_settings_get(MCLE_SETTING_ViewBob)},
+        {"ShowHints",        "Hints",                1, (BOOL)mcle_settings_get(MCLE_SETTING_Hints)},
+        {"ShowTooltips",     "In-game Tooltips",     2, (BOOL)mcle_settings_get(MCLE_SETTING_Tooltips)},
+        {"InGameGamertags",  "In-game Gamertags",    3, (BOOL)mcle_settings_get(MCLE_SETTING_GamertagsVisible)},
         {"ShowMashUpWorlds", "Unhide Mashup Worlds", 4, NO},
     };
     for (auto& c : checkboxes) {
@@ -683,13 +688,23 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             c.checked ? 1 : 0);
     }
 
-    // 2 sliders: Init(label, id, min, max, current). Ranges come
-    // straight from UIScene_SettingsOptionsMenu.cpp:69 (autosave
-    // 0..8) and :82 (difficulty 0..3).
+    // 2 sliders. Ranges come straight from
+    // UIScene_SettingsOptionsMenu.cpp:69 (autosave 0..8) and :82
+    // (difficulty 0..3). Labels match the console format strings.
+    int autosave = mcle_settings_get(MCLE_SETTING_Autosave);
+    int difficulty = mcle_settings_get(MCLE_SETTING_Difficulty);
+    NSString* autosaveLabel = (autosave == 0)
+        ? @"Autosave: Off"
+        : [NSString stringWithFormat:@"Autosave: %d minutes", autosave * 15];
+    static NSArray<NSString*>* kDifficultyNames = @[@"Peaceful", @"Easy", @"Normal", @"Hard"];
+    int diffClamped = MAX(0, MIN(difficulty, 3));
+    NSString* difficultyLabel = [NSString
+        stringWithFormat:@"Difficulty: %@", kDifficultyNames[diffClamped]];
+
     struct Sl { const char* name; const char* label; int id; int min; int max; int current; };
     Sl sliders[] = {
-        {"Autosave",   "Autosave: Off",        5, 0, 8, 0},
-        {"Difficulty", "Difficulty: Normal",   7, 0, 3, 2},
+        {"Autosave",   autosaveLabel.UTF8String,   5, 0, 8, autosave},
+        {"Difficulty", difficultyLabel.UTF8String, 7, 0, 3, diffClamped},
     };
     for (auto& s : sliders) {
         ruffle_ios_call_init_slider(
@@ -738,8 +753,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     [self attachMenuScenery];
 
-    int music = 100;
-    int sound = 100;
+    int music = mcle_settings_get(MCLE_SETTING_MusicVolume);
+    int sound = mcle_settings_get(MCLE_SETTING_SoundFXVolume);
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"Music",
            @"label": [NSString stringWithFormat:@"Music: %d%%", music],
@@ -775,8 +790,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     [self attachMenuScenery];
 
-    int ingame = 100;
-    int inmenu = 100;
+    int ingame = mcle_settings_get(MCLE_SETTING_SensitivityInGame);
+    int inmenu = mcle_settings_get(MCLE_SETTING_SensitivityInMenu);
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"SensitivityInGame",
            @"label": [NSString stringWithFormat:@"Sensitivity In-game: %d%%", ingame],
@@ -819,9 +834,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"Clouds",         "Render clouds",        0, YES},
-        {"BedrockFog",     "Bedrock fog",          1, YES},
-        {"CustomSkinAnim", "Custom skin animation", 2, YES},
+        {"Clouds",         "Render clouds",         0, (BOOL)mcle_settings_get(MCLE_SETTING_Clouds)},
+        {"BedrockFog",     "Bedrock fog",           1, (BOOL)mcle_settings_get(MCLE_SETTING_BedrockFog)},
+        {"CustomSkinAnim", "Custom skin animation", 2, (BOOL)mcle_settings_get(MCLE_SETTING_CustomSkinAnim)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -832,12 +847,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             c.checked ? 1 : 0);
     }
 
-    int renderLevel = 3;            // = 16 blocks
-    int renderBlocks = 16;
-    int gamma = 50;
-    int fovSlider = 50;             // slider 50 -> 90 degrees
+    static const int kDistanceTable[6] = {2, 4, 8, 16, 32, 64};
+    int renderBlocks = mcle_settings_get(MCLE_SETTING_RenderDistance);
+    int renderLevel = 3;
+    for (int i = 0; i < 6; ++i) if (kDistanceTable[i] == renderBlocks) { renderLevel = i; break; }
+    int gamma = mcle_settings_get(MCLE_SETTING_Gamma);
+    int fovSlider = mcle_settings_get(MCLE_SETTING_FOV);
     int fovDeg = 70 + (fovSlider * (110 - 70)) / 100;
-    int opacity = 100;
+    int opacity = mcle_settings_get(MCLE_SETTING_InterfaceOpacity);
 
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"RenderDistance",
@@ -884,12 +901,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"DisplayHUD",               "Display HUD",                 0, YES},
-        {"DisplayHand",              "Display Hand",                1, YES},
-        {"DisplayDeathMessages",     "Display Death Messages",      2, YES},
-        {"DisplayAnimatedCharacter", "Display Animated Character",  3, YES},
-        {"Splitscreen",              "Vertical split-screen",       4, NO},
-        {"ShowSplitscreenGamertags", "Display split-screen gamertags", 5, YES},
+        {"DisplayHUD",               "Display HUD",                 0, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHUD)},
+        {"DisplayHand",              "Display Hand",                1, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHand)},
+        {"DisplayDeathMessages",     "Display Death Messages",      2, (BOOL)mcle_settings_get(MCLE_SETTING_DeathMessages)},
+        {"DisplayAnimatedCharacter", "Display Animated Character",  3, (BOOL)mcle_settings_get(MCLE_SETTING_AnimatedCharacter)},
+        {"Splitscreen",              "Vertical split-screen",       4, (BOOL)mcle_settings_get(MCLE_SETTING_SplitScreenVertical)},
+        {"ShowSplitscreenGamertags", "Display split-screen gamertags", 5, (BOOL)mcle_settings_get(MCLE_SETTING_DisplaySplitscreenGamertags)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -900,8 +917,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             c.checked ? 1 : 0);
     }
 
-    int uiSize = 2;                 // console default UI size
-    int uiSizeSplit = 2;
+    int uiSize = mcle_settings_get(MCLE_SETTING_UISize);
+    int uiSizeSplit = mcle_settings_get(MCLE_SETTING_UISizeSplitscreen);
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"UISize",
            @"label": [NSString stringWithFormat:@"UI Size: %d", uiSize],

@@ -12,6 +12,8 @@ set(APP_SOURCES
   GameBootstrap.cpp
   MCLE_iOS_Audio.h
   MCLE_iOS_Audio.mm
+  MCLE_iOS_Settings.h
+  MCLE_iOS_Settings.mm
 )
 
 set(APP_RESOURCES
