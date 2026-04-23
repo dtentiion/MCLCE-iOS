@@ -79,6 +79,55 @@ static BURN_DONE:     std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU3
 
 pub struct LoggingExternalInterface;
 
+// Host-registered callback fired when LCE AS3 reports a setting
+// change via ExternalInterface. handleCheckboxToggled(id, checked)
+// and handleSliderMove(id, current) are the two we care about for
+// now; console UIScene.cpp:1251/1271 dispatches them as virtual
+// method overrides per scene. On iOS the host maps (current scene,
+// id) to an mcle_setting index and writes through the store.
+pub type SettingsEventCallback = extern "C" fn(
+    method: *const c_char,
+    id: f64,
+    value: f64,
+);
+static SETTINGS_EVENT_CB: Mutex<Option<SettingsEventCallback>> = Mutex::new(None);
+
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_settings_event_callback(cb: SettingsEventCallback) {
+    if let Ok(mut slot) = SETTINGS_EVENT_CB.lock() {
+        *slot = Some(cb);
+    }
+}
+
+fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
+    // Only the two event shapes we bind today; others fall through
+    // to the log-only path below.
+    let (id_val, value_val) = match name {
+        "handleCheckboxToggled" if args.len() >= 2 => {
+            let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
+            let checked = match &args[1] {
+                ExtValue::Bool(b) => if *b { 1.0 } else { 0.0 },
+                ExtValue::Number(n) => if *n != 0.0 { 1.0 } else { 0.0 },
+                _ => return,
+            };
+            (id, checked)
+        }
+        "handleSliderMove" if args.len() >= 2 => {
+            let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
+            let value = match &args[1] { ExtValue::Number(n) => *n, _ => return };
+            (id, value)
+        }
+        _ => return,
+    };
+    if let Ok(slot) = SETTINGS_EVENT_CB.lock() {
+        if let Some(cb) = *slot {
+            if let Ok(c_name) = std::ffi::CString::new(name) {
+                cb(c_name.as_ptr(), id_val, value_val);
+            }
+        }
+    }
+}
+
 impl ExternalInterfaceProvider for LoggingExternalInterface {
     fn call_method(&self, _context: &mut UpdateContext<'_>, name: &str, args: &[ExtValue]) -> ExtValue {
         let rendered_args: Vec<String> = args.iter().map(|v| format!("{v:?}")).collect();
@@ -95,6 +144,9 @@ impl ExternalInterfaceProvider for LoggingExternalInterface {
         // what goes through avm_log_push, and we need those calls in the
         // persisted log when diagnosing why text fields never populate.
         avm_log_push(format!("[extint] call {line}"));
+        // LCE setting events route to the iOS settings store if a
+        // callback was registered.
+        dispatch_settings_event(name, args);
         // For now, every call returns Null. Specific menus may need better
         // responses; we wire those once we know what the names are.
         ExtValue::Null

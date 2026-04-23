@@ -12,6 +12,97 @@
 #include "MCLE_iOS_Settings.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
+
+// Name of the currently loaded menu SWF, set whenever we enter a
+// new scene. The settings-event bridge reads this to decide which
+// scene's control-id -> MCLE_SETTING_* mapping to use, without
+// holding a reference to the view controller itself.
+static NSString* g_current_scene_name = @"";
+
+// Maps an (sliderId, rawValue) coming from handleSliderMove in
+// whatever scene g_current_scene_name names, to a pair
+// (mcle_setting index, value to store). Returns -1 if the pair
+// doesn't map to anything persisted.
+static int mcle_map_slider(int sliderId, double rawValue, unsigned char* outValue) {
+    if (!outValue) return -1;
+    int v = (int)rawValue;
+    if (v < 0) v = 0; if (v > 255) v = 255;
+    *outValue = (unsigned char)v;
+    if ([g_current_scene_name isEqualToString:@"SettingsAudioMenu1080.swf"]) {
+        if (sliderId == 0) return MCLE_SETTING_MusicVolume;
+        if (sliderId == 1) return MCLE_SETTING_SoundFXVolume;
+    } else if ([g_current_scene_name isEqualToString:@"SettingsControlMenu1080.swf"]) {
+        if (sliderId == 0) return MCLE_SETTING_SensitivityInGame;
+        if (sliderId == 1) return MCLE_SETTING_SensitivityInMenu;
+    } else if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
+        if (sliderId == 5) return MCLE_SETTING_Autosave;
+        if (sliderId == 7) return MCLE_SETTING_Difficulty;
+    } else if ([g_current_scene_name isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
+        // RenderDistance slider value is a level 0..5; store the
+        // block count the level maps to (matches console's
+        // eGameSetting_RenderDistance which holds the count).
+        if (sliderId == 3) {
+            static const int kDistance[6] = {2, 4, 8, 16, 32, 64};
+            int lvl = v; if (lvl < 0) lvl = 0; if (lvl > 5) lvl = 5;
+            *outValue = (unsigned char)kDistance[lvl];
+            return MCLE_SETTING_RenderDistance;
+        }
+        if (sliderId == 4) return MCLE_SETTING_Gamma;
+        if (sliderId == 5) return MCLE_SETTING_FOV;
+        if (sliderId == 6) return MCLE_SETTING_InterfaceOpacity;
+    } else if ([g_current_scene_name isEqualToString:@"SettingsUIMenu1080.swf"]) {
+        if (sliderId == 6) return MCLE_SETTING_UISize;
+        if (sliderId == 7) return MCLE_SETTING_UISizeSplitscreen;
+    }
+    return -1;
+}
+
+static int mcle_map_checkbox(int boxId) {
+    if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
+        switch (boxId) {
+            case 0: return MCLE_SETTING_ViewBob;
+            case 1: return MCLE_SETTING_Hints;
+            case 2: return MCLE_SETTING_Tooltips;
+            case 3: return MCLE_SETTING_GamertagsVisible;
+            // case 4: MashUp unhide - one-shot action, no store slot.
+        }
+    } else if ([g_current_scene_name isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
+        switch (boxId) {
+            case 0: return MCLE_SETTING_Clouds;
+            case 1: return MCLE_SETTING_BedrockFog;
+            case 2: return MCLE_SETTING_CustomSkinAnim;
+        }
+    } else if ([g_current_scene_name isEqualToString:@"SettingsUIMenu1080.swf"]) {
+        switch (boxId) {
+            case 0: return MCLE_SETTING_DisplayHUD;
+            case 1: return MCLE_SETTING_DisplayHand;
+            case 2: return MCLE_SETTING_DeathMessages;
+            case 3: return MCLE_SETTING_AnimatedCharacter;
+            case 4: return MCLE_SETTING_SplitScreenVertical;
+            case 5: return MCLE_SETTING_DisplaySplitscreenGamertags;
+        }
+    }
+    return -1;
+}
+
+extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
+    if (!method) return;
+    if (strcmp(method, "handleCheckboxToggled") == 0) {
+        int setting = mcle_map_checkbox((int)id);
+        if (setting < 0) return;
+        unsigned char v = (value != 0.0) ? 1 : 0;
+        mcle_settings_set(setting, v);
+        NSLog(@"[settings] %@ checkbox id=%d -> setting=%d val=%u",
+              g_current_scene_name, (int)id, setting, v);
+    } else if (strcmp(method, "handleSliderMove") == 0) {
+        unsigned char stored = 0;
+        int setting = mcle_map_slider((int)id, value, &stored);
+        if (setting < 0) return;
+        mcle_settings_set(setting, stored);
+        NSLog(@"[settings] %@ slider id=%d raw=%g -> setting=%d val=%u",
+              g_current_scene_name, (int)id, value, setting, stored);
+    }
+}
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
 extern "C" unsigned long long mcle_swf_total_triangles(void);
 extern "C" unsigned long long mcle_swf_total_frames(void);
@@ -327,6 +418,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 (const uint8_t*)data.bytes, data.length,
                 docsPath.UTF8String);
             self.currentMenuSwf = swfPath.lastPathComponent;
+            g_current_scene_name = self.currentMenuSwf ?: @"";
             self.menuStack = [NSMutableArray array];
             BOOL fromDocs = [swfPath rangeOfString:@"/Documents/"].location != NSNotFound;
             self.loadedSwfName = [NSString stringWithFormat:@"%@ (%@)",
@@ -379,6 +471,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // first run). Mirrors CMinecraftApp::InitGameSettings path:
     // load settings.dat, fall through to defaults otherwise.
     mcle_settings_load();
+    // Register the AS3-side event bridge. ExternalInterface calls
+    // to handleCheckboxToggled / handleSliderMove route through
+    // this callback, which maps (current scene, control id) to an
+    // MCLE_SETTING_* index and writes the value through to
+    // settings.dat. Mirrors the per-scene handleCheckboxToggled /
+    // handleSliderMove switch statements on console
+    // (e.g. UIScene_SettingsOptionsMenu.cpp:379).
+    extern void mcle_ios_settings_event_bridge(const char*, double, double);
+    ruffle_ios_set_settings_event_callback(&mcle_ios_settings_event_bridge);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -1028,6 +1129,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     NSLog(@"[MinecraftVC] transition -> %@ rc=%d", swfName, rc);
     if (rc == 1) {
         self.currentMenuSwf = swfName;
+        g_current_scene_name = swfName ?: @"";
         self.menuFocusIndex = 0;
         // Re-roll the splash when entering MainMenu. Console does
         // the same every time UIScene_MainMenu is constructed.
