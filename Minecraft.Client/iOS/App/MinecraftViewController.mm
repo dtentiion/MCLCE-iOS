@@ -899,15 +899,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // tile1 scrolled into the letterbox area.
         struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
         NSArray* siblings = @[
-            @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            // Depth order (back to front): Panorama (-2),
+            // MenuBackground (-1, dim), scene root (0), Tooltips
+            // (100), Logo (101). The dim needs to sit BELOW the
+            // scene root so it doesn't cover the dialog; stage
+            // child depths are integers so Panorama drops to -2
+            // to free -1 for MenuBackground.
+            @[@"Panorama1080.swf",     @(-2),  @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
             // MenuBackground is the dim backdrop console adds via
             // UIComponent_MenuBackground while a MessageBox dialog
-            // is up (UIScene_MessageBox.cpp:49 addComponent). Sits
-            // above Panorama but BELOW the scene root, so it dims
-            // the panorama edges without covering the dialog's own
-            // BackgroundPanel. Starts hidden - flipped on only when
-            // a dialog is loaded, flipped off when it dismisses.
-            @[@"MenuBackground1080.swf", @(90),  @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
+            // is up (UIScene_MessageBox.cpp:49 addComponent).
+            // Authored 1080-wide; without stretching to match the
+            // Panorama scale it only covered the centre band of
+            // the screen. Same 1.5x and pre-shift Panorama uses so
+            // it fills iPhone aspect ratios end-to-end.
+            @[@"MenuBackground1080.swf",@(-1), @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
             @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
             @[@"ComponentLogo1080.swf",@(101), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
         ];
@@ -939,7 +945,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // while a MessageBox dialog is up so it doesn't dim the
         // regular menu tree.
         ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, 90, 0);
+            g_ruffle_player, -1, 0);
     }
 }
 
@@ -1680,7 +1686,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern PlayerHandle* g_ruffle_player;
     if (g_ruffle_player) {
         ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, 90, 1);
+            g_ruffle_player, -1, 1);
     }
 
     [self navigateForwardTo:@"MessageBox1080.swf"];
@@ -1779,7 +1785,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern PlayerHandle* g_ruffle_player;
     if (g_ruffle_player) {
         ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, 90, 0);
+            g_ruffle_player, -1, 0);
     }
     [self navigateBack];
     if (req && req.callback) req.callback(result);
