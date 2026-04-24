@@ -900,6 +900,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
         NSArray* siblings = @[
             @[@"Panorama1080.swf",     @(-1),  @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            // MenuBackground is the dim backdrop console adds via
+            // UIComponent_MenuBackground while a MessageBox dialog
+            // is up (UIScene_MessageBox.cpp:49 addComponent). Sits
+            // above Panorama but BELOW the scene root, so it dims
+            // the panorama edges without covering the dialog's own
+            // BackgroundPanel. Starts hidden - flipped on only when
+            // a dialog is loaded, flipped off when it dismisses.
+            @[@"MenuBackground1080.swf", @(90),  @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
             @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
             @[@"ComponentLogo1080.swf",@(101), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
         ];
@@ -926,6 +934,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             NSLog(@"[MinecraftVC] %@ (depth %d, scale %.1fx%.1f, t=%.0f,%.0f) -> %d",
                   swfName, depth, sx, sy, tx, ty, rc);
         }
+
+        // Hide the MenuBackground sibling at startup. Only shown
+        // while a MessageBox dialog is up so it doesn't dim the
+        // regular menu tree.
+        ruffle_ios_set_xui_sibling_visible_at_depth(
+            g_ruffle_player, 90, 0);
     }
 }
 
@@ -1659,6 +1673,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     req.callback = callback;
     g_pending_dialog = req;
 
+    // Dim the scene behind the dialog by flipping the
+    // MenuBackground sibling on. Mirrors console's
+    // addComponent(eUIComponent_MenuBackground) at UIScene_
+    // MessageBox.cpp:49.
+    extern PlayerHandle* g_ruffle_player;
+    if (g_ruffle_player) {
+        ruffle_ios_set_xui_sibling_visible_at_depth(
+            g_ruffle_player, 90, 1);
+    }
+
     [self navigateForwardTo:@"MessageBox1080.swf"];
 }
 
@@ -1750,6 +1774,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 - (void)finishDialogWithResult:(MCLEDialogResult)result {
     MCLEDialogRequest* req = g_pending_dialog;
     g_pending_dialog = nil;
+    // Hide the dim backdrop before navigating back so the
+    // underlying scene reappears without the dim still on top.
+    extern PlayerHandle* g_ruffle_player;
+    if (g_ruffle_player) {
+        ruffle_ios_set_xui_sibling_visible_at_depth(
+            g_ruffle_player, 90, 0);
+    }
     [self navigateBack];
     if (req && req.callback) req.callback(result);
 }
