@@ -949,6 +949,60 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
 }
 
+// Configure the tooltips strip at the bottom of the screen for
+// the current scene. Drives ToolTips1080.swf (attached as a
+// stage sibling at depth 100) via its public AS3 API:
+//   SetToolTip(buttonId, label, show)  per ToolTips.as:144
+//   UpdateLayout()                     per ToolTips.as:150
+// Button ids match the TOOLTIP_BUTTON_* constants in ToolTips.as:
+//   0 = A, 1 = B, 2 = X, 3 = Y, 4 = LT, 5 = RT, 6 = LB, 7 = RB,
+//   8 = LS, 9 = RS, 10 = SELECT.
+// Console seeds these per-scene via UIScene::updateTooltips,
+// which most scenes implement as
+// ui.SetTooltips(iPad, IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK)
+// and route through UIController -> UIComponent_Tooltips ->
+// SetToolTip on each visible button.
+//
+// `hidden` is true for scenes where the tooltips strip would
+// overlap a dialog or full-screen UI (e.g. MessageBox).
+- (void)seedTooltipsForScene:(NSString*)swfName hidden:(BOOL)hidden {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    // SetToolTip signature: (int buttonId, String label, Boolean show)
+    // Index 0..10 per ToolTips.as TOOLTIP_BUTTON_* constants.
+    // Empty label + show=false collapses that slot in UpdateLayout.
+    struct Slot { int id; const char* label; BOOL show; };
+    Slot slots[] = {
+        { 0,  "Select", !hidden },   // A
+        { 1,  "Back",   !hidden },   // B
+        { 2,  "",        NO },       // X
+        { 3,  "",        NO },       // Y
+        { 4,  "",        NO },       // LT
+        { 5,  "",        NO },       // RT
+        { 6,  "",        NO },       // LB
+        { 7,  "",        NO },       // RB
+        { 8,  "",        NO },       // LS
+        { 9,  "",        NO },       // RS
+        { 10, "",        NO },       // SELECT
+    };
+    for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i) {
+        ruffle_ios_call_set_tooltip(
+            g_ruffle_player, 100,
+            slots[i].id,
+            (const uint8_t*)slots[i].label, strlen(slots[i].label),
+            slots[i].show ? 1 : 0);
+    }
+
+    // Reposition visible tooltips along the bottom; collapsed
+    // (show=false) slots end up off-screen so they don't take
+    // up space in the strip.
+    const char* updateName = "UpdateLayout";
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, 100,
+        (const uint8_t*)updateName, strlen(updateName),
+        NULL, 0);
+}
+
 - (void)initMainMenuButtons {
     NSArray<NSDictionary*>* cfg = @[
         @{ @"name": @"Button1", @"label": @"Play Game",            @"id": @(0) },
@@ -1970,6 +2024,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // Logo is depth 101 on our stage (see attachMenuScenery).
         ruffle_ios_set_xui_sibling_visible_at_depth(
             g_ruffle_player, 101, logoVisible);
+
+        // Seed the Tooltips bottom-strip on every scene transition.
+        // Mirrors what each console UIScene::updateTooltips does
+        // (e.g. UIScene_SettingsAudioMenu.cpp:45 calls
+        // ui.SetTooltips(iPad, IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK)
+        // which routes to UIController::SetTooltips and then to
+        // UIComponent_Tooltips::SetTooltips, eventually firing
+        // ToolTips.as SetToolTip per button).
+        // Most scenes use the same A=Select / B=Back pair; the
+        // few that customise (chat, splitscreen menus) aren't
+        // ported yet. Hide MessageBox's tooltips since the dialog
+        // covers the bottom strip area visually anyway.
+        BOOL hideTips = [swfName isEqualToString:@"MessageBox1080.swf"];
+        [self seedTooltipsForScene:swfName hidden:hideTips];
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
         // non-MainMenu scenes; that's a per-scene string table follow-up.

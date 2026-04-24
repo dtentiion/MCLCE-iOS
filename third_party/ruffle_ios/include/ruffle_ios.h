@@ -353,6 +353,16 @@ int           ruffle_ios_set_focus_to_sibling_child(PlayerHandle* h,
                                                     int depth,
                                                     const uint8_t* child_name, size_t child_name_len);
 
+// Call ToolTips1080.SetToolTip(button_id, label, show) on the
+// sibling at the given depth. Specialised because the AS3
+// signature is mixed-type (int, string, bool) which the
+// generic helpers above don't cover. Used per-scene to seed
+// the bottom-strip tooltips (Select / Back / etc.).
+int           ruffle_ios_call_set_tooltip(PlayerHandle* h,
+                                          int depth, int button_id,
+                                          const uint8_t* label, size_t label_len,
+                                          int show);
+
 // --- FJ_ButtonList / FJ_ButtonList_ListIconLeft widget calls ---
 // Dynamic list widget used by LoadOrJoinMenu (SavesList/JoinList),
 // HowToPlayMenu, LeaderboardMenu, DLCMainMenu, and SkinSelectMenu.
