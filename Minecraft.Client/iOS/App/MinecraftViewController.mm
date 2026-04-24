@@ -196,6 +196,49 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                     0.0);
             });
         }
+    } else if (strcmp(method, "handlePress") == 0) {
+        // LCE SWF fires handlePress(controlId, childId) when the
+        // user hits A on a button or list item. FJ_Document's
+        // stage-level handler in FJ_Document.as:170-191 routes
+        // through ExternalInterface. For list widgets (LoadOrJoin
+        // SavesList/JoinList) controlId is the FJ_ButtonList's id
+        // and childId is the item index. For simple FJ_Button
+        // screens the MainMenu path fires controlId=buttonId,
+        // childId=0 - but the host's DPad handler already
+        // routes simple-button scenes natively, so we only need
+        // the list-widget path here.
+        int listId = (int)id;
+        int itemId = (int)value;
+        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
+            if (listId == 0) {
+                // SavesList. Item 0 = "Create New World" (see
+                // UIScene_LoadOrJoinMenu.cpp JOIN_LOAD_CREATE_BUTTON_
+                // INDEX=0); anything > 0 is a save slot or level
+                // generator. Neither path is functional yet -
+                // the create-world flow needs a level-gen picker
+                // scene, and the load-save flow needs the LCE
+                // save-format reader.
+                NSLog(@"[loadorjoin] saves list press idx=%d (loading path is a follow-up)",
+                      itemId);
+            } else if (listId == 1) {
+                // JoinList. iOS has no netcode yet, so this list
+                // stays empty - log in case we get here anyway
+                // so the event path is visible.
+                NSLog(@"[loadorjoin] join list press idx=%d (no networking yet)",
+                      itemId);
+            }
+        } else {
+            NSLog(@"[handlePress] scene=%@ list=%d item=%d (unhandled)",
+                  g_current_scene_name, listId, itemId);
+        }
+    } else if (strcmp(method, "handleInitFocus") == 0) {
+        // LCE fires this once per scene when SetFocus(-1) finds
+        // the tabIndex==1 child (FJ_Document.SetFocus line 81-160,
+        // OnFocusChange(false) calls through to handleInitFocus).
+        // Purely informational for now; logging helps verify the
+        // SetFocus path is firing as expected.
+        NSLog(@"[handleInitFocus] scene=%@ control=%d child=%d",
+              g_current_scene_name, (int)id, (int)value);
     }
 }
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -1164,6 +1207,62 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.menuFocusIndex = 0;
 }
 
+// Ports UIScene_LoadOrJoinMenu constructor
+// (Common/UI/UIScene_LoadOrJoinMenu.cpp:536+). Two
+// FJ_ButtonList_ListIconLeft controls on stage:
+//   SavesList (id 0, eControl_SavesList) - user's worlds.
+//   JoinList  (id 1, eControl_GamesList) - online sessions.
+// The first default entry on SavesList is "Create New World"
+// (JOIN_LOAD_CREATE_BUTTON_INDEX=0, AddDefaultButtons ln 1098).
+// Actual save enumeration + level-generator listing is a
+// separate follow-up tied to LCE save-format parsing; this
+// landing just gets the widget plumbing and scene transition
+// working so Play Game -> world list -> Back works end-to-end.
+// JoinList stays empty on iOS (no netcode yet); the NoGames
+// label is what the authored scene shows in that state.
+- (void)initLoadOrJoinMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    // Init both lists with the console-side EControls enum ids.
+    // matches UIScene_LoadOrJoinMenu.h:19-26.
+    const char* saves = "SavesList";
+    const char* games = "JoinList";
+    ruffle_ios_call_list_init(g_ruffle_player,
+        (const uint8_t*)saves, strlen(saves), 0.0);
+    ruffle_ios_call_list_init(g_ruffle_player,
+        (const uint8_t*)games, strlen(games), 1.0);
+
+    // Wipe anything still in the lists from a prior scene load
+    // (shouldn't happen since replace_root_movie clears AS3
+    // state, but defensive - console also clears before
+    // populating in UIScene_LoadOrJoinMenu::Initialise).
+    ruffle_ios_call_list_remove_all(g_ruffle_player,
+        (const uint8_t*)saves, strlen(saves));
+    ruffle_ios_call_list_remove_all(g_ruffle_player,
+        (const uint8_t*)games, strlen(games));
+
+    // Default first item: "Create New World". Console adds this
+    // at JOIN_LOAD_CREATE_BUTTON_INDEX=0 regardless of whether
+    // any saves exist (UIScene_LoadOrJoinMenu.cpp:1098).
+    const char* createLabel = "Create New World";
+    ruffle_ios_call_list_add_item(g_ruffle_player,
+        (const uint8_t*)saves, strlen(saves),
+        (const uint8_t*)createLabel, strlen(createLabel),
+        0.0,
+        (const uint8_t*)"", 0);
+
+    // Auto-focus via SWF's SetFocus(-1). SavesList has tabIndex=1
+    // per LoadOrJoinMenu.as __setTab_SavesList_... so FJ_Document.
+    // SetFocus picks it.
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -1295,6 +1394,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initSettingsGraphicsMenu];
         } else if ([swfName isEqualToString:@"SettingsUIMenu1080.swf"]) {
             [self initSettingsUIMenu];
+        } else if ([swfName isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
+            [self initLoadOrJoinMenu];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
