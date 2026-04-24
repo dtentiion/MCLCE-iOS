@@ -1235,6 +1235,54 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     ruffle_ios_call_list_init(g_ruffle_player,
         (const uint8_t*)games, strlen(games), 1.0);
 
+    // Seed title labels so they stop rendering their authoring-
+    // time placeholder text ("FJ_Label_Black" etc.). Mirrors
+    // UIScene_LoadOrJoinMenu::Initialise line 227-230:
+    //   m_labelSavesListTitle.init( IDS_START_GAME );  "Start Game"
+    //   m_labelJoinListTitle.init(  IDS_JOIN_GAME );   "Join Game"
+    //   m_labelNoGames.init(        IDS_NO_GAMES_FOUND ); hidden initially
+    // FJ_Label.SetLabel flips m_bInitialised = true itself (unlike
+    // FJ_Button), so calling SetLabel without a separate Init
+    // works and avoids a new label-specific FFI.
+    struct LabelSeed { const char* name; const char* text; };
+    LabelSeed labels[] = {
+        { "SavesListTitle", "Start Game" },
+        { "JoinListTitle",  "Join Game" },
+        { "NoGames",        "No Games Found" },
+    };
+    for (auto& s : labels) {
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)s.name, strlen(s.name),
+            (const uint8_t*)"SetLabel", 8,
+            (const uint8_t*)s.text, strlen(s.text),
+            0.0);
+    }
+
+    // Console starts NoGames hidden (UIScene_LoadOrJoinMenu.cpp:230
+    // setVisible(false)) and only shows it when the join list
+    // actually ends up empty. We don't have the networking layer
+    // that populates the join list yet, so for now we flip it on
+    // to communicate "no sessions" to the user instead of leaving
+    // blank space. Revisit when we have real session discovery.
+    const char* noGames = "NoGames";
+    ruffle_ios_set_root_child_visible(
+        g_ruffle_player,
+        (const uint8_t*)noGames, strlen(noGames),
+        1);
+
+    // Hide the timer controls. Console shows them (line 231-232)
+    // because they're part of the auto-refresh cadence for save
+    // thumbnails / session discovery; with neither wired up on
+    // iOS the spinning timer art just sits there looking like a
+    // bug. Revisit when the corresponding backends land.
+    for (const char* timer : { "SavesTimer", "JoinTimer" }) {
+        ruffle_ios_set_root_child_visible(
+            g_ruffle_player,
+            (const uint8_t*)timer, strlen(timer),
+            0);
+    }
+
     // Wipe anything still in the lists from a prior scene load
     // (shouldn't happen since replace_root_movie clears AS3
     // state, but defensive - console also clears before
