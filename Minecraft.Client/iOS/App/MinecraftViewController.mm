@@ -1035,22 +1035,48 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
+    // Per-scene tooltip parity. Each console UIScene::updateTooltips
+    // sets a different (A, B) pair via ui.SetTooltips(pad, iA, iB).
+    // -1 means hide that slot. Match those exact pairs here.
+    NSString* aLabel = @"Select";
+    NSString* bLabel = @"Back";
+    BOOL showA = YES;
+    BOOL showB = YES;
+
+    if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
+        // UIScene_MainMenu::updateTooltips
+        // (UIScene_MainMenu.cpp:124-142): SetTooltips(pad, iA=Select,
+        // iB=-1, iX=-1) - main menu only shows Select. No Back since
+        // there's nowhere to back out to.
+        showB = NO;
+        bLabel = @"";
+    } else if ([swfName isEqualToString:@"MessageBox1080.swf"]) {
+        // UIScene_MessageBox::updateTooltips
+        // (UIScene_MessageBox.cpp:74-77): SetTooltips(..., iA=Select,
+        // iB=Cancel). Dialog cancels rather than backs.
+        bLabel = @"Cancel";
+    }
+    // Every other scene (HelpAndOptions / Settings / LoadOrJoin /
+    // HowToPlay / Leaderboard / DLCMain / SkinSelect) inherits the
+    // default A=Select / B=Back pair, matching their respective
+    // updateTooltips overrides on console.
+
     // SetToolTip signature: (int buttonId, String label, Boolean show)
     // Index 0..10 per ToolTips.as TOOLTIP_BUTTON_* constants.
     // Empty label + show=false collapses that slot in UpdateLayout.
     struct Slot { int id; const char* label; BOOL show; };
     Slot slots[] = {
-        { 0,  "Select", !hidden },   // A
-        { 1,  "Back",   !hidden },   // B
-        { 2,  "",        NO },       // X
-        { 3,  "",        NO },       // Y
-        { 4,  "",        NO },       // LT
-        { 5,  "",        NO },       // RT
-        { 6,  "",        NO },       // LB
-        { 7,  "",        NO },       // RB
-        { 8,  "",        NO },       // LS
-        { 9,  "",        NO },       // RS
-        { 10, "",        NO },       // SELECT
+        { 0,  aLabel.UTF8String, showA },   // A
+        { 1,  bLabel.UTF8String, showB },   // B
+        { 2,  "",                NO },      // X
+        { 3,  "",                NO },      // Y
+        { 4,  "",                NO },      // LT
+        { 5,  "",                NO },      // RT
+        { 6,  "",                NO },      // LB
+        { 7,  "",                NO },      // RB
+        { 8,  "",                NO },      // LS
+        { 9,  "",                NO },      // RS
+        { 10, "",                NO },      // SELECT
     };
     for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i) {
         ruffle_ios_call_set_tooltip(
@@ -1059,6 +1085,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)slots[i].label, strlen(slots[i].label),
             slots[i].show ? 1 : 0);
     }
+
+    // Push the strip in from the screen edge. Console drives this
+    // via UIScene::updateSafeZone calling FJ_Document.SetSafeZone(
+    // top, bottom, left, right) at UIScene.cpp:200-232. Defaults
+    // give a generous bottom-left inset so the strip doesn't sit
+    // flush against the edge.
+    const char* setSafe = "SetSafeZone";
+    double safe[4] = { 0.0, 60.0, 60.0, 0.0 }; // top, bottom, left, right
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, 100,
+        (const uint8_t*)setSafe, strlen(setSafe),
+        safe, 4);
 
     // Reposition visible tooltips along the bottom; collapsed
     // (show=false) slots end up off-screen so they don't take
@@ -2098,12 +2135,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // which routes to UIController::SetTooltips and then to
         // UIComponent_Tooltips::SetTooltips, eventually firing
         // ToolTips.as SetToolTip per button).
-        // Most scenes use the same A=Select / B=Back pair; the
-        // few that customise (chat, splitscreen menus) aren't
-        // ported yet. Hide MessageBox's tooltips since the dialog
-        // covers the bottom strip area visually anyway.
-        BOOL hideTips = [swfName isEqualToString:@"MessageBox1080.swf"];
-        [self seedTooltipsForScene:swfName hidden:hideTips];
+        // seedTooltipsForScene picks the right (A, B) pair per
+        // scene to match each console UIScene::updateTooltips
+        // override. MessageBox stays visible with Select / Cancel
+        // instead of being hidden, matching console.
+        [self seedTooltipsForScene:swfName hidden:NO];
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
         // non-MainMenu scenes; that's a per-scene string table follow-up.
