@@ -308,6 +308,36 @@ int           ruffle_ios_focus_named_child(PlayerHandle* h,
 // -2 call failed.
 int           ruffle_ios_call_root_set_focus(PlayerHandle* h, double id);
 
+// --- FJ_ButtonList / FJ_ButtonList_ListIconLeft widget calls ---
+// Dynamic list widget used by LoadOrJoinMenu (SavesList/JoinList),
+// HowToPlayMenu, LeaderboardMenu, DLCMainMenu, and SkinSelectMenu.
+// Matches the console-side UIControl_ButtonList / UIControl_SaveList
+// AS3 method contract (UIControl_ButtonList.cpp, UIControl_SaveList.cpp).
+// Returns follow the rest of the file: 1 ok, 0 bad args, -1 lock
+// fail, -2 AVM2 call err or child not found.
+
+// Init(id) on the named list child. Call once per list on scene
+// entry, before any addItem / removeAll.
+int           ruffle_ios_call_list_init(PlayerHandle* h,
+                                        const uint8_t* child_name, size_t child_name_len,
+                                        double id);
+
+// addNewItem(label, data, iconName) on a
+// FJ_ButtonList_ListIconLeft child. `data` becomes the item's
+// button id reported back through handlePress. Pass iconName
+// empty for no icon.
+int           ruffle_ios_call_list_add_item(PlayerHandle* h,
+                                            const uint8_t* child_name, size_t child_name_len,
+                                            const uint8_t* label, size_t label_len,
+                                            double data,
+                                            const uint8_t* icon_name, size_t icon_name_len);
+
+// removeAllItems() on the named list child. Used before a
+// repopulate so stale items don't bleed from a previous scene
+// tick.
+int           ruffle_ios_call_list_remove_all(PlayerHandle* h,
+                                              const uint8_t* child_name, size_t child_name_len);
+
 // Register a callback that fires when LCE AS3 reports a setting
 // change via ExternalInterface. The two method names currently
 // routed are "handleCheckboxToggled" (id=control id, value=1.0 for
