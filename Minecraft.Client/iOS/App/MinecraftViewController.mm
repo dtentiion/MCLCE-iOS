@@ -57,14 +57,15 @@ static MCLEDialogRequest* g_pending_dialog = nil;
 // finishDialogWithResult:) without plumbing self through the C ABI.
 // Set in viewDidLoad, cleared in viewDidDisappear. The full
 // MinecraftViewController @interface lives further down in this
-// file, but the bridge fn above needs callable method signatures
-// now, so we expose the handful of entry points through a protocol
-// the VC conforms to.
-@protocol MCLEBridgeVCMethods <NSObject>
+// file, so forward-declare the class and a category that surfaces
+// just the methods the bridge needs to call. The class-extension
+// body below adopts these.
+@class MinecraftViewController;
+@interface MinecraftViewController (MCLEBridgeEntryPoints)
 - (void)finishDialogWithResult:(MCLEDialogResult)result;
 - (void)navigateBack;
 @end
-static __weak id<MCLEBridgeVCMethods> g_active_vc = nil;
+static __weak MinecraftViewController* g_active_vc = nil;
 
 // Maps an (sliderId, rawValue) coming from handleSliderMove in
 // whatever scene g_current_scene_name names, to a pair
@@ -319,7 +320,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 default: break;
             }
             dispatch_async(dispatch_get_main_queue(), ^{
-                id<MCLEBridgeVCMethods> vc = g_active_vc;
+                MinecraftViewController* vc = g_active_vc;
                 if (vc) [vc finishDialogWithResult:r];
             });
         } else {
@@ -344,7 +345,7 @@ extern "C" unsigned long long mcle_swf_total_line_strips(void);
 extern "C" unsigned long long mcle_swf_total_masks(void);
 extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
-@interface MinecraftViewController () <MCLEBridgeVCMethods>
+@interface MinecraftViewController ()
 @property (strong, nonatomic) CADisplayLink* displayLink;
 @property (strong, nonatomic) UILabel* statusLabel;
 @property (strong, nonatomic) MetalView* metalView;
