@@ -1,84 +1,54 @@
 # Status
 
-Snapshot of where the port actually stands. Kept honest. Updated as things move.
+Honest snapshot of where the port is. Updated as things move.
 
-## Builds?
+## What runs right now
 
-- Yes: CI builds the iOS app shell (no game code yet) on every push. Unsigned `.ipa` is attached to each workflow run. First green build was commit 0fe641e. Artifact size about 15 KB compressed.
-- No: the game itself does not run. What ships right now is an empty shell that shows a black screen with a controller-state readout.
+The app launches straight into the real LCE main menu. Here's what works end-to-end:
 
-## What works
+- Animated panorama background, LCE logo, random splash text re-rolled every load (same logic as console).
+- Menu music. Tracks picked with the same GetRandomishTrack logic as console (unheard-first, reset when all played).
+- UI sound effects on focus, select, back.
+- Controller navigation. Xbox, PlayStation, and MFi gamepads all work through Apple's GameController framework. D-pad moves, A selects, B backs out.
+- Full walk-through of Main Menu, Help & Options, and Settings.
+- All five Settings sub-menus: Options, Audio, Control, Graphics, User Interface.
+  - Sliders apply live. Music volume actually fades in real time, no scene reload.
+  - Checkboxes persist.
+  - Reset to Defaults resets every setting console resets.
+- `settings.dat` in Documents, written on every change.
+- Play Game opens the world list scene (SavesList + JoinList layout).
+- How To Play menu shows its 24 topic entries.
 
-- Bundle layout, launch, orientation locking (landscape only).
-- GameController.framework bridge, mapped to the 4J / Xbox 360 button bitmask. Connect an Xbox or PlayStation controller and the status label shows live input.
-- Per-frame display link driving the Metal renderer. RGB test triangle draws on device.
-- NSFileManager-backed paths for `GameHDD`, application support, documents, and bundle resources. Nothing writes to them yet.
-- CMake build with Xcode as generator. Presets for device (arm64), simulator (arm64), and simulator (x86_64).
-- **Shader translation pipeline.** All four real 4JLibs HLSL shaders round-trip HLSL → SPIR-V → MSL → `.metallib` in CI. See the `Shader probe` workflow. Means Phase 2 does not need manual shader rewriting.
-- **Iggy-to-SWF converter script.** `scripts/iggy-to-swf.sh` drives JPEXS to turn `.iggy` files into standard `.swf` that GameSWF can consume. Build-time only, not in CI (game assets are not shipped here).
-- **GameSWF runtime linked into the main app.** Full SWF player compiled in (base + player + 30 AS3 builtin classes, ~96 TUs). `AppDelegate` calls `mcle_swf_init()` on launch, which builds our Metal `render_handler`, installs it via `gameswf::set_render_handler`, and allocates a `gameswf::player`. libz linked for SWF decompression. All in the `.ipa` you download from the Actions tab.
+## What doesn't run yet
 
-## What does not work
+- World creation and loading. The save-format reader isn't wired up, so Play Game reaches the world list but can't enter a world. Gameplay is the next rock after the menu tree is done.
+- Leaderboards, DLC, Skin Select menus. Skeletons queued next, same pattern as LoadOrJoin and HowToPlay.
+- Multiplayer and networking. None of it is in the iOS build yet. On the roadmap but behind gameplay.
+- Tooltips strip at the bottom of each menu. The authored SWF has it, we don't wire it yet.
+- Some rendering quirks on scrollbars, panel masking, and a couple of labels. Being cleaned up as scenes land.
 
-- Real GameSWF drawing: render_handler methods are still stubs, so even if a SWF is loaded nothing visible comes out yet.
-- UI: Iggy is stubbed. Menus, HUD, inventory, chat will not draw.
-- Audio: nothing wired yet.
-- Networking: nothing wired yet. LAN discovery and multiplayer will need their own port pass.
-- Save system: paths exist; actual serialization needs upstream Common code to compile against iOS.
-- Most of upstream's `Minecraft.Client/Common` and all of `Minecraft.World` are not yet in the build graph.
+## How it's put together
 
-## GameSWF probe: full player compiles clean
+- **UI runtime:** patched Ruffle fork (`third_party/ruffle_ios/` + branch `mclce-ios-patches` on [dtentiion/ruffle](https://github.com/dtentiion/ruffle)). Ruffle runs LCE's stock `.swf` menu files directly. Patches cover XUI bitmap imports, scene-lifecycle AS3 listener cleanup, and a handful of rendering fixes specific to LCE's authoring conventions.
+- **Audio:** miniaudio with the stb_vorbis OGG decoder. Same library console uses.
+- **Graphics:** wgpu through MetalANGLE.
+- **Controller:** GameController.framework bridge in `Minecraft.Client/iOS/Input/INP_iOS_Controller.mm`, output snapshotted into the 4J `_360_JOY_BUTTON_*` bitmask the game's input layer was already written for.
+- **Settings:** flat `unsigned char[32]` keyed by LCE's `eGameSetting` enum, persisted to `Documents/settings.dat` on every set. Parallels console's `Win64_SaveSettings` path.
 
-Running `-DENABLE_GAMESWF_PROBE=ON` (manual workflow "Port probes") builds green for iOS ARM64 on the complete SWF player. Scope:
+## Key decisions that differ from the original port plan
 
-- All 21 portable sources in `base/` (containers, triangulation, image manipulation, GC, timers, utf8, config, etc.)
-- All ~45 portable sources in `gameswf/` (player, SWF stream parser, shape rendering, AVM1 / AVM2 virtual machines, ActionScript, sprite, button, font, fontlib, tesselation, text, character, canvas, filters, morph, all AS3 builtin classes, etc.)
+The original plan in older versions of this file called for GameSWF (with Iggy-to-SWF conversion) and a direct Metal renderer. Neither turned out to be the right call:
 
-Excluded from the probe (not portable as-is, not needed yet):
-- Renderer handlers for D3D / OGL / OGL ES / Intel Wireless GL / Xbox. We write our own Metal render_handler.
-- Sound handlers for SDL / OpenAL. We wire AVFoundation later.
-- `gameswf_freetype.cpp` and `gameswf_test_ogl.cpp`. FreeType comes with the font pass, test_ogl is demo code.
-- `base/jpeg.cpp` (pending jpeglib wiring) and `base/png_helper.cpp` (pending libpng).
+- **GameSWF was dropped in favour of Ruffle** once AVM2 support in GameSWF turned out to be too incomplete for LCE's ActionScript 3 menus. Ruffle is actively maintained, handles AS3, and had a cleaner C FFI path.
+- **The direct Metal renderer was deferred.** Ruffle's wgpu backend rides MetalANGLE on iOS and covers the menu workload. A standalone Metal renderer is still on the roadmap for gameplay, since wgpu via Ruffle is overkill for block / chunk rendering.
+- **Audio went with miniaudio instead of AVAudioEngine.** Matches what console LCE actually uses, and gets OGG support for free.
+- **Iggy-to-SWF conversion isn't needed at runtime.** The SWF files are already there in the console build's media folder (the Iggy header is a thin wrapper); JPEXS strips it once at build time.
 
-Walls cleared, all automated by `scripts/patch-gameswf.sh`:
-1. `fmax` / `fmin` rename to `gs_fmax` / `gs_fmin` (libc++ collision).
-2. `compiler_assert(x)` macro neutralized (newer clang trips on its `switch` duplicate-case trick inside template bodies).
-3. `vm_stack : private array<as_value>` flipped to `public` so derived classes can name `array<T>` unqualified, which the original code assumed.
-4. `compatibility_include.h` rewritten with guarded `#define`s so our iOS config overrides rather than gets overridden by the Marmalade defaults.
-5. `__DATE__` / `__TIME__` adjacency to string literals space-separated so the C++11 UDL parser does not treat them as suffixes.
+## Notes
 
-Metal render_handler wired (stub, but valid vtable):
-- `Minecraft.Client/iOS/UI/render_handler_metal.{h,mm}` subclasses `gameswf::render_handler` and implements every pure virtual method with either real stub logic (bitmap_info storage) or a no-op that will be filled in with Metal draw calls.
-- Link-smoke test in the probe does `create_render_handler_metal()` + `gameswf::set_render_handler()` + `new gameswf::player()`. CI builds green, so the full object graph links.
-
-Not-yet-handled in the probe (next walls to tackle):
-- Pull in the bundled `jpeglib/` sources, flip `TU_CONFIG_LINK_TO_JPEGLIB=1`.
-- Fill in the render_handler stubs with real Metal draw calls: textured quads for bitmaps, triangle-strip mesh for vector shapes, alpha blending, masks.
-- Load a test `.swf` from the app bundle and drive `player->step()` each frame.
-- FreeType for font rendering (can defer; many SWFs embed their own glyphs).
-
-## World probe: current wall
-
-The optional `-DENABLE_WORLD_PROBE=ON` target now attempts to compile `AABB.cpp` and `Vec3.cpp` from upstream. Two walls cleared, one new wall hit.
-
-Cleared so far:
-- `sal.h` (Microsoft Source Annotation Language) shimmed with empty macros.
-- Core Win32 typedefs (`WORD`, `DWORD`, `LPVOID`, `LPCWSTR`, `SIZE_T`, `ULONG_PTR`, `FILETIME`, `CRITICAL_SECTION`, `VOID`, `PBYTE`) mapped in `Minecraft.Client/iOS/iOS_WinCompat.h`.
-
-Blocking the probe right now:
-- `reference to 'byte' is ambiguous`. Upstream `extraX64.h` does `typedef unsigned char byte;` alongside `using namespace std;` somewhere transitive. On C++17+ libc++ this collides with `std::byte`. MSVC suppressed this via `_HAS_STD_BYTE=0`; libc++ has no equivalent switch. Likely fixes, ordered by effort:
-  1. Patch upstream headers to rename the typedef to `u8` or `Byte`, or qualify every use.
-  2. Force the probe TU to `-std=c++14` where `std::byte` does not exist. Brittle; won't work once we pull in C++17-only code.
-  3. Do a small header injection that does `namespace std { using ::byte; }` before C++17 is introduced. Very hacky.
-
-See `world-probe.yml` Actions run artifact for full log.
-
-## Known issues / questions
-
-- GameSWF vs Ruffle: both are candidates to replace Iggy. GameSWF is C++, easier to embed, but old and unmaintained. Ruffle is in Rust, actively developed, harder to glue to a C++ game. Plan is GameSWF first, Ruffle as a fallback.
-- Renderer approach: GL ES 3 + MetalANGLE is the current plan. If MetalANGLE is stale on modern iOS SDKs we fall back to a direct Metal backend, which is more work.
-- Code signing: nothing gets signed in CI on purpose. Users sign at install time. This keeps the repo public without exposing a dev cert.
+- Code signing is not done in CI on purpose. Users sign at install time. Keeps the repo public without exposing a dev cert.
+- The `.ipa` artifacts from Actions are unsigned. Sideload tools (AltStore / Sideloadly / xtool / TrollStore) handle signing.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md).
+See [ROADMAP.md](ROADMAP.md) for what's next.
