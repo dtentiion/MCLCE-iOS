@@ -915,6 +915,39 @@ pub unsafe extern "C" fn ruffle_ios_call_list_add_item(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// addNewItem(label, data) on an FJ_ButtonList_Menu child (the
+/// 2-arg no-icon variant used by HowToPlay / Leaderboard / Credits).
+/// Wrapper around Player::call_list_add_menu_item. Matches
+/// UIControl_ButtonList::addItem (UIControl_ButtonList.cpp:96-112).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_list_add_menu_item(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    label_ptr: *const u8,
+    label_len: usize,
+    data: f64,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let label = if label_ptr.is_null() || label_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_list_add_menu_item(child_name, label, data);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_list_add_menu_item('{}', '{}', data={}) -> {}",
+        child_name, label, data, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 /// removeAllItems() on an FJ_ButtonList child. Wrapper around
 /// Player::call_list_remove_all. Mirrors
 /// UIControl_ButtonList::clearList (UIControl_ButtonList.cpp:60-66).
