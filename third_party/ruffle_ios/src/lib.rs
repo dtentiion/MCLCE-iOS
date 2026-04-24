@@ -101,8 +101,16 @@ pub unsafe extern "C" fn ruffle_ios_set_settings_event_callback(cb: SettingsEven
 }
 
 fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
-    // Only the two event shapes we bind today; others fall through
-    // to the log-only path below.
+    // Routed event shapes. Matches console's ExternalInterface.call
+    // names from FJ_Document.as (handlePress line 170-191,
+    // handleFocusChange / handleInitFocus line 270-298) plus the
+    // per-scene setting events (handleCheckboxToggled /
+    // handleSliderMove). Host receives them with a unified
+    // (method, id, value) shape; semantics depend on method:
+    //   handleCheckboxToggled(controlId, checked)
+    //   handleSliderMove(controlId, currentValue)
+    //   handlePress(controlId, childId) - button / list press
+    //   handleInitFocus(controlId, childId) - scene-entry focus
     let (id_val, value_val) = match name {
         "handleCheckboxToggled" if args.len() >= 2 => {
             let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
@@ -117,6 +125,11 @@ fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
             let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
             let value = match &args[1] { ExtValue::Number(n) => *n, _ => return };
             (id, value)
+        }
+        "handlePress" | "handleInitFocus" if args.len() >= 2 => {
+            let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
+            let child = match &args[1] { ExtValue::Number(n) => *n, _ => return };
+            (id, child)
         }
         _ => return,
     };
@@ -833,6 +846,94 @@ pub unsafe extern "C" fn ruffle_ios_call_init_slider(
     avm_log_push(format!(
         "[ruffle_ios] call_init_slider('{}', '{}', id={}, [{}..{}]={}) -> {}",
         child_name, label, id, min, max, current, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// Init(id) on an FJ_ButtonList child. Wrapper around
+/// Player::call_list_init. Mirrors UIControl_ButtonList::init
+/// (UIControl_ButtonList.cpp:28-50) on console.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_list_init(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    id: f64,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_list_init(child_name, id);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_list_init('{}', id={}) -> {}",
+        child_name, id, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// addNewItem(label, data, iconName) on an
+/// FJ_ButtonList_ListIconLeft child. Wrapper around
+/// Player::call_list_add_item. Mirrors UIControl_SaveList::addItem
+/// (UIControl_SaveList.cpp:48-89). Pass empty icon_name for no icon.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_list_add_item(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    label_ptr: *const u8,
+    label_len: usize,
+    data: f64,
+    icon_name_ptr: *const u8,
+    icon_name_len: usize,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let label = if label_ptr.is_null() || label_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let icon_name = if icon_name_ptr.is_null() || icon_name_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(icon_name_ptr, icon_name_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_list_add_item(child_name, label, data, icon_name);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_list_add_item('{}', '{}', data={}, icon='{}') -> {}",
+        child_name, label, data, icon_name, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// removeAllItems() on an FJ_ButtonList child. Wrapper around
+/// Player::call_list_remove_all. Mirrors
+/// UIControl_ButtonList::clearList (UIControl_ButtonList.cpp:60-66).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_list_remove_all(
+    raw: *mut PlayerHandle,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_list_remove_all(child_name);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_list_remove_all('{}') -> {}", child_name, status
     ));
     if status.starts_with("ok:") { 1 } else { -2 }
 }
