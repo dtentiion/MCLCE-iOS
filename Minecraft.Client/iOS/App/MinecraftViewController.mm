@@ -2114,18 +2114,32 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                         } else if (id == 4) {
                             [self navigateForwardTo:@"DLCMainMenu1080.swf"];
                         } else if (id == 5) {
-                            // Exit Game. iOS apps normally shouldn't
-                            // self-terminate (App Store rejects it) but
-                            // this is a sideloaded dev build; mirrors the
-                            // console LCE where Exit Game fully quits.
-                            // Briefly delay so the press animation shows.
-                            dispatch_after(
-                                dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
-                                dispatch_get_main_queue(), ^{
-                                    NSLog(@"[MinecraftVC] Exit Game pressed, terminating");
-                                    mcle_audio_stop_menu_music();
-                                    exit(0);
-                                });
+                            // Exit Game. Console opens a confirm
+                            // dialog before quitting; IUIScene_
+                            // PauseMenu::ExitGameDialogReturned
+                            // (IUIScene_PauseMenu.cpp:19) runs the
+                            // actual shutdown only on Accept. Match
+                            // that path here through the
+                            // presentDialog helper. iOS self-
+                            // terminate is normally an App Store
+                            // reject but this is a sideloaded dev
+                            // build so exit(0) is fine. Small delay
+                            // after the callback so the SFX plays
+                            // before the process dies.
+                            [self presentDialogWithTitle:@"Exit Game"
+                                                 content:@"Are you sure you want to exit?"
+                                                 buttons:@[@"OK", @"Cancel"]
+                                              focusIndex:1
+                                                callback:^(MCLEDialogResult r) {
+                                if (r != MCLEDialogResultAccept) return;
+                                dispatch_after(
+                                    dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                                    dispatch_get_main_queue(), ^{
+                                        NSLog(@"[MinecraftVC] Exit Game confirmed, terminating");
+                                        mcle_audio_stop_menu_music();
+                                        exit(0);
+                                    });
+                            }];
                         }
                     } else if ([self.currentMenuSwf isEqualToString:
                                 @"HelpAndOptionsMenu1080.swf"]) {
