@@ -725,6 +725,29 @@ pub unsafe extern "C" fn ruffle_ios_clear_focus(raw: *mut PlayerHandle) {
     p.clear_focus();
 }
 
+/// Call SetFocus(id) on the root SWF's document class. Wrapper
+/// around Player::call_root_method_number("SetFocus", id). Matches
+/// console's UIScene::gainFocus path (UIScene.cpp:1003-1012) and
+/// UIScene::SetFocusToElement (UIScene.cpp:246-258): for initial
+/// scene entry pass id=-1, which FJ_Document.SetFocus treats as
+/// "auto-focus the child with tabIndex == 1" and also fires
+/// handleInitFocus through ExternalInterface.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_root_set_focus(
+    raw: *mut PlayerHandle,
+    id: f64,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_root_method_number("SetFocus", id);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_root_set_focus({}) -> {}", id, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_focus_named_child(
     raw: *mut PlayerHandle,
