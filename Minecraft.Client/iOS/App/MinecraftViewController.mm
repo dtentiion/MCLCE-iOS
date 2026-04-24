@@ -227,6 +227,16 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 NSLog(@"[loadorjoin] join list press idx=%d (no networking yet)",
                       itemId);
             }
+        } else if ([g_current_scene_name isEqualToString:@"HowToPlayMenu1080.swf"]) {
+            // HowToList item press. Console routes each topic to
+            // its own tutorial scene via m_uiHTPSceneA
+            // (UIScene_HowToPlayMenu.cpp:42-75 + handlePress at
+            // line 230+). Those scenes are gameplay-facing pages
+            // (UIScene_HowToPlay_Basics, _Inventory, etc.) that
+            // will land once the gameplay layer is in; for now
+            // pressing a topic just logs which one.
+            NSLog(@"[howtoplay] topic press idx=%d (topic scenes are a follow-up)",
+                  itemId);
         } else {
             NSLog(@"[handlePress] scene=%@ list=%d item=%d (unhandled)",
                   g_current_scene_name, listId, itemId);
@@ -1313,6 +1323,72 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.menuFocusIndex = 0;
 }
 
+// Ports UIScene_HowToPlayMenu constructor
+// (Common/UI/UIScene_HowToPlayMenu.cpp:77-104). Single
+// FJ_ButtonList_Menu named "HowToList" (eControl_Buttons = 0)
+// with 24 static items from the IDS_HOW_TO_PLAY_MENU_* string
+// table. Selecting an item on console calls a per-topic
+// proceedToScene(eHowToPlay_*) (m_uiHTPSceneA at line 42-75) -
+// those scenes are gameplay-facing tutorial pages not yet in
+// scope, so handlePress here just logs for now.
+- (void)initHowToPlayMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    const char* list = "HowToList";
+    ruffle_ios_call_list_init(g_ruffle_player,
+        (const uint8_t*)list, strlen(list), 0.0);
+    ruffle_ios_call_list_remove_all(g_ruffle_player,
+        (const uint8_t*)list, strlen(list));
+
+    // Labels mirror m_uiHTPButtonNameA string-table ids in
+    // UIScene_HowToPlayMenu.cpp:6-39. Non-Xbox build: SocialMedia
+    // and BanningLevels are excluded. Order and ids match the
+    // console enum so a later per-topic scene wire-up lines up
+    // with the same press ids console's handlePress switches on.
+    struct Item { const char* label; int id; };
+    Item items[] = {
+        { "What's New",        0 },
+        { "The Basics",        1 },
+        { "Multiplayer",       2 },
+        { "HUD",               3 },
+        { "Creative Mode",     4 },
+        { "Inventory",         5 },
+        { "Chests",            6 },
+        { "Crafting",          7 },
+        { "Furnace",           8 },
+        { "Dispenser",         9 },
+        { "Brewing",          10 },
+        { "Enchanting",       11 },
+        { "Anvil",            12 },
+        { "Farming Animals",  13 },
+        { "Breeding Animals", 14 },
+        { "Trading",          15 },
+        { "Horses",           16 },
+        { "Beacons",          17 },
+        { "Fireworks",        18 },
+        { "Hoppers",          19 },
+        { "Droppers",         20 },
+        { "Nether Portal",    21 },
+        { "The End",          22 },
+        { "Host Options",     23 },
+    };
+    for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); ++i) {
+        ruffle_ios_call_list_add_menu_item(
+            g_ruffle_player,
+            (const uint8_t*)list, strlen(list),
+            (const uint8_t*)items[i].label, strlen(items[i].label),
+            (double)items[i].id);
+    }
+
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 - (void)initSettingsMenuButtons {
     // Mirrors UIScene_SettingsMenu constructor on console
     // (Common/UI/UIScene_SettingsMenu.cpp). Six buttons, but the id
@@ -1446,6 +1522,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initSettingsUIMenu];
         } else if ([swfName isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
             [self initLoadOrJoinMenu];
+        } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
+            [self initHowToPlayMenu];
         }
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for

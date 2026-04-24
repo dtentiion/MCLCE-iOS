@@ -332,6 +332,14 @@ int           ruffle_ios_call_list_add_item(PlayerHandle* h,
                                             double data,
                                             const uint8_t* icon_name, size_t icon_name_len);
 
+// addNewItem(label, data) on an FJ_ButtonList_Menu child (2-arg
+// no-icon variant used by HowToPlayMenu, LeaderboardMenu, and
+// the other plain-label scenes).
+int           ruffle_ios_call_list_add_menu_item(PlayerHandle* h,
+                                                 const uint8_t* child_name, size_t child_name_len,
+                                                 const uint8_t* label, size_t label_len,
+                                                 double data);
+
 // removeAllItems() on the named list child. Used before a
 // repopulate so stale items don't bleed from a previous scene
 // tick.
