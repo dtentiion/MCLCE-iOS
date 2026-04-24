@@ -23,16 +23,16 @@ strip = "symbols"
 # for iOS, then we pin. Expect the first CI build to take 10-20 minutes as
 # the full dep tree compiles.
 [dependencies]
-swf                 = { git = "https://github.com/dtentiion/ruffle", rev = "5e23b681" }
-ruffle_render       = { git = "https://github.com/dtentiion/ruffle", rev = "5e23b681" }
-ruffle_core         = { git = "https://github.com/dtentiion/ruffle", rev = "5e23b681" }
-ruffle_common       = { git = "https://github.com/dtentiion/ruffle", rev = "5e23b681" }
+swf                 = { git = "https://github.com/dtentiion/ruffle", rev = "910bad59" }
+ruffle_render       = { git = "https://github.com/dtentiion/ruffle", rev = "910bad59" }
+ruffle_core         = { git = "https://github.com/dtentiion/ruffle", rev = "910bad59" }
+ruffle_common       = { git = "https://github.com/dtentiion/ruffle", rev = "910bad59" }
 # wgpu-backed renderer. wgpu supports iOS Metal natively, so letting
 # Ruffle's official wgpu backend drive the drawing is vastly simpler than
 # writing our own Metal RenderBackend by hand. Brings naga + wgpu's dep
 # tree (meaningful build-time hit, but much less work than a custom
 # backend and far more correct).
-ruffle_render_wgpu  = { git = "https://github.com/dtentiion/ruffle", rev = "5e23b681" }
+ruffle_render_wgpu  = { git = "https://github.com/dtentiion/ruffle", rev = "910bad59" }
 wgpu                = "27"
 raw-window-handle   = "0.6"
 pollster            = "0.4"
