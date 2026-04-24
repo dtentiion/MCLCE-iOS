@@ -19,6 +19,53 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 // holding a reference to the view controller itself.
 static NSString* g_current_scene_name = @"";
 
+// Pending dialog request: seeded by presentDialog..., consumed by
+// initMessageBoxMenu once MessageBox1080.swf has loaded, fired by
+// the extint bridge on button press or by the B-back handler as a
+// cancellation. Mirrors console's MessageBoxInfo that
+// UIController::RequestMessageBox stashes when navigating to
+// eUIScene_MessageBox (UIController.cpp:2951-2994).
+//
+// Result codes track C4JStorage::EMessageResult used in every
+// console dialog callback signature. ControlId 0..3 from the
+// MessageBox scene's handlePress map to Accept, Decline, Third,
+// Fourth respectively (UIScene_MessageBox.cpp:120-141). -1 is
+// Cancelled (B press, matches EMessage_Cancelled).
+typedef NS_ENUM(NSInteger, MCLEDialogResult) {
+    MCLEDialogResultCancelled  = -1,
+    MCLEDialogResultAccept     =  0,
+    MCLEDialogResultDecline    =  1,
+    MCLEDialogResultThird      =  2,
+    MCLEDialogResultFourth     =  3,
+};
+typedef void (^MCLEDialogCallback)(MCLEDialogResult result);
+
+@interface MCLEDialogRequest : NSObject
+@property (nonatomic, copy)   NSString* title;
+@property (nonatomic, copy)   NSString* content;
+@property (nonatomic, copy)   NSArray<NSString*>* buttonLabels;  // filled end-first per MessageBox.as:47
+@property (nonatomic, assign) int focusIndex;
+@property (nonatomic, copy)   MCLEDialogCallback callback;
+@end
+@implementation MCLEDialogRequest
+@end
+
+static MCLEDialogRequest* g_pending_dialog = nil;
+
+// Weak-ish ref to the live VC so C-style ExternalInterface bridge
+// callbacks can reach instance methods (navigateBack,
+// finishDialogWithResult:) without plumbing self through the C ABI.
+// Set in viewDidLoad, cleared in viewDidDisappear. The full
+// MinecraftViewController @interface lives further down in this
+// file, but the bridge fn above needs callable method signatures
+// now, so we expose the handful of entry points through a protocol
+// the VC conforms to.
+@protocol MCLEBridgeVCMethods <NSObject>
+- (void)finishDialogWithResult:(MCLEDialogResult)result;
+- (void)navigateBack;
+@end
+static __weak id<MCLEBridgeVCMethods> g_active_vc = nil;
+
 // Maps an (sliderId, rawValue) coming from handleSliderMove in
 // whatever scene g_current_scene_name names, to a pair
 // (mcle_setting index, value to store). Returns -1 if the pair
@@ -250,6 +297,31 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             // press here shouldn't fire, but log it anyway.
             NSLog(@"[leaderboard] entry press idx=%d (online service is a follow-up)",
                   itemId);
+        } else if ([g_current_scene_name isEqualToString:@"MessageBox1080.swf"]) {
+            // MessageBox button press. Mirrors
+            // UIScene_MessageBox::handlePress (UIScene_MessageBox.cpp:120):
+            //   controlId 0 -> EMessage_ResultAccept
+            //   controlId 1 -> EMessage_ResultDecline
+            //   controlId 2 -> EMessage_ResultThirdOption
+            //   controlId 3 -> EMessage_ResultFourthOption
+            // Console then navigates back and fires the callback
+            // with the mapped result. We do the same through the
+            // shared finishDialogWithResult helper. Note that the
+            // handlePress controlId reported here is the button's
+            // id, which initMessageBoxMenu sets to the button's
+            // slot index (0..3) in the authored SWF.
+            MCLEDialogResult r = MCLEDialogResultCancelled;
+            switch (listId) {
+                case 0: r = MCLEDialogResultAccept;   break;
+                case 1: r = MCLEDialogResultDecline;  break;
+                case 2: r = MCLEDialogResultThird;    break;
+                case 3: r = MCLEDialogResultFourth;   break;
+                default: break;
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id<MCLEBridgeVCMethods> vc = g_active_vc;
+                if (vc) [vc finishDialogWithResult:r];
+            });
         } else {
             NSLog(@"[handlePress] scene=%@ list=%d item=%d (unhandled)",
                   g_current_scene_name, listId, itemId);
@@ -272,7 +344,7 @@ extern "C" unsigned long long mcle_swf_total_line_strips(void);
 extern "C" unsigned long long mcle_swf_total_masks(void);
 extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
-@interface MinecraftViewController ()
+@interface MinecraftViewController () <MCLEBridgeVCMethods>
 @property (strong, nonatomic) CADisplayLink* displayLink;
 @property (strong, nonatomic) UILabel* statusLabel;
 @property (strong, nonatomic) MetalView* metalView;
@@ -651,6 +723,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // (e.g. UIScene_SettingsOptionsMenu.cpp:379).
     extern void mcle_ios_settings_event_bridge(const char*, double, double);
     ruffle_ios_set_settings_event_callback(&mcle_ios_settings_event_bridge);
+
+    g_active_vc = self;
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -1554,6 +1628,131 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.menuFocusIndex = 0;
 }
 
+// Present a MessageBox-style dialog overlay. Matches console's
+// UIController::RequestMessageBox flow (UIController.cpp:2951):
+// stash the callback / titles / buttons, navigate to the
+// MessageBox SWF scene, which reads back the stash in its init
+// method and configures the authored scene. Cancel (B) and button
+// presses both fire the callback with the matching result code.
+//
+// buttonLabels is filled END-FIRST so a 2-button dialog is
+// typically ["OK", "Cancel"] (OK = Button2, Cancel = Button3 on
+// the authored SWF). Matches console's UIScene_MessageBox.cpp:26
+// where Button0 is filled last.
+- (void)presentDialogWithTitle:(NSString*)title
+                       content:(NSString*)content
+                       buttons:(NSArray<NSString*>*)buttonLabels
+                    focusIndex:(int)focus
+                      callback:(MCLEDialogCallback)callback
+{
+    if (!buttonLabels.count || buttonLabels.count > 4) {
+        NSLog(@"[dialog] invalid button count %lu", (unsigned long)buttonLabels.count);
+        if (callback) callback(MCLEDialogResultCancelled);
+        return;
+    }
+    MCLEDialogRequest* req = [MCLEDialogRequest new];
+    req.title = title ?: @"";
+    req.content = content ?: @"";
+    req.buttonLabels = buttonLabels;
+    req.focusIndex = focus;
+    req.callback = callback;
+    g_pending_dialog = req;
+
+    [self navigateForwardTo:@"MessageBox1080.swf"];
+}
+
+// Scene init for MessageBox1080.swf. Reads g_pending_dialog,
+// configures the authored scene per UIScene_MessageBox.cpp:5-55:
+//   root.Init(count, focus)   - hides unused buttons, wires nav graph
+//   Title/Content SetLabel
+//   Button3..Button0.Init(label, id) - filled end-first
+//   root.AutoResize()         - resize panel + shift buttons
+- (void)initMessageBoxMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    MCLEDialogRequest* req = g_pending_dialog;
+    if (!req) {
+        NSLog(@"[dialog] MessageBox loaded with no pending request");
+        return;
+    }
+
+    int count = (int)req.buttonLabels.count;
+
+    // Init(count, focusIndex). MessageBox.as Init signature takes
+    // two ints; our helper serialises through a double array.
+    double initArgs[2] = { (double)count, (double)req.focusIndex };
+    const char* initName = "Init";
+    ruffle_ios_call_root_method_numbers(
+        g_ruffle_player,
+        (const uint8_t*)initName, strlen(initName),
+        initArgs, 2);
+
+    // Seed Title and Content labels. FJ_Label.SetLabel sets
+    // m_bInitialised itself so no separate Init call needed.
+    struct LabelSeed { const char* name; const char* text; };
+    LabelSeed labels[] = {
+        { "Title",   [req.title UTF8String] },
+        { "Content", [req.content UTF8String] },
+    };
+    for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); ++i) {
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)labels[i].name, strlen(labels[i].name),
+            (const uint8_t*)"SetLabel", 8,
+            (const uint8_t*)labels[i].text, strlen(labels[i].text),
+            0.0);
+    }
+
+    // Fill buttons from the END (Button3 first, then 2, 1, 0). See
+    // UIScene_MessageBox.cpp:23-39 for the same iteration shape.
+    // Button ids match their position in the authored SWF so the
+    // handlePress controlId we receive lines up with the button
+    // the user pressed.
+    int buttonIndex = 0;
+    NSArray<NSString*>* buttonNames = @[@"Button0", @"Button1", @"Button2", @"Button3"];
+    for (int slot = 4 - count; slot < 4; ++slot) {
+        NSString* label = req.buttonLabels[buttonIndex];
+        const char* n = [buttonNames[slot] UTF8String];
+        const char* l = [label UTF8String];
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)n, strlen(n),
+            (const uint8_t*)"Init", 4,
+            (const uint8_t*)l, strlen(l),
+            (double)slot);
+        ++buttonIndex;
+    }
+
+    // Root.AutoResize() - 0-arg.
+    const char* resize = "AutoResize";
+    ruffle_ios_call_root_method_numbers(
+        g_ruffle_player,
+        (const uint8_t*)resize, strlen(resize),
+        NULL, 0);
+
+    // MessageBox's own Init() sets m_bAutoFocusEnabled=false and
+    // picks the focus button itself (MessageBox.as:49-114), so
+    // don't call SetFocus(-1) here - it would override the
+    // focus the scene just placed on the requested button.
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// Fire the pending dialog's callback with a result and pop the
+// MessageBox scene off the back stack. Shared by the handlePress
+// route (for button presses) and the B-back handler (for
+// cancellation).
+- (void)finishDialogWithResult:(MCLEDialogResult)result {
+    MCLEDialogRequest* req = g_pending_dialog;
+    g_pending_dialog = nil;
+    [self navigateBack];
+    if (req && req.callback) req.callback(result);
+}
+
 // Forward navigation: push the current menu + its focus index onto
 // the back stack before swapping to the new one, so a later B-press
 // returns here with the same button highlighted. Mirrors how console
@@ -1678,6 +1877,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initDLCMainMenu];
         } else if ([swfName isEqualToString:@"SkinSelectMenu1080.swf"]) {
             [self initSkinSelectMenu];
+        } else if ([swfName isEqualToString:@"MessageBox1080.swf"]) {
+            [self initMessageBoxMenu];
         }
 
         // Per-scene scenery visibility. Console drives this per
@@ -1703,6 +1904,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             @"DLCMainMenu1080.swf",
             @"CreateWorldMenu1080.swf",
             @"LaunchMoreOptionsMenu1080.swf",
+            // MessageBox has its own BackgroundPanel that covers
+            // the logo area. Matches UIScene_MessageBox.cpp:49
+            // calling addComponent(eUIComponent_MenuBackground)
+            // which console uses to dim the scene behind the box;
+            // we just hide the logo since we don't have the dim
+            // effect yet.
+            @"MessageBox1080.swf",
         ]];
         int logoVisible = [logoOff containsObject:swfName] ? 0 : 1;
         // Logo is depth 101 on our stage (see attachMenuScenery).
@@ -1920,16 +2128,27 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                             case 4: target = @"SettingsGraphicsMenu1080.swf"; break;
                             case 5: target = @"SettingsUIMenu1080.swf"; break;
                             case 6:
-                                mcle_settings_reset_to_defaults();
-                                // Audio is the one setting that's
-                                // live-applied, so push it through
-                                // immediately. Everything else is
-                                // read from the store next time the
-                                // relevant scene opens.
-                                mcle_audio_set_music_volume(
-                                    mcle_settings_get(MCLE_SETTING_MusicVolume));
-                                mcle_audio_set_sfx_volume(
-                                    mcle_settings_get(MCLE_SETTING_SoundFXVolume));
+                                // Console opens a confirm dialog
+                                // ("Reset to default settings?") before
+                                // applying. We drive that same path
+                                // through presentDialogWithTitle:...:
+                                // and only run the reset on Accept.
+                                [self presentDialogWithTitle:@"Reset to Defaults"
+                                                     content:@"This will reset every setting to its default value. Continue?"
+                                                     buttons:@[@"OK", @"Cancel"]
+                                                  focusIndex:1
+                                                    callback:^(MCLEDialogResult r) {
+                                    if (r == MCLEDialogResultAccept) {
+                                        mcle_settings_reset_to_defaults();
+                                        // Audio is the one setting
+                                        // that's live-applied, so
+                                        // push it through immediately.
+                                        mcle_audio_set_music_volume(
+                                            mcle_settings_get(MCLE_SETTING_MusicVolume));
+                                        mcle_audio_set_sfx_volume(
+                                            mcle_settings_get(MCLE_SETTING_SoundFXVolume));
+                                    }
+                                }];
                                 break;
                         }
                         if (target) [self navigateForwardTo:target];
@@ -1938,14 +2157,23 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             }
             // B button (code=1, mask 0x00000002) -> back to MainMenu when
             // we're on any non-MainMenu scene. Mirrors the console's
-            // "Cancel" handler on submenus.
+            // "Cancel" handler on submenus. When a MessageBox dialog is
+            // up, route B through finishDialogWithResult: so the
+            // caller's callback fires with Cancelled before we pop,
+            // matching UIScene_MessageBox::handleInput
+            // (UIScene_MessageBox.cpp:99-105).
             if ((pressedNow & 0x00000002u)
                 && ![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
                 NSLog(@"[MinecraftVC] back from %@ (stack depth %lu)",
                       self.currentMenuSwf,
                       (unsigned long)self.menuStack.count);
                 mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
-                [self navigateBack];
+                if ([self.currentMenuSwf isEqualToString:@"MessageBox1080.swf"]
+                    && g_pending_dialog) {
+                    [self finishDialogWithResult:MCLEDialogResultCancelled];
+                } else {
+                    [self navigateBack];
+                }
             }
         }
 

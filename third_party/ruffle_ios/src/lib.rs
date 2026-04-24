@@ -738,6 +738,39 @@ pub unsafe extern "C" fn ruffle_ios_clear_focus(raw: *mut PlayerHandle) {
     p.clear_focus();
 }
 
+/// Generic: call a root-level AS3 method with zero or more number
+/// args. Wrapper around Player::call_root_method_numbers. Used by
+/// the MessageBox scene for Init(count, focus) and AutoResize().
+/// `args_ptr` / `args_len` describe a contiguous array of doubles.
+/// Returns 1 ok, 0 bad args, -1 lock fail, -2 call fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_root_method_numbers(
+    raw: *mut PlayerHandle,
+    method_ptr: *const u8,
+    method_len: usize,
+    args_ptr: *const f64,
+    args_len: usize,
+) -> c_int {
+    if raw.is_null() || method_ptr.is_null() || method_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let method = match std::str::from_utf8(
+        std::slice::from_raw_parts(method_ptr, method_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let args: &[f64] = if args_ptr.is_null() || args_len == 0 {
+        &[]
+    } else {
+        std::slice::from_raw_parts(args_ptr, args_len)
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_root_method_numbers(method, args);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_root_method_numbers('{}', args={:?}) -> {}",
+        method, args, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 /// Call SetFocus(id) on the root SWF's document class. Wrapper
 /// around Player::call_root_method_number("SetFocus", id). Matches
 /// console's UIScene::gainFocus path (UIScene.cpp:1003-1012) and
