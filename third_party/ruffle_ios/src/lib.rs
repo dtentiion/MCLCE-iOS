@@ -738,6 +738,124 @@ pub unsafe extern "C" fn ruffle_ios_clear_focus(raw: *mut PlayerHandle) {
     p.clear_focus();
 }
 
+/// Remove the stage sibling at `depth`. Used by the dialog
+/// overlay path on dismiss so MessageBox1080.swf's AS3 listeners
+/// get torn down cleanly. Returns 1 if a sibling existed at that
+/// depth, 0 if none, -1 on lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_remove_sibling_at_depth(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let found = p.remove_sibling_at_depth(depth);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] remove_sibling_at_depth(depth={}) -> {}",
+        depth, found
+    ));
+    if found { 1 } else { 0 }
+}
+
+/// Call a zero-or-more-number-arg AS3 method on the document
+/// class of the SWF at the given stage depth. Sibling-targeted
+/// version of ruffle_ios_call_root_method_numbers.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_method_on_sibling_root(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    method_ptr: *const u8,
+    method_len: usize,
+    args_ptr: *const f64,
+    args_len: usize,
+) -> c_int {
+    if raw.is_null() || method_ptr.is_null() || method_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let method = match std::str::from_utf8(
+        std::slice::from_raw_parts(method_ptr, method_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let args: &[f64] = if args_ptr.is_null() || args_len == 0 {
+        &[]
+    } else {
+        std::slice::from_raw_parts(args_ptr, args_len)
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_method_on_sibling_root(depth, method, args);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_method_on_sibling_root(depth={}, '{}', args={:?}) -> {}",
+        depth, method, args, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// Call a method on a named descendant of the SWF at the given
+/// stage depth. Sibling-targeted version of
+/// ruffle_ios_call_init_on_named_child with the same method-shape
+/// selection (SetLabel, ChangeState, HideUntilInit, default Init).
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_init_on_sibling_child(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+    method_ptr: *const u8,
+    method_len: usize,
+    label_ptr: *const u8,
+    label_len: usize,
+    id: f64,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    if method_ptr.is_null() || method_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let method = match std::str::from_utf8(
+        std::slice::from_raw_parts(method_ptr, method_len)
+    ) { Ok(s) => s, Err(_) => return 0 };
+    let label = if label_ptr.is_null() || label_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_init_on_sibling_child(depth, child_name, method, label, id);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_init_on_sibling_child(depth={}, '{}', '{}', '{}', {}) -> {}",
+        depth, child_name, method, label, id, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// Set stage focus to a named direct child of the SWF at the
+/// given stage depth. Sibling version of
+/// ruffle_ios_focus_named_child.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_focus_to_sibling_child(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    child_name_ptr: *const u8,
+    child_name_len: usize,
+) -> c_int {
+    if raw.is_null() || child_name_ptr.is_null() || child_name_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let child_name = match std::str::from_utf8(
+        std::slice::from_raw_parts(child_name_ptr, child_name_len)
+    ) { Ok(s) => s.to_string(), Err(_) => return 0 };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let ok = p.set_focus_to_sibling_child(depth, &child_name);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] set_focus_to_sibling_child(depth={}, '{}') -> {}",
+        depth, child_name, ok
+    ));
+    if ok { 1 } else { -2 }
+}
+
 /// Generic: call a root-level AS3 method with zero or more number
 /// args. Wrapper around Player::call_root_method_numbers. Used by
 /// the MessageBox scene for Init(count, focus) and AutoResize().
