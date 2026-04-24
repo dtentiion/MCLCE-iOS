@@ -1737,11 +1737,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             0.0);
     }
 
-    // Fill buttons from the END (Button3 first, then 2, 1, 0). See
-    // UIScene_MessageBox.cpp:23-39 for the same iteration shape.
-    // Button ids match their position in the authored SWF so the
-    // handlePress controlId we receive lines up with the button
-    // the user pressed.
+    // Fill buttons. Matches UIScene_MessageBox.cpp:23-39: the
+    // authored slots (Button0..Button3) are filled from the END
+    // for lower button counts, but the id passed to FJ_Button.Init
+    // is the sequence counter (0 for the first visible button,
+    // 1 for the next, etc.) NOT the authored slot index. That is
+    // what ties into handlePress's controlId -> result mapping
+    // (MessageBox.cpp:120-141 case 0 = Accept, 1 = Decline, etc.)
+    // so that a 2-button OK/Cancel dialog returns Accept for OK.
     int buttonIndex = 0;
     NSArray<NSString*>* buttonNames = @[@"Button0", @"Button1", @"Button2", @"Button3"];
     for (int slot = 4 - count; slot < 4; ++slot) {
@@ -1753,7 +1756,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)n, strlen(n),
             (const uint8_t*)"Init", 4,
             (const uint8_t*)l, strlen(l),
-            (double)slot);
+            (double)buttonIndex);
         ++buttonIndex;
     }
 
