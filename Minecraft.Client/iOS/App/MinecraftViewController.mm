@@ -942,10 +942,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         (const uint8_t*)"", 0,
         0.0);
 
-    const char* firstCtl = "ViewBob";
-    ruffle_ios_focus_named_child(
-        g_ruffle_player,
-        (const uint8_t*)firstCtl, strlen(firstCtl));
+    // Mirror console's UIScene::gainFocus first-focus path
+    // (UIScene.cpp:1003-1012): call SWF SetFocus(-1) so
+    // FJ_Document.SetFocus picks the authored tabIndex==1 child
+    // and fires handleInitFocus via ExternalInterface.
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
     // menuButtonConfig stays unset for this scene so the DPad state
     // machine doesn't fight the SWF's internal focus handling
@@ -987,10 +988,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"cur"] intValue]);
     }
 
-    const char* firstCtl = "Music";
-    ruffle_ios_focus_named_child(
-        g_ruffle_player,
-        (const uint8_t*)firstCtl, strlen(firstCtl));
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
@@ -1029,10 +1027,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"cur"] intValue]);
     }
 
-    const char* firstCtl = "SensitivityInGame";
-    ruffle_ios_focus_named_child(
-        g_ruffle_player,
-        (const uint8_t*)firstCtl, strlen(firstCtl));
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
@@ -1104,10 +1099,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"cur"] intValue]);
     }
 
-    const char* firstCtl = "Clouds";
-    ruffle_ios_focus_named_child(
-        g_ruffle_player,
-        (const uint8_t*)firstCtl, strlen(firstCtl));
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
@@ -1166,10 +1158,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [s[@"cur"] intValue]);
     }
 
-    const char* firstCtl = "DisplayHUD";
-    ruffle_ios_focus_named_child(
-        g_ruffle_player,
-        (const uint8_t*)firstCtl, strlen(firstCtl));
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
@@ -1244,8 +1233,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                      [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
     // Clear AS3 stage focus so the previous scene's focus highlight
     // doesn't paint on top of the new scene. Settings scenes call
-    // ruffle_ios_focus_named_child inside their init methods to
-    // re-establish a scene-local focus.
+    // SWF SetFocus(-1) via ruffle_ios_call_root_set_focus inside
+    // their init methods to re-establish a scene-local focus,
+    // matching console's UIScene::gainFocus path.
     ruffle_ios_clear_focus(g_ruffle_player);
 
     // Snapshot panorama/logo/tooltips matrices before the whole
