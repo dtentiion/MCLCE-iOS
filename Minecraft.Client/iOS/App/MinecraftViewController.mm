@@ -237,6 +237,19 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             // pressing a topic just logs which one.
             NSLog(@"[howtoplay] topic press idx=%d (topic scenes are a follow-up)",
                   itemId);
+        } else if ([g_current_scene_name isEqualToString:@"DLCMainMenu1080.swf"]) {
+            // Console's UIScene_DLCMainMenu::handlePress opens
+            // DLCOffersMenu for the selected offer category. Not
+            // wired until the store backend lands.
+            NSLog(@"[dlcmain] offer press idx=%d (store backend is a follow-up)",
+                  itemId);
+        } else if ([g_current_scene_name isEqualToString:@"LeaderboardMenu1080.swf"]) {
+            // FJ_LeaderboardList is native-driven on console
+            // (UIControl_LeaderboardList customDraw + per-row
+            // selection). We don't populate the list yet so a
+            // press here shouldn't fire, but log it anyway.
+            NSLog(@"[leaderboard] entry press idx=%d (online service is a follow-up)",
+                  itemId);
         } else {
             NSLog(@"[handlePress] scene=%@ list=%d item=%d (unhandled)",
                   g_current_scene_name, listId, itemId);
@@ -1406,6 +1419,141 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     [self applyMenuButtonConfig:cfg];
 }
 
+// Ports UIScene_LeaderboardsMenu constructor
+// (Common/UI/UIScene_LeaderboardsMenu.cpp:120-160). The scene has
+// one specialized FJ_LeaderboardList named "Gamers" plus four
+// labels (Filter, Leaderboard, Entries, Info). Console populates
+// the list via network reads against Xbox Live / PSN; we have no
+// online service wired yet, so the list stays empty and the Info
+// label carries the "offline" copy instead of an empty panel.
+- (void)initLeaderboardMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    // Header labels. Console fills these from IDS_FILTER / IDS_
+    // LEADERBOARD / IDS_ENTRIES / IDS_LEADERBOARDS_NOT_AVAILABLE
+    // (see SetLeaderboardHeader in UIScene_LeaderboardsMenu.cpp).
+    // Human-readable copy for now; swap for the real string table
+    // values once the localisation pass lands.
+    struct LabelSeed { const char* name; const char* text; };
+    LabelSeed labels[] = {
+        { "Filter",      "Filter: All Players" },
+        { "Leaderboard", "Leaderboard: Kills" },
+        { "Entries",     "Entries" },
+        { "Info",        "Leaderboards are not available on this platform yet." },
+    };
+    for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); ++i) {
+        ruffle_ios_call_init_on_named_child(
+            g_ruffle_player,
+            (const uint8_t*)labels[i].name, strlen(labels[i].name),
+            (const uint8_t*)"SetLabel", 8,
+            (const uint8_t*)labels[i].text, strlen(labels[i].text),
+            0.0);
+    }
+
+    // FJ_LeaderboardList driven from native (UIControl_LeaderboardList
+    // on console uses customDraw and column feeds via handleSelection
+    // ChangedRS). Our FFI doesn't cover that pathway yet, so we skip
+    // initialising it. Effect: Gamers widget shows its authored
+    // empty state, which is the same thing console displays before
+    // the first network read completes.
+
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// Ports UIScene_DLCMainMenu constructor
+// (Common/UI/UIScene_DLCMainMenu.cpp:25-70). One FJ_ButtonList_List
+// named "OffersList" (eControl_OffersList = 0) plus OffersList_Title
+// label. Console populates the list from a DLC offer query against
+// the platform store (Xbox Live, PSN, etc.). Without a store
+// backend we leave the list empty and seed the title + a "store
+// not available" hint through the title label.
+- (void)initDLCMainMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    const char* list = "OffersList";
+    ruffle_ios_call_list_init(g_ruffle_player,
+        (const uint8_t*)list, strlen(list), 0.0);
+    ruffle_ios_call_list_remove_all(g_ruffle_player,
+        (const uint8_t*)list, strlen(list));
+
+    // FJ_ButtonList_List takes the 2-arg addNewItem shape (same as
+    // FJ_ButtonList_Menu, see FJ_ButtonList_List.as:18). Seed a
+    // single placeholder so the list widget has at least one
+    // focusable row; pressing it just logs for now.
+    const char* placeholder = "Store not available yet";
+    ruffle_ios_call_list_add_menu_item(
+        g_ruffle_player,
+        (const uint8_t*)list, strlen(list),
+        (const uint8_t*)placeholder, strlen(placeholder),
+        0.0);
+
+    const char* titleName = "OffersList_Title";
+    const char* titleText = "Downloadable Content";
+    ruffle_ios_call_init_on_named_child(
+        g_ruffle_player,
+        (const uint8_t*)titleName, strlen(titleName),
+        (const uint8_t*)"SetLabel", 8,
+        (const uint8_t*)titleText, strlen(titleText),
+        0.0);
+
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// Ports UIScene_SkinSelectMenu constructor
+// (Common/UI/UIScene_SkinSelectMenu.cpp). No list widget - a
+// carousel of 9 UIControl_PlayerSkinPreview slots (eCharacter_
+// Current + 4 on each side) wrapped in "IggyCharacters". Console
+// renders per-pack skin thumbnails via custom draw and swaps the
+// centre preview as you navigate. Without DLC texture loading and
+// the skin registry wired, none of that renders yet. For this
+// skeleton we seed the SkinNamePlate labels and the "Selected"
+// pill so the scene has readable text instead of authoring-time
+// "FJ_Label_Black" placeholders. Logo is already hidden by the
+// scene-transition dispatcher (SkinSelectMenu1080.swf is in the
+// logo-off set matching UIScene_SkinSelectMenu.cpp:143).
+- (void)initSkinSelectMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    [self attachMenuScenery];
+
+    // SkinNamePlate.SkinTitle1 / SkinTitle2 are nested labels on
+    // the name-plate movieclip. call_init_on_named_child walks
+    // root children only, not grand-children, so this targets the
+    // top-level SkinNamePlate clip and uses SetLabel there. If
+    // SkinNamePlate exposes its own Init we can switch once the
+    // label seeds prove the skeleton is reachable.
+    const char* namePlate = "SkinNamePlate";
+    const char* selectedPanel = "SelectedPanel";
+    ruffle_ios_call_init_on_named_child(
+        g_ruffle_player,
+        (const uint8_t*)namePlate, strlen(namePlate),
+        (const uint8_t*)"SetLabel", 8,
+        (const uint8_t*)"Default Skin", strlen("Default Skin"),
+        0.0);
+    ruffle_ios_call_init_on_named_child(
+        g_ruffle_player,
+        (const uint8_t*)selectedPanel, strlen(selectedPanel),
+        (const uint8_t*)"SetLabel", 8,
+        (const uint8_t*)"Selected", strlen("Selected"),
+        0.0);
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
 // Forward navigation: push the current menu + its focus index onto
 // the back stack before swapping to the new one, so a later B-press
 // returns here with the same button highlighted. Mirrors how console
@@ -1524,6 +1672,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initLoadOrJoinMenu];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
+        } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
+            [self initLeaderboardMenu];
+        } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
+            [self initDLCMainMenu];
+        } else if ([swfName isEqualToString:@"SkinSelectMenu1080.swf"]) {
+            [self initSkinSelectMenu];
         }
 
         // Per-scene scenery visibility. Console drives this per
