@@ -42,13 +42,18 @@ If your device is on an iOS version TrollStore supports (15.0 to 16.6.1, plus a 
 The app cannot ship Minecraft content because it is copyrighted by Mojang. You provide your own:
 
 1. On a PC, extract `MediaWindows64.arc` from your LCE install using [PCK Studio](https://github.com/LCERD/PCK-Studio) or our bundled `scripts/list-arc.py` helper.
-2. The SWF you want is **`MainMenu1080.swf`** (about 14 KB). Copy it somewhere accessible to your iPhone: iCloud Drive, AirDrop, or email.
+2. Copy every `.swf` from the extracted folder into a single directory. The app will look for them by name. The ones the menu tree currently uses include:
+   - `MainMenu1080.swf`, `HelpAndOptionsMenu1080.swf`, `SettingsMenu1080.swf`
+   - All five `Settings*Menu1080.swf` (Options, Audio, Control, Graphics, UI)
+   - `LoadOrJoinMenu1080.swf`, `HowToPlayMenu1080.swf`, `LeaderboardMenu1080.swf`, `DLCMainMenu1080.swf`, `SkinSelectMenu1080.swf`
+   - `MessageBox1080.swf`, `MenuBackground1080.swf`, `Panorama1080.swf`, `ToolTips1080.swf`, `ComponentLogo1080.swf`
+   - The base skin set: `skinHD.swf`, `skinHDGraphics.swf`, `skinHDLabels.swf`, plus `skinHDWin.swf` (this last one is what the controller-button tooltip glyphs come from on the Windows64 dump; the app aliases it as `platformskinHD.swf` automatically on first launch).
 3. On the iPhone, open the **Files** app.
 4. Navigate to **On My iPhone** then the **Minecraft LCE** folder (the app creates it the first time you launch).
-5. Drop `MainMenu1080.swf` in.
-6. Relaunch the app. It looks in this folder on startup and plays whatever SWF you put there, preferring `MainMenu1080.swf` if it exists.
+5. Drop the SWFs in.
+6. Relaunch the app. It looks in this folder on startup and uses whatever it finds.
 
-Without a user-supplied SWF the app falls back to the tiny test rectangle movie bundled for diagnostics.
+Missing SWFs degrade gracefully: a missing `Panorama1080.swf` just leaves the menu background blank, missing `ToolTips1080.swf` hides the bottom hint strip, etc. The minimum to see anything is `MainMenu1080.swf`.
 
 ## After the first install: enable Developer Mode
 
