@@ -346,6 +346,14 @@ int           ruffle_ios_call_list_add_menu_item(PlayerHandle* h,
 int           ruffle_ios_call_list_remove_all(PlayerHandle* h,
                                               const uint8_t* child_name, size_t child_name_len);
 
+// Toggle a stage-level sibling SWF (Panorama at -1, Tooltips at
+// 100, Logo at 101) on or off. Mirrors console's per-scene
+// UILayer::showComponent(eUIComponent_Logo / _Panorama, bool) in
+// updateComponents(). Returns 1 if a sibling at the given depth
+// was found, 0 if none, -1 on lock fail.
+int           ruffle_ios_set_xui_sibling_visible_at_depth(PlayerHandle* h,
+                                                          int depth, int visible);
+
 // Register a callback that fires when LCE AS3 reports a setting
 // change via ExternalInterface. The two method names currently
 // routed are "handleCheckboxToggled" (id=control id, value=1.0 for
