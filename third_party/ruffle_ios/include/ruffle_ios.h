@@ -308,6 +308,15 @@ int           ruffle_ios_focus_named_child(PlayerHandle* h,
 // -2 call failed.
 int           ruffle_ios_call_root_set_focus(PlayerHandle* h, double id);
 
+// Generic: call an AS3 method on the root SWF's document class
+// with zero or more number args. Matches console's
+// IggyPlayerCallMethodRS with an IGGY_DATATYPE_number array
+// shape. Used by the MessageBox overlay scene for Init(count,
+// focus) and AutoResize().
+int           ruffle_ios_call_root_method_numbers(PlayerHandle* h,
+                                                  const uint8_t* method, size_t method_len,
+                                                  const double* args, size_t args_len);
+
 // --- FJ_ButtonList / FJ_ButtonList_ListIconLeft widget calls ---
 // Dynamic list widget used by LoadOrJoinMenu (SavesList/JoinList),
 // HowToPlayMenu, LeaderboardMenu, DLCMainMenu, and SkinSelectMenu.
