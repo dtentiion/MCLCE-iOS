@@ -759,6 +759,36 @@ pub unsafe extern "C" fn ruffle_ios_remove_sibling_at_depth(
     if found { 1 } else { 0 }
 }
 
+/// Call ToolTips1080's SetToolTip(int, String, Boolean) on the
+/// sibling at `depth`. Used per-scene to seed the bottom-strip
+/// tooltip slots (Select / Back / etc.). Returns 1 ok, 0 bad
+/// args, -1 lock fail, -2 call fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_set_tooltip(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    button_id: c_int,
+    label_ptr: *const u8,
+    label_len: usize,
+    show: c_int,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let label = if label_ptr.is_null() || label_len == 0 { "" } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(label_ptr, label_len)) {
+            Ok(s) => s, Err(_) => return 0,
+        }
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_set_tooltip(depth, button_id, label, show != 0);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_set_tooltip(depth={}, btn={}, '{}', show={}) -> {}",
+        depth, button_id, label, show != 0, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
 /// Call a zero-or-more-number-arg AS3 method on the document
 /// class of the SWF at the given stage depth. Sibling-targeted
 /// version of ruffle_ios_call_root_method_numbers.
