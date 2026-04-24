@@ -1525,6 +1525,35 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         }
+
+        // Per-scene scenery visibility. Console drives this per
+        // scene via updateComponents() calling
+        // UILayer::showComponent(eUIComponent_Logo / _Panorama, bool)
+        // (UILayer.cpp:544+). A table here mirrors the source-side
+        // decisions. Scenes not listed keep the default (Logo on,
+        // Panorama on) so MainMenu / HelpAndOptions / LoadOrJoin /
+        // HowToPlay / Settings all look right without per-scene
+        // changes. The logo-off list matches which scenes pass
+        // false to showComponent for eUIComponent_Logo in their
+        // updateComponents() implementations:
+        //   SkinSelectMenu.cpp:143
+        //   LeaderboardsMenu.cpp:150
+        //   CreateWorldMenu.cpp:263
+        //   LaunchMoreOptionsMenu.cpp:201
+        // DLCMainMenu also wants logo off once wired (its panel
+        // covers the full upper half of the screen).
+        NSSet<NSString*>* logoOff = [NSSet setWithArray:@[
+            @"SkinSelectMenu1080.swf",
+            @"LeaderboardMenu1080.swf",
+            @"LeaderboardsMenu1080.swf",
+            @"DLCMainMenu1080.swf",
+            @"CreateWorldMenu1080.swf",
+            @"LaunchMoreOptionsMenu1080.swf",
+        ]];
+        int logoVisible = [logoOff containsObject:swfName] ? 0 : 1;
+        // Logo is depth 101 on our stage (see attachMenuScenery).
+        ruffle_ios_set_xui_sibling_visible_at_depth(
+            g_ruffle_player, 101, logoVisible);
         // Dump the new menu's root children so we know what buttons/
         // named instances to drive next. Labels aren't Init'd yet for
         // non-MainMenu scenes; that's a per-scene string table follow-up.

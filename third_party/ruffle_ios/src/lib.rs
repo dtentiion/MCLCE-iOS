@@ -948,6 +948,30 @@ pub unsafe extern "C" fn ruffle_ios_call_list_add_menu_item(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// Toggle the visibility of the stage-level sibling SWF at the
+/// given depth (Panorama / Logo / Tooltips). Mirrors console's
+/// UILayer::showComponent path (UILayer.cpp:544+) that each scene's
+/// updateComponents() calls to opt each scenery component in or out.
+/// Returns 1 if a sibling at that depth was found and toggled, 0 if
+/// no sibling existed at that depth, -1 on lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_xui_sibling_visible_at_depth(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    visible: c_int,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let found = p.set_xui_sibling_visible_at_depth(depth, visible != 0);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] set_xui_sibling_visible_at_depth(depth={}, visible={}) -> {}",
+        depth, visible != 0, found
+    ));
+    if found { 1 } else { 0 }
+}
+
 /// removeAllItems() on an FJ_ButtonList child. Wrapper around
 /// Player::call_list_remove_all. Mirrors
 /// UIControl_ButtonList::clearList (UIControl_ButtonList.cpp:60-66).
