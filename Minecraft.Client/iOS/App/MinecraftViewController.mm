@@ -1729,6 +1729,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         return;
     }
 
+    // Let the sibling SWF's async imports settle and its
+    // document class construct before we call methods on it.
+    // Matches the 30-headless-tick burst transitionToMenuNamed
+    // uses after replace_root_movie (~500 ms of player time)
+    // so any skinHDGraphics / skinHD imports land before Init
+    // runs. Without this, call_method_on_sibling_root fires
+    // before context.library_for_movie has resolved the class
+    // and errors with 'sibling has no avm2 object'.
+    for (int i = 0; i < 30; ++i) {
+        ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
+    }
+
     // Populate the sibling. Same AS3 call shape as the old scene-
     // swap initMessageBoxMenu but targeting the sibling's root
     // instead of the stage root.
