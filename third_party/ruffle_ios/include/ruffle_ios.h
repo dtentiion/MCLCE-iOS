@@ -297,6 +297,17 @@ void          ruffle_ios_suppress_auto_focus_highlight(PlayerHandle* h, int supp
 int           ruffle_ios_focus_named_child(PlayerHandle* h,
                                            const uint8_t* name, size_t name_len);
 
+// Call SetFocus(id) on the root SWF's document class. Mirrors
+// console's UIScene::gainFocus calling the SWF's SetFocus via
+// IggyPlayerCallMethodRS with a single number arg. Pass id=-1
+// for the auto-focus path (FJ_Document.SetFocus picks the child
+// with tabIndex == 1 and fires handleInitFocus via extint).
+// Prefer this over ruffle_ios_focus_named_child for scene-entry
+// focus so the authored tabIndex decides and the SWF fires its
+// init-focus event. Returns 1 ok, 0 bad args, -1 lock fail,
+// -2 call failed.
+int           ruffle_ios_call_root_set_focus(PlayerHandle* h, double id);
+
 // Register a callback that fires when LCE AS3 reports a setting
 // change via ExternalInterface. The two method names currently
 // routed are "handleCheckboxToggled" (id=control id, value=1.0 for
