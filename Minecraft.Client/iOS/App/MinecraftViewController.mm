@@ -1276,7 +1276,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // thumbnails / session discovery; with neither wired up on
     // iOS the spinning timer art just sits there looking like a
     // bug. Revisit when the corresponding backends land.
-    for (const char* timer : { "SavesTimer", "JoinTimer" }) {
+    const char* kTimers[] = { "SavesTimer", "JoinTimer" };
+    for (size_t i = 0; i < sizeof(kTimers) / sizeof(kTimers[0]); ++i) {
+        const char* timer = kTimers[i];
         ruffle_ios_set_root_child_visible(
             g_ruffle_player,
             (const uint8_t*)timer, strlen(timer),
