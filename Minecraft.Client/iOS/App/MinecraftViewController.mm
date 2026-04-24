@@ -420,9 +420,61 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     return [[NSBundle mainBundle] pathForResource:@"test_rect" ofType:@"swf"];
 }
 
+// Mirror console's UIController::loadSkin aliasing (UIController.cpp
+// 540-611), where the platform-specific Windows skin SWF
+// (skinHDWin.swf) is loaded under the alias platformskinHD.swf so
+// scene SWFs that reference platformskinHD.swf find the actual
+// file. Per-platform variants exist (skinHDDurango on XB1,
+// skinHDOrbis on PS4, skinHDWin on Windows64). For iOS we fall
+// back to the Windows64 variant since that is what the
+// MediaWindows64.arc dump in INSTALL.md walks the user through
+// extracting.
+//
+// Symlinks aren't allowed inside the app sandbox without
+// entitlements, so make a real copy. Only runs once: skips if
+// the alias name already exists.
++ (void)installPlatformSkinAliasIfNeeded {
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    if (!docs) return;
+    NSFileManager* fm = NSFileManager.defaultManager;
+    struct AliasPair { NSString* alias; NSArray<NSString*>* sources; };
+    AliasPair pairs[] = {
+        { @"platformskinHD.swf", @[ @"skinHDWin.swf", @"skinHDDurango.swf",
+                                    @"skinHDOrbis.swf", @"skinHDWiiU.swf" ] },
+        { @"platformskin.swf",   @[ @"skinWin.swf", @"skinPS3.swf",
+                                    @"skinVita.swf" ] },
+    };
+    for (size_t i = 0; i < sizeof(pairs) / sizeof(pairs[0]); ++i) {
+        NSString* aliasPath = [docs stringByAppendingPathComponent:pairs[i].alias];
+        if ([fm fileExistsAtPath:aliasPath]) continue;
+        for (NSString* candidate in pairs[i].sources) {
+            NSString* srcPath = [docs stringByAppendingPathComponent:candidate];
+            if ([fm fileExistsAtPath:srcPath]) {
+                NSError* err = nil;
+                if ([fm copyItemAtPath:srcPath toPath:aliasPath error:&err]) {
+                    NSLog(@"[platformskin] aliased %@ -> %@",
+                          candidate, pairs[i].alias);
+                } else {
+                    NSLog(@"[platformskin] copy %@ -> %@ failed: %@",
+                          candidate, pairs[i].alias, err);
+                }
+                break;
+            }
+        }
+    }
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.blackColor;
+
+    // Lay down the platform-skin alias before any SWF parses
+    // imports. Without this, ToolTips1080.swf (and any other
+    // 1080p scene that imports platformskinHD.swf) 404s on the
+    // imports for controller-button glyphs and the icons stay
+    // blank.
+    [MinecraftViewController installPlatformSkinAliasIfNeeded];
 
     CGRect frame = self.view.bounds;
 
