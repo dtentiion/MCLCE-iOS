@@ -946,6 +946,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // regular menu tree.
         ruffle_ios_set_xui_sibling_visible_at_depth(
             g_ruffle_player, -1, 0);
+
+        // Tick the player a few frames so each sibling SWF's
+        // ADDED_TO_STAGE event fires and its FJ_Document.init
+        // runs (m_aToolTips array gets built etc.). Without this,
+        // the very first seedTooltipsForScene call after
+        // attachMenuScenery hits a Tooltips sibling whose init
+        // hasn't run yet, SetToolTip silently no-ops on the
+        // half-constructed clip, and the bottom-strip stays empty
+        // until the next scene transition lets init catch up.
+        // Subsequent scene transitions are fine because the
+        // sibling's already constructed by then.
+        for (int i = 0; i < 10; ++i) {
+            ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
+        }
     }
 }
 
