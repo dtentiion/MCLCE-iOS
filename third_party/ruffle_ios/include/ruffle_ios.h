@@ -317,6 +317,42 @@ int           ruffle_ios_call_root_method_numbers(PlayerHandle* h,
                                                   const uint8_t* method, size_t method_len,
                                                   const double* args, size_t args_len);
 
+// --- Sibling-targeted variants (dialog overlay path) ---
+// When a SWF is attached as a stage sibling via
+// ruffle_ios_add_sibling_swf_to_root, these helpers let the host
+// drive AS3 on it without the sibling needing to be the root
+// scene. Used for the MessageBox overlay so the underlying scene
+// stays alive beneath.
+
+// Remove the stage sibling at `depth`. Returns 1 if one existed,
+// 0 if none, -1 on lock fail.
+int           ruffle_ios_remove_sibling_at_depth(PlayerHandle* h, int depth);
+
+// Call an AS3 method on the document class of the sibling SWF
+// at the given depth, with zero or more number args.
+int           ruffle_ios_call_method_on_sibling_root(PlayerHandle* h,
+                                                     int depth,
+                                                     const uint8_t* method, size_t method_len,
+                                                     const double* args, size_t args_len);
+
+// Call Init / SetLabel / ChangeState / etc. on a named descendant
+// of the sibling at the given depth. Method-shape selection
+// matches ruffle_ios_call_init_on_named_child (SetLabel = 1
+// string arg, ChangeState = 1 int, default = 2 args (label, id)).
+int           ruffle_ios_call_init_on_sibling_child(PlayerHandle* h,
+                                                    int depth,
+                                                    const uint8_t* child_name, size_t child_name_len,
+                                                    const uint8_t* method, size_t method_len,
+                                                    const uint8_t* label, size_t label_len,
+                                                    double id);
+
+// Set AS3 stage focus to a named direct child of the sibling at
+// the given depth. Used to transfer focus into the dialog when
+// it opens.
+int           ruffle_ios_set_focus_to_sibling_child(PlayerHandle* h,
+                                                    int depth,
+                                                    const uint8_t* child_name, size_t child_name_len);
+
 // --- FJ_ButtonList / FJ_ButtonList_ListIconLeft widget calls ---
 // Dynamic list widget used by LoadOrJoinMenu (SavesList/JoinList),
 // HowToPlayMenu, LeaderboardMenu, DLCMainMenu, and SkinSelectMenu.
