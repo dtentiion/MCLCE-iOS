@@ -169,6 +169,8 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "DataOutputStream.h"
 #include "ByteArrayInputStream.h"
 #include "Icon.h"
+#include "TilePos.h"
+#include "ChunkPos.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
