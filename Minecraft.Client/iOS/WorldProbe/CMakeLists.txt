@@ -59,7 +59,9 @@ set(WORLD_PROBE_SOURCES
   # Entity / Tile / Mob / Item / Biome.
   ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BinaryHeap.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BoundingBox.cpp
+  # BoundingBox.cpp dropped: needs full IntArrayTag type for `new
+  # IntArrayTag(...)`. Forward decl is not enough. Re-add when the
+  # full Tag hierarchy compiles.
   ${UPSTREAM_DIR}/Minecraft.World/Buffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BufferedOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BufferedReader.cpp
