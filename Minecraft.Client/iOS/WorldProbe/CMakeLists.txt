@@ -92,6 +92,19 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/FastNoise.cpp
   # File.cpp dropped: heavy Win32 file system (WIN32_FIND_DATA,
   # MoveFile, GetLastError, MAX_PATH, wstringtofilename helper).
+  ${UPSTREAM_DIR}/Minecraft.World/FileHeader.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FloatBuffer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FoliageColor.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FoodConstants.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FuzzyZoomLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GameRules.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GameCommandPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GeneralStat.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatLayerInfo.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatGeneratorInfo.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlippedIcon.cpp
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
