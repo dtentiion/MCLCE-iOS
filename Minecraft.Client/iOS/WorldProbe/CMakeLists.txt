@@ -43,6 +43,12 @@ target_compile_options(mcle_world_probe PRIVATE
 target_compile_definitions(mcle_world_probe PRIVATE
   _LIB
   _LARGE_WORLDS
+  # Skip debug/profiling code paths that need the global `app`
+  # (CMinecraftApp instance). PerformanceTimer.cpp gates its body on
+  # !_CONTENT_PACKAGE; many other Minecraft.World files do the same.
+  # We do not have a real `app` to bind against in the probe so we
+  # take the content-only branch.
+  _CONTENT_PACKAGE
 )
 
 # Pin to C++14. Upstream is 2014-era code that doesn't need anything newer,

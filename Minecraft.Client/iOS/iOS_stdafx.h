@@ -79,4 +79,22 @@ using namespace std;
 class Entity;
 #endif
 
+// Math + type macros that upstream Definitions.h provides at file scope.
+// Random.h refers to `byte`, Mth.cpp refers to `PI` and `HALF_PI` without
+// pulling Definitions.h directly, expecting upstream's stdafx.h chain to
+// have brought them in. Mirror the same names here so the probe sees them.
+#ifndef PI
+#  define PI       (3.141592654f)
+#endif
+#ifndef HALF_PI
+#  define HALF_PI  (1.570796327f)
+#endif
+
+// extraX64.h does `typedef unsigned char byte;` at file scope. Several
+// upstream headers (Random.h, DataInput.h, FileHeader.h) reference `byte`
+// unqualified expecting that typedef to be in scope.
+#ifdef __cplusplus
+typedef unsigned char byte;
+#endif
+
 #endif // !_WIN32 && !_WIN64
