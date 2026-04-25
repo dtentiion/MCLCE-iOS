@@ -35,10 +35,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/ArrowDamageEnchantment.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
+  # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
+  # HtmlString, ItemInstance, plus each cpp needs IDS_ENCHANTMENT_*
+  # localization constants. Re-add when entity / item / loc layers
+  # are ported.
   # AttackDamageMobEffect.cpp dropped: pulls AttributeModifier.h,
   # MobEffect.h, eMinecraftColour, LivingEntity, BaseAttributeMap.
   ${UPSTREAM_DIR}/Minecraft.World/BasicTypeContainers.cpp
