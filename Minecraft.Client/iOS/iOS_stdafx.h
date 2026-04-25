@@ -85,7 +85,18 @@ class Biome;
 class LivingEntity;
 class BaseAttributeMap;
 class AttributeModifier;
-class ItemInstance;
+// ItemInstance is referenced as a non-pointer field in
+// LivingEntity / Mob / Player (`ItemInstanceArray equipment;`)
+// so a forward decl is not enough. Provide a minimal stub here
+// so the entity hierarchy headers parse without us porting the
+// real ItemInstance subsystem. ItemInstance.h itself is not
+// pulled in (ArrayWithLength.h's include of ItemInstance.h is
+// patched out for iOS), so this stub never collides with the
+// real definition.
+class ItemInstance {
+public:
+    int dummy_for_layout;
+};
 class HtmlString;
 class IntArrayTag;
 class CompoundTag;
