@@ -28,11 +28,9 @@ set(WORLD_PROBE_SOURCES
   # is under 600 lines with at most 4 includes.
   ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
-  # AttributeModifier.cpp dropped: pulls HtmlString + eATTRIBUTE_ID
-  # + eMinecraftColour + eHTMLColor_ enums + global `app`. Bring it
-  # back when those enums land via the proper Common/* port.
+  # Attribute family dropped: uses IDS_ATTRIBUTE_NAME_* loc strings
+  # and eATTRIBUTE_ID enum from Common/* headers we excluded.
+  # Re-add with the localization layer port.
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
