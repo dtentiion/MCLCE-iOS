@@ -147,6 +147,13 @@ inline void MemSect(int) {}
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
 #include "Attribute.h"
+// Auto-generated localization string ID #defines (IDS_OK,
+// IDS_ATTRIBUTE_NAME_GENERIC_MAXHEALTH, IDS_HOW_TO_PLAY_MENU_*, etc).
+// 2287 entries, zero includes, pure #define so it is safe to pre-
+// include for the probe. Use the Windows64 string table because
+// the iOS port already targets the Windows64 string set on the
+// menu side.
+#include "../Minecraft.Client/Windows64Media/strings.h"
 #endif
 
 #endif // !_WIN32 && !_WIN64
