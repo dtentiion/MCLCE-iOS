@@ -27,7 +27,8 @@ set(WORLD_PROBE_SOURCES
   # Shallow files with no Entity / ItemInstance dependencies. Each
   # is under 600 lines with at most 4 includes.
   ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
+  # AnimalChest.cpp dropped: needs ItemInstanceArray (patched out
+  # at ArrayWithLength.h) + IDS_CONTAINER_ANIMAL loc string.
   # Attribute family dropped: uses IDS_ATTRIBUTE_NAME_* loc strings
   # and eATTRIBUTE_ID enum from Common/* headers we excluded.
   # Re-add with the localization layer port.
