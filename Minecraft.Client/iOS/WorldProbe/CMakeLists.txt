@@ -15,8 +15,13 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/StringHelpers.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PerformanceTimer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Random.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
+  # ChunkPos.cpp dropped: it does
+  #   #include "net.minecraft.world.entity.h"
+  # which pulls Entity / Creature / SynchedEntityData / EntityIO and a
+  # cascade of enums (eINSTANCEOF, eMinecraftColour, eTYPE_DERIVED_FROM)
+  # plus ItemInstance. Add back when the entity subsystem is brought
+  # into the probe deliberately.
 )
 
 add_library(mcle_world_probe STATIC
