@@ -94,7 +94,7 @@ set(WORLD_PROBE_SOURCES
   # MoveFile, GetLastError, MAX_PATH, wstringtofilename helper).
   ${UPSTREAM_DIR}/Minecraft.World/FileHeader.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FloatBuffer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FoliageColor.cpp
+  # FoliageColor.cpp dropped: pulls Textures.h (C4JRender) + needs ColourTable.
   ${UPSTREAM_DIR}/Minecraft.World/FoodConstants.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FuzzyZoomLayer.cpp
   # GameRules.cpp dropped: heavy use of global `app`.
