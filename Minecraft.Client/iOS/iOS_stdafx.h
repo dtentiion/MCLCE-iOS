@@ -151,6 +151,8 @@ inline void MemSect(int) {}
 #include "System.h"
 #include "Mth.h"
 #include "Random.h"
+#include "DataInputStream.h"
+#include "DataOutputStream.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
