@@ -87,7 +87,8 @@ class ItemInstance;
 class HtmlString;
 class IntArrayTag;
 class CompoundTag;
-class ListTag;
+// ListTag is a template `template<class T> class ListTag`, do not
+// forward-declare as plain class.
 #endif
 
 // Math + type macros that upstream Definitions.h provides at file scope.
