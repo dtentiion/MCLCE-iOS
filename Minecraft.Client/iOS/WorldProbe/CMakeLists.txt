@@ -104,6 +104,20 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
   # FlatLayerInfo + FlatGeneratorInfo dropped, pull Biome/Tile.
   ${UPSTREAM_DIR}/Minecraft.World/FlippedIcon.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Hasher.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HtmlString.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/I18n.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ImprovedNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/InputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/InputStreamReader.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/IntBuffer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/IntCache.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/JavaMath.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/KeepAlivePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/KickPlayerPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Language.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelSettings.cpp
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
