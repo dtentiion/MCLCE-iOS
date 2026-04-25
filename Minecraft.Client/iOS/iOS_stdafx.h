@@ -51,10 +51,23 @@
 #include <thread>
 #include <chrono>
 
+// Upstream files write `using namespace std;` at file scope in their .h files
+// (AABB.h, Vec3.h, Definitions.h all do it explicitly). Some upstream .cpp
+// files however assume the `using` is already in scope by the time their
+// translation unit starts (e.g. StringHelpers.cpp at file scope: `wstring
+// toLower(const wstring& a)`). On other platforms upstream's stdafx.h chain
+// includes a header that brings std into scope before these .cpps parse.
+// Our stdafx.h is a no-op on iOS, so we make the same `using` happen here.
+// Scoped to translation units that get this header force-included, which is
+// only the world-probe target (not the App or Ruffle code paths).
+#ifdef __cplusplus
+using namespace std;
+#endif
+
 // Upstream files write `using namespace std;` at file scope and then refer to
 // names like `vector` / `shared_ptr` / `string` without the std:: prefix. The
-// `using` is in the upstream headers, not here; we only need to make sure the
-// symbols exist before the headers are parsed.
+// `using` above brings them into scope; we still need the headers themselves
+// included so the symbols actually exist.
 
 // Forward declarations for upstream gameplay types referenced through pointers
 // or shared_ptr by headers in the probe set. On other platforms these declar-
