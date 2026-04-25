@@ -47,9 +47,10 @@ set(WORLD_PROBE_SOURCES
   # AttributeModifier.cpp dropped: needs global `app` (CMinecraftApp
   # instance) for app.GetString(). Re-add when the global app stub
   # lands.
-  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
+  # Add*Layer biome generators dropped (again): they include
+  # net.minecraft.world.level.biome.h -> Biome.h -> Mob.h ->
+  # LivingEntity.h -> Entity.h, hitting the entity subsystem wall.
+  # Re-add when ItemInstance + entity hierarchy land.
   ${UPSTREAM_DIR}/Minecraft.World/ArrowDamageEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
