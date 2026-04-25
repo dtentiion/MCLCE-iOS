@@ -17,6 +17,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STDAFX="$REPO_ROOT/upstream/Minecraft.World/stdafx.h"
 FILEHEADER="$REPO_ROOT/upstream/Minecraft.World/FileHeader.h"
+ARRWITHLEN="$REPO_ROOT/upstream/Minecraft.World/ArrayWithLength.h"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -26,9 +27,13 @@ if [ ! -f "$FILEHEADER" ]; then
     echo "patch-upstream-stdafx: $FILEHEADER not found"
     exit 1
 fi
+if [ ! -f "$ARRWITHLEN" ]; then
+    echo "patch-upstream-stdafx: $ARRWITHLEN not found"
+    exit 1
+fi
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER"; then
-    echo "patch-upstream-stdafx: iOS branches already present in both files, nothing to do"
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN"; then
+    echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
 
@@ -90,6 +95,47 @@ fi
 # this device, and we are unlikely to ever ship a "save from iOS"
 # format distinct from PS4 since LCE's save layer is platform-tagged
 # but format-shared.
+# ArrayWithLength.h has a `#include "ItemInstance.h"` near the bottom that
+# only exists to define ItemInstanceArray. ItemInstance.h transitively
+# pulls in com.mojang.nbt -> NbtIo -> CompoundTag -> ByteArrayTag -> Tag
+# -> InputOutputStream -> DataInput, which references PlayerUID and
+# System (the latter creating a circular include loop because we are
+# already in System.h's chain when we reach ByteArrayTag's inline body).
+# Skip the ItemInstance include on iOS - the probe set does not exercise
+# ItemInstance and we will land it as a separate piece later. Wrap with
+# a marker comment so grep can detect idempotency.
+if grep -q '__APPLE_IOS__' "$ARRWITHLEN"; then
+    echo "patch-upstream-stdafx: ArrayWithLength.h already patched, skipping"
+else
+python3 - "$ARRWITHLEN" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+needle = '#include "ItemInstance.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: anchor `#include \"ItemInstance.h\"` not found in ArrayWithLength.h")
+
+# Wrap the ItemInstance include + its dependent typedef. The line right
+# after the include is `typedef arrayWithLength<shared_ptr<ItemInstance> > ItemInstanceArray;`
+# so we wrap both lines.
+old = needle + '\ntypedef arrayWithLength<shared_ptr<ItemInstance> > ItemInstanceArray;'
+new = (
+    '#ifndef __APPLE_IOS__  // probe skips ItemInstance to avoid NBT cascade\n'
+    + old + '\n'
+    + '#endif // !__APPLE_IOS__'
+)
+if old not in src:
+    sys.exit("patch-upstream-stdafx: ItemInstance include + typedef pair not found verbatim in ArrayWithLength.h")
+patched = src.replace(old, new, 1)
+
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: skipped ItemInstance include on iOS in {path}")
+PY
+fi
+
 if grep -q '__APPLE_IOS__' "$FILEHEADER"; then
     echo "patch-upstream-stdafx: FileHeader.h already patched, skipping"
 else
