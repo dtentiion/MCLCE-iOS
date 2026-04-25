@@ -26,16 +26,16 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
   # Shallow files with no Entity / ItemInstance dependencies. Each
   # is under 600 lines with at most 4 includes.
-  ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
+  # AirTile.cpp dropped: AirTile.h pulls Tile.h which references
+  # ItemInstance, LivingEntity, Explosion, eMinecraftColour, etc.
   # AnimalChest.cpp dropped: needs ItemInstanceArray (patched out
   # at ArrayWithLength.h) + IDS_CONTAINER_ANIMAL loc string.
   # Attribute family dropped: uses IDS_ATTRIBUTE_NAME_* loc strings
   # and eATTRIBUTE_ID enum from Common/* headers we excluded.
   # Re-add with the localization layer port.
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
+  # Add*Layer biome generators: pull BiomeSource and friends, also
+  # heavy. Re-add with the world-gen subsystem port.
   # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
   # HtmlString, ItemInstance, plus each cpp needs IDS_ENCHANTMENT_*
   # localization constants. Re-add when entity / item / loc layers
