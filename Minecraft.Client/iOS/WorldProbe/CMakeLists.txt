@@ -72,10 +72,10 @@ set(WORLD_PROBE_SOURCES
   # World-gen feature files dropped: they all pull Tile.h
   # transitively which references Entity hierarchy with non-pointer
   # ItemInstance fields. Re-add when ItemInstance is ported.
-  # Strategic: try ItemInstance.cpp itself. If it compiles, the
-  # entity wall opens up because shared_ptr<ItemInstance> uses can
-  # then resolve full type.
-  ${UPSTREAM_DIR}/Minecraft.World/ItemInstance.cpp
+  # ItemInstance.cpp dropped: pulls Stat / GenericStats which
+  # references Player / Mob / DamageSource / eAward / LocalPlayer.
+  # Real port would need the whole stat + player + entity chain
+  # brought up together.
   ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
   # AddExperienceOrbPacket.cpp dropped: includes
   # net.minecraft.world.entity.h (Entity hierarchy).
