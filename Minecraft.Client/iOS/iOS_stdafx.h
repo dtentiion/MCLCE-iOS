@@ -155,6 +155,7 @@ inline void MemSect(int) {}
 // App_enums.h lives in Minecraft.Client/Common, escape upstream/
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
+#include "Class.h"
 #include "Attribute.h"
 #include "AttributeModifier.h"
 // Auto-generated localization string ID #defines (IDS_OK,
