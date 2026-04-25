@@ -69,6 +69,11 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddExperienceOrbPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BehaviorRegistry.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BlockReplacements.cpp
   # AttackDamageMobEffect.cpp dropped: pulls Entity.h transitively
   # which has non-pointer ItemInstance fields. Forward decl is not
   # enough; needs ItemInstance properly ported (Item subsystem).
