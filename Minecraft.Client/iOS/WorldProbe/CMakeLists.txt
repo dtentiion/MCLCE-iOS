@@ -16,6 +16,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/PerformanceTimer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Random.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TilePos.cpp
   # NBT + IO layer. Most Tag derivatives are header-only; the
   # .cpp files below cover Tag base + the IO read/write layer.
   ${UPSTREAM_DIR}/Minecraft.World/Tag.cpp
@@ -23,6 +24,11 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
+  # zlib-backed compression. Uses bundled Common/zlib at
+  # upstream/Minecraft.Client/Common/zlib/zlib.h. The platform
+  # `#if` chain in compression.cpp gets an __APPLE_IOS__ branch
+  # via patch-upstream-stdafx.sh so it picks the bundled zlib.
+  ${UPSTREAM_DIR}/Minecraft.World/compression.cpp
   # ChunkPos.cpp dropped: it does
   #   #include "net.minecraft.world.entity.h"
   # which pulls Entity / Creature / SynchedEntityData / EntityIO and a
