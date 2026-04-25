@@ -104,7 +104,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
   # FlatLayerInfo + FlatGeneratorInfo dropped, pull Biome/Tile.
   ${UPSTREAM_DIR}/Minecraft.World/FlippedIcon.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Hasher.cpp
+  # Hasher.cpp dropped: needs MSVC's <xhash> header.
   # HtmlString.cpp dropped: needs escapeXML helper + global app.
   ${UPSTREAM_DIR}/Minecraft.World/I18n.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ImprovedNoise.cpp
