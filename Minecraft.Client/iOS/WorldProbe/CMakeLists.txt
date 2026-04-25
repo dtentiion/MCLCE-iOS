@@ -24,6 +24,23 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
+  # Shallow files with no Entity / ItemInstance dependencies. Each
+  # is under 600 lines with at most 4 includes.
+  ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AttributeModifier.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowDamageEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BasicTypeContainers.cpp
   # compression.cpp deferred. It needs ByteOrder + LITTLEENDIAN
   # from Definitions.h (stdafx is no-op so we have to surface
   # those some other way), plus Win32 CriticalSection shims, plus
