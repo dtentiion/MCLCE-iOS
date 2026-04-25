@@ -1166,7 +1166,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @{ @"name": @"Button2", @"label": @"Leaderboards",         @"id": @(1) },
         @{ @"name": @"Button3", @"label": @"Achievements",         @"id": @(2) },
         @{ @"name": @"Button4", @"label": @"Help & Options",       @"id": @(3) },
-        @{ @"name": @"Button5", @"label": @"Downloadable Content", @"id": @(4) },
+        // "Minecraft Store" is IDS_DOWNLOADABLECONTENT on console
+        // (strings_Misc.txt line 8-9). Stored under that name so
+        // the DLC scene opens with the right header.
+        @{ @"name": @"Button5", @"label": @"Minecraft Store",      @"id": @(4) },
         @{ @"name": @"Button6", @"label": @"Exit Game",            @"id": @(5) },
     ];
     [self attachMenuScenery];
@@ -1803,7 +1806,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         0.0);
 
     const char* titleName = "OffersList_Title";
-    const char* titleText = "Downloadable Content";
+    const char* titleText = "Minecraft Store";
     ruffle_ios_call_init_on_named_child(
         g_ruffle_player,
         (const uint8_t*)titleName, strlen(titleName),
@@ -2257,8 +2260,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // surface, so the in-engine dim layer can't reach it.
         // Alpha-dim it manually while a dialog is up to mirror
         // what the dim does to the rest of the scene underneath.
-        // Restored to full opacity on dismiss.
-        self.splashLabel.alpha = g_pending_dialog ? 0.35 : 1.0;
+        // MenuBackground1080.swf's authored fill is a black box
+        // at roughly alpha 0.65, which darkens the scene below it
+        // to ~35% of original brightness. Aim for similar: alpha
+        // 0.2 lets enough yellow through that the splash is still
+        // visibly there, but muted to about the same level as the
+        // panorama / logo / buttons behind the dialog.
+        self.splashLabel.alpha = g_pending_dialog ? 0.2 : 1.0;
         if (onMainMenu) {
             uint64_t nowMs = (uint64_t)(CACurrentMediaTime() * 1000.0);
             double phase = (double)(nowMs % 1000) / 1000.0 * M_PI * 2.0;
@@ -2409,8 +2417,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                             // build so exit(0) is fine. Small delay
                             // after the callback so the SFX plays
                             // before the process dies.
-                            [self presentDialogWithTitle:@"Exit Game"
-                                                 content:@"Are you sure you want to exit?"
+                            // Title IDS_WINDOWS_EXIT / body
+                            // IDS_WARNING_ARCADE_TEXT per
+                            // strings_Misc.txt - MainMenu exit is
+                            // a distinct pair from the in-game
+                            // pause-menu exit (IDS_CONFIRM_EXIT_GAME).
+                            [self presentDialogWithTitle:@"Exit Minecraft"
+                                                 content:@"Are you sure you want to exit the game?"
                                                  buttons:@[@"OK", @"Cancel"]
                                               focusIndex:1
                                                 callback:^(MCLEDialogResult r) {
@@ -2468,8 +2481,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                                 // applying. We drive that same path
                                 // through presentDialogWithTitle:...:
                                 // and only run the reset on Accept.
-                                [self presentDialogWithTitle:@"Reset to Defaults"
-                                                     content:@"This will reset every setting to its default value. Continue?"
+                                // Title IDS_DEFAULTS_TITLE / body
+                                // IDS_DEFAULTS_TEXT per
+                                // strings_Misc.txt line 492-496.
+                                [self presentDialogWithTitle:@"Reset Settings"
+                                                     content:@"Are you sure you would like to reset your settings to their default values?"
                                                      buttons:@[@"OK", @"Cancel"]
                                                   focusIndex:1
                                                     callback:^(MCLEDialogResult r) {
