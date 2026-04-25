@@ -133,6 +133,7 @@ inline void MemSect(int) {}
 #ifdef __cplusplus
 #include "ArrayWithLength.h"
 #include "System.h"
+#include "Mth.h"
 #endif
 
 #endif // !_WIN32 && !_WIN64
