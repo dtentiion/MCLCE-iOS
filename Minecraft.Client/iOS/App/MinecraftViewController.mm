@@ -1052,6 +1052,29 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 //
 // `hidden` is true for scenes where the tooltips strip would
 // overlap a dialog or full-screen UI (e.g. MessageBox).
+// Per-scene logo visibility. Mirrors which console UIScenes pass
+// false to UILayer::showComponent(eUIComponent_Logo) in their
+// updateComponents() override (SkinSelectMenu.cpp:143,
+// LeaderboardsMenu.cpp:150, etc.). All other scenes leave logo on.
+// Also called by finishDialogWithResult: after a dialog dismisses
+// to put the logo back where the underlying scene wants it.
+- (void)applyLogoVisibilityForScene:(NSString*)swfName {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    NSSet<NSString*>* logoOff = [NSSet setWithArray:@[
+        @"SkinSelectMenu1080.swf",
+        @"LeaderboardMenu1080.swf",
+        @"LeaderboardsMenu1080.swf",
+        @"DLCMainMenu1080.swf",
+        @"CreateWorldMenu1080.swf",
+        @"LaunchMoreOptionsMenu1080.swf",
+    ]];
+    int visible = [logoOff containsObject:swfName] ? 0 : 1;
+    // Logo is depth 101 on our stage (see attachMenuScenery).
+    ruffle_ios_set_xui_sibling_visible_at_depth(
+        g_ruffle_player, 101, visible);
+}
+
 - (void)seedTooltipsForScene:(NSString*)swfName hidden:(BOOL)hidden {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -1869,6 +1892,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // MessageBox.cpp:49.
     ruffle_ios_set_xui_sibling_visible_at_depth(
         g_ruffle_player, -1, 1);
+    // Hide the Minecraft logo (sibling at depth 101) while the
+    // dialog is up. Without this it sits in front of the dim
+    // layer and pokes out above the dialog. Restored on dismiss
+    // by applyLogoVisibilityForScene: in finishDialogWithResult:.
+    ruffle_ios_set_xui_sibling_visible_at_depth(
+        g_ruffle_player, 101, 0);
 
     // Sibling-overlay model. Add MessageBox1080.swf as a stage
     // sibling at depth kMessageBoxDepth on top of the underlying
@@ -1891,6 +1920,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     NSString* url = [NSString stringWithFormat:@"file://%@",
                      [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
 
+    // Snapshot the existing siblings' (panorama / logo / tooltips)
+    // matrices around the burst so a brief 0.5s of normal animation
+    // doesn't leave them with any visible drift. Only the new
+    // MessageBox sibling needs frames to construct; everything else
+    // can be rewound to its pre-dialog matrix on the way out.
+    ruffle_ios_player_snapshot_xui_matrices(g_ruffle_player);
+
     int rc = ruffle_ios_add_sibling_swf_to_root(
         g_ruffle_player,
         (const uint8_t*)data.bytes, data.length,
@@ -1898,16 +1934,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         kMessageBoxDepth, 1.0f, 1.0f, 0.0f, 0.0f);
     NSLog(@"[dialog] add_sibling MessageBox @%d -> %d", kMessageBoxDepth, rc);
 
-    // 30-tick headless burst so the sibling's preload + class
-    // construct finish before we drive its AS3. Same cadence as
-    // transitionToMenuNamed.
-    ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 0);
+    // 30-tick headless burst so the sibling's preload + ABC class
+    // construct + first-frame placement finish before we drive its
+    // AS3. Don't freeze siblings here: set_xui_siblings_playing(0)
+    // would also freeze the just-attached MessageBox, and it needs
+    // those exact frames to advance from preloaded to constructed.
+    // matricesRestore at the bottom of this method wipes any drift
+    // on the other siblings.
     for (int i = 0; i < 30; ++i) {
         ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
     }
-    ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 1);
 
     [self populateMessageBoxSibling];
+
+    ruffle_ios_player_restore_xui_matrices(g_ruffle_player);
 
     // Swap the bottom-strip tooltips to MessageBox's pair
     // (Select / Cancel). Mirrors UIScene_MessageBox::updateTooltips
@@ -2006,13 +2046,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             g_ruffle_player, kMessageBoxDepth);
         ruffle_ios_clear_stage_dispatch_list(g_ruffle_player);
         ruffle_ios_redispatch_added_to_stage(g_ruffle_player, -1);
-        // Restore the underlying scene's tooltips and focus
+        // Restore the underlying scene's tooltips, logo, and focus
         // highlight. seedTooltipsForScene picks the (A, B) pair
         // that scene's updateTooltips override would have set
-        // on console; refreshFocusState pushes ChangeState=
-        // SELECTED on whichever button menuFocusIndex points at.
+        // on console; applyLogoVisibilityForScene puts the logo
+        // back where that scene wants it; refreshFocusState pushes
+        // ChangeState=SELECTED on whichever button menuFocusIndex
+        // points at.
         if (self.currentMenuSwf.length) {
             [self seedTooltipsForScene:self.currentMenuSwf hidden:NO];
+            [self applyLogoVisibilityForScene:self.currentMenuSwf];
         }
         [self refreshFocusState];
     }
@@ -2161,18 +2204,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         //   LaunchMoreOptionsMenu.cpp:201
         // DLCMainMenu also wants logo off once wired (its panel
         // covers the full upper half of the screen).
-        NSSet<NSString*>* logoOff = [NSSet setWithArray:@[
-            @"SkinSelectMenu1080.swf",
-            @"LeaderboardMenu1080.swf",
-            @"LeaderboardsMenu1080.swf",
-            @"DLCMainMenu1080.swf",
-            @"CreateWorldMenu1080.swf",
-            @"LaunchMoreOptionsMenu1080.swf",
-        ]];
-        int logoVisible = [logoOff containsObject:swfName] ? 0 : 1;
-        // Logo is depth 101 on our stage (see attachMenuScenery).
-        ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, 101, logoVisible);
+        [self applyLogoVisibilityForScene:swfName];
 
         // Seed the Tooltips bottom-strip on every scene transition.
         // Mirrors what each console UIScene::updateTooltips does
@@ -2215,8 +2247,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // visible on MainMenu; hidden on sub-scenes to match console.
     if (self.splashLabel) {
         BOOL onMainMenu = [self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"];
-        self.splashLabel.hidden = !onMainMenu;
-        if (onMainMenu) {
+        // Hide while a dialog is up too: the splash is a UIKit
+        // UILabel painted on top of the wgpu surface, so it would
+        // sit in front of the dialog otherwise.
+        self.splashLabel.hidden = !onMainMenu || (g_pending_dialog != nil);
+        if (onMainMenu && !g_pending_dialog) {
             uint64_t nowMs = (uint64_t)(CACurrentMediaTime() * 1000.0);
             double phase = (double)(nowMs % 1000) / 1000.0 * M_PI * 2.0;
             double pulse = 1.0 - fabs(sin(phase)) * 0.05;
