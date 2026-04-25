@@ -32,49 +32,51 @@ if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER"; t
     exit 0
 fi
 
-# Insert an `elif __APPLE_IOS__` branch just before the catch-all `#else`
-# (which selects Orbis). The new branch points at our iOS 4JLibs stubs.
+# Wrap the entire body of upstream's stdafx.h in `#ifndef __APPLE_IOS__`
+# so it becomes a no-op on iOS. Upstream's stdafx.h was written for the
+# full app build and pulls in ~30 Minecraft.Client/Common/*.h headers
+# (Consoles_App, GameNetworkManager, UIStructs, App_structs, ...) plus
+# their dependencies, each of which assumes a full Win32 / SCE / 4J
+# environment we are not trying to provide right now.
+#
+# Our force-included iOS_stdafx.h already provides the std headers and
+# Win32 type aliases AABB.cpp / Vec3.cpp / similar low-level translation
+# units actually need. As the probe set grows and a file genuinely
+# needs something stdafx.h would have pulled in, we add it directly to
+# iOS_stdafx.h or include it from the file's own header.
 if grep -q '__APPLE_IOS__' "$STDAFX"; then
     echo "patch-upstream-stdafx: stdafx.h already patched, skipping"
 else
 python3 - "$STDAFX" <<'PY'
-import re, sys
+import sys
 path = sys.argv[1]
 with open(path, 'r', encoding='utf-8', errors='replace') as f:
     src = f.read()
 
-# The block we want to extend is the 4J_* platform chain:
-#     #elif defined __PSVITA__
-#     #include "../Minecraft.Client/PSVita/4JLibs/inc/4J_Profile.h"
-#     ...
-#     #else
-#     #include "../Minecraft.Client/Orbis/4JLibs/inc/4J_Profile.h"
-#     ...
-#     #endif
-# `#elif defined __PSVITA__` appears twice in stdafx.h (once in the std-
-# headers block, once here), so anchor on the more specific 4JLibs line
-# instead. That uniquely identifies the right block.
-needle = '#include "../Minecraft.Client/PSVita/4JLibs/inc/4J_Profile.h"'
-if needle not in src:
-    sys.exit("patch-upstream-stdafx: anchor `PSVita 4J_Profile.h include` not found in stdafx.h")
+# Wrap everything after the leading `#pragma once` in `#ifndef
+# __APPLE_IOS__ ... #endif`. The marker comment also serves as the
+# idempotency check (grep for __APPLE_IOS__ above).
+pragma = '#pragma once'
+idx = src.find(pragma)
+if idx < 0:
+    sys.exit("patch-upstream-stdafx: `#pragma once` not found in stdafx.h")
+split_at = idx + len(pragma)
+prefix = src[:split_at]
+body   = src[split_at:]
 
-# Find the `#else` that follows the PSVita 4J block and insert before it.
-psvita_at = src.index(needle)
-else_at = src.index('#else', psvita_at)
-ios_branch = (
-    '#elif defined __APPLE_IOS__\n'
-    '// iOS 4JLibs stubs live in the project root, not inside the upstream\n'
-    '// submodule, so the relative path escapes upstream/ via `../..`.\n'
-    '#include "../../Minecraft.Client/iOS/4JLibs/inc/4J_Profile.h"\n'
-    '#include "../../Minecraft.Client/iOS/4JLibs/inc/4J_Render.h"\n'
-    '#include "../../Minecraft.Client/iOS/4JLibs/inc/4J_Storage.h"\n'
-    '#include "../../Minecraft.Client/iOS/4JLibs/inc/4J_Input.h"\n'
+wrapped = (
+    prefix
+    + '\n\n// Skip upstream stdafx body on iOS - iOS_stdafx.h is force-included\n'
+    + '// and provides only what the probe set actually needs. See the\n'
+    + '// patch-upstream-stdafx.sh comment for the full reasoning.\n'
+    + '#ifndef __APPLE_IOS__\n'
+    + body
+    + '\n#endif // !__APPLE_IOS__\n'
 )
-patched = src[:else_at] + ios_branch + src[else_at:]
 
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
-    f.write(patched)
-print(f"patch-upstream-stdafx: inserted iOS branch into {path}")
+    f.write(wrapped)
+print(f"patch-upstream-stdafx: wrapped stdafx.h body in #ifndef __APPLE_IOS__")
 PY
 fi
 
