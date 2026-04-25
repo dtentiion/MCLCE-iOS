@@ -39,7 +39,8 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
+  # AttackDamageMobEffect.cpp dropped: pulls AttributeModifier.h,
+  # MobEffect.h, eMinecraftColour, LivingEntity, BaseAttributeMap.
   ${UPSTREAM_DIR}/Minecraft.World/BasicTypeContainers.cpp
   # compression.cpp deferred. It needs ByteOrder + LITTLEENDIAN
   # from Definitions.h (stdafx is no-op so we have to surface
