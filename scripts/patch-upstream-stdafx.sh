@@ -18,6 +18,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STDAFX="$REPO_ROOT/upstream/Minecraft.World/stdafx.h"
 FILEHEADER="$REPO_ROOT/upstream/Minecraft.World/FileHeader.h"
 ARRWITHLEN="$REPO_ROOT/upstream/Minecraft.World/ArrayWithLength.h"
+DOSCPP="$REPO_ROOT/upstream/Minecraft.World/DataOutputStream.cpp"
+DISCPP="$REPO_ROOT/upstream/Minecraft.World/DataInputStream.cpp"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -31,8 +33,14 @@ if [ ! -f "$ARRWITHLEN" ]; then
     echo "patch-upstream-stdafx: $ARRWITHLEN not found"
     exit 1
 fi
+for f in "$DOSCPP" "$DISCPP"; do
+    if [ ! -f "$f" ]; then
+        echo "patch-upstream-stdafx: $f not found"
+        exit 1
+    fi
+done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN"; then
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -135,6 +143,38 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: skipped ItemInstance include on iOS in {path}")
 PY
 fi
+
+# DataOutputStream.cpp / DataInputStream.cpp gate writePlayerUID /
+# readPlayerUID on platform macros to either (a) write/read 16 raw
+# bytes (Sony platforms - PS3, Orbis, Vita), (b) write/read a string
+# (Durango), or (c) write/read a Long (everywhere else). iOS
+# PlayerUID is a 16-byte struct, so put __APPLE_IOS__ in the Sony
+# branch where the for-loop write-each-byte path matches.
+add_ios_to_sony_branch() {
+    local file="$1"
+    if grep -q '__APPLE_IOS__' "$file"; then
+        echo "patch-upstream-stdafx: $(basename "$file") already patched, skipping"
+        return
+    fi
+    python3 - "$file" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+needle = '#if defined(__PS3__) || defined(__ORBIS__) || defined (__PSVITA__)'
+if needle not in src:
+    sys.exit(f"patch-upstream-stdafx: Sony branch anchor not found in {path}")
+
+new = '#if defined(__PS3__) || defined(__ORBIS__) || defined (__PSVITA__) || defined(__APPLE_IOS__)'
+patched = src.replace(needle, new, 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added __APPLE_IOS__ to Sony branch in {path}")
+PY
+}
+add_ios_to_sony_branch "$DOSCPP"
+add_ios_to_sony_branch "$DISCPP"
 
 if grep -q '__APPLE_IOS__' "$FILEHEADER"; then
     echo "patch-upstream-stdafx: FileHeader.h already patched, skipping"
