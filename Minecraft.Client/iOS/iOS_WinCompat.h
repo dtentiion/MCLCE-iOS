@@ -244,4 +244,33 @@ static inline BOOL TlsSetValue(DWORD index, LPVOID value) {
     return pthread_setspecific((pthread_key_t)index, value) == 0 ? TRUE : FALSE;
 }
 
+// Win32 high-resolution timer API. Random.cpp seeds the RNG with
+// QueryPerformanceCounter; PerformanceTimer.cpp uses both. On Apple
+// platforms mach_absolute_time gives us a high-res monotonic counter
+// in mach-time units, convertible to nanoseconds via mach_timebase_info.
+// We expose these as nanosecond counts (frequency = 1e9) so QuadPart
+// values across calls yield meaningful ns deltas without callers caring
+// about the unit.
+#include <mach/mach_time.h>
+
+static inline BOOL QueryPerformanceFrequency(LARGE_INTEGER *out) {
+    if (!out) return FALSE;
+    out->QuadPart = 1000000000LL;  // 1 GHz pretend-frequency = nanoseconds
+    return TRUE;
+}
+
+static inline BOOL QueryPerformanceCounter(LARGE_INTEGER *out) {
+    if (!out) return FALSE;
+    static mach_timebase_info_data_t s_tb = {0, 0};
+    if (s_tb.denom == 0) {
+        mach_timebase_info(&s_tb);
+    }
+    uint64_t mach_ns = mach_absolute_time();
+    if (s_tb.denom != 0) {
+        mach_ns = (mach_ns * s_tb.numer) / s_tb.denom;
+    }
+    out->QuadPart = (LONGLONG)mach_ns;
+    return TRUE;
+}
+
 #endif // !_WIN32 && !_WIN64
