@@ -146,6 +146,7 @@ inline void MemSect(int) {}
 #include "ArrayWithLength.h"
 #include "System.h"
 #include "Mth.h"
+#include "Random.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
