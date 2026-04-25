@@ -69,6 +69,14 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
+  # World-gen feature trees + caves. Mostly decoration logic that
+  # places tiles. May or may not pull Tile.h - try and see.
+  ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BirchFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CanyonFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CaveFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
   # AddExperienceOrbPacket.cpp dropped: includes
   # net.minecraft.world.entity.h (Entity hierarchy).
