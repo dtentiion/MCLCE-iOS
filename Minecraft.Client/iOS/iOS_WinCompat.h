@@ -38,6 +38,18 @@ typedef uint32_t ULONG;
 typedef int64_t  LONGLONG;
 typedef uint64_t ULONGLONG;
 
+// MSVC integer aliases. __int64 is widely used in upstream IO code
+// (ByteArrayInputStream, FileInputStream) instead of long long /
+// int64_t. clang on iOS does not predefine these names.
+typedef int64_t  __int64;
+typedef uint64_t __uint64;
+typedef int32_t  __int32;
+typedef uint32_t __uint32;
+typedef int16_t  __int16;
+typedef uint16_t __uint16;
+typedef int8_t   __int8;
+typedef uint8_t  __uint8;
+
 // BOOL: Apple's Objective-C runtime defines BOOL as signed char. Only define
 // the Windows-style int BOOL when Obj-C is NOT active (i.e. pure C++ TUs that
 // are compiling upstream code that expects int BOOL semantics).
@@ -171,6 +183,11 @@ typedef int32_t HRESULT;
 // <cstring> (already in iOS_stdafx.h) cover both.
 #ifndef ZeroMemory
 #  define ZeroMemory(dest, size)       memset((dest), 0, (size))
+#endif
+// XMemCpy is the Xbox SDK alias for memcpy. Used in upstream IO code
+// (ByteArrayInputStream etc) for what is otherwise a plain memcpy.
+#ifndef XMemCpy
+#  define XMemCpy(dest, src, size)     memcpy((dest), (src), (size))
 #endif
 #ifndef CopyMemory
 #  define CopyMemory(dest, src, size)  memcpy((dest), (src), (size))
