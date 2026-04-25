@@ -129,6 +129,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/Scale.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetCarriedItemPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetDisplayObjectivePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Team.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThreadName.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TickNextTickData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileEventData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/VoronoiZoom.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WaterColor.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
   # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
