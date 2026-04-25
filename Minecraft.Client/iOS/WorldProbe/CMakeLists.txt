@@ -27,12 +27,18 @@ set(WORLD_PROBE_SOURCES
   # Shallow files with no Entity / ItemInstance dependencies. Each
   # is under 600 lines with at most 4 includes.
   # AirTile.cpp dropped: AirTile.h pulls Tile.h which references
-  # ItemInstance, LivingEntity, Explosion, eMinecraftColour, etc.
+  # ItemInstance, LivingEntity, Explosion. The eMinecraftColour
+  # piece is now resolvable via App_enums.h pre-include but the
+  # other refs need the Tile / Item / Entity subsystems.
   # AnimalChest.cpp dropped: needs ItemInstanceArray (patched out
-  # at ArrayWithLength.h) + IDS_CONTAINER_ANIMAL loc string.
-  # Attribute family dropped: uses IDS_ATTRIBUTE_NAME_* loc strings
-  # and eATTRIBUTE_ID enum from Common/* headers we excluded.
-  # Re-add with the localization layer port.
+  # at ArrayWithLength.h). The IDS_ side is unblocked but Item
+  # subsystem is still gated.
+  # Re-attempt Attribute.cpp + BaseAttribute.cpp now that
+  # eATTRIBUTE_ID is pre-included via Attribute.h. They still
+  # need IDS_ATTRIBUTE_NAME_* loc constants - if those are
+  # missing this round will fail again on those.
+  ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
