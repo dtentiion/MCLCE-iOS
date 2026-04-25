@@ -70,9 +70,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddExperienceOrbPacket.cpp
+  # AddExperienceOrbPacket.cpp dropped: includes
+  # net.minecraft.world.entity.h (Entity hierarchy).
   ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityPacket.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BehaviorRegistry.cpp
+  # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
   # fields and Container types.
