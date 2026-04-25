@@ -56,4 +56,13 @@
 // `using` is in the upstream headers, not here; we only need to make sure the
 // symbols exist before the headers are parsed.
 
+// Forward declarations for upstream gameplay types referenced through pointers
+// or shared_ptr by headers in the probe set. On other platforms these declar-
+// ations come transitively through stdafx.h's chain of includes, which we
+// shut off on iOS to avoid the avalanche of unrelated dependencies. Add to
+// this list as the probe set grows and surfaces a new forward-declared name.
+#ifdef __cplusplus
+class Entity;
+#endif
+
 #endif // !_WIN32 && !_WIN64
