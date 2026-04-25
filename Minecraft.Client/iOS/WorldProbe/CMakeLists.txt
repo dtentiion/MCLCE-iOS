@@ -135,18 +135,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/TileEventData.cpp
   ${UPSTREAM_DIR}/Minecraft.World/VoronoiZoom.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterColor.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DownfallLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DownfallMixerLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RiverInitLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RiverLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RiverMixerLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/TemperatureLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/TemperatureMixerLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/IslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RegionHillsLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BiomeOverrideLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BiomeInitLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FlatLayer.cpp
+  # Biome layer files all dropped - all pull Biome -> Mob -> Entity.
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
   # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
