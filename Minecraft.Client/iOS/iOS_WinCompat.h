@@ -261,6 +261,46 @@ static inline BOOL TlsSetValue(DWORD index, LPVOID value) {
     return pthread_setspecific((pthread_key_t)index, value) == 0 ? TRUE : FALSE;
 }
 
+// Critical sections backed by pthread mutexes. Upstream uses these
+// for the global-lock pattern around C4JThread, command dispatch,
+// etc. Compile-only support: we only need calls to typecheck. The
+// CRITICAL_SECTION type is already declared in this header above.
+static inline void InitializeCriticalSection(LPCRITICAL_SECTION cs) {
+    if (cs) pthread_mutex_init(&cs->_mu, NULL);
+}
+static inline void DeleteCriticalSection(LPCRITICAL_SECTION cs) {
+    if (cs) pthread_mutex_destroy(&cs->_mu);
+}
+static inline void EnterCriticalSection(LPCRITICAL_SECTION cs) {
+    if (cs) pthread_mutex_lock(&cs->_mu);
+}
+static inline void LeaveCriticalSection(LPCRITICAL_SECTION cs) {
+    if (cs) pthread_mutex_unlock(&cs->_mu);
+}
+static inline BOOL TryEnterCriticalSection(LPCRITICAL_SECTION cs) {
+    return (cs && pthread_mutex_trylock(&cs->_mu) == 0) ? TRUE : FALSE;
+}
+
+// Xbox / 4J-platform user-slot constants. Upstream code uses these
+// at file scope in struct sizes (per-player arrays). Real values
+// match the Xbox 360 SDK and the 4J Vita override (1).
+#ifndef XUSER_MAX_COUNT
+#  ifdef __PSVITA__
+#    define XUSER_MAX_COUNT 1
+#  else
+#    define XUSER_MAX_COUNT 4
+#  endif
+#endif
+#ifndef XUSER_INDEX_ANY
+#  define XUSER_INDEX_ANY 255
+#endif
+#ifndef MAX_PATH
+#  define MAX_PATH 260
+#endif
+#ifndef MAX_PATH_SIZE
+#  define MAX_PATH_SIZE 256
+#endif
+
 // Win32 high-resolution timer API. Random.cpp seeds the RNG with
 // QueryPerformanceCounter; PerformanceTimer.cpp uses both. On Apple
 // platforms mach_absolute_time gives us a high-res monotonic counter
