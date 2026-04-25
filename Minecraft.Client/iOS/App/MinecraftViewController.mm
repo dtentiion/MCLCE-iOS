@@ -2018,8 +2018,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // Drive MessageBox1080.swf's AS3 once it's attached as a sibling.
 // Mirrors UIScene_MessageBox.cpp:5-55:
 //   root.Init(count, focus)         hides unused buttons, wires nav
-//   Title.Init / Content.Init       text + re-measure for autoresize
+//   Title.SetLabel / Content.SetLabel
 //   Button3..Button(4-count).Init(label, id)  filled end-first
+//   [tick burst so TextField layout completes]
 //   root.AutoResize()               resize panel + shift buttons
 - (void)populateMessageBoxSibling {
     extern PlayerHandle* g_ruffle_player;
@@ -2036,14 +2037,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         (const uint8_t*)initName, strlen(initName),
         initArgs, 2);
 
-    // Title / Content labels. Use Init(text, 0) rather than
-    // SetLabel: on MessageBox's AutoResize path, Init forces an
-    // FJ_Label measure-and-wrap pass that SetLabel alone skips.
-    // SetLabel updates the string but keeps the label's authored
-    // height, which causes the panel to inherit the placeholder
-    // height for longer bodies (e.g. Reset Settings wraps to 3
-    // lines but the panel sizes as if Content needs 5+ lines,
-    // leaving a big gap between the body and the button row).
+    // Title / Content labels. FJ_Label.Init takes a single arg
+    // (the label text) -- passing (text, id) causes
+    // ArgumentError #1063. Use SetLabel, which the class
+    // explicitly supports as a post-construction update path
+    // that also flips m_bInitialised.
     struct LabelSeed { const char* name; const char* text; };
     LabelSeed labels[] = {
         { "Title",   [req.title UTF8String] },
@@ -2053,7 +2051,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         ruffle_ios_call_init_on_sibling_child(
             g_ruffle_player, kMessageBoxDepth,
             (const uint8_t*)labels[i].name, strlen(labels[i].name),
-            (const uint8_t*)"Init", 4,
+            (const uint8_t*)"SetLabel", 8,
             (const uint8_t*)labels[i].text, strlen(labels[i].text),
             0.0);
     }
@@ -2076,6 +2074,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)l, strlen(l),
             (double)buttonIndex);
         ++buttonIndex;
+    }
+
+    // Tick the player a few frames so the TextField layout
+    // triggered by each SetLabel (text wrap, line-break pass,
+    // textHeight measure) completes BEFORE AutoResize reads back
+    // Content's current height. Without these ticks, Content's
+    // textHeight on longer bodies (e.g. Reset Settings wraps to
+    // 3 lines) reflects the authored placeholder height, which
+    // makes the panel over-tall and leaves a visible gap between
+    // the body text and the button row.
+    for (int i = 0; i < 10; ++i) {
+        ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
     }
 
     // root.AutoResize().
