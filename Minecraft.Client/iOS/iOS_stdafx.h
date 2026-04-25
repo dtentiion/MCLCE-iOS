@@ -85,6 +85,9 @@ class BaseAttributeMap;
 class AttributeModifier;
 class ItemInstance;
 class HtmlString;
+class IntArrayTag;
+class CompoundTag;
+class ListTag;
 #endif
 
 // Math + type macros that upstream Definitions.h provides at file scope.
