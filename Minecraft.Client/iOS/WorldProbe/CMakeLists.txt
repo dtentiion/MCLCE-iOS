@@ -171,7 +171,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BirchFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/CaveFeature.cpp
+  # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
   ${UPSTREAM_DIR}/Minecraft.World/CanyonFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
