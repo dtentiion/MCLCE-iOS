@@ -98,7 +98,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/FoodConstants.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FuzzyZoomLayer.cpp
   # GameRules.cpp dropped: heavy use of global `app`.
-  ${UPSTREAM_DIR}/Minecraft.World/GameCommandPacket.cpp
+  # GameCommandPacket.cpp dropped: uses `app`.
   ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
   # GeneralStat.cpp dropped: pulls GenericStats with eAward + app.
   ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
