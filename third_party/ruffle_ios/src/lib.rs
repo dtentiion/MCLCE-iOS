@@ -759,6 +759,48 @@ pub unsafe extern "C" fn ruffle_ios_remove_sibling_at_depth(
     if found { 1 } else { 0 }
 }
 
+/// Wipe every AVM2 event listener attached to the Stage object.
+/// Pair with ruffle_ios_redispatch_added_to_stage to swap which
+/// FJ_Document owns input. Returns 1 if the stage had a dispatch
+/// list to clear, 0 otherwise, -1 on lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_clear_stage_dispatch_list(
+    raw: *mut PlayerHandle,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let cleared = p.clear_stage_dispatch_list();
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] clear_stage_dispatch_list -> {}",
+        cleared
+    ));
+    if cleared { 1 } else { 0 }
+}
+
+/// Re-fire the AVM2 `addedToStage` event on a target so its
+/// FJ_Document re-registers its stage-level KEY_DOWN listener.
+/// `target_depth` of -1 (or 0) selects the root scene; any other
+/// value matches a sibling depth. Returns 1 ok, 0 if target not
+/// found, -1 on lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_redispatch_added_to_stage(
+    raw: *mut PlayerHandle,
+    target_depth: c_int,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let dispatched = p.redispatch_added_to_stage(target_depth);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] redispatch_added_to_stage(target_depth={}) -> {}",
+        target_depth, dispatched
+    ));
+    if dispatched { 1 } else { 0 }
+}
+
 /// Call ToolTips1080's SetToolTip(int, String, Boolean) on the
 /// sibling at `depth`. Used per-scene to seed the bottom-strip
 /// tooltip slots (Select / Back / etc.). Returns 1 ok, 0 bad
