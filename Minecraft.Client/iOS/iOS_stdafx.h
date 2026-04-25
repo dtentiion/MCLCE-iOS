@@ -146,6 +146,7 @@ inline void MemSect(int) {}
 // ArrayWithLength.h is patched at build time to skip ItemInstance.h
 // on iOS so this pre-include does not pull in the NBT cascade.
 #ifdef __cplusplus
+#include "Definitions.h"
 #include "ArrayWithLength.h"
 #include "System.h"
 #include "Mth.h"
