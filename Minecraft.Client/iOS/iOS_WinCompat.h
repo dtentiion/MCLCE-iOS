@@ -158,6 +158,60 @@ typedef int32_t HRESULT;
 #  define __cdecl
 #endif
 
+// MSVC debug-break intrinsic. Upstream uses __debugbreak() to assert
+// invariants in debug builds (CompoundTag.h:39 etc). On clang we map
+// to __builtin_trap() so a hit still aborts the process under a
+// debugger.
+#ifndef __debugbreak
+#  define __debugbreak() __builtin_trap()
+#endif
+
+// Win32 macros for zeroing / copying memory. Upstream uses these in
+// FileHeader.h and similar serialization code. memset / memcpy from
+// <cstring> (already in iOS_stdafx.h) cover both.
+#ifndef ZeroMemory
+#  define ZeroMemory(dest, size)       memset((dest), 0, (size))
+#endif
+#ifndef CopyMemory
+#  define CopyMemory(dest, src, size)  memcpy((dest), (src), (size))
+#endif
+#ifndef MoveMemory
+#  define MoveMemory(dest, src, size)  memmove((dest), (src), (size))
+#endif
+#ifndef FillMemory
+#  define FillMemory(dest, size, fill) memset((dest), (fill), (size))
+#endif
+
+// LARGE_INTEGER is a 64-bit signed value with a union that exposes
+// the high / low 32-bit halves. Upstream PerformanceTimer.h uses
+// QuadPart for QueryPerformanceCounter timestamps.
+#ifndef _LARGE_INTEGER_DEFINED
+#define _LARGE_INTEGER_DEFINED
+typedef union _LARGE_INTEGER {
+    struct {
+        DWORD LowPart;
+        LONG  HighPart;
+    } u;
+    struct {
+        DWORD LowPart;
+        LONG  HighPart;
+    };
+    LONGLONG QuadPart;
+} LARGE_INTEGER, *PLARGE_INTEGER;
+
+typedef union _ULARGE_INTEGER {
+    struct {
+        DWORD LowPart;
+        DWORD HighPart;
+    } u;
+    struct {
+        DWORD LowPart;
+        DWORD HighPart;
+    };
+    ULONGLONG QuadPart;
+} ULARGE_INTEGER, *PULARGE_INTEGER;
+#endif // _LARGE_INTEGER_DEFINED
+
 // Thread Local Storage Win32 API. Upstream code (Vec3.cpp, AABB.cpp,
 // pool allocators) uses TlsAlloc / TlsGetValue / TlsSetValue / TlsFree
 // to keep per-thread allocation arenas. On POSIX we back these with
