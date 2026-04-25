@@ -1253,12 +1253,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // persistent store (see MCLE_iOS_Settings). Mirrors
     // UIControl_CheckBox::init (3 args).
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
+    // Labels match the IDS_ constants in stringsGeneric.xml:
+    //   IDS_VIEW_BOBBING             "View Bobbing"
+    //   IDS_HINTS                    "Hints"
+    //   IDS_IN_GAME_TOOLTIPS         "In-Game Tooltips"
+    //   IDS_IN_GAME_GAMERTAGS        "In-Game Gamertags"
+    //   IDS_UNHIDE_MASHUP_WORLDS     "Show all Mash-up Worlds"
     Cb checkboxes[] = {
-        {"ViewBob",          "View Bobbing",         0, (BOOL)mcle_settings_get(MCLE_SETTING_ViewBob)},
-        {"ShowHints",        "Hints",                1, (BOOL)mcle_settings_get(MCLE_SETTING_Hints)},
-        {"ShowTooltips",     "In-game Tooltips",     2, (BOOL)mcle_settings_get(MCLE_SETTING_Tooltips)},
-        {"InGameGamertags",  "In-game Gamertags",    3, (BOOL)mcle_settings_get(MCLE_SETTING_GamertagsVisible)},
-        {"ShowMashUpWorlds", "Unhide Mashup Worlds", 4, NO},
+        {"ViewBob",          "View Bobbing",             0, (BOOL)mcle_settings_get(MCLE_SETTING_ViewBob)},
+        {"ShowHints",        "Hints",                    1, (BOOL)mcle_settings_get(MCLE_SETTING_Hints)},
+        {"ShowTooltips",     "In-Game Tooltips",         2, (BOOL)mcle_settings_get(MCLE_SETTING_Tooltips)},
+        {"InGameGamertags",  "In-Game Gamertags",        3, (BOOL)mcle_settings_get(MCLE_SETTING_GamertagsVisible)},
+        {"ShowMashUpWorlds", "Show all Mash-up Worlds",  4, NO},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -1274,9 +1280,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // (difficulty 0..3). Labels match the console format strings.
     int autosave = mcle_settings_get(MCLE_SETTING_Autosave);
     int difficulty = mcle_settings_get(MCLE_SETTING_Difficulty);
+    // Autosave label format from UIScene_SettingsOptionsMenu.cpp:
+    //   index 0       -> IDS_SLIDER_AUTOSAVE_OFF  "Autosave Interval: OFF"
+    //   index 1..8    -> "%ls: %d %ls" with IDS_SLIDER_AUTOSAVE
+    //                    ("Autosave Interval") and IDS_MINUTES
+    //                    ("Mins"), value = 15 * index.
     NSString* autosaveLabel = (autosave == 0)
-        ? @"Autosave: Off"
-        : [NSString stringWithFormat:@"Autosave: %d minutes", autosave * 15];
+        ? @"Autosave Interval: OFF"
+        : [NSString stringWithFormat:@"Autosave Interval: %d Mins", autosave * 15];
     static NSArray<NSString*>* kDifficultyNames = @[@"Peaceful", @"Easy", @"Normal", @"Hard"];
     int diffClamped = MAX(0, MIN(difficulty, 3));
     NSString* difficultyLabel = [NSString
@@ -1297,6 +1308,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
 
     // 1 button: Init(label, id) via the FJ_Button path.
+    // No IDS_ for this label in the LCE strings dump; console
+    // appears to feed it through a different path (platform-
+    // specific language picker). Placeholder until we find the
+    // right source string or the iOS language sheet wires up.
     const char* lang = "Languages";
     const char* langLabel = "Language Selector";
     ruffle_ios_call_init_on_named_child(
@@ -1381,12 +1396,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     int ingame = mcle_settings_get(MCLE_SETTING_SensitivityInGame);
     int inmenu = mcle_settings_get(MCLE_SETTING_SensitivityInMenu);
+    // Label format "%ls: %d%%" from UIScene_SettingsControlMenu.cpp
+    // lines 103 / 111 with IDS_SLIDER_SENSITIVITY_INGAME =
+    // "Game Sensitivity" and IDS_SLIDER_SENSITIVITY_INMENU =
+    // "Interface Sensitivity".
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"SensitivityInGame",
-           @"label": [NSString stringWithFormat:@"Sensitivity In-game: %d%%", ingame],
+           @"label": [NSString stringWithFormat:@"Game Sensitivity: %d%%", ingame],
            @"id":    @(0), @"min": @(0), @"max": @(200), @"cur": @(ingame) },
         @{ @"name":  @"SensitivityInMenu",
-           @"label": [NSString stringWithFormat:@"Sensitivity In-menu: %d%%", inmenu],
+           @"label": [NSString stringWithFormat:@"Interface Sensitivity: %d%%", inmenu],
            @"id":    @(1), @"min": @(0), @"max": @(200), @"cur": @(inmenu) },
     ];
     for (NSDictionary* s in sliders) {
@@ -1423,11 +1442,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     [self attachMenuScenery];
 
+    // Labels from IDS_CHECKBOX_RENDER_CLOUDS / RENDER_BEDROCKFOG /
+    // CUSTOM_SKIN_ANIM in stringsGeneric.xml.
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"Clouds",         "Render clouds",         0, (BOOL)mcle_settings_get(MCLE_SETTING_Clouds)},
-        {"BedrockFog",     "Bedrock fog",           1, (BOOL)mcle_settings_get(MCLE_SETTING_BedrockFog)},
-        {"CustomSkinAnim", "Custom skin animation", 2, (BOOL)mcle_settings_get(MCLE_SETTING_CustomSkinAnim)},
+        {"Clouds",         "Render Clouds",         0, (BOOL)mcle_settings_get(MCLE_SETTING_Clouds)},
+        {"BedrockFog",     "Bedrock Fog",           1, (BOOL)mcle_settings_get(MCLE_SETTING_BedrockFog)},
+        {"CustomSkinAnim", "Custom Skin Animation", 2, (BOOL)mcle_settings_get(MCLE_SETTING_CustomSkinAnim)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -1458,7 +1479,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
            @"label": [NSString stringWithFormat:@"FOV: %d", fovDeg],
            @"id":    @(5), @"min": @(0), @"max": @(100), @"cur": @(fovSlider) },
         @{ @"name":  @"InterfaceOpacity",
-           @"label": [NSString stringWithFormat:@"Interface opacity: %d%%", opacity],
+           @"label": [NSString stringWithFormat:@"Interface Opacity: %d%%", opacity],
            @"id":    @(6), @"min": @(0), @"max": @(100), @"cur": @(opacity) },
     ];
     for (NSDictionary* s in sliders) {
@@ -1492,14 +1513,19 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     [self attachMenuScenery];
 
+    // Labels from IDS_CHECKBOX_DISPLAY_HUD / DISPLAY_HAND /
+    // DEATH_MESSAGES / ANIMATED_CHARACTER /
+    // VERTICAL_SPLIT_SCREEN / DISPLAY_SPLITSCREENGAMERTAGS in
+    // stringsGeneric.xml. Note that the last four don't have the
+    // "Display" prefix that earlier versions of this port assumed.
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"DisplayHUD",               "Display HUD",                 0, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHUD)},
-        {"DisplayHand",              "Display Hand",                1, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHand)},
-        {"DisplayDeathMessages",     "Display Death Messages",      2, (BOOL)mcle_settings_get(MCLE_SETTING_DeathMessages)},
-        {"DisplayAnimatedCharacter", "Display Animated Character",  3, (BOOL)mcle_settings_get(MCLE_SETTING_AnimatedCharacter)},
-        {"Splitscreen",              "Vertical split-screen",       4, (BOOL)mcle_settings_get(MCLE_SETTING_SplitScreenVertical)},
-        {"ShowSplitscreenGamertags", "Display split-screen gamertags", 5, (BOOL)mcle_settings_get(MCLE_SETTING_DisplaySplitscreenGamertags)},
+        {"DisplayHUD",               "Display HUD",                     0, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHUD)},
+        {"DisplayHand",              "Display Hand",                    1, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHand)},
+        {"DisplayDeathMessages",     "Death Messages",                  2, (BOOL)mcle_settings_get(MCLE_SETTING_DeathMessages)},
+        {"DisplayAnimatedCharacter", "Animated Character",              3, (BOOL)mcle_settings_get(MCLE_SETTING_AnimatedCharacter)},
+        {"Splitscreen",              "2 Player Split-screen Vertical",  4, (BOOL)mcle_settings_get(MCLE_SETTING_SplitScreenVertical)},
+        {"ShowSplitscreenGamertags", "Splitscreen Gamertags",           5, (BOOL)mcle_settings_get(MCLE_SETTING_DisplaySplitscreenGamertags)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -1512,12 +1538,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     int uiSize = mcle_settings_get(MCLE_SETTING_UISize);
     int uiSizeSplit = mcle_settings_get(MCLE_SETTING_UISizeSplitscreen);
+    // IDS_SLIDER_UISIZE = "HUD Size",
+    // IDS_SLIDER_UISIZESPLITSCREEN = "HUD Size (Splitscreen)".
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"UISize",
-           @"label": [NSString stringWithFormat:@"UI Size: %d", uiSize],
+           @"label": [NSString stringWithFormat:@"HUD Size: %d", uiSize],
            @"id":    @(6), @"min": @(1), @"max": @(3), @"cur": @(uiSize) },
         @{ @"name":  @"UISizeSplitscreen",
-           @"label": [NSString stringWithFormat:@"UI Size Split-screen: %d", uiSizeSplit],
+           @"label": [NSString stringWithFormat:@"HUD Size (Splitscreen): %d", uiSizeSplit],
            @"id":    @(7), @"min": @(1), @"max": @(3), @"cur": @(uiSizeSplit) },
     ];
     for (NSDictionary* s in sliders) {
@@ -1670,32 +1698,36 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // and BanningLevels are excluded. Order and ids match the
     // console enum so a later per-topic scene wire-up lines up
     // with the same press ids console's handlePress switches on.
+    // Labels mirror IDS_HOW_TO_PLAY_MENU_* in strings.resx
+    // (lines 504-691). Ordering + ids match the console enum
+    // in UIScene_HowToPlayMenu.cpp:6-39 so when per-topic scenes
+    // land the press ids line up with console's handlePress.
     struct Item { const char* label; int id; };
     Item items[] = {
-        { "What's New",        0 },
-        { "The Basics",        1 },
-        { "Multiplayer",       2 },
-        { "HUD",               3 },
-        { "Creative Mode",     4 },
-        { "Inventory",         5 },
-        { "Chests",            6 },
-        { "Crafting",          7 },
-        { "Furnace",           8 },
-        { "Dispenser",         9 },
-        { "Brewing",          10 },
-        { "Enchanting",       11 },
-        { "Anvil",            12 },
-        { "Farming Animals",  13 },
-        { "Breeding Animals", 14 },
-        { "Trading",          15 },
-        { "Horses",           16 },
-        { "Beacons",          17 },
-        { "Fireworks",        18 },
-        { "Hoppers",          19 },
-        { "Droppers",         20 },
-        { "Nether Portal",    21 },
-        { "The End",          22 },
-        { "Host Options",     23 },
+        { "What's New",              0 },
+        { "Basics",                  1 },
+        { "Multiplayer",             2 },
+        { "HUD",                     3 },
+        { "Creative Mode",           4 },
+        { "Inventory",               5 },
+        { "Chests",                  6 },
+        { "Crafting",                7 },
+        { "Furnace",                 8 },
+        { "Dispenser",               9 },
+        { "Brewing",                10 },
+        { "Enchantment",            11 },
+        { "Anvil",                  12 },
+        { "Farming Animals",        13 },
+        { "Breeding Animals",       14 },
+        { "Trading",                15 },
+        { "Horses",                 16 },
+        { "Beacons",                17 },
+        { "Fireworks",              18 },
+        { "Hoppers",                19 },
+        { "Droppers",               20 },
+        { "Nether Portal",          21 },
+        { "The End",                22 },
+        { "Host and Player Options",23 },
     };
     for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); ++i) {
         ruffle_ios_call_list_add_menu_item(
@@ -1742,15 +1774,24 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     [self attachMenuScenery];
 
     // Header labels. Console fills these from IDS_FILTER / IDS_
-    // LEADERBOARD / IDS_ENTRIES / IDS_LEADERBOARDS_NOT_AVAILABLE
-    // (see SetLeaderboardHeader in UIScene_LeaderboardsMenu.cpp).
-    // Human-readable copy for now; swap for the real string table
-    // values once the localisation pass lands.
+    // Labels from UIScene_LeaderboardsMenu.cpp:
+    //   IDS_LEADERBOARD_FILTER    "Filter: "  (subtype appended at
+    //                              runtime from the current filter
+    //                              selection)
+    //   IDS_LEADERBOARD_ENTRIES   "Entries: " (count appended at
+    //                              runtime)
+    //   Leaderboard title comes from LEADERBOARD_DESCRIPTORS per
+    //   (m_currentLeaderboard, m_currentDifficulty) -- we don't
+    //   have the descriptor table wired up yet so show a neutral
+    //   stand-in that keeps the label from rendering FJ_Label.
+    // The informational "not available yet" line has no LCE
+    // equivalent (online services aren't wired on iOS) so it
+    // stays as a port-only explanatory string.
     struct LabelSeed { const char* name; const char* text; };
     LabelSeed labels[] = {
-        { "Filter",      "Filter: All Players" },
-        { "Leaderboard", "Leaderboard: Kills" },
-        { "Entries",     "Entries" },
+        { "Filter",      "Filter: " },
+        { "Leaderboard", "Leaderboards" },
+        { "Entries",     "Entries: " },
         { "Info",        "Leaderboards are not available on this platform yet." },
     };
     for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); ++i) {
