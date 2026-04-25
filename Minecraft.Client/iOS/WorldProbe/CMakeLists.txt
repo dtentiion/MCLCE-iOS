@@ -102,8 +102,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
   # GeneralStat.cpp dropped: pulls GenericStats with eAward + app.
   ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FlatLayerInfo.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FlatGeneratorInfo.cpp
+  # FlatLayerInfo + FlatGeneratorInfo dropped, pull Biome/Tile.
   ${UPSTREAM_DIR}/Minecraft.World/FlippedIcon.cpp
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
