@@ -20,9 +20,12 @@ extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 static NSString* g_current_scene_name = @"";
 
 // Pending dialog request: seeded by presentDialog..., consumed by
-// initMessageBoxMenu once MessageBox1080.swf has loaded, fired by
-// the extint bridge on button press or by the B-back handler as a
-// cancellation. Mirrors console's MessageBoxInfo that
+// populateMessageBoxSibling once MessageBox1080.swf is attached as
+// a stage sibling, fired by the extint bridge on button press or
+// by the B-back handler as a cancellation. While this is non-nil
+// the iOS-side menu state machine is suppressed and B / handlePress
+// route through the dialog instead of the underlying scene.
+// Mirrors console's MessageBoxInfo that
 // UIController::RequestMessageBox stashes when navigating to
 // eUIScene_MessageBox (UIController.cpp:2951-2994).
 //
@@ -51,6 +54,13 @@ typedef void (^MCLEDialogCallback)(MCLEDialogResult result);
 @end
 
 static MCLEDialogRequest* g_pending_dialog = nil;
+
+// Stage depth used for the MessageBox sibling overlay. Sits in
+// front of the underlying scene (depth 0), the Tooltips strip
+// (100), and the Logo (101). The dim layer at depth -1 is behind
+// all of them. Console picks no specific depth (Iggy stack is
+// scene-swap-only on console); we own the depth choice here.
+static const int kMessageBoxDepth = 200;
 
 // Weak-ish ref to the live VC so C-style ExternalInterface bridge
 // callbacks can reach instance methods (navigateBack,
@@ -298,19 +308,19 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             // press here shouldn't fire, but log it anyway.
             NSLog(@"[leaderboard] entry press idx=%d (online service is a follow-up)",
                   itemId);
-        } else if ([g_current_scene_name isEqualToString:@"MessageBox1080.swf"]) {
+        } else if (g_pending_dialog) {
             // MessageBox button press. Mirrors
             // UIScene_MessageBox::handlePress (UIScene_MessageBox.cpp:120):
             //   controlId 0 -> EMessage_ResultAccept
             //   controlId 1 -> EMessage_ResultDecline
             //   controlId 2 -> EMessage_ResultThirdOption
             //   controlId 3 -> EMessage_ResultFourthOption
-            // Console then navigates back and fires the callback
-            // with the mapped result. We do the same through the
-            // shared finishDialogWithResult helper. Note that the
-            // handlePress controlId reported here is the button's
-            // id, which initMessageBoxMenu sets to the button's
-            // slot index (0..3) in the authored SWF.
+            // controlId reported is the button's id, which
+            // populateMessageBoxSibling sets to the sequence
+            // counter (0 for the first visible button, etc.).
+            // With the sibling-overlay model g_current_scene_name
+            // is still the underlying scene so we key off
+            // g_pending_dialog instead.
             MCLEDialogResult r = MCLEDialogResultCancelled;
             switch (listId) {
                 case 0: r = MCLEDialogResultAccept;   break;
@@ -1839,6 +1849,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         if (callback) callback(MCLEDialogResultCancelled);
         return;
     }
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) {
+        if (callback) callback(MCLEDialogResultCancelled);
+        return;
+    }
+
     MCLEDialogRequest* req = [MCLEDialogRequest new];
     req.title = title ?: @"";
     req.content = content ?: @"";
@@ -1851,92 +1867,112 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // MenuBackground sibling on. Mirrors console's
     // addComponent(eUIComponent_MenuBackground) at UIScene_
     // MessageBox.cpp:49.
-    extern PlayerHandle* g_ruffle_player;
-    if (g_ruffle_player) {
-        ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, -1, 1);
-    }
+    ruffle_ios_set_xui_sibling_visible_at_depth(
+        g_ruffle_player, -1, 1);
 
-    // Scene-swap model: push the current scene onto the back
-    // stack and transition to MessageBox1080.swf as the new
-    // root. Takes the underlying scene's AS3 out of play so
-    // its FJ_Document.keyDownHandler can't fight MessageBox's
-    // stage-level nav listener. True overlay would keep the
-    // underlying scene alive as a sibling beneath, but both
-    // scenes' stage listeners end up firing on every key because
-    // their authored button names (Button0..Button3 in MessageBox
-    // collide with Button0..Button6 in MainMenu / Settings) and
-    // the check in FJ_Document.keyDownHandler at Base/FJ_Document.
-    // as:194-258 bails only when m_this.getChildByName(name)
-    // returns null - with a name collision it silently navigates
-    // BOTH scenes. The dim overlay covers the visual gap that
-    // the scene swap introduces, so functionally this matches
-    // console and the player cannot accidentally trigger clicks
-    // on buttons 'underneath' the dialog.
-    [self navigateForwardTo:@"MessageBox1080.swf"];
-}
-
-// Scene init for MessageBox1080.swf. Reads g_pending_dialog,
-// configures the authored scene per UIScene_MessageBox.cpp:5-55:
-//   root.Init(count, focus)   - hides unused buttons, wires nav graph
-//   Title/Content SetLabel
-//   Button3..Button0.Init(label, id) - filled end-first
-//   root.AutoResize()         - resize panel + shift buttons
-- (void)initMessageBoxMenu {
-    extern PlayerHandle* g_ruffle_player;
-    if (!g_ruffle_player) return;
-
-    [self attachMenuScenery];
-
-    MCLEDialogRequest* req = g_pending_dialog;
-    if (!req) {
-        NSLog(@"[dialog] MessageBox loaded with no pending request");
+    // Sibling-overlay model. Add MessageBox1080.swf as a stage
+    // sibling at depth kMessageBoxDepth on top of the underlying
+    // scene, then quiet the underlying FJ_Document with
+    // clear_stage_dispatch_list + redispatch_added_to_stage so
+    // ENTER/ESCAPE only trigger the dialog's nav handler. The
+    // underlying scene stays alive at depth 0 the whole time so
+    // it reappears instantly on dismiss without a reload.
+    NSString* docsPath = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString* path = [docsPath stringByAppendingPathComponent:@"MessageBox1080.swf"];
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data.length) {
+        NSLog(@"[dialog] MessageBox1080.swf not found at %@", path);
+        g_pending_dialog = nil;
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -1, 0);
+        if (callback) callback(MCLEDialogResultCancelled);
         return;
     }
+    NSString* url = [NSString stringWithFormat:@"file://%@",
+                     [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+
+    int rc = ruffle_ios_add_sibling_swf_to_root(
+        g_ruffle_player,
+        (const uint8_t*)data.bytes, data.length,
+        (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
+        kMessageBoxDepth, 1.0f, 1.0f, 0.0f, 0.0f);
+    NSLog(@"[dialog] add_sibling MessageBox @%d -> %d", kMessageBoxDepth, rc);
+
+    // 30-tick headless burst so the sibling's preload + class
+    // construct finish before we drive its AS3. Same cadence as
+    // transitionToMenuNamed.
+    ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 0);
+    for (int i = 0; i < 30; ++i) {
+        ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
+    }
+    ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 1);
+
+    [self populateMessageBoxSibling];
+
+    // Swap the bottom-strip tooltips to MessageBox's pair
+    // (Select / Cancel). Mirrors UIScene_MessageBox::updateTooltips
+    // (UIScene_MessageBox.cpp:74-77). Restored to the underlying
+    // scene's pair in finishDialogWithResult:.
+    [self seedTooltipsForScene:@"MessageBox1080.swf" hidden:NO];
+
+    // Hand stage-level KEY_DOWN ownership over to the dialog.
+    // Without this both FJ_Documents fight on every press because
+    // the underlying scene's button names (Button0..N) collide
+    // with MessageBox's, and FJ_Document.keyDownHandler bails by
+    // name (m_this.getChildByName) which can't tell them apart.
+    ruffle_ios_clear_stage_dispatch_list(g_ruffle_player);
+    ruffle_ios_redispatch_added_to_stage(g_ruffle_player, kMessageBoxDepth);
+}
+
+// Drive MessageBox1080.swf's AS3 once it's attached as a sibling.
+// Mirrors UIScene_MessageBox.cpp:5-55:
+//   root.Init(count, focus)         hides unused buttons, wires nav
+//   Title.SetLabel / Content.SetLabel
+//   Button3..Button(4-count).Init(label, id)  filled end-first
+//   root.AutoResize()               resize panel + shift buttons
+- (void)populateMessageBoxSibling {
+    extern PlayerHandle* g_ruffle_player;
+    MCLEDialogRequest* req = g_pending_dialog;
+    if (!g_ruffle_player || !req) return;
 
     int count = (int)req.buttonLabels.count;
 
-    // Init(count, focusIndex). MessageBox.as Init signature takes
-    // two ints; our helper serialises through a double array.
+    // root.Init(count, focusIndex).
     double initArgs[2] = { (double)count, (double)req.focusIndex };
     const char* initName = "Init";
-    ruffle_ios_call_root_method_numbers(
-        g_ruffle_player,
+    ruffle_ios_call_method_on_sibling_root(
+        g_ruffle_player, kMessageBoxDepth,
         (const uint8_t*)initName, strlen(initName),
         initArgs, 2);
 
-    // Seed Title and Content labels. FJ_Label.SetLabel sets
-    // m_bInitialised itself so no separate Init call needed.
+    // Title / Content labels.
     struct LabelSeed { const char* name; const char* text; };
     LabelSeed labels[] = {
         { "Title",   [req.title UTF8String] },
         { "Content", [req.content UTF8String] },
     };
     for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); ++i) {
-        ruffle_ios_call_init_on_named_child(
-            g_ruffle_player,
+        ruffle_ios_call_init_on_sibling_child(
+            g_ruffle_player, kMessageBoxDepth,
             (const uint8_t*)labels[i].name, strlen(labels[i].name),
             (const uint8_t*)"SetLabel", 8,
             (const uint8_t*)labels[i].text, strlen(labels[i].text),
             0.0);
     }
 
-    // Fill buttons. Matches UIScene_MessageBox.cpp:23-39: the
-    // authored slots (Button0..Button3) are filled from the END
-    // for lower button counts, but the id passed to FJ_Button.Init
-    // is the sequence counter (0 for the first visible button,
-    // 1 for the next, etc.) NOT the authored slot index. That is
-    // what ties into handlePress's controlId -> result mapping
-    // (MessageBox.cpp:120-141 case 0 = Accept, 1 = Decline, etc.)
-    // so that a 2-button OK/Cancel dialog returns Accept for OK.
+    // Fill buttons end-first. Authored slot 3 holds the LAST
+    // visible button; the id is the sequence counter (0 for the
+    // first visible, etc.) which is what handlePress's controlId
+    // -> Accept/Decline mapping keys off (UIScene_MessageBox.cpp:
+    // 120-141).
     int buttonIndex = 0;
     NSArray<NSString*>* buttonNames = @[@"Button0", @"Button1", @"Button2", @"Button3"];
     for (int slot = 4 - count; slot < 4; ++slot) {
         NSString* label = req.buttonLabels[buttonIndex];
         const char* n = [buttonNames[slot] UTF8String];
         const char* l = [label UTF8String];
-        ruffle_ios_call_init_on_named_child(
-            g_ruffle_player,
+        ruffle_ios_call_init_on_sibling_child(
+            g_ruffle_player, kMessageBoxDepth,
             (const uint8_t*)n, strlen(n),
             (const uint8_t*)"Init", 4,
             (const uint8_t*)l, strlen(l),
@@ -1944,38 +1980,43 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         ++buttonIndex;
     }
 
-    // Root.AutoResize() - 0-arg.
+    // root.AutoResize().
     const char* resize = "AutoResize";
-    ruffle_ios_call_root_method_numbers(
-        g_ruffle_player,
+    ruffle_ios_call_method_on_sibling_root(
+        g_ruffle_player, kMessageBoxDepth,
         (const uint8_t*)resize, strlen(resize),
         NULL, 0);
-
-    // MessageBox's own Init() sets m_bAutoFocusEnabled=false and
-    // picks the focus button itself (MessageBox.as:49-114), so
-    // don't call SetFocus(-1) here - it would override the
-    // focus the scene just placed on the requested button.
-
-    self.menuButtonConfig = nil;
-    self.menuFocusIndex = 0;
 }
 
-// Fire the pending dialog's callback with a result and pop the
-// MessageBox scene off the back stack. Shared by the handlePress
-// route (for button presses) and the B-back handler (for
-// cancellation).
+// Fire the pending dialog's callback with a result and tear down
+// the MessageBox sibling overlay. Shared by the handlePress route
+// (for button presses) and the B-back handler (for cancellation).
 - (void)finishDialogWithResult:(MCLEDialogResult)result {
     MCLEDialogRequest* req = g_pending_dialog;
+    if (!req) return;  // already torn down (idempotent)
     g_pending_dialog = nil;
-    // Hide the dim backdrop before navigating back so the
-    // underlying scene reappears without the dim still on top.
     extern PlayerHandle* g_ruffle_player;
     if (g_ruffle_player) {
+        // Hide dim, drop the MessageBox sibling, and hand stage
+        // KEY_DOWN ownership back to the underlying scene's
+        // FJ_Document.
         ruffle_ios_set_xui_sibling_visible_at_depth(
             g_ruffle_player, -1, 0);
+        ruffle_ios_remove_sibling_at_depth(
+            g_ruffle_player, kMessageBoxDepth);
+        ruffle_ios_clear_stage_dispatch_list(g_ruffle_player);
+        ruffle_ios_redispatch_added_to_stage(g_ruffle_player, -1);
+        // Restore the underlying scene's tooltips and focus
+        // highlight. seedTooltipsForScene picks the (A, B) pair
+        // that scene's updateTooltips override would have set
+        // on console; refreshFocusState pushes ChangeState=
+        // SELECTED on whichever button menuFocusIndex points at.
+        if (self.currentMenuSwf.length) {
+            [self seedTooltipsForScene:self.currentMenuSwf hidden:NO];
+        }
+        [self refreshFocusState];
     }
-    [self navigateBack];
-    if (req && req.callback) req.callback(result);
+    if (req.callback) req.callback(result);
 }
 
 // Forward navigation: push the current menu + its focus index onto
@@ -2102,8 +2143,6 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initDLCMainMenu];
         } else if ([swfName isEqualToString:@"SkinSelectMenu1080.swf"]) {
             [self initSkinSelectMenu];
-        } else if ([swfName isEqualToString:@"MessageBox1080.swf"]) {
-            [self initMessageBoxMenu];
         }
 
         // Per-scene scenery visibility. Console drives this per
@@ -2129,10 +2168,6 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             @"DLCMainMenu1080.swf",
             @"CreateWorldMenu1080.swf",
             @"LaunchMoreOptionsMenu1080.swf",
-            // MessageBox has its own BackgroundPanel that covers
-            // the logo area. Matches UIScene_MessageBox.cpp:49
-            // calling addComponent(eUIComponent_MenuBackground).
-            @"MessageBox1080.swf",
         ]];
         int logoVisible = [logoOff containsObject:swfName] ? 0 : 1;
         // Logo is depth 101 on our stage (see attachMenuScenery).
@@ -2254,7 +2289,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             // FJ_Button.ChangeState codes: 1=SELECTED, 2=UNSELECTED,
             // 3=PRESSED. We edge-detect DPadUp/Down to walk the list and
             // A to fire the press animation + any scene action.
-            NSArray<NSDictionary*>* cfg = self.menuButtonConfig;
+            // When a dialog overlay is up, this whole block is
+            // skipped: the underlying scene is silent (stage
+            // KEY_DOWN was redispatched onto the MessageBox
+            // sibling so its FJ_Document owns input) and the iOS
+            // state machine must not animate or navigate behind
+            // the dialog. B routes through
+            // finishDialogWithResult: for cancellation, matching
+            // UIScene_MessageBox::handleInput (line 99-105).
+            NSArray<NSDictionary*>* cfg = g_pending_dialog ? nil : self.menuButtonConfig;
             int count = (int)cfg.count;
             uint32_t pressedNow = changed & now;  // buttons that went 0 -> 1
             auto changeState = ^(int idx, int state) {
@@ -2404,27 +2447,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                     }
                 }
             }
-            // B button (code=1, mask 0x00000002) -> back to MainMenu when
-            // we're on any non-MainMenu scene. Mirrors the console's
-            // "Cancel" handler on submenus. When a MessageBox dialog is
-            // up, route B through finishDialogWithResult: so the
-            // caller's callback fires with Cancelled before we pop,
-            // matching UIScene_MessageBox::handleInput
-            // (UIScene_MessageBox.cpp:99-105).
-            if ((pressedNow & 0x00000002u)
-                && ![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
-                NSLog(@"[MinecraftVC] back from %@ (stack depth %lu)",
-                      self.currentMenuSwf,
-                      (unsigned long)self.menuStack.count);
-                mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
-                // When the current scene is the MessageBox SWF
-                // and there's a pending dialog, route B through
-                // finishDialogWithResult so the caller's callback
-                // fires with Cancelled before we pop the stack.
-                if ([self.currentMenuSwf isEqualToString:@"MessageBox1080.swf"]
-                    && g_pending_dialog) {
+            // B button (code=1, mask 0x00000002). Priority order:
+            //   1. Dialog up -> Cancelled (regardless of which
+            //      underlying scene is showing). Matches console
+            //      UIScene_MessageBox::handleInput line 99-105.
+            //   2. Otherwise on a non-MainMenu scene -> back.
+            //   3. MainMenu B is a no-op (no scene to pop to).
+            if (pressedNow & 0x00000002u) {
+                if (g_pending_dialog) {
+                    mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
-                } else {
+                } else if (![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
+                    NSLog(@"[MinecraftVC] back from %@ (stack depth %lu)",
+                          self.currentMenuSwf,
+                          (unsigned long)self.menuStack.count);
+                    mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
                     [self navigateBack];
                 }
             }
