@@ -80,6 +80,9 @@ using namespace std;
 class Entity;
 class Node;
 class Biome;
+class LivingEntity;
+class BaseAttributeMap;
+class AttributeModifier;
 #endif
 
 // Math + type macros that upstream Definitions.h provides at file scope.
@@ -147,6 +150,7 @@ inline void MemSect(int) {}
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
 #include "Attribute.h"
+#include "AttributeModifier.h"
 // Auto-generated localization string ID #defines (IDS_OK,
 // IDS_ATTRIBUTE_NAME_GENERIC_MAXHEALTH, IDS_HOW_TO_PLAY_MENU_*, etc).
 // 2287 entries, zero includes, pure #define so it is safe to pre-
