@@ -116,7 +116,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/KeepAlivePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KickPlayerPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Language.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/PacketListener.cpp
+  # PacketListener dropped: pulls every packet header.
   ${UPSTREAM_DIR}/Minecraft.World/PerlinNoise.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PerlinSimplexNoise.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerInputPacket.cpp
