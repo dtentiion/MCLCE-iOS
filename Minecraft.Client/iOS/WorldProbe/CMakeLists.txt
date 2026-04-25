@@ -116,6 +116,19 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/KeepAlivePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KickPlayerPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Language.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PacketListener.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PerlinNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PerlinSimplexNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PlayerInputPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Pos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PreLoginPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RangedAttribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Rarity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Rotate.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RotateHeadPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Scale.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetCarriedItemPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetDisplayObjectivePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
   # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
