@@ -73,7 +73,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AddExperienceOrbPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BehaviorRegistry.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BlockReplacements.cpp
+  # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
+  # StairTile, TntTile, etc which all reference Explosion / Random
+  # fields and Container types.
   # AttackDamageMobEffect.cpp dropped: pulls Entity.h transitively
   # which has non-pointer ItemInstance fields. Forward decl is not
   # enough; needs ItemInstance properly ported (Item subsystem).
