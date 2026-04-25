@@ -99,4 +99,32 @@ class Biome;
 typedef unsigned char byte;
 #endif
 
+// PlayerUID stub. Other platforms define this in their 4J_Profile.h;
+// our iOS 4J_Profile.h has the same definition but it does not get
+// included on iOS (upstream stdafx.h is a no-op for us, so its
+// platform-4JLibs include chain never fires). Inline the definition
+// here so the probe sees it at file scope.
+#ifdef __cplusplus
+struct PlayerUID {
+    uint8_t bytes[16];
+};
+typedef PlayerUID* PPlayerUID;
+#endif
+
+// Pre-include ArrayWithLength.h + System.h so the byteArray / charArray
+// typedefs and the System class body are visible before any other
+// upstream header references them. Without this, upstream files like
+// Tag.h / InputOutputStream.h / DataInput.h hit `byteArray` and
+// `System::arraycopy` before ArrayWithLength.h has been parsed (the
+// upstream include graph is order-sensitive and only works on other
+// platforms because their stdafx.h chain parses these in the right
+// sequence; ours is a no-op).
+//
+// ArrayWithLength.h is patched at build time to skip ItemInstance.h
+// on iOS so this pre-include does not pull in the NBT cascade.
+#ifdef __cplusplus
+#include "ArrayWithLength.h"
+#include "System.h"
+#endif
+
 #endif // !_WIN32 && !_WIN64
