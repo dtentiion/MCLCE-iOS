@@ -89,6 +89,9 @@ class ItemInstance;
 class HtmlString;
 class IntArrayTag;
 class CompoundTag;
+class Player;
+class Mob;
+class DamageSource;
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif
