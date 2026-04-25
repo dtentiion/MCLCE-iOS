@@ -328,6 +328,22 @@ int           ruffle_ios_call_root_method_numbers(PlayerHandle* h,
 // 0 if none, -1 on lock fail.
 int           ruffle_ios_remove_sibling_at_depth(PlayerHandle* h, int depth);
 
+// Wipe every AVM2 event listener attached to the Stage object.
+// Pair with ruffle_ios_redispatch_added_to_stage to swap which
+// FJ_Document owns input. The dialog overlay path uses both to
+// transfer stage-level KEY_DOWN ownership between the underlying
+// scene's FJ_Document and the dialog's FJ_Document without removing
+// the underlying scene root. Returns 1 if a dispatch list existed,
+// 0 otherwise, -1 on lock fail.
+int           ruffle_ios_clear_stage_dispatch_list(PlayerHandle* h);
+
+// Re-fire the AVM2 `addedToStage` event on a target so its
+// FJ_Document re-registers its stage-level KEY_DOWN listener. Pass
+// target_depth == -1 (or 0) to select the root scene, or any other
+// depth to target a sibling. Returns 1 ok, 0 if target not found,
+// -1 on lock fail.
+int           ruffle_ios_redispatch_added_to_stage(PlayerHandle* h, int target_depth);
+
 // Call an AS3 method on the document class of the sibling SWF
 // at the given depth, with zero or more number args.
 int           ruffle_ios_call_method_on_sibling_root(PlayerHandle* h,
