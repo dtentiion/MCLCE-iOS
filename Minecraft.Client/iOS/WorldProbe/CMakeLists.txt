@@ -11,6 +11,12 @@
 set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AABB.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Vec3.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Class.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StringHelpers.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PerformanceTimer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Random.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
 )
 
 add_library(mcle_world_probe STATIC
