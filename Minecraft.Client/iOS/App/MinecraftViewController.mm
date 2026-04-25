@@ -2018,7 +2018,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // Drive MessageBox1080.swf's AS3 once it's attached as a sibling.
 // Mirrors UIScene_MessageBox.cpp:5-55:
 //   root.Init(count, focus)         hides unused buttons, wires nav
-//   Title.SetLabel / Content.SetLabel
+//   Title.Init / Content.Init       text + re-measure for autoresize
 //   Button3..Button(4-count).Init(label, id)  filled end-first
 //   root.AutoResize()               resize panel + shift buttons
 - (void)populateMessageBoxSibling {
@@ -2036,7 +2036,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         (const uint8_t*)initName, strlen(initName),
         initArgs, 2);
 
-    // Title / Content labels.
+    // Title / Content labels. Use Init(text, 0) rather than
+    // SetLabel: on MessageBox's AutoResize path, Init forces an
+    // FJ_Label measure-and-wrap pass that SetLabel alone skips.
+    // SetLabel updates the string but keeps the label's authored
+    // height, which causes the panel to inherit the placeholder
+    // height for longer bodies (e.g. Reset Settings wraps to 3
+    // lines but the panel sizes as if Content needs 5+ lines,
+    // leaving a big gap between the body and the button row).
     struct LabelSeed { const char* name; const char* text; };
     LabelSeed labels[] = {
         { "Title",   [req.title UTF8String] },
@@ -2046,7 +2053,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         ruffle_ios_call_init_on_sibling_child(
             g_ruffle_player, kMessageBoxDepth,
             (const uint8_t*)labels[i].name, strlen(labels[i].name),
-            (const uint8_t*)"SetLabel", 8,
+            (const uint8_t*)"Init", 4,
             (const uint8_t*)labels[i].text, strlen(labels[i].text),
             0.0);
     }
