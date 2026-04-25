@@ -30,7 +30,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AttributeModifier.cpp
+  # AttributeModifier.cpp dropped: pulls HtmlString + eATTRIBUTE_ID
+  # + eMinecraftColour + eHTMLColor_ enums + global `app`. Bring it
+  # back when those enums land via the proper Common/* port.
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
