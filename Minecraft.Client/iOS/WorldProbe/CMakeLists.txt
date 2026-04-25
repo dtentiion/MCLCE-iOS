@@ -146,9 +146,9 @@ set(WORLD_PROBE_SOURCES
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
   # fields and Container types.
-  # AttackDamageMobEffect.cpp dropped: pulls Entity.h transitively
-  # which has non-pointer ItemInstance fields. Forward decl is not
-  # enough; needs ItemInstance properly ported (Item subsystem).
+  # AttackDamageMobEffect retry: ItemInstance now a stub class so
+  # the entity field-layout parse should succeed.
+  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
   # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
