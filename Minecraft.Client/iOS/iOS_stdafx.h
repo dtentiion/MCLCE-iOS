@@ -30,6 +30,7 @@
 #include <cctype>
 #include <cwchar>
 #include <ctime>
+#include <cassert>
 
 #include <string>
 #include <vector>
