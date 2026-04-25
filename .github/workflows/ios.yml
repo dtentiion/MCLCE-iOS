@@ -123,3 +123,35 @@ jobs:
           path: build/Minecraft.Client/iOS/App/Release-iphoneos/Minecraft.LCE.app
           if-no-files-found: warn
           retention-days: 7
+
+  world-probe:
+    name: world-probe (upstream gameplay TUs)
+    runs-on: macos-14
+    timeout-minutes: 30
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
+          xcodebuild -version
+          cmake --version
+
+      - name: Configure (probe target only)
+        run: |
+          cmake -S . -B build-probe \
+            -G Xcode \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/ios.toolchain.cmake" \
+            -DPLATFORM=OS64 \
+            -DDEPLOYMENT_TARGET=14.0 \
+            -DENABLE_WORLD_PROBE=ON
+
+      - name: Build mcle_world_probe
+        run: |
+          cmake --build build-probe --config Release --target mcle_world_probe -- -quiet
