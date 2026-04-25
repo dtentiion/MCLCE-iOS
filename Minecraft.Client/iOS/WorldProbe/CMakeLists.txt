@@ -50,6 +50,10 @@ target_include_directories(mcle_world_probe PRIVATE
 # `#include "stdafx.h"` resolve cleanly without us having to edit them.
 target_compile_options(mcle_world_probe PRIVATE
   -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/iOS_stdafx.h"
+  # Upstream uses __declspec(thread) for thread-local storage in a few
+  # files (Tag.cpp etc). clang understands the syntax under -fdeclspec
+  # and maps it to thread_local for static storage.
+  -fdeclspec
 )
 
 target_compile_definitions(mcle_world_probe PRIVATE
