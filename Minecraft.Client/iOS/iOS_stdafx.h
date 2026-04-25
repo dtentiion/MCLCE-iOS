@@ -111,6 +111,14 @@ struct PlayerUID {
 typedef PlayerUID* PPlayerUID;
 #endif
 
+// Memory-section profiler hook declared in upstream stdafx.h:
+//     void MemSect(int sect);
+// Used by NbtIo.cpp etc to mark allocation regions for the platform's
+// memory tracker. We do not have a tracker on iOS, no-op it out.
+#ifdef __cplusplus
+inline void MemSect(int) {}
+#endif
+
 // Pre-include ArrayWithLength.h + System.h so the byteArray / charArray
 // typedefs and the System class body are visible before any other
 // upstream header references them. Without this, upstream files like
