@@ -16,6 +16,13 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/PerformanceTimer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Random.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
+  # NBT + IO layer. Most Tag derivatives are header-only; the
+  # .cpp files below cover Tag base + the IO read/write layer.
+  ${UPSTREAM_DIR}/Minecraft.World/Tag.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NbtIo.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
   # ChunkPos.cpp dropped: it does
   #   #include "net.minecraft.world.entity.h"
   # which pulls Entity / Creature / SynchedEntityData / EntityIO and a
