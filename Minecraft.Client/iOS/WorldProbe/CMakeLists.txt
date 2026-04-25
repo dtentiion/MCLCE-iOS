@@ -80,6 +80,17 @@ set(WORLD_PROBE_SOURCES
   # AddExperienceOrbPacket.cpp dropped: includes
   # net.minecraft.world.entity.h (Entity hierarchy).
   ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DataLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Direction.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Facing.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FacingEnum.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DoorInfo.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DummyCriteria.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentCategory.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Distort.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Emboss.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FastNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/File.cpp
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
