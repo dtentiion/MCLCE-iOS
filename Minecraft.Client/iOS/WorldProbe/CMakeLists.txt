@@ -170,7 +170,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BirchFeature.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
+  # CactusFeature dropped - PortalForcer base class incomplete.
   # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
   # CanyonFeature dropped - uses app.
   ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
