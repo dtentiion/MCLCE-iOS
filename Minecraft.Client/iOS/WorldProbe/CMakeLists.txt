@@ -149,6 +149,32 @@ set(WORLD_PROBE_SOURCES
   # AttackDamageMobEffect retry: ItemInstance now a stub class so
   # the entity field-layout parse should succeed.
   ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
+  # Big retry batch with ItemInstance stub.
+  ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DownfallLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RiverInitLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RiverLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RiverMixerLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/IslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RegionHillsLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BiomeOverrideLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BiomeInitLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TemperatureLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TemperatureMixerLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DownfallMixerLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BirchFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CaveFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CanyonFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
   # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
