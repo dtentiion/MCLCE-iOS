@@ -83,6 +83,8 @@ class Biome;
 class LivingEntity;
 class BaseAttributeMap;
 class AttributeModifier;
+class ItemInstance;
+class HtmlString;
 #endif
 
 // Math + type macros that upstream Definitions.h provides at file scope.
