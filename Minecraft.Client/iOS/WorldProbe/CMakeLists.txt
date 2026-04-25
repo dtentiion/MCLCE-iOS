@@ -26,10 +26,12 @@ target_include_directories(mcle_world_probe PRIVATE
   ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/compat_headers
 )
 
-# Drop the Win32 compat shim into every translation unit via force-include so
-# we do not have to patch upstream .cpp files.
+# Force-include the iOS PCH-equivalent at the top of every TU. iOS_stdafx.h
+# pulls in the C++ standard headers upstream's stdafx.h chain assumes plus
+# iOS_WinCompat.h's Win32 type aliases, so upstream files that start with
+# `#include "stdafx.h"` resolve cleanly without us having to edit them.
 target_compile_options(mcle_world_probe PRIVATE
-  -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/iOS_WinCompat.h"
+  -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/iOS_stdafx.h"
 )
 
 target_compile_definitions(mcle_world_probe PRIVATE
