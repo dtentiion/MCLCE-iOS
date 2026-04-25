@@ -20,6 +20,7 @@ FILEHEADER="$REPO_ROOT/upstream/Minecraft.World/FileHeader.h"
 ARRWITHLEN="$REPO_ROOT/upstream/Minecraft.World/ArrayWithLength.h"
 DOSCPP="$REPO_ROOT/upstream/Minecraft.World/DataOutputStream.cpp"
 DISCPP="$REPO_ROOT/upstream/Minecraft.World/DataInputStream.cpp"
+COMPCPP="$REPO_ROOT/upstream/Minecraft.World/compression.cpp"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -33,14 +34,14 @@ if [ ! -f "$ARRWITHLEN" ]; then
     echo "patch-upstream-stdafx: $ARRWITHLEN not found"
     exit 1
 fi
-for f in "$DOSCPP" "$DISCPP"; do
+for f in "$DOSCPP" "$DISCPP" "$COMPCPP"; do
     if [ ! -f "$f" ]; then
         echo "patch-upstream-stdafx: $f not found"
         exit 1
     fi
 done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP"; then
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -183,6 +184,30 @@ PY
 }
 add_ios_to_sony_branch "$DOSCPP"
 add_ios_to_sony_branch "$DISCPP"
+
+# compression.cpp picks zlib headers per platform. The first chain
+# (line 3) selects upstream's bundled Common/zlib for Orbis / PS3 /
+# Durango / Win64. iOS has the same file accessible, so add iOS to
+# this same set so the standard zlib.h is included.
+if grep -q '__APPLE_IOS__' "$COMPCPP"; then
+    echo "patch-upstream-stdafx: compression.cpp already patched, skipping"
+else
+python3 - "$COMPCPP" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+needle = '#if defined __ORBIS__ || defined __PS3__ || defined _DURANGO || defined _WIN64'
+if needle not in src:
+    sys.exit(f"patch-upstream-stdafx: zlib branch anchor not found in {path}")
+new = needle + ' || defined __APPLE_IOS__'
+patched = src.replace(needle, new, 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added __APPLE_IOS__ to zlib branch in {path}")
+PY
+fi
 
 if grep -q '__APPLE_IOS__' "$FILEHEADER"; then
     echo "patch-upstream-stdafx: FileHeader.h already patched, skipping"
