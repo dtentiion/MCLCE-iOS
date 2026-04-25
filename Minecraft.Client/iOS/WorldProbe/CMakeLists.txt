@@ -44,7 +44,9 @@ set(WORLD_PROBE_SOURCES
   # was dropped earlier on a missing enum or IDS_ constant. Try
   # again now; if any still fails it is on a different blocker
   # (entity / item / sync subsystem) and will be dropped again.
-  ${UPSTREAM_DIR}/Minecraft.World/AttributeModifier.cpp
+  # AttributeModifier.cpp dropped: needs global `app` (CMinecraftApp
+  # instance) for app.GetString(). Re-add when the global app stub
+  # lands.
   ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
