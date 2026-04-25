@@ -97,8 +97,6 @@ class ItemInstance {
 public:
     int dummy_for_layout;
 };
-// Icon stub - referenced as a value type by LivingEntity / Player.
-class Icon { public: int dummy; };
 class HtmlString;
 class IntArrayTag;
 class CompoundTag;
@@ -170,6 +168,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "DataInputStream.h"
 #include "DataOutputStream.h"
 #include "ByteArrayInputStream.h"
+#include "Icon.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
