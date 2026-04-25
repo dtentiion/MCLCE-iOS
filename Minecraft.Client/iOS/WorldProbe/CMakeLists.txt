@@ -55,6 +55,17 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
+  # Next batch: more shallow files that do not transitively pull
+  # Entity / Tile / Mob / Item / Biome.
+  ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BinaryHeap.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BoundingBox.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Buffer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BufferedOutputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BufferedReader.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ByteArrayOutputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
   # AttackDamageMobEffect.cpp dropped: pulls Entity.h transitively
   # which has non-pointer ItemInstance fields. Forward decl is not
   # enough; needs ItemInstance properly ported (Item subsystem).
