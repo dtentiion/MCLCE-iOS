@@ -97,6 +97,8 @@ class ItemInstance {
 public:
     int dummy_for_layout;
 };
+// Icon stub - referenced as a value type by LivingEntity / Player.
+class Icon { public: int dummy; };
 class HtmlString;
 class IntArrayTag;
 class CompoundTag;
@@ -159,6 +161,9 @@ inline void MemSect(int) {}
 #ifdef __cplusplus
 #include "Definitions.h"
 #include "ArrayWithLength.h"
+// ItemInstanceArray typedef from upstream's ArrayWithLength.h
+// (the line we patch out for iOS to avoid the NBT cascade).
+typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "System.h"
 #include "Mth.h"
 #include "Random.h"
