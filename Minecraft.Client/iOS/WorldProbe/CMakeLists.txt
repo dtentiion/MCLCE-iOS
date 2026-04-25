@@ -86,7 +86,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/FacingEnum.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DoorInfo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DummyCriteria.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentCategory.cpp
+  # EnchantmentCategory.cpp dropped: pulls every item header.
   ${UPSTREAM_DIR}/Minecraft.World/Distort.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Emboss.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FastNoise.cpp
