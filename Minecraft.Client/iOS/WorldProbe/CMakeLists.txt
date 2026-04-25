@@ -121,7 +121,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/PerlinSimplexNoise.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerInputPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Pos.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/PreLoginPacket.cpp
+  # PreLoginPacket dropped: SHORT type + MINECRAFT_NET constants + app.
   ${UPSTREAM_DIR}/Minecraft.World/RangedAttribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Rarity.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Rotate.cpp
