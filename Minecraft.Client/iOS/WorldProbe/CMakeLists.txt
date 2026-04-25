@@ -38,3 +38,14 @@ target_compile_definitions(mcle_world_probe PRIVATE
   _LIB
   _LARGE_WORLDS
 )
+
+# Pin to C++14. Upstream is 2014-era code that doesn't need anything newer,
+# and C++17's std::byte clashes with extraX64.h:14's `typedef unsigned char
+# byte;` whenever upstream files do `using namespace std;` (which is most of
+# them). The main app target stays on C++17; this only affects the probe
+# static lib so there's no ABI-mixing concern at link time.
+set_target_properties(mcle_world_probe PROPERTIES
+  CXX_STANDARD 14
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
