@@ -158,4 +158,36 @@ typedef int32_t HRESULT;
 #  define __cdecl
 #endif
 
+// Thread Local Storage Win32 API. Upstream code (Vec3.cpp, AABB.cpp,
+// pool allocators) uses TlsAlloc / TlsGetValue / TlsSetValue / TlsFree
+// to keep per-thread allocation arenas. On POSIX we back these with
+// pthread keys so the upstream code compiles unchanged. The pthread
+// key fits in a DWORD on iOS / macOS (unsigned long under the hood,
+// truncated for the Win32 API surface). TLS_OUT_OF_INDEXES is the
+// Win32 sentinel for allocation failure.
+
+#ifndef TLS_OUT_OF_INDEXES
+#  define TLS_OUT_OF_INDEXES ((DWORD)0xFFFFFFFFu)
+#endif
+
+static inline DWORD TlsAlloc(void) {
+    pthread_key_t key;
+    if (pthread_key_create(&key, NULL) != 0) {
+        return TLS_OUT_OF_INDEXES;
+    }
+    return (DWORD)key;
+}
+
+static inline BOOL TlsFree(DWORD index) {
+    return pthread_key_delete((pthread_key_t)index) == 0 ? TRUE : FALSE;
+}
+
+static inline LPVOID TlsGetValue(DWORD index) {
+    return pthread_getspecific((pthread_key_t)index);
+}
+
+static inline BOOL TlsSetValue(DWORD index, LPVOID value) {
+    return pthread_setspecific((pthread_key_t)index, value) == 0 ? TRUE : FALSE;
+}
+
 #endif // !_WIN32 && !_WIN64
