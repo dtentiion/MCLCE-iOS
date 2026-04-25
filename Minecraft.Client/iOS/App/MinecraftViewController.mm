@@ -732,6 +732,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
                 // the shared -initMainMenuButtons path (also used on
                 // transition back from submenus).
                 [self initMainMenuButtons];
+
+                // The transitionToMenuNamed dispatcher seeds tooltips
+                // on every navigation, but the very first scene
+                // boots through ruffle_ios_player_create_wgpu without
+                // going through that path. Replicate the per-scene
+                // tooltip seed here so MainMenu's bottom strip shows
+                // on the launch screen rather than waiting for the
+                // first nav. MainMenu uses A=Select only per
+                // UIScene_MainMenu::updateTooltips
+                // (UIScene_MainMenu.cpp:124-142).
+                [self seedTooltipsForScene:self.currentMenuSwf hidden:NO];
             }
         }
     }
