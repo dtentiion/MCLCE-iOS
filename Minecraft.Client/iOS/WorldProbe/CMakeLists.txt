@@ -100,7 +100,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/GameRules.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GameCommandPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/GeneralStat.cpp
+  # GeneralStat.cpp dropped: pulls GenericStats with eAward + app.
   ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlatLayerInfo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlatGeneratorInfo.cpp
