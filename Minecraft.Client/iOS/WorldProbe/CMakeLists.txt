@@ -40,6 +40,19 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
+  # Re-attempts after enum + IDS pre-include unlocks. Each of these
+  # was dropped earlier on a missing enum or IDS_ constant. Try
+  # again now; if any still fails it is on a different blocker
+  # (entity / item / sync subsystem) and will be dropped again.
+  ${UPSTREAM_DIR}/Minecraft.World/AttributeModifier.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowDamageEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
   # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
