@@ -55,12 +55,24 @@ typedef void (^MCLEDialogCallback)(MCLEDialogResult result);
 
 static MCLEDialogRequest* g_pending_dialog = nil;
 
-// Stage depth used for the MessageBox sibling overlay. Sits in
-// front of the underlying scene (depth 0), the Tooltips strip
-// (100), and the Logo (101). The dim layer at depth -1 is behind
-// all of them. Console picks no specific depth (Iggy stack is
-// scene-swap-only on console); we own the depth choice here.
-static const int kMessageBoxDepth = 200;
+// Stage-sibling depth assignments. Stack is back-to-front:
+//   -2  Panorama
+//    0  root scene (the active menu SWF)
+//  101  Logo (ComponentLogo1080.swf)
+//  199  MenuBackground (the dim overlay, hidden by default,
+//       shown while a dialog is up). Sits ABOVE the logo so
+//       the dim covers it, matching console where MessageBox's
+//       addComponent(eUIComponent_MenuBackground) darkens
+//       everything underneath including the logo.
+//  200  MessageBox dialog (sibling, only when dialog up)
+//  201  Tooltips bottom strip - lives above the dialog so
+//       Select / Cancel stay readable while the dim is up.
+//       The strip is at the bottom of the screen so it doesn't
+//       visually overlap the dialog panel.
+static const int kLogoDepth        = 101;
+static const int kDimDepth         = 199;
+static const int kMessageBoxDepth  = 200;
+static const int kTooltipsDepth    = 201;
 
 // Weak-ish ref to the live VC so C-style ExternalInterface bridge
 // callbacks can reach instance methods (navigateBack,
@@ -972,13 +984,13 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // tile1 scrolled into the letterbox area.
         struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
         NSArray* siblings = @[
-            // Depth order (back to front): Panorama (-2),
-            // MenuBackground (-1, dim), scene root (0), Tooltips
-            // (100), Logo (101). The dim needs to sit BELOW the
-            // scene root so it doesn't cover the dialog; stage
-            // child depths are integers so Panorama drops to -2
-            // to free -1 for MenuBackground.
-            @[@"Panorama1080.swf",     @(-2),  @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            // Depth stack documented next to the kFooDepth
+            // constants near the top of this file. Order is
+            // back-to-front: Panorama, scene root (added later by
+            // replace_swf), Logo, dim, dialog (only when up),
+            // Tooltips.
+            @[@"Panorama1080.swf",     @(-2),                   @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            @[@"ComponentLogo1080.swf",@(kLogoDepth),           @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
             // MenuBackground is the dim backdrop console adds via
             // UIComponent_MenuBackground while a MessageBox dialog
             // is up (UIScene_MessageBox.cpp:49 addComponent).
@@ -986,9 +998,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             // Panorama scale it only covered the centre band of
             // the screen. Same 1.5x and pre-shift Panorama uses so
             // it fills iPhone aspect ratios end-to-end.
-            @[@"MenuBackground1080.swf",@(-1), @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
-            @[@"ToolTips1080.swf",     @(100), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
-            @[@"ComponentLogo1080.swf",@(101), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
+            @[@"MenuBackground1080.swf",@(kDimDepth),           @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            @[@"ToolTips1080.swf",     @(kTooltipsDepth),       @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
         ];
         for (NSArray* entry in siblings) {
             NSString* swfName = entry[0];
@@ -1018,7 +1029,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // while a MessageBox dialog is up so it doesn't dim the
         // regular menu tree.
         ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, -1, 0);
+            g_ruffle_player, kDimDepth, 0);
 
         // Tick the player a few frames so each sibling SWF's
         // ADDED_TO_STAGE event fires and its FJ_Document.init
@@ -1038,7 +1049,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 // Configure the tooltips strip at the bottom of the screen for
 // the current scene. Drives ToolTips1080.swf (attached as a
-// stage sibling at depth 100) via its public AS3 API:
+// stage sibling at kTooltipsDepth) via its public AS3 API:
 //   SetToolTip(buttonId, label, show)  per ToolTips.as:144
 //   UpdateLayout()                     per ToolTips.as:150
 // Button ids match the TOOLTIP_BUTTON_* constants in ToolTips.as:
@@ -1070,9 +1081,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         @"LaunchMoreOptionsMenu1080.swf",
     ]];
     int visible = [logoOff containsObject:swfName] ? 0 : 1;
-    // Logo is depth 101 on our stage (see attachMenuScenery).
     ruffle_ios_set_xui_sibling_visible_at_depth(
-        g_ruffle_player, 101, visible);
+        g_ruffle_player, kLogoDepth, visible);
 }
 
 - (void)seedTooltipsForScene:(NSString*)swfName hidden:(BOOL)hidden {
@@ -1124,7 +1134,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     };
     for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i) {
         ruffle_ios_call_set_tooltip(
-            g_ruffle_player, 100,
+            g_ruffle_player, kTooltipsDepth,
             slots[i].id,
             (const uint8_t*)slots[i].label, strlen(slots[i].label),
             slots[i].show ? 1 : 0);
@@ -1137,7 +1147,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // flush against the edge.
     const char* setSafe = "SetSafeZone";
     double safe[4] = { 0.0, 60.0, 60.0, 0.0 }; // top, bottom, left, right
-    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, 100,
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
         (const uint8_t*)setSafe, strlen(setSafe),
         safe, 4);
 
@@ -1145,7 +1155,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // (show=false) slots end up off-screen so they don't take
     // up space in the strip.
     const char* updateName = "UpdateLayout";
-    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, 100,
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
         (const uint8_t*)updateName, strlen(updateName),
         NULL, 0);
 }
@@ -1889,15 +1899,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // Dim the scene behind the dialog by flipping the
     // MenuBackground sibling on. Mirrors console's
     // addComponent(eUIComponent_MenuBackground) at UIScene_
-    // MessageBox.cpp:49.
+    // MessageBox.cpp:49. Dim sits ABOVE the logo (kDimDepth >
+    // kLogoDepth) so logo + scene are darkened underneath it,
+    // matching console where the dialog overlay covers everything
+    // except the tooltips strip.
     ruffle_ios_set_xui_sibling_visible_at_depth(
-        g_ruffle_player, -1, 1);
-    // Hide the Minecraft logo (sibling at depth 101) while the
-    // dialog is up. Without this it sits in front of the dim
-    // layer and pokes out above the dialog. Restored on dismiss
-    // by applyLogoVisibilityForScene: in finishDialogWithResult:.
-    ruffle_ios_set_xui_sibling_visible_at_depth(
-        g_ruffle_player, 101, 0);
+        g_ruffle_player, kDimDepth, 1);
 
     // Sibling-overlay model. Add MessageBox1080.swf as a stage
     // sibling at depth kMessageBoxDepth on top of the underlying
@@ -1913,7 +1920,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (!data.length) {
         NSLog(@"[dialog] MessageBox1080.swf not found at %@", path);
         g_pending_dialog = nil;
-        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -1, 0);
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kDimDepth, 0);
         if (callback) callback(MCLEDialogResultCancelled);
         return;
     }
@@ -2039,23 +2046,21 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     if (g_ruffle_player) {
         // Hide dim, drop the MessageBox sibling, and hand stage
         // KEY_DOWN ownership back to the underlying scene's
-        // FJ_Document.
+        // FJ_Document. Logo wasn't toggled on dialog open (the
+        // dim covers it underneath), so no logo restore needed.
         ruffle_ios_set_xui_sibling_visible_at_depth(
-            g_ruffle_player, -1, 0);
+            g_ruffle_player, kDimDepth, 0);
         ruffle_ios_remove_sibling_at_depth(
             g_ruffle_player, kMessageBoxDepth);
         ruffle_ios_clear_stage_dispatch_list(g_ruffle_player);
         ruffle_ios_redispatch_added_to_stage(g_ruffle_player, -1);
-        // Restore the underlying scene's tooltips, logo, and focus
+        // Restore the underlying scene's tooltips and focus
         // highlight. seedTooltipsForScene picks the (A, B) pair
         // that scene's updateTooltips override would have set
-        // on console; applyLogoVisibilityForScene puts the logo
-        // back where that scene wants it; refreshFocusState pushes
-        // ChangeState=SELECTED on whichever button menuFocusIndex
-        // points at.
+        // on console; refreshFocusState pushes ChangeState=
+        // SELECTED on whichever button menuFocusIndex points at.
         if (self.currentMenuSwf.length) {
             [self seedTooltipsForScene:self.currentMenuSwf hidden:NO];
-            [self applyLogoVisibilityForScene:self.currentMenuSwf];
         }
         [self refreshFocusState];
     }
@@ -2247,11 +2252,14 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // visible on MainMenu; hidden on sub-scenes to match console.
     if (self.splashLabel) {
         BOOL onMainMenu = [self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"];
-        // Hide while a dialog is up too: the splash is a UIKit
-        // UILabel painted on top of the wgpu surface, so it would
-        // sit in front of the dialog otherwise.
-        self.splashLabel.hidden = !onMainMenu || (g_pending_dialog != nil);
-        if (onMainMenu && !g_pending_dialog) {
+        self.splashLabel.hidden = !onMainMenu;
+        // Splash is a UIKit UILabel painted on top of the wgpu
+        // surface, so the in-engine dim layer can't reach it.
+        // Alpha-dim it manually while a dialog is up to mirror
+        // what the dim does to the rest of the scene underneath.
+        // Restored to full opacity on dismiss.
+        self.splashLabel.alpha = g_pending_dialog ? 0.35 : 1.0;
+        if (onMainMenu) {
             uint64_t nowMs = (uint64_t)(CACurrentMediaTime() * 1000.0);
             double phase = (double)(nowMs % 1000) / 1000.0 * M_PI * 2.0;
             double pulse = 1.0 - fabs(sin(phase)) * 0.05;
