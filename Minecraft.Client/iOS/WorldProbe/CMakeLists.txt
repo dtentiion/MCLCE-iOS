@@ -54,7 +54,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
+  # AttackDamageMobEffect.cpp dropped: pulls Entity.h transitively
+  # which has non-pointer ItemInstance fields. Forward decl is not
+  # enough; needs ItemInstance properly ported (Item subsystem).
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
   # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
