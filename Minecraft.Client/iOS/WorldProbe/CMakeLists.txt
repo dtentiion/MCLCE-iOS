@@ -117,7 +117,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/KickPlayerPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Language.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/LevelSettings.cpp
+  # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
