@@ -69,14 +69,13 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
-  # World-gen feature trees + caves. Mostly decoration logic that
-  # places tiles. May or may not pull Tile.h - try and see.
-  ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BirchFeature.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/CanyonFeature.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/CaveFeature.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
+  # World-gen feature files dropped: they all pull Tile.h
+  # transitively which references Entity hierarchy with non-pointer
+  # ItemInstance fields. Re-add when ItemInstance is ported.
+  # Strategic: try ItemInstance.cpp itself. If it compiles, the
+  # entity wall opens up because shared_ptr<ItemInstance> uses can
+  # then resolve full type.
+  ${UPSTREAM_DIR}/Minecraft.World/ItemInstance.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
   # AddExperienceOrbPacket.cpp dropped: includes
   # net.minecraft.world.entity.h (Entity hierarchy).
