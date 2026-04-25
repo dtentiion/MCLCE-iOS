@@ -136,6 +136,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/VoronoiZoom.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterColor.cpp
   # Biome layer files all dropped - all pull Biome -> Mob -> Entity.
+  # Pivot: try a Minecraft.Client utility cpp that does not pull
+  # the entity subsystem. ColourTable maps colour names to
+  # eMinecraftColour values, pure data + StringHelpers.
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Colours/ColourTable.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
   # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
