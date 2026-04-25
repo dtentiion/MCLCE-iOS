@@ -157,17 +157,25 @@ add_ios_to_sony_branch() {
         return
     fi
     python3 - "$file" <<'PY'
-import sys
+import re, sys
 path = sys.argv[1]
 with open(path, 'r', encoding='utf-8', errors='replace') as f:
     src = f.read()
 
-needle = '#if defined(__PS3__) || defined(__ORBIS__) || defined (__PSVITA__)'
-if needle not in src:
+# Match both variants: `defined (__PSVITA__)` with space and
+# `defined(__PSVITA__)` without. Two upstream files use different
+# whitespace styles in the same conditional.
+pat = re.compile(
+    r'#if defined\(__PS3__\) \|\| defined\(__ORBIS__\) \|\| defined ?\(__PSVITA__\)'
+)
+m = pat.search(src)
+if not m:
     sys.exit(f"patch-upstream-stdafx: Sony branch anchor not found in {path}")
 
-new = '#if defined(__PS3__) || defined(__ORBIS__) || defined (__PSVITA__) || defined(__APPLE_IOS__)'
-patched = src.replace(needle, new, 1)
+# Re-emit with iOS appended, preserving whatever whitespace style the
+# original had (we just append `|| defined(__APPLE_IOS__)`).
+new_text = m.group(0) + ' || defined(__APPLE_IOS__)'
+patched = src[:m.start()] + new_text + src[m.end():]
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: added __APPLE_IOS__ to Sony branch in {path}")
