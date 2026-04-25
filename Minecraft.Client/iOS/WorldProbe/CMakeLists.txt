@@ -57,7 +57,8 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
   # Next batch: more shallow files that do not transitively pull
   # Entity / Tile / Mob / Item / Biome.
-  ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
+  # BaseAttributeMap.cpp dropped: accesses ItemInstance members via
+  # shared_ptr - needs full ItemInstance type, not forward decl.
   ${UPSTREAM_DIR}/Minecraft.World/BinaryHeap.cpp
   # BoundingBox.cpp dropped: needs full IntArrayTag type for `new
   # IntArrayTag(...)`. Forward decl is not enough. Re-add when the
