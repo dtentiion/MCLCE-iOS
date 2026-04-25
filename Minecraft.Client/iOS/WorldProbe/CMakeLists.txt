@@ -24,11 +24,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
-  # zlib-backed compression. Uses bundled Common/zlib at
-  # upstream/Minecraft.Client/Common/zlib/zlib.h. The platform
-  # `#if` chain in compression.cpp gets an __APPLE_IOS__ branch
-  # via patch-upstream-stdafx.sh so it picks the bundled zlib.
-  ${UPSTREAM_DIR}/Minecraft.World/compression.cpp
+  # compression.cpp deferred. It needs ByteOrder + LITTLEENDIAN
+  # from Definitions.h (stdafx is no-op so we have to surface
+  # those some other way), plus Win32 CriticalSection shims, plus
+  # Xbox PIX profiling no-ops, plus an XMEMCOMPRESSION_CONTEXT stub
+  # for the Xbox compression branch we will not enter. Punt until
+  # those shims land for other reasons.
   # ChunkPos.cpp dropped: it does
   #   #include "net.minecraft.world.entity.h"
   # which pulls Entity / Creature / SynchedEntityData / EntityIO and a
