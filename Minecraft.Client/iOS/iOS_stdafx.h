@@ -31,6 +31,7 @@
 #include <cwchar>
 #include <ctime>
 #include <cassert>
+#include <cfloat>
 
 #include <string>
 #include <vector>
