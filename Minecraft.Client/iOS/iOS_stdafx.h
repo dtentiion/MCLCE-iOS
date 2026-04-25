@@ -137,4 +137,16 @@ inline void MemSect(int) {}
 #include "Mth.h"
 #endif
 
+// Upstream enum definitions. App_enums.h has eMinecraftColour /
+// eGameSetting / eGameMode / eXuiAction / EControllerActions /
+// EHTMLFontSize / eMCLang and many more. Attribute.h has
+// eATTRIBUTE_ID. Both files are header-include-free pure-enum
+// declarations - safe to pre-include for the probe.
+#ifdef __cplusplus
+// App_enums.h lives in Minecraft.Client/Common, escape upstream/
+// Minecraft.World via .. then descend into the Common/ tree.
+#include "../Minecraft.Client/Common/App_enums.h"
+#include "Attribute.h"
+#endif
+
 #endif // !_WIN32 && !_WIN64
