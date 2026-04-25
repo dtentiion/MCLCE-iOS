@@ -10,3 +10,16 @@
 #pragma once
 
 #include "iOS_WinCompat.h"
+
+// Opaque player identity stub. Other platforms back this with platform-
+// specific identity (Sony NP, Xbox Live, etc). For iOS we have no online
+// identity yet, so PlayerUID is a fixed-size byte buffer that satisfies
+// the type usage in DataInput / DataOutput / Connection / save formats.
+// Layout chosen to be wide enough to hold any platform's identity at
+// the size LCE expects (16 bytes covers Xbox XUID, PS NP id digest, etc).
+#ifdef __cplusplus
+struct PlayerUID {
+    uint8_t bytes[16];
+};
+typedef PlayerUID* PPlayerUID;
+#endif

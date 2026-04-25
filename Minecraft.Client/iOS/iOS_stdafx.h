@@ -77,6 +77,8 @@ using namespace std;
 // this list as the probe set grows and surfaces a new forward-declared name.
 #ifdef __cplusplus
 class Entity;
+class Node;
+class Biome;
 #endif
 
 // Math + type macros that upstream Definitions.h provides at file scope.
