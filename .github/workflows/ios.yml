@@ -143,6 +143,11 @@ jobs:
           xcodebuild -version
           cmake --version
 
+      - name: Patch upstream Minecraft.World/stdafx.h for iOS
+        run: |
+          chmod +x scripts/patch-upstream-stdafx.sh
+          ./scripts/patch-upstream-stdafx.sh
+
       - name: Configure (probe target only)
         run: |
           cmake -S . -B build-probe \
