@@ -90,7 +90,8 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/Distort.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Emboss.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FastNoise.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/File.cpp
+  # File.cpp dropped: heavy Win32 file system (WIN32_FIND_DATA,
+  # MoveFile, GetLastError, MAX_PATH, wstringtofilename helper).
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
   # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
   # StairTile, TntTile, etc which all reference Explosion / Random
