@@ -409,6 +409,16 @@ typedef struct D3D11_VIEWPORT {
 #ifndef INFINITE
 #  define INFINITE              0xFFFFFFFF
 #endif
+// Win32 WaitForSingleObject return - timeout elapsed without signal.
+#ifndef WAIT_TIMEOUT
+#  define WAIT_TIMEOUT          258
+#endif
+#ifndef WAIT_OBJECT_0
+#  define WAIT_OBJECT_0         0
+#endif
+#ifndef WAIT_FAILED
+#  define WAIT_FAILED           0xFFFFFFFF
+#endif
 
 // Win32 thread-creation flags. Probe never spawns a thread; constant
 // just needs to exist for compile.

@@ -17,6 +17,8 @@ namespace mcle_world_probe { inline void _anchor() {} }
 // owns the symbol so the link resolves.
 C_4JProfile ProfileManager;
 C4JStorage  StorageManager;
+class CTelemetryManager;
+CTelemetryManager *TelemetryManager = nullptr;
 
 // Out-of-line definitions for upstream class statics that were declared
 // with in-class initializers but never defined out-of-line in the .cpp
