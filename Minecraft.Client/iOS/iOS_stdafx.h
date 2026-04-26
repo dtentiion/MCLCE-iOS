@@ -156,6 +156,18 @@ struct LevelGenerationOptions {
     template<class... A> bool requiresBaseSave(A...)   { return false; }
     template<class... A> void* getBaseSaveData(A...)   { return nullptr; }
     template<class... A> void deleteBaseSaveData(A...) {}
+    template<class... A> bool isFromDLC(A...)          { return false; }
+    template<class... A> bool isFromMashup(A...)       { return false; }
+};
+
+// DLCSkinFile: opaque per-skin metadata pulled from DLC. Probe-only
+// stub. TextureAndGeometryPacket etc reach in for skin-anim flags;
+// returning sentinels keeps parses going.
+struct DLCSkinFile {
+    template<class... A> int  getAnimOverrideBitmask(A...) { return 0; }
+    template<class... A> int  getAdditionalModelParts(A...) { return 0; }
+    template<class... A> bool isMashup(A...)               { return false; }
+    template<class... A> const wchar_t* getName(A...)      { return L""; }
 };
 
 // C4JRender is a heavyweight platform render class - the real one
