@@ -796,6 +796,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/SpawnEggItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StrongholdPieces.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Entity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Level.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/AllowAllCuller.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/BlazeRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/BossMobGuiInfo.cpp
