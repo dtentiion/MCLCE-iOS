@@ -208,6 +208,9 @@ typedef int32_t HRESULT;
 #ifndef PIXEndNamedEvent
 #  define PIXEndNamedEvent() ((void)0)
 #endif
+#ifndef PIXAddNamedCounter
+#  define PIXAddNamedCounter(value, name) ((void)0)
+#endif
 #ifndef CopyMemory
 #  define CopyMemory(dest, src, size)  memcpy((dest), (src), (size))
 #endif
