@@ -183,6 +183,7 @@ struct LevelGenerationOptions {
     template<class... A> int  getFeatureSeed(A...)     { return 0; }
     template<class... A> bool hasLoadedData(A...)      { return false; }
     template<class... A> bool isReady(A...)            { return true; }
+    template<class... A> bool ready(A...)              { return true; }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/

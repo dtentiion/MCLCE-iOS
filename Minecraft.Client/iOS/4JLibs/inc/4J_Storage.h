@@ -47,6 +47,16 @@ public:
         ESaveGame_SaveSubfilesCompleteFail,
         ESaveGame_SaveSubfilesIncomplete,
     };
+
+    template<class... A> bool GetSaveDisabled(A...)        { return false; }
+    template<class... A> bool IsSaving(A...)               { return false; }
+    template<class... A> int  GetActiveSaveSlot(A...)      { return 0; }
+    template<class... A> void* GetActiveSaveFile(A...)     { return nullptr; }
 };
+
+// Real upstream 4J_Storage.h declares `extern C4JStorage StorageManager;`
+// Mirror that so platform-agnostic code referencing the global resolves.
+// The actual instance is defined in probe_stub.cpp.
+extern C4JStorage StorageManager;
 
 #endif // __cplusplus
