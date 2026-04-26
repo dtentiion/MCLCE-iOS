@@ -789,6 +789,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/FileInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RespawnPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/CompressedTileStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Packet.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TilePlanterItem.cpp
 )
 
 add_library(mcle_world_probe STATIC
