@@ -116,12 +116,13 @@ enum ETelemetryChallenges {
     eTelemetryChallenges_Unknown,
 };
 
-// eTYPE_BOSS_MOB_PART is a Class.h-style RTTI enum value upstream
-// uses for runtime type ID. Stubbed as the next slot after eINSTANCEOF
-// values. Real enum lives in Class.h which we already include; this
-// gives just the missing entry.
+// eTYPE_BOSS_MOB_PART is a console-branch RTTI slot upstream's Class.h
+// does not declare. BossMobPart.h GetType() returns this; using the
+// enum identifier eTYPE_NOTSET (0) means the macro substitutes a real
+// eINSTANCEOF value rather than an int literal that would not implicitly
+// convert. Resolved at the use site, after Class.h is parsed.
 #ifndef eTYPE_BOSS_MOB_PART
-#  define eTYPE_BOSS_MOB_PART 0
+#  define eTYPE_BOSS_MOB_PART eTYPE_NOTSET
 #endif
 
 // Stubs for upstream classes we cannot easily include without
@@ -143,7 +144,19 @@ struct ConsoleGameRules {
     };
     template<class... A> ConsoleGameRules(A...) {}
 };
-struct C4JRenderStub    {};
+// Stub for upstream's heavyweight C4JRender. Textures.h asks for the
+// nested texture-format enum value to declare a static field;
+// upstream platforms have a real enum here. Generic enumerator slot
+// keeps the parse going.
+struct C4JRenderStub {
+    enum eTextureFormat {
+        eTextureFormat_None = 0,
+        eTextureFormat_RGBA = 1,
+    };
+    struct Texture {};
+    struct VertexBuffer {};
+    struct IndexBuffer {};
+};
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
 
@@ -158,6 +171,8 @@ struct LevelGenerationOptions {
     template<class... A> void deleteBaseSaveData(A...) {}
     template<class... A> bool isFromDLC(A...)          { return false; }
     template<class... A> bool isFromMashup(A...)       { return false; }
+    template<class... A> bool isFeatureChunk(A...)     { return false; }
+    template<class... A> int  getFeatureSeed(A...)     { return 0; }
 };
 
 // DLCSkinFile: opaque per-skin metadata pulled from DLC. Probe-only
@@ -180,6 +195,7 @@ class CompoundTag;
 class Player;
 class Mob;
 class DamageSource;
+class MobEffect;
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif

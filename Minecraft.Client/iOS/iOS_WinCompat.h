@@ -343,6 +343,87 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define MINECRAFT_NET_MAX_PLAYERS 8
 #endif
 
+// Console world-size constants from upstream Minecraft.Client/MinecraftServer.h.
+// Real values match the Console Edition's legacy 864-block worlds and
+// classic 256-block worlds. Used as compile-time array sizes / loop
+// bounds so they need to be the right magnitude.
+#ifndef LEVEL_LEGACY_WIDTH
+#  define LEVEL_LEGACY_WIDTH    864
+#endif
+#ifndef LEVEL_WIDTH_CLASSIC
+#  define LEVEL_WIDTH_CLASSIC   256
+#endif
+#ifndef LEVEL_MAX_WIDTH
+#  define LEVEL_MAX_WIDTH       1024
+#endif
+
+// Win32 file-share mask flags. Probe never opens files; constants
+// just need to exist for compile.
+#ifndef GENERIC_READ
+#  define GENERIC_READ          0x80000000
+#endif
+#ifndef GENERIC_WRITE
+#  define GENERIC_WRITE         0x40000000
+#endif
+#ifndef OPEN_EXISTING
+#  define OPEN_EXISTING         3
+#endif
+#ifndef CREATE_ALWAYS
+#  define CREATE_ALWAYS         2
+#endif
+#ifndef FILE_ATTRIBUTE_NORMAL
+#  define FILE_ATTRIBUTE_NORMAL 0x00000080
+#endif
+#ifndef FILE_SHARE_READ
+#  define FILE_SHARE_READ       0x00000001
+#endif
+
+// Xbox-style memset intrinsics. Real platforms use SIMD-aligned memset.
+// Map to the standard memset on iOS - probe never executes these.
+#ifndef XMemSet
+#  define XMemSet(dst, val, len)    memset((dst), (val), (len))
+#endif
+#ifndef XMemSet128
+#  define XMemSet128(dst, val, len) memset((dst), (val), (len))
+#endif
+
+// Win32 SetFilePointer entry. Probe stub; never called.
+static inline DWORD SetFilePointer(HANDLE, LONG distLow, PLONG distHigh, DWORD) {
+    if (distHigh) *distHigh = 0;
+    return (DWORD)distLow;
+}
+
+// Win32 CreateFile / WriteFile / ReadFile / CloseHandle entries.
+// Required for compile of File.cpp on the Console branch.
+#ifndef _IOS_FILE_API_DECLARED
+#define _IOS_FILE_API_DECLARED
+static inline HANDLE CreateFileA(const char*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
+    return INVALID_HANDLE_VALUE;
+}
+static inline HANDLE CreateFileW(const wchar_t*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
+    return INVALID_HANDLE_VALUE;
+}
+#  ifdef UNICODE
+#    define CreateFile CreateFileW
+#  else
+#    define CreateFile CreateFileA
+#  endif
+static inline BOOL ReadFile(HANDLE, void*, DWORD, LPDWORD got, void*) {
+    if (got) *got = 0; return FALSE;
+}
+static inline BOOL WriteFile(HANDLE, const void*, DWORD, LPDWORD wrote, void*) {
+    if (wrote) *wrote = 0; return FALSE;
+}
+static inline BOOL CloseHandle(HANDLE) { return TRUE; }
+static inline BOOL DeleteFileA(const char*) { return TRUE; }
+static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
+#  ifdef UNICODE
+#    define DeleteFile DeleteFileW
+#  else
+#    define DeleteFile DeleteFileA
+#  endif
+#endif
+
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
 #define _PLONG_DEFINED
