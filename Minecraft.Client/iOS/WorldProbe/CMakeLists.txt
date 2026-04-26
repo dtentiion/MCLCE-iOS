@@ -161,7 +161,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/RiverMixerLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/IslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RegionHillsLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BiomeOverrideLayer.cpp
+  # BiomeOverrideLayer dropped - heavy Win32 file I/O.
   ${UPSTREAM_DIR}/Minecraft.World/BiomeInitLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlatLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TemperatureLayer.cpp
