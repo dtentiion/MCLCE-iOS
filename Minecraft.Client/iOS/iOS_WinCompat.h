@@ -189,6 +189,16 @@ typedef int32_t HRESULT;
 #ifndef XMemCpy
 #  define XMemCpy(dest, src, size)     memcpy((dest), (src), (size))
 #endif
+
+// PIX (Performance Investigator for Xbox) profiling macros. Upstream
+// uses these to mark named timing regions in chunk update / world
+// gen / etc. No-op everywhere off-Xbox.
+#ifndef PIXBeginNamedEvent
+#  define PIXBeginNamedEvent(color, name, ...) ((void)0)
+#endif
+#ifndef PIXEndNamedEvent
+#  define PIXEndNamedEvent() ((void)0)
+#endif
 #ifndef CopyMemory
 #  define CopyMemory(dest, src, size)  memcpy((dest), (src), (size))
 #endif
