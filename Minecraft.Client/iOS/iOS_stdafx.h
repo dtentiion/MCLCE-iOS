@@ -179,6 +179,16 @@ struct LevelGenerationOptions {
     template<class... A> int  getFeatureSeed(A...)     { return 0; }
 };
 
+// IllegalArgumentException stub. Upstream Packet.cpp throws this on
+// bad packet shapes. Probe never throws; constructor body is empty.
+class IllegalArgumentException {
+public:
+    IllegalArgumentException() {}
+    IllegalArgumentException(const std::wstring&) {}
+    IllegalArgumentException(const std::string&) {}
+    template<class... A> IllegalArgumentException(A...) {}
+};
+
 // DLCSkinFile: opaque per-skin metadata pulled from DLC. Probe-only
 // stub. TextureAndGeometryPacket etc reach in for skin-anim flags;
 // returning sentinels keeps parses going.

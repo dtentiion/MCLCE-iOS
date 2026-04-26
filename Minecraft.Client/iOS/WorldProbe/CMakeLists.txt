@@ -788,6 +788,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/BiomeOverrideLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FileInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RespawnPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CompressedTileStorage.cpp
 )
 
 add_library(mcle_world_probe STATIC
