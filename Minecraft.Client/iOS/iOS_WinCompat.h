@@ -357,6 +357,11 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define LEVEL_MAX_WIDTH       1024
 #endif
 
+// Console nether-scale ratio for legacy worlds.
+#ifndef HELL_LEVEL_LEGACY_SCALE
+#  define HELL_LEVEL_LEGACY_SCALE 3
+#endif
+
 // Win32 file-share mask flags. Probe never opens files; constants
 // just need to exist for compile.
 #ifndef GENERIC_READ
@@ -367,6 +372,12 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #endif
 #ifndef OPEN_EXISTING
 #  define OPEN_EXISTING         3
+#endif
+#ifndef OPEN_ALWAYS
+#  define OPEN_ALWAYS           4
+#endif
+#ifndef CREATE_NEW
+#  define CREATE_NEW            1
 #endif
 #ifndef CREATE_ALWAYS
 #  define CREATE_ALWAYS         2
@@ -386,6 +397,73 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #ifndef XMemSet128
 #  define XMemSet128(dst, val, len) memset((dst), (val), (len))
 #endif
+
+// Win32 secure-CRT printf variants. Upstream uses these for thread-name
+// formatting and a couple of debug strings. Map to vsnprintf - probe
+// only needs the symbols to exist.
+#include <stdio.h>
+#ifndef sprintf_s
+#  define sprintf_s(buf, sz, ...)   snprintf((buf), (sz), __VA_ARGS__)
+#endif
+#ifndef swprintf_s
+#  define swprintf_s(buf, sz, ...)  swprintf((buf), (sz), __VA_ARGS__)
+#endif
+
+// Win32 thread error reporting. iOS exposes errno; for the probe a
+// constant zero satisfies the call sites.
+static inline DWORD GetLastError(void) { return 0; }
+static inline void  SetLastError(DWORD) {}
+
+// Win32 atomic intrinsics for upstream's lock-free paths. iOS clang
+// supports the GCC __sync builtins which match the semantics. The
+// _Release variants drop the full barrier - probe never races so any
+// of the __sync flavours works.
+#ifndef InterlockedCompareExchangeRelease64
+#  define InterlockedCompareExchangeRelease64(dst, exch, comp) \
+       __sync_val_compare_and_swap((volatile long long*)(dst), (long long)(comp), (long long)(exch))
+#endif
+#ifndef InterlockedCompareExchange64
+#  define InterlockedCompareExchange64(dst, exch, comp) \
+       __sync_val_compare_and_swap((volatile long long*)(dst), (long long)(comp), (long long)(exch))
+#endif
+#ifndef InterlockedIncrement
+#  define InterlockedIncrement(p)   __sync_add_and_fetch((p), 1)
+#endif
+#ifndef InterlockedDecrement
+#  define InterlockedDecrement(p)   __sync_sub_and_fetch((p), 1)
+#endif
+
+// Win32 spin-count critical-section initializer. The spin parameter
+// is a Win-only optimization; on iOS we just init like a regular CS.
+static inline BOOL InitializeCriticalSectionAndSpinCount(LPCRITICAL_SECTION cs, DWORD) {
+    if (cs) pthread_mutex_init(&cs->_mu, NULL);
+    return TRUE;
+}
+
+// Wide string equalsIgnoreCase helper. AnvilMenu uses it to compare
+// the user-typed item name with the existing hover name. Probe never
+// runs the rename path; an exact-equality fallback typechecks fine.
+#ifdef __cplusplus
+static inline bool equalsIgnoreCase(const std::wstring& a, const std::wstring& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        wchar_t ca = a[i], cb = b[i];
+        if (ca >= L'A' && ca <= L'Z') ca = (wchar_t)(ca + 32);
+        if (cb >= L'A' && cb <= L'Z') cb = (wchar_t)(cb + 32);
+        if (ca != cb) return false;
+    }
+    return true;
+}
+#endif
+
+// CRT integer-to-wide-string. Upstream uses for HUD numerics. Map to
+// swprintf - the probe never inspects the buffer.
+static inline wchar_t* _itow(int v, wchar_t* buf, int radix) {
+    if (!buf) return buf;
+    if (radix == 16) swprintf(buf, 12, L"%x", v);
+    else             swprintf(buf, 12, L"%d", v);
+    return buf;
+}
 
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
