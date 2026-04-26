@@ -14,6 +14,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_FILE="${1:-$REPO_ROOT/auto-probe-greens.txt}"
 MW_DIR="$REPO_ROOT/upstream/Minecraft.World"
+MC_DIR="$REPO_ROOT/upstream/Minecraft.Client"
 LOG_DIR="$REPO_ROOT/auto-probe-logs"
 SHIM="$REPO_ROOT/Minecraft.Client/iOS/iOS_stdafx.h"
 
@@ -33,6 +34,8 @@ CXXFLAGS="-std=c++14 -fdeclspec -fsyntax-only \
   -DMCLE_PROBE_BUILD=1 \
   -I $MW_DIR \
   -I $MW_DIR/x64headers \
+  -I $MC_DIR \
+  -I $MC_DIR/Common \
   -I $REPO_ROOT/upstream/include \
   -I $REPO_ROOT/Minecraft.Client/iOS \
   -I $REPO_ROOT/Minecraft.Client/iOS/compat_headers \
@@ -47,22 +50,42 @@ total=0
 green=0
 red=0
 
+# Probe set 1: upstream/Minecraft.World/*.cpp  (the gameplay/world simulation)
 cd "$MW_DIR"
 for src in *.cpp; do
     total=$((total + 1))
-    log="$LOG_DIR/${src%.cpp}.log"
+    log="$LOG_DIR/MW_${src%.cpp}.log"
     if "$CXX" $ARCH $CXXFLAGS "$src" > "$log" 2>&1; then
-        echo "GREEN: $src"
-        echo "$src" >> "$OUT_FILE"
+        echo "GREEN: Minecraft.World/$src"
+        echo "Minecraft.World/$src" >> "$OUT_FILE"
         green=$((green + 1))
-        rm -f "$log"  # clean up greens to keep artifact size down
+        rm -f "$log"
     else
         red=$((red + 1))
-        # Keep the first failing-error line in a summary
         head -3 "$log" >> "$LOG_DIR/_failures.txt"
-        echo "  -> $src" >> "$LOG_DIR/_failures.txt"
+        echo "  -> Minecraft.World/$src" >> "$LOG_DIR/_failures.txt"
     fi
 done
+
+# Probe set 2: upstream/Minecraft.Client/Common/**/*.cpp (platform-agnostic
+# client + game-rules + DLC + Network code). Excludes the renderer-heavy
+# Minecraft.Client/ root for now (those need Phase D's GL ES bringup).
+while IFS= read -r src; do
+    total=$((total + 1))
+    rel="${src#$REPO_ROOT/upstream/}"
+    safe="${rel//\//_}"
+    log="$LOG_DIR/${safe%.cpp}.log"
+    if "$CXX" $ARCH $CXXFLAGS "$src" > "$log" 2>&1; then
+        echo "GREEN: $rel"
+        echo "$rel" >> "$OUT_FILE"
+        green=$((green + 1))
+        rm -f "$log"
+    else
+        red=$((red + 1))
+        head -3 "$log" >> "$LOG_DIR/_failures.txt"
+        echo "  -> $rel" >> "$LOG_DIR/_failures.txt"
+    fi
+done < <(find "$MC_DIR/Common" -name "*.cpp")
 
 echo
 echo "==== auto-probe summary ===="
