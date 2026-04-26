@@ -94,6 +94,7 @@ struct McleAppStub {
     template<class... A> void           AddMemoryTPDFile(A...)        {}
     template<class... A> void           AddMemoryTextureFile(A...)    {}
     template<class... A> void           ClearTerrainFeaturePosition(A...) {}
+    template<class... A> void*          getGameRuleDefinitions(A...)  { return nullptr; }
     template<class... A> bool           DLCAlreadyPurchased(A...)     { return false; }
     template<class... A> bool           DLCInstalled(A...)            { return false; }
     template<class... A> bool           DLCInstallPending(A...)       { return false; }
