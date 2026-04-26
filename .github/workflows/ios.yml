@@ -155,8 +155,32 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/ios.toolchain.cmake" \
             -DPLATFORM=OS64 \
             -DDEPLOYMENT_TARGET=14.0 \
-            -DENABLE_WORLD_PROBE=ON
+            -DENABLE_WORLD_PROBE=ON \
+            -DENABLE_WORLD_PROBE_LINK=ON
 
       - name: Build mcle_world_probe
         run: |
           cmake --build build-probe --config Release --target mcle_world_probe -- -quiet
+
+      - name: Link mcle_world_probe_link_test (expected to fail; capture log)
+        continue-on-error: true
+        run: |
+          set +e
+          cmake --build build-probe --config Release --target mcle_world_probe_link_test 2>&1 | tee link-test.log
+          status=${PIPESTATUS[0]}
+          echo "linker exit status: $status"
+          # Pull undefined-symbol lines out for a small artifact even if the
+          # full log is huge.
+          (grep -E "Undefined symbol|undefined symbol|symbol not found|cannot find symbol" link-test.log || true) > link-test-undefined.log
+          wc -l link-test-undefined.log
+          exit 0
+
+      - name: Upload link-test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: world-probe-link-test
+          path: |
+            link-test.log
+            link-test-undefined.log
+          if-no-files-found: warn

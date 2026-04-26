@@ -844,3 +844,48 @@ set_target_properties(mcle_world_probe PROPERTIES
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF
 )
+
+# ----------------------------------------------------------------------------
+# Phase C link-test target. Pulls every TU out of the static archive via
+# -force_load so the linker tries to resolve every symbol referenced by the
+# probe set. Almost certainly fails to link against the iOS toolchain - the
+# undefined-symbol list is the Phase C work item priority queue.
+#
+# Gated behind ENABLE_WORLD_PROBE_LINK so the regular probe job stays fast.
+# The CI driver runs `cmake --build --target mcle_world_probe_link_test` with
+# continue-on-error and uploads the log.
+
+option(ENABLE_WORLD_PROBE_LINK "Try to link mcle_world_probe into a tiny exe" OFF)
+if(ENABLE_WORLD_PROBE_LINK)
+  add_executable(mcle_world_probe_link_test
+    probe_link_test.cpp
+  )
+  target_include_directories(mcle_world_probe_link_test PRIVATE
+    ${UPSTREAM_DIR}/Minecraft.World
+    ${UPSTREAM_DIR}/Minecraft.World/x64headers
+    ${UPSTREAM_DIR}/include
+    ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS
+    ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/compat_headers
+  )
+  target_compile_options(mcle_world_probe_link_test PRIVATE
+    -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/iOS_stdafx.h"
+    -fdeclspec
+  )
+  target_compile_definitions(mcle_world_probe_link_test PRIVATE
+    _LIB _LARGE_WORLDS _CONTENT_PACKAGE MCLE_PROBE_BUILD=1
+  )
+  set_target_properties(mcle_world_probe_link_test PROPERTIES
+    CXX_STANDARD 14
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+  )
+  target_link_libraries(mcle_world_probe_link_test PRIVATE
+    mcle_world_probe
+  )
+  # Force-load every .o in the archive so undefined symbols actually surface.
+  # Without this the linker would only pull TUs that satisfy the test's
+  # tiny call set, hiding 99% of the Phase C work list.
+  target_link_options(mcle_world_probe_link_test PRIVATE
+    "LINKER:-force_load,$<TARGET_FILE:mcle_world_probe>"
+  )
+endif()
