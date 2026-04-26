@@ -169,7 +169,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/DownfallMixerLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BirchFeature.cpp
+  # BirchFeature dropped - app + LevelGenerationOptions.
   # CactusFeature dropped - PortalForcer base class incomplete.
   # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
   # CanyonFeature dropped - uses app.
