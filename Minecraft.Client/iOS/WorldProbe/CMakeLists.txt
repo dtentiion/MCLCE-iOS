@@ -162,7 +162,7 @@ set(WORLD_PROBE_SOURCES
   # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
   # CanyonFeature dropped - uses app.
   # Bush.cpp dropped - PortalForcer chain.
-  ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
+  # BaseAttributeMap dropped - calls real ItemInstance methods.
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
   # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
