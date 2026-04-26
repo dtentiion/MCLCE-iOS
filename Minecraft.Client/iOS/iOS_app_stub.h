@@ -128,4 +128,18 @@ struct McleAppStub {
 // link is not needed since the world-probe is a syntax-only build.
 inline McleAppStub app;
 
+// Stub for the upstream global `g_NetworkManager`. Connection.cpp /
+// Socket.cpp reach into it during the receive-loop. Probe never runs
+// the receive loop; variadic template members absorb signatures and
+// every getter returns sane null/false defaults.
+struct McleNetworkManagerStub {
+    template<class... A> bool IsLeavingGame(A...)   { return false; }
+    template<class... A> bool IsInSession(A...)     { return false; }
+    template<class... A> bool IsHost(A...)          { return false; }
+    template<class... A> int  GetSmallId(A...)      { return 0; }
+    template<class... A> McleNetworkManagerStub* GetHostPlayer(A...) { return this; }
+    template<class... A> void* GetPlayerByXuid(A...) { return nullptr; }
+};
+inline McleNetworkManagerStub g_NetworkManager;
+
 #endif // __cplusplus
