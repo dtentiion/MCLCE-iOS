@@ -321,6 +321,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // `class Socket` forward decl. Brings IsHost / GetSmallId / SendData /
 // etc into scope for files that reach into INetworkPlayer.
 #include "../Minecraft.Client/Common/Network/NetworkPlayerInterface.h"
+// StringTable: real upstream class with map<wstring, wstring> backing
+// store. DLCTexturePack reaches in for getString(); pre-include so
+// member access compiles without extra include directives in callers.
+#include "../Minecraft.Client/StringTable.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
