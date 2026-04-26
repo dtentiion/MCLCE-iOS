@@ -96,9 +96,20 @@ class HtmlString;
 class Explosion;
 class Container;
 class LocalPlayer;
-class AttributeInstance;
 class ResourceLocation;
 class SharedConstants;
+class C4JRender;
+class C4JThread;
+class TileEntity;
+class ServerPlayer;
+class CombatTracker;
+
+// Telemetry enum stub for ServerPlayer.h family. Real enum lives in
+// platform-specific Sentient/TelemetryEnum.h. Few enumerators give
+// upstream code something to compile against.
+enum ETelemetryChallenges {
+    eTelemetryChallenges_None = 0,
+};
 class IntArrayTag;
 class CompoundTag;
 class Player;
