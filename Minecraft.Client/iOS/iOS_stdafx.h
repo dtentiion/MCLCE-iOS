@@ -173,6 +173,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "Icon.h"
 #include "TilePos.h"
 #include "ChunkPos.h"
+#include "Pos.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
