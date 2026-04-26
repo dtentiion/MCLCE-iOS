@@ -475,27 +475,8 @@ static inline void  SetLastError(DWORD) {}
 #include <unistd.h>
 static inline void Sleep(DWORD ms) { usleep(ms * 1000u); }
 
-// Wide string in-place find/replace helper. StringHelpers exposes
-// `replaceAll` on other platforms; the probe target needs the symbol
-// for compile but never executes the path.
-#ifdef __cplusplus
-static inline void replaceAll(std::wstring& s, const std::wstring& from, const std::wstring& to) {
-    if (from.empty()) return;
-    size_t pos = 0;
-    while ((pos = s.find(from, pos)) != std::wstring::npos) {
-        s.replace(pos, from.size(), to);
-        pos += to.size();
-    }
-}
-static inline void replaceAll(std::string& s, const std::string& from, const std::string& to) {
-    if (from.empty()) return;
-    size_t pos = 0;
-    while ((pos = s.find(from, pos)) != std::string::npos) {
-        s.replace(pos, from.size(), to);
-        pos += to.size();
-    }
-}
-#endif
+// `replaceAll` is in upstream StringHelpers.h - the pre-include in
+// iOS_stdafx.h brings its declaration into scope.
 
 // Win32 atomic intrinsics for upstream's lock-free paths. iOS clang
 // supports the GCC __sync builtins which match the semantics. The
@@ -523,21 +504,9 @@ static inline BOOL InitializeCriticalSectionAndSpinCount(LPCRITICAL_SECTION cs, 
     return TRUE;
 }
 
-// Wide string equalsIgnoreCase helper. AnvilMenu uses it to compare
-// the user-typed item name with the existing hover name. Probe never
-// runs the rename path; an exact-equality fallback typechecks fine.
-#ifdef __cplusplus
-static inline bool equalsIgnoreCase(const std::wstring& a, const std::wstring& b) {
-    if (a.size() != b.size()) return false;
-    for (size_t i = 0; i < a.size(); ++i) {
-        wchar_t ca = a[i], cb = b[i];
-        if (ca >= L'A' && ca <= L'Z') ca = (wchar_t)(ca + 32);
-        if (cb >= L'A' && cb <= L'Z') cb = (wchar_t)(cb + 32);
-        if (ca != cb) return false;
-    }
-    return true;
-}
-#endif
+// `equalsIgnoreCase` lives in upstream's StringHelpers.h/cpp; the
+// pre-include in iOS_stdafx.h surfaces the declaration for files
+// that use it without including StringHelpers.h directly.
 
 // CRT integer-to-wide-string. Upstream uses for HUD numerics. Map to
 // swprintf - the probe never inspects the buffer.
@@ -712,20 +681,12 @@ static inline long XMemCreateDecompressionContext(unsigned long, void*, unsigned
 static inline void XMemDestroyCompressionContext(void*) {}
 static inline void XMemDestroyDecompressionContext(void*) {}
 
-// File.cpp / FileInputStream.cpp use this Win32 helper to convert a
-// wstring path into an 8-bit char buffer suitable for POSIX APIs.
-// The probe never calls it; an empty C-string keeps callers happy.
-#ifdef __cplusplus
-static inline const char* wstringtofilename(const std::wstring&) { return ""; }
-#endif
-
-// HtmlString.cpp passes its raw input through this to neutralize
-// markup-significant characters. Probe build only needs the symbol
-// to exist; pass-through is fine.
-#ifdef __cplusplus
-static inline std::wstring escapeXML(const std::wstring& s) { return s; }
-inline std::wstring escapeXML(const wchar_t* s) { return s ? std::wstring(s) : std::wstring(); }
-#endif
+// `wstringtofilename` and `escapeXML` are declared in upstream's
+// StringHelpers.h and defined in StringHelpers.cpp. Pre-include of
+// StringHelpers.h in iOS_stdafx.h brings the declarations into scope
+// for the files that need them; we no longer ship inline stubs here
+// because those collided with the real definitions when the probe
+// library was actually linked.
 
 // SystemTimeToFileTime: Win32 conversion helper. Probe stubs to a
 // no-op zero fill; we never read FILETIME on iOS.
