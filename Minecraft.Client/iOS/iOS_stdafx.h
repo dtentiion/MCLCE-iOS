@@ -211,6 +211,10 @@ class ItemEntity;
 class INetworkPlayer;
 class StructureFeatureSavedData;
 class Connection;
+// Real `class Minecraft` is the platform client app class (lives in
+// Minecraft.Client/Minecraft.h). MultiPlayerLevel etc reference it
+// via pointer, so a forward decl is enough for the probe parses.
+class Minecraft;
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif
