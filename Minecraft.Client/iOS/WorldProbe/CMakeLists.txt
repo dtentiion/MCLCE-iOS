@@ -152,21 +152,9 @@ set(WORLD_PROBE_SOURCES
   # Big retry batch with ItemInstance stub.
   ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DownfallLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RiverInitLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RiverLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RiverMixerLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/IslandLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/RegionHillsLayer.cpp
-  # BiomeOverrideLayer dropped - heavy Win32 file I/O.
-  ${UPSTREAM_DIR}/Minecraft.World/BiomeInitLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FlatLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/TemperatureLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/TemperatureMixerLayer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DownfallMixerLayer.cpp
+  # All biome layer + override layer files dropped - they pull
+  # net.minecraft.world.level.biome.h which transitively hits
+  # PortalForcer.h's incomplete base class.
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
   # BirchFeature dropped - app + LevelGenerationOptions.
