@@ -313,6 +313,35 @@ static inline BOOL TryEnterCriticalSection(LPCRITICAL_SECTION cs) {
 #  define MAX_PATH_SIZE 256
 #endif
 
+// Durango (Xbox One) string verify return shape. SignTileEntity etc
+// reference this type via 4J_Input.h. Stub small enough to satisfy
+// declarations.
+typedef struct _STRING_VERIFY_RESPONSE {
+    int             dwResult;
+    DWORD           cchString;
+    const WCHAR*    pszString;
+} STRING_VERIFY_RESPONSE;
+
+// Xbox-style invalid XUID sentinel.
+#ifndef INVALID_XUID
+#  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
+#endif
+
+// PLONG = long*. MS pointer-aliased.
+#ifndef _PLONG_DEFINED
+#define _PLONG_DEFINED
+typedef LONG* PLONG;
+#endif
+
+// GetTickCount returns ms since boot. Tie to mach for iOS.
+static inline DWORD GetTickCount(void) {
+    static mach_timebase_info_data_t s_tb = {0, 0};
+    if (s_tb.denom == 0) mach_timebase_info(&s_tb);
+    uint64_t t = mach_absolute_time();
+    if (s_tb.denom != 0) t = (t * s_tb.numer) / s_tb.denom;
+    return (DWORD)(t / 1000000ull);
+}
+
 // Win32 high-resolution timer API. Random.cpp seeds the RNG with
 // QueryPerformanceCounter; PerformanceTimer.cpp uses both. On Apple
 // platforms mach_absolute_time gives us a high-res monotonic counter
