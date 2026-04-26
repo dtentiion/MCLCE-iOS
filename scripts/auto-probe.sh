@@ -68,13 +68,19 @@ for src in *.cpp; do
 done
 
 # Probe set 2: upstream/Minecraft.Client/Common/**/*.cpp (platform-agnostic
-# client + game-rules + DLC + Network code). Excludes the renderer-heavy
-# Minecraft.Client/ root for now (those need Phase D's GL ES bringup).
-while IFS= read -r src; do
+# client + game-rules + DLC + Network code).
+#
+# Probe set 3: upstream/Minecraft.Client/*.cpp (root) for the gameplay-
+# host classes (Minecraft, MinecraftServer, PlayerList, ServerLevel,
+# MultiPlayerLevel, ...). Renderers in this dir will fail compile under
+# our toolchain (they need GL ES + MetalANGLE bringup, Phase D), but
+# the auto-probe just records what passes.
+probe_one_file() {
+    local src="$1"
     total=$((total + 1))
-    rel="${src#$REPO_ROOT/upstream/}"
-    safe="${rel//\//_}"
-    log="$LOG_DIR/${safe%.cpp}.log"
+    local rel="${src#$REPO_ROOT/upstream/}"
+    local safe="${rel//\//_}"
+    local log="$LOG_DIR/${safe%.cpp}.log"
     if "$CXX" $ARCH $CXXFLAGS "$src" > "$log" 2>&1; then
         echo "GREEN: $rel"
         echo "$rel" >> "$OUT_FILE"
@@ -85,7 +91,15 @@ while IFS= read -r src; do
         head -3 "$log" >> "$LOG_DIR/_failures.txt"
         echo "  -> $rel" >> "$LOG_DIR/_failures.txt"
     fi
-done < <(find "$MC_DIR/Common" -name "*.cpp")
+}
+
+# Recurse Common/ (platform-agnostic client / game-rules / DLC / etc).
+while IFS= read -r src; do probe_one_file "$src"; done < <(find "$MC_DIR/Common" -name "*.cpp")
+
+# Top-level Minecraft.Client/*.cpp (gameplay-host: Minecraft, MinecraftServer,
+# PlayerList, ServerLevel, MultiPlayerLevel, ...) plus a bunch of renderers
+# that will fail under iOS until Phase D. Auto-probe just records what passes.
+while IFS= read -r src; do probe_one_file "$src"; done < <(find "$MC_DIR" -maxdepth 1 -name "*.cpp")
 
 echo
 echo "==== auto-probe summary ===="
