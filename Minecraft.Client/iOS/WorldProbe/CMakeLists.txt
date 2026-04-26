@@ -795,6 +795,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/PotionItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SpawnEggItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StrongholdPieces.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Entity.cpp
 )
 
 add_library(mcle_world_probe STATIC
