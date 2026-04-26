@@ -30,6 +30,7 @@ CXXFLAGS="-std=c++14 -fdeclspec -fsyntax-only \
   -include $SHIM \
   -D_LIB -D_LARGE_WORLDS -D_CONTENT_PACKAGE \
   -D__APPLE_IOS__=1 -D_IOS=1 -DPLATFORM_IOS=1 \
+  -DMCLE_PROBE_BUILD=1 \
   -I $MW_DIR \
   -I $MW_DIR/x64headers \
   -I $REPO_ROOT/upstream/include \
