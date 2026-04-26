@@ -25,6 +25,10 @@
 #include "4JLibs/inc/4J_Storage.h"
 // 4J profile layer - PlayerUID, C_4JProfile, ProfileManager (extern).
 #include "4JLibs/inc/4J_Profile.h"
+// Sentient telemetry enum tags (mirrored from upstream's Orbis/PS3/
+// PSVita/Durango copies which are byte-identical). TelemetryManager.h
+// references ESen_CompeteOrCoop / ESen_FriendOrMatch by type.
+#include "Sentient/SentientTelemetryCommon.h"
 
 // C++ standard library bits upstream uses unguarded.
 #include <cstddef>
@@ -121,12 +125,9 @@ enum ETelemetryChallenges {
     eTelemetryChallenges_Unknown,
 };
 
-// Debug-flag bit indices upstream uses to gate cheats / dev-tools.
-// Real enum lives in platform-specific app debug settings; just the
-// CraftAnything bit is referenced from upstream Minecraft.World/.
-enum eDebugSettings {
-    eDebugSetting_CraftAnything = 0,
-};
+// Real eDebugSetting enum lives in Common/Console_Debug_enum.h; pre-
+// included below so all enumerators (FreezeTime, CraftAnything,
+// MobsDontAttack, etc) are visible.
 
 // eTYPE_BOSS_MOB_PART is a console-branch RTTI slot upstream's Class.h
 // does not declare. BossMobPart.h GetType() returns this; using the
@@ -182,15 +183,9 @@ struct LevelGenerationOptions {
     template<class... A> int  getFeatureSeed(A...)     { return 0; }
 };
 
-// DLCSkinFile: opaque per-skin metadata pulled from DLC. Probe-only
-// stub. TextureAndGeometryPacket etc reach in for skin-anim flags;
-// returning sentinels keeps parses going.
-struct DLCSkinFile {
-    template<class... A> int  getAnimOverrideBitmask(A...) { return 0; }
-    template<class... A> int  getAdditionalModelParts(A...) { return 0; }
-    template<class... A> bool isMashup(A...)               { return false; }
-    template<class... A> const wchar_t* getName(A...)      { return L""; }
-};
+// DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
+// DLCSkinFile.h). Header is pre-included further down in this file so
+// every TU sees the real definition.
 
 // C4JRender is a heavyweight platform render class - the real one
 // lives in platform-specific 4JLibs/. Files like Textures.h
@@ -204,7 +199,6 @@ class Mob;
 class DamageSource;
 class MobEffect;
 class ItemEntity;
-class INetworkPlayer;
 class StructureFeatureSavedData;
 class Connection;
 // Real `class Minecraft` is the platform client app class (lives in
@@ -215,6 +209,15 @@ class Minecraft;
 // references it via `DLCPack* getDLCPack()` pointer. Forward decl is
 // all we need for the probe parses.
 class DLCPack;
+// FriendSessionInfo lives in Common/Network/SessionInfo.h which has a
+// platform-conditional chain we do not cover. UIStructs.h references
+// it as a pointer field; forward-decl is enough for parses.
+class FriendSessionInfo;
+// Textures lives in Minecraft.Client/Textures.h. TexturePack.h
+// references it as a pointer field.
+class Textures;
+// Note: INetworkPlayer is defined by the real header pre-included
+// further down. No forward-decl here to avoid duplicate-declaration.
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif
@@ -307,6 +310,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // menu side.
 #include "../Minecraft.Client/Windows64Media/strings.h"
 #include "../Minecraft.Client/Common/Console_Awards_enum.h"
+#include "../Minecraft.Client/Common/Console_Debug_enum.h"
 #include "../Minecraft.Client/Common/Minecraft_Macros.h"
 #include "../Minecraft.Client/Common/Potion_Macros.h"
 #include "../Minecraft.Client/Common/Colours/ColourTable.h"
@@ -321,6 +325,12 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // store. DLCTexturePack reaches in for getString(); pre-include so
 // member access compiles without extra include directives in callers.
 #include "../Minecraft.Client/StringTable.h"
+// DLCFile + DLCSkinFile real headers. DLCPack.h's inline getSkinFile()
+// does static_cast<DLCSkinFile*>(DLCFile*), needs both as complete
+// types at every TU. DLCSkinFile.h pulls HumanoidModel -> Model -> a
+// chunk of the renderer chain; we accept the compile cost for parity.
+#include "../Minecraft.Client/Common/DLC/DLCFile.h"
+#include "../Minecraft.Client/Common/DLC/DLCSkinFile.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
