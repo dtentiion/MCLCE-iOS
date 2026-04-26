@@ -138,6 +138,19 @@ enum ETelemetryChallenges {
 #  define eTYPE_BOSS_MOB_PART eTYPE_NOTSET
 #endif
 
+// MOJANG_DATA is a typedef of an unnamed struct in App_structs.h.
+// Player.cpp uses `MOJANG_DATA *pMojangData = app.GetMojangDataForXuid(...)`
+// on the path that gates skin / cape display. Real struct shape mirrors
+// upstream's App_structs.h:155 - eXUID + cape/skin filenames.
+#ifndef MOJANG_DATA_DEFINED
+#define MOJANG_DATA_DEFINED
+typedef struct {
+    int eXuid;
+    wchar_t wchCape[32];
+    wchar_t wchSkin[32];
+} MOJANG_DATA;
+#endif
+
 // Stubs for upstream classes we cannot easily include without
 // pulling huge subtrees. Each is defined as an empty struct so
 // any pointer / pointer-to-incomplete reference compiles, and
@@ -312,7 +325,9 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
 #include "../Minecraft.Client/Common/App_Defines.h"
-#include "../Minecraft.Client/Common/App_structs.h"
+// App_structs.h has UI / C4JStorage / GAME_SETTINGS deps that conflict
+// with our shims. We forward-declare MOJANG_DATA in Consoles_App stub
+// and patch upstream call sites instead.
 #include "Class.h"
 #include "Attribute.h"
 #include "AttributeModifier.h"
