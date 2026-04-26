@@ -113,6 +113,7 @@ class ConsoleSaveFile;
 // upstream code something to compile against.
 enum ETelemetryChallenges {
     eTelemetryChallenges_None = 0,
+    eTelemetryChallenges_Unknown,
 };
 
 // eTYPE_BOSS_MOB_PART is a Class.h-style RTTI enum value upstream
@@ -128,7 +129,20 @@ enum ETelemetryChallenges {
 // any pointer / pointer-to-incomplete reference compiles, and
 // member-access calls fall through templated catch-alls (none
 // of these methods are ever called by the probe).
-struct ConsoleGameRules { template<class... A> ConsoleGameRules(A...) {} };
+struct ConsoleGameRules {
+    // Real ConsoleGameRules has this nested enum for game-rule
+    // categories; UpdateGameRuleProgressPacket.h refers to it via
+    // ConsoleGameRules::EGameRuleType. Generic enumerators mirror
+    // upstream so packet parses do not need values to match.
+    enum EGameRuleType {
+        eGameRuleType_None = 0,
+        eGameRuleType_Boolean,
+        eGameRuleType_Integer,
+        eGameRuleType_String,
+        eGameRuleType_Max,
+    };
+    template<class... A> ConsoleGameRules(A...) {}
+};
 struct C4JRenderStub    {};
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.

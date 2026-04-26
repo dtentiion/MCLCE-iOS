@@ -353,6 +353,7 @@ typedef int boolean;
 template<class T> class XLockFreeStack {
 public:
     template<class... A> XLockFreeStack(A...) {}
+    template<class... A> void Initialize(A...) {}
     template<class... A> bool push(A...)    { return false; }
     template<class... A> T*   pop(A...)     { return nullptr; }
     template<class... A> bool empty(A...) const { return true; }
@@ -363,6 +364,77 @@ public:
 // to exist for header parses. Opaque struct fits.
 typedef struct _XMEMCOMPRESSION_CONTEXT { int dummy; } XMEMCOMPRESSION_CONTEXT;
 typedef struct _XMEMDECOMPRESSION_CONTEXT { int dummy; } XMEMDECOMPRESSION_CONTEXT;
+
+// Win32 SetFilePointer move-method constants. Upstream RegionFile /
+// ConsoleSaveFile* use them via the platform setFilePointer abstraction.
+#ifndef FILE_BEGIN
+#  define FILE_BEGIN   0
+#endif
+#ifndef FILE_CURRENT
+#  define FILE_CURRENT 1
+#endif
+#ifndef FILE_END
+#  define FILE_END     2
+#endif
+
+// Win32 invalid handle sentinel. FileOutputStream / FileInputStream use
+// it as the unset-state marker for HANDLE-typed members.
+#ifndef INVALID_HANDLE_VALUE
+#  define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
+#endif
+
+// MS pointer-size max. Used as the third arg to XPhysicalAlloc by
+// SparseDataStorage / CompressedTileStorage. Real value matches
+// MAXSIZE_T on Win64.
+#ifndef MAXULONG_PTR
+#  define MAXULONG_PTR ((unsigned long long)-1)
+#endif
+
+// Win32 page-protect flag. Upstream XPhysicalAlloc calls pass
+// PAGE_READWRITE; the macro just needs to expand to something.
+#ifndef PAGE_READWRITE
+#  define PAGE_READWRITE 0x04
+#endif
+
+// Xbox-style physical-memory allocator. Real one returns aligned
+// pages; on iOS we fall back to malloc since the upstream code
+// already accepts that fallback (PS3 / Vita branches do the same).
+static inline void* XPhysicalAlloc(size_t size, unsigned long long, unsigned long, unsigned long) {
+    return malloc(size);
+}
+static inline void XPhysicalFree(void* p) { free(p); }
+
+// Xbox-style memory compression entry points. Probe never executes
+// these (compression.cpp's iOS branch uses zlib via the patched
+// path) but the call sites need to typecheck.
+static inline long XMemCompress(void*, void*, size_t*, const void*, size_t) { return 0; }
+static inline long XMemDecompress(void*, void*, size_t*, const void*, size_t) { return 0; }
+static inline long XMemCreateCompressionContext(unsigned long, void*, unsigned long, void**) { return 0; }
+static inline long XMemCreateDecompressionContext(unsigned long, void*, unsigned long, void**) { return 0; }
+static inline void XMemDestroyCompressionContext(void*) {}
+static inline void XMemDestroyDecompressionContext(void*) {}
+
+// File.cpp / FileInputStream.cpp use this Win32 helper to convert a
+// wstring path into an 8-bit char buffer suitable for POSIX APIs.
+// The probe never calls it; an empty C-string keeps callers happy.
+#ifdef __cplusplus
+static inline const char* wstringtofilename(const std::wstring&) { return ""; }
+#endif
+
+// HtmlString.cpp passes its raw input through this to neutralize
+// markup-significant characters. Probe build only needs the symbol
+// to exist; pass-through is fine.
+#ifdef __cplusplus
+static inline std::wstring escapeXML(const std::wstring& s) { return s; }
+inline std::wstring escapeXML(const wchar_t* s) { return s ? std::wstring(s) : std::wstring(); }
+#endif
+
+// SystemTimeToFileTime: Win32 conversion helper. Probe stubs to a
+// no-op zero fill; we never read FILETIME on iOS.
+static inline BOOL SystemTimeToFileTime(const SYSTEMTIME*, FILETIME* ft) {
+    if (ft) { ft->dwLowDateTime = 0; ft->dwHighDateTime = 0; }
+    return TRUE;
+}
 
 // GetSystemTime for upstream system.cpp. Fills SYSTEMTIME from
 // localtime. Compile-only correctness; we never call this.
