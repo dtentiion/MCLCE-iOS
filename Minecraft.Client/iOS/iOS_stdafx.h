@@ -98,11 +98,10 @@ class Container;
 class LocalPlayer;
 class ResourceLocation;
 class SharedConstants;
-// C4JRender / C4JThread defined as stubs below.
+// C4JRender / C4JThread / LevelGenerationOptions defined as stubs below.
 class TileEntity;
 class ServerPlayer;
 class CombatTracker;
-class LevelGenerationOptions;
 class GAME_SETTINGS;
 class C_4JProfile;
 class CDLCManager;
@@ -133,6 +132,17 @@ struct ConsoleGameRules { template<class... A> ConsoleGameRules(A...) {} };
 struct SharedConstants  {};
 struct C4JRenderStub    {};
 struct C4JThreadStub    {};
+
+// LevelGenerationOptions: full stub. Upstream uses it as a pointer
+// returned from app.getLevelGenerationOptions() and called for
+// methods like checkIntersects / requiresBaseSave / etc. Variadic
+// template methods absorb whatever signature.
+struct LevelGenerationOptions {
+    template<class... A> bool checkIntersects(A...)    { return false; }
+    template<class... A> bool requiresBaseSave(A...)   { return false; }
+    template<class... A> void* getBaseSaveData(A...)   { return nullptr; }
+    template<class... A> void deleteBaseSaveData(A...) {}
+};
 
 // C4JRender / C4JThread are the heavyweight classes. Real ones live
 // in platform-specific 4JLibs/. Files like Textures.h reference

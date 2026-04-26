@@ -19,7 +19,7 @@
 class GAME_SETTINGS;
 class C_4JProfile;
 class CDLCManager;
-class LevelGenerationOptions;
+struct LevelGenerationOptions;
 class CGameSettingsManager;
 class FileNameMap;
 
