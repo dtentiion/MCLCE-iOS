@@ -370,6 +370,9 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #ifndef LEVEL_WIDTH_MEDIUM
 #  define LEVEL_WIDTH_MEDIUM    640
 #endif
+#ifndef LEVEL_MIN_WIDTH
+#  define LEVEL_MIN_WIDTH       128
+#endif
 
 // Console nether-scale ratio - max value used for size cap.
 #ifndef HELL_LEVEL_MAX_SCALE
@@ -379,6 +382,17 @@ typedef struct _STRING_VERIFY_RESPONSE {
 // Win32 wait sentinel - infinite timeout.
 #ifndef INFINITE
 #  define INFINITE              0xFFFFFFFF
+#endif
+
+// Win32 thread-creation flags. Probe never spawns a thread; constant
+// just needs to exist for compile.
+#ifndef CREATE_SUSPENDED
+#  define CREATE_SUSPENDED      0x00000004
+#endif
+
+// 4J QNet send-flags. Console-only; probe never sends a packet.
+#ifndef NON_QNET_SENDDATA_ACK_REQUIRED
+#  define NON_QNET_SENDDATA_ACK_REQUIRED 0
 #endif
 
 // Win32 file open hints. Probe never opens a real file.
@@ -619,6 +633,35 @@ static inline BOOL DeleteFileA(const char*) { return TRUE; }
 static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
 static inline DWORD GetFileSize(HANDLE, LPDWORD high) {
     if (high) *high = 0; return 0;
+}
+static inline BOOL CreateDirectoryA(const char*, void*) { return TRUE; }
+static inline BOOL CreateDirectoryW(const wchar_t*, void*) { return TRUE; }
+#  ifdef UNICODE
+#    define CreateDirectory CreateDirectoryW
+#  else
+#    define CreateDirectory CreateDirectoryA
+#  endif
+
+// Win32 memory status report struct. Compression code reads available
+// physical memory before doing big allocations; probe never executes
+// that path - empty struct compiles fine.
+typedef struct _MEMORYSTATUS {
+    DWORD dwLength;
+    DWORD dwMemoryLoad;
+    DWORD dwTotalPhys;
+    DWORD dwAvailPhys;
+    DWORD dwTotalPageFile;
+    DWORD dwAvailPageFile;
+    DWORD dwTotalVirtual;
+    DWORD dwAvailVirtual;
+} MEMORYSTATUS, *LPMEMORYSTATUS;
+static inline void GlobalMemoryStatus(LPMEMORYSTATUS s) {
+    if (!s) return;
+    s->dwLength = sizeof(*s);
+    s->dwMemoryLoad = 0;
+    s->dwTotalPhys = 0; s->dwAvailPhys = 0;
+    s->dwTotalPageFile = 0; s->dwAvailPageFile = 0;
+    s->dwTotalVirtual = 0; s->dwAvailVirtual = 0;
 }
 #  ifdef UNICODE
 #    define DeleteFile DeleteFileW
