@@ -331,8 +331,44 @@ typedef struct _STRING_VERIFY_RESPONSE {
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
 #define _PLONG_DEFINED
-typedef LONG* PLONG;
+typedef LONG*  PLONG;
+typedef DWORD* LPDWORD;
+typedef DWORD* PDWORD;
+typedef WORD*  LPWORD;
+typedef WORD*  PWORD;
+typedef BYTE*  PBYTE2;
 #endif
+
+// Win32 BOOL aliased "boolean" (ms-style lowercase wide). Some
+// upstream code uses both interchangeably.
+#ifndef __OBJC__
+typedef int boolean;
+#endif
+
+// Xbox concurrent free-list stack template. Used in upstream
+// SparseLightStorage as a thread-safe stack. Stub: empty class
+// templated on T - methods absorbed by variadic template.
+template<class T> class XLockFreeStack {
+public:
+    template<class... A> XLockFreeStack(A...) {}
+    template<class... A> bool push(A...)    { return false; }
+    template<class... A> T*   pop(A...)     { return nullptr; }
+    template<class... A> bool empty(A...) const { return true; }
+};
+
+// Xbox memcompression contexts. Used by compression.cpp's PE-only
+// branch which we do not enter on iOS, but the type still needs
+// to exist for header parses. Opaque struct fits.
+typedef struct _XMEMCOMPRESSION_CONTEXT { int dummy; } XMEMCOMPRESSION_CONTEXT;
+typedef struct _XMEMDECOMPRESSION_CONTEXT { int dummy; } XMEMDECOMPRESSION_CONTEXT;
+
+// GetSystemTime for upstream system.cpp. Fills SYSTEMTIME from
+// localtime. Compile-only correctness; we never call this.
+static inline void GetSystemTime(LPSYSTEMTIME st) {
+    if (!st) return;
+    st->wYear = 2026; st->wMonth = 1; st->wDayOfWeek = 0; st->wDay = 1;
+    st->wHour = 0; st->wMinute = 0; st->wSecond = 0; st->wMilliseconds = 0;
+}
 
 // GetTickCount returns ms since boot. Tie to mach for iOS.
 static inline DWORD GetTickCount(void) {
