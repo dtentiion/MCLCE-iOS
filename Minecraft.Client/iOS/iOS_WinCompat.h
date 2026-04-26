@@ -539,6 +539,21 @@ static inline wchar_t* _itow(int v, wchar_t* buf, int radix) {
     else             swprintf(buf, 12, L"%d", v);
     return buf;
 }
+// Secure-CRT variant. Same signature plus a buffer-size arg.
+static inline int _itow_s(int v, wchar_t* buf, size_t bufSize, int radix) {
+    if (!buf || bufSize == 0) return -1;
+    if (radix == 16) swprintf(buf, bufSize, L"%x", v);
+    else             swprintf(buf, bufSize, L"%d", v);
+    return 0;
+}
+// Three-arg helper variant. Upstream files call _itow_s with
+// (value, buf, radix) when the buffer is a fixed-size wchar_t array.
+// The C++ template deduces the array size; reroutes to the
+// 4-arg path which actually does the formatting.
+template<size_t N>
+static inline int _itow_s(int v, wchar_t (&buf)[N], int radix) {
+    return _itow_s(v, buf, N, radix);
+}
 
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
