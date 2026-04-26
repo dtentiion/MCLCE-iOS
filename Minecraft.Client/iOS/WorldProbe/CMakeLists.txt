@@ -604,6 +604,14 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/WorkbenchTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/XZPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ZoomLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Achievement.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Achievements.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CommonStats.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DirectoryLevelStorageSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GeneralStat.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ItemStat.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MobEffectInstance.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Stat.cpp
 )
 
 add_library(mcle_world_probe STATIC
