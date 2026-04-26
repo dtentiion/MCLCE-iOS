@@ -20,6 +20,21 @@
 #ifdef __cplusplus
 struct PlayerUID {
     uint8_t bytes[16];
+
+    PlayerUID() { for (int i = 0; i < 16; ++i) bytes[i] = 0; }
+    PlayerUID(uint64_t v) {
+        // Pack the 64-bit value into the leading 8 bytes; remaining 8 are
+        // zeroed. INVALID_XUID = 0xFFFFFFFFFFFFFFFFu maps to all-FF in
+        // the leading bytes which doubles as a sentinel.
+        for (int i = 0; i < 16; ++i) bytes[i] = 0;
+        for (int i = 0; i < 8; ++i) bytes[i] = (uint8_t)((v >> (i * 8)) & 0xFF);
+    }
+    PlayerUID& operator=(uint64_t v) { *this = PlayerUID(v); return *this; }
+    bool operator==(const PlayerUID& o) const {
+        for (int i = 0; i < 16; ++i) if (bytes[i] != o.bytes[i]) return false;
+        return true;
+    }
+    bool operator!=(const PlayerUID& o) const { return !(*this == o); }
 };
 typedef PlayerUID* PPlayerUID;
 
