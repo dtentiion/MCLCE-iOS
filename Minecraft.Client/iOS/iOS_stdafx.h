@@ -86,25 +86,11 @@ class LivingEntity;
 class BaseAttributeMap;
 class AttributeModifier;
 // ItemInstance is referenced as a non-pointer field in
-// LivingEntity / Mob / Player (`ItemInstanceArray equipment;`)
-// so a forward decl is not enough. Provide a minimal stub here
-// so the entity hierarchy headers parse without us porting the
-// real ItemInstance subsystem. ItemInstance.h itself is not
-// pulled in (ArrayWithLength.h's include of ItemInstance.h is
-// patched out for iOS), so this stub never collides with the
-// real definition.
-class ItemInstance {
-public:
-    int dummy_for_layout;
-    ItemInstance() {}
-    // Variadic template constructor to absorb whatever arg shape
-    // upstream code calls make_shared<ItemInstance>(...) with.
-    // Compile-only: bodies are no-ops.
-    template<class A> ItemInstance(A) {}
-    template<class A, class B> ItemInstance(A, B) {}
-    template<class A, class B, class C> ItemInstance(A, B, C) {}
-    template<class A, class B, class C, class D> ItemInstance(A, B, C, D) {}
-};
+// LivingEntity / Mob / Player (`ItemInstanceArray equipment;`).
+// Use the real ItemInstance.h - included a bit later in this file
+// after System.h is fully parsed (so ByteArrayTag inline body's
+// System::arraycopy reference resolves).
+class ItemInstance;
 class HtmlString;
 class Explosion;
 class Container;
@@ -182,6 +168,12 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "TilePos.h"
 #include "ChunkPos.h"
 #include "Pos.h"
+// Bring in real ItemInstance now that System / ArrayWithLength / NBT
+// chain headers are all parsed. ItemInstance.h pulls com.mojang.nbt
+// -> NbtIo -> CompoundTag -> ByteArrayTag where ByteArrayTag's
+// inline copy() body calls System::arraycopy. System is defined by
+// this point so the call resolves.
+#include "ItemInstance.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
