@@ -60,7 +60,8 @@ struct McleAppStub {
     template<class... A> int            getSkinPathFromId(A...) { return 0; }
     template<class... A> LevelGenerationOptions* getLevelGenerationOptions(A...) { return nullptr; }
     template<class... A> void*          GetSaveThumbnail(A...)  { return nullptr; }
-    template<class... A> void*          GetMojangDataForXuid(A...) { return nullptr; }
+    // Real signature returns `MOJANG_DATA*` - declared in stdafx.
+    template<class... A> struct MOJANG_DATA* GetMojangDataForXuid(A...) { return nullptr; }
     template<class... A> int            GetTerrainFeaturePosition(A...) { return 0; }
     template<class... A> void           AddTerrainFeaturePosition(A...) {}
     template<class... A> int            GetAdditionalModelParts(A...) { return 0; }
