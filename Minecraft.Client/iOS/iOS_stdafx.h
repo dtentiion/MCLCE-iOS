@@ -312,6 +312,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
 #include "../Minecraft.Client/Common/App_Defines.h"
+#include "../Minecraft.Client/Common/App_structs.h"
 #include "Class.h"
 #include "Attribute.h"
 #include "AttributeModifier.h"
