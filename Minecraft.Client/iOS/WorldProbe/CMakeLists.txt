@@ -173,7 +173,7 @@ set(WORLD_PROBE_SOURCES
   # CactusFeature dropped - PortalForcer base class incomplete.
   # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
   # CanyonFeature dropped - uses app.
-  ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
+  # Bush.cpp dropped - PortalForcer chain.
   ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
   # Add*Layer biome generators: pull BiomeSource and friends, also
   # heavy. Re-add with the world-gen subsystem port.
