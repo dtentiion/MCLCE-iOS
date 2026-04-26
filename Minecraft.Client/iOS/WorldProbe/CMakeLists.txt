@@ -696,6 +696,24 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/WoodSlabTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WoodTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/system.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BeaconMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BrewingStandMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatLevelSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FurnaceMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellFlatLevelSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellRandomLevelSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MineShaftFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Minecraft.World.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NetherBridgeFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NetherBridgePieces.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RandomScatteredLargeFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ScatteredFeaturePieces.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SignItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StrongholdFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TheEndLevelRandomLevelSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Tile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/VillageFeature.cpp
 )
 
 add_library(mcle_world_probe STATIC

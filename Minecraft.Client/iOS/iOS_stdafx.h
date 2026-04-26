@@ -145,13 +145,17 @@ struct ConsoleGameRules {
     template<class... A> ConsoleGameRules(A...) {}
 };
 // Stub for upstream's heavyweight C4JRender. Textures.h asks for the
-// nested texture-format enum value to declare a static field;
-// upstream platforms have a real enum here. Generic enumerator slot
-// keeps the parse going.
+// nested texture-format enum value to declare a static field and
+// uses TEXTURE_FORMAT_RxGyBzAw as a default arg. Real platforms
+// expose a fuller enum; the probe just needs the names.
 struct C4JRenderStub {
     enum eTextureFormat {
         eTextureFormat_None = 0,
         eTextureFormat_RGBA = 1,
+        TEXTURE_FORMAT_RxGyBzAw = 2,
+        TEXTURE_FORMAT_DXT1 = 3,
+        TEXTURE_FORMAT_DXT3 = 4,
+        TEXTURE_FORMAT_DXT5 = 5,
     };
     struct Texture {};
     struct VertexBuffer {};
@@ -196,6 +200,9 @@ class Player;
 class Mob;
 class DamageSource;
 class MobEffect;
+class ItemEntity;
+class INetworkPlayer;
+class StructureFeatureSavedData;
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif
