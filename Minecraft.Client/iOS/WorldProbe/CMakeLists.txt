@@ -785,6 +785,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/SparseLightStorage.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TallGrass.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterLilyTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BiomeOverrideLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FileInputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RespawnPacket.cpp
 )
 
 add_library(mcle_world_probe STATIC
