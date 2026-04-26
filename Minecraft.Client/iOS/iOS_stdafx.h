@@ -129,9 +129,9 @@ enum ETelemetryChallenges {
 // member-access calls fall through templated catch-alls (none
 // of these methods are ever called by the probe).
 struct ConsoleGameRules { template<class... A> ConsoleGameRules(A...) {} };
-struct SharedConstants  {};
 struct C4JRenderStub    {};
-struct C4JThreadStub    {};
+// SharedConstants / C4JThread are real classes in Minecraft.World/
+// and get pre-included below. Do not define stubs here.
 
 // LevelGenerationOptions: full stub. Upstream uses it as a pointer
 // returned from app.getLevelGenerationOptions() and called for
@@ -144,13 +144,11 @@ struct LevelGenerationOptions {
     template<class... A> void deleteBaseSaveData(A...) {}
 };
 
-// C4JRender / C4JThread are the heavyweight classes. Real ones live
-// in platform-specific 4JLibs/. Files like Textures.h reference
-// nested types via `C4JRender::Texture *` which need the class
-// declared. Map the names to our stubs via typedef so any
-// references resolve to a complete type.
+// C4JRender is a heavyweight platform render class - the real one
+// lives in platform-specific 4JLibs/. Files like Textures.h
+// reference nested types via `C4JRender::Texture *` which need the
+// class declared. Map the name to our stub via typedef.
 typedef C4JRenderStub C4JRender;
-typedef C4JThreadStub C4JThread;
 class IntArrayTag;
 class CompoundTag;
 class Player;
@@ -256,6 +254,8 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "../Minecraft.Client/Common/Console_Awards_enum.h"
 #include "../Minecraft.Client/Common/Minecraft_Macros.h"
 #include "FileHeader.h"
+#include "SharedConstants.h"
+#include "C4JThread.h"
 #endif
 
 #endif // !_WIN32 && !_WIN64
