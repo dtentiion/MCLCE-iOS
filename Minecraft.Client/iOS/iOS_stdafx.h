@@ -137,20 +137,11 @@ enum eDebugSettings {
 // any pointer / pointer-to-incomplete reference compiles, and
 // member-access calls fall through templated catch-alls (none
 // of these methods are ever called by the probe).
-struct ConsoleGameRules {
-    // Real ConsoleGameRules has this nested enum for game-rule
-    // categories; UpdateGameRuleProgressPacket.h refers to it via
-    // ConsoleGameRules::EGameRuleType. Generic enumerators mirror
-    // upstream so packet parses do not need values to match.
-    enum EGameRuleType {
-        eGameRuleType_None = 0,
-        eGameRuleType_Boolean,
-        eGameRuleType_Integer,
-        eGameRuleType_String,
-        eGameRuleType_Max,
-    };
-    template<class... A> ConsoleGameRules(A...) {}
-};
+// ConsoleGameRules: real upstream class. Lightweight Constants header
+// gives us the class shell + EGameRuleType / EGameRuleAttr enums with
+// zero heavy includes. The full ConsoleGameRules.h pulls 24 GameRules/*
+// headers which we do not want force-included; files that need full
+// behavior include ConsoleGameRules.h directly.
 // Stub for upstream's heavyweight C4JRender. Textures.h asks for the
 // nested texture-format enum value to declare a static field and
 // uses TEXTURE_FORMAT_RxGyBzAw as a default arg. Real platforms
@@ -322,6 +313,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "../Minecraft.Client/Common/Colours/ColourTable.h"
 #include "Exceptions.h"
 #include "StringHelpers.h"
+#include "../Minecraft.Client/Common/GameRules/ConsoleGameRulesConstants.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
