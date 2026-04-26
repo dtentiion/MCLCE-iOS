@@ -21,6 +21,7 @@ ARRWITHLEN="$REPO_ROOT/upstream/Minecraft.World/ArrayWithLength.h"
 DOSCPP="$REPO_ROOT/upstream/Minecraft.World/DataOutputStream.cpp"
 DISCPP="$REPO_ROOT/upstream/Minecraft.World/DataInputStream.cpp"
 COMPCPP="$REPO_ROOT/upstream/Minecraft.World/compression.cpp"
+LEVELH="$REPO_ROOT/upstream/Minecraft.World/Level.h"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -41,7 +42,12 @@ for f in "$DOSCPP" "$DISCPP" "$COMPCPP"; do
     fi
 done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP"; then
+if [ ! -f "$LEVELH" ]; then
+    echo "patch-upstream-stdafx: $LEVELH not found"
+    exit 1
+fi
+
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -206,6 +212,38 @@ patched = src.replace(needle, new, 1)
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: added __APPLE_IOS__ to zlib branch in {path}")
+PY
+fi
+
+# Level.h is missing a `static const int DEPTH` member - the only place
+# it is referenced is ZonedChunkStorage.cpp:21, which uses it to size
+# CHUNK_SIZE = CHUNK_WIDTH * CHUNK_WIDTH * Level::DEPTH. Upstream's
+# Level.h has maxBuildHeight = 256 which is the world's vertical
+# resolution; alias DEPTH to that value so ZonedChunkStorage compiles
+# under parity (rather than us shimming Level::DEPTH out of band).
+if grep -q '__APPLE_IOS__' "$LEVELH"; then
+    echo "patch-upstream-stdafx: Level.h already patched, skipping"
+else
+python3 - "$LEVELH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+# Insert DEPTH right after maxBuildHeight so the constants stay grouped.
+needle = 'static const int maxBuildHeight = 256;'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: maxBuildHeight anchor not found in Level.h")
+addition = (
+    needle
+    + '\n#ifdef __APPLE_IOS__\n'
+    + '\tstatic const int DEPTH = maxBuildHeight; // 4J - referenced by ZonedChunkStorage\n'
+    + '#endif'
+)
+patched = src.replace(needle, addition, 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added Level::DEPTH to {path}")
 PY
 fi
 
