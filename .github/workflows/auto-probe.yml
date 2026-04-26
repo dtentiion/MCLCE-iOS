@@ -1,0 +1,40 @@
+name: auto-probe (compile every upstream cpp)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
+          xcodebuild -version
+
+      - name: Run auto-probe over Minecraft.World
+        run: |
+          chmod +x scripts/auto-probe.sh
+          ./scripts/auto-probe.sh
+
+      - name: Upload greens list
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-probe-greens
+          path: auto-probe-greens.txt
+
+      - name: Upload failure summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-probe-failures
+          path: auto-probe-logs/_failures.txt
+          if-no-files-found: warn
