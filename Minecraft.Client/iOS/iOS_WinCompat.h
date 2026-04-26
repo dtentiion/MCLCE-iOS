@@ -314,14 +314,16 @@ static inline BOOL TryEnterCriticalSection(LPCRITICAL_SECTION cs) {
 #  define MAX_PATH_SIZE 256
 #endif
 
-// Durango (Xbox One) string verify return shape. SignTileEntity etc
-// reference this type via 4J_Input.h. Stub small enough to satisfy
-// declarations.
+// Probe-only stubs. The main app build pulls real Win64 4J_Input.h
+// which has its own STRING_VERIFY_RESPONSE definition; only the
+// probe target has these defines.
+#ifdef MCLE_PROBE_BUILD
 typedef struct _STRING_VERIFY_RESPONSE {
     int             dwResult;
     DWORD           cchString;
     const WCHAR*    pszString;
 } STRING_VERIFY_RESPONSE;
+#endif
 
 // Xbox-style invalid XUID sentinel.
 #ifndef INVALID_XUID
