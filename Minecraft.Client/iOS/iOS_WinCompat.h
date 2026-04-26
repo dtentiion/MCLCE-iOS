@@ -330,6 +330,13 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
 #endif
 
+// Net protocol cap. Real value differs per platform (PS4/Switch use
+// 16, X1 uses 8). Probe never sends/receives so the constant just
+// needs to exist and be reasonable.
+#ifndef MINECRAFT_NET_MAX_PLAYERS
+#  define MINECRAFT_NET_MAX_PLAYERS 8
+#endif
+
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
 #define _PLONG_DEFINED
