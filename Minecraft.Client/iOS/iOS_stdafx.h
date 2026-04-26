@@ -20,6 +20,9 @@
 // reference without guarding.
 #include "iOS_WinCompat.h"
 #include "iOS_app_stub.h"
+// 4J platform storage layer - exposes C4JStorage class with the
+// EMessageResult / ESaveGameState enums upstream code references.
+#include "4JLibs/inc/4J_Storage.h"
 
 // C++ standard library bits upstream uses unguarded.
 #include <cstddef>
@@ -314,6 +317,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "Exceptions.h"
 #include "StringHelpers.h"
 #include "../Minecraft.Client/Common/GameRules/ConsoleGameRulesConstants.h"
+// Pure virtual interface - lightweight, no chained includes besides
+// `class Socket` forward decl. Brings IsHost / GetSmallId / SendData /
+// etc into scope for files that reach into INetworkPlayer.
+#include "../Minecraft.Client/Common/Network/NetworkPlayerInterface.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
