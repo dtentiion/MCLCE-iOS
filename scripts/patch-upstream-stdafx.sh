@@ -16,6 +16,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STDAFX="$REPO_ROOT/upstream/Minecraft.World/stdafx.h"
+CLIENT_STDAFX="$REPO_ROOT/upstream/Minecraft.Client/stdafx.h"
 FILEHEADER="$REPO_ROOT/upstream/Minecraft.World/FileHeader.h"
 ARRWITHLEN="$REPO_ROOT/upstream/Minecraft.World/ArrayWithLength.h"
 DOSCPP="$REPO_ROOT/upstream/Minecraft.World/DataOutputStream.cpp"
@@ -42,12 +43,14 @@ for f in "$DOSCPP" "$DISCPP" "$COMPCPP"; do
     fi
 done
 
-if [ ! -f "$LEVELH" ]; then
-    echo "patch-upstream-stdafx: $LEVELH not found"
-    exit 1
-fi
+for f in "$LEVELH" "$CLIENT_STDAFX"; do
+    if [ ! -f "$f" ]; then
+        echo "patch-upstream-stdafx: $f not found"
+        exit 1
+    fi
+done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH"; then
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -64,6 +67,39 @@ fi
 # units actually need. As the probe set grows and a file genuinely
 # needs something stdafx.h would have pulled in, we add it directly to
 # iOS_stdafx.h or include it from the file's own header.
+patch_stdafx_no_op() {
+    local path="$1"
+    local label="$2"
+    if grep -q '__APPLE_IOS__' "$path"; then
+        echo "patch-upstream-stdafx: ${label} already patched, skipping"
+        return
+    fi
+    python3 - "$path" "$label" <<'PY'
+import sys
+path = sys.argv[1]
+label = sys.argv[2]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+pragma = '#pragma once'
+idx = src.find(pragma)
+if idx < 0:
+    sys.exit(f"patch-upstream-stdafx: `#pragma once` not found in {label}")
+split_at = idx + len(pragma)
+prefix = src[:split_at]
+body   = src[split_at:]
+wrapped = (
+    prefix
+    + f'\n\n// Skip upstream stdafx body on iOS - iOS_stdafx.h is force-included.\n'
+    + '#ifndef __APPLE_IOS__\n'
+    + body
+    + '\n#endif // !__APPLE_IOS__\n'
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(wrapped)
+print(f"patch-upstream-stdafx: wrapped {label} body in #ifndef __APPLE_IOS__")
+PY
+}
+
 if grep -q '__APPLE_IOS__' "$STDAFX"; then
     echo "patch-upstream-stdafx: stdafx.h already patched, skipping"
 else
@@ -99,6 +135,11 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: wrapped stdafx.h body in #ifndef __APPLE_IOS__")
 PY
 fi
+
+# Same treatment for Minecraft.Client/stdafx.h. It pulls Win32 / Xbox /
+# Sony platform headers per #ifdef chain; iOS has no branch so we skip
+# the whole body and rely on iOS_stdafx.h to provide what we need.
+patch_stdafx_no_op "$CLIENT_STDAFX" "Minecraft.Client/stdafx.h"
 
 # FileHeader.h: enum ESavePlatform has a #if/#elif chain that picks one
 # of SAVE_FILE_PLATFORM_X360 / XBONE / PS3 / PS4 / PSVITA / WIN64 as
