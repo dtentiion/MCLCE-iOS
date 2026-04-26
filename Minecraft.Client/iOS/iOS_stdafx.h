@@ -103,6 +103,12 @@ class C4JThread;
 class TileEntity;
 class ServerPlayer;
 class CombatTracker;
+class LevelGenerationOptions;
+class GAME_SETTINGS;
+class C_4JProfile;
+class CDLCManager;
+class FileNameMap;
+class ConsoleSaveFile;
 
 // Telemetry enum stub for ServerPlayer.h family. Real enum lives in
 // platform-specific Sentient/TelemetryEnum.h. Few enumerators give
