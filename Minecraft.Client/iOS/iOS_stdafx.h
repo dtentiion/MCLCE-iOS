@@ -188,7 +188,10 @@ struct LevelGenerationOptions {
     template<class... A> bool useFlatWorld(A...)       { return false; }
     template<class... A> int  getWorldSeed(A...)       { return 0; }
     // Pos* return so MinecraftServer's `Pos *spawnPos = ...` typechecks.
-    Pos* getSpawnPos() { return nullptr; }
+    // Pos.h is pre-included further down so the type is visible by the
+    // time this method body is instantiated; forward-decl keeps the
+    // declaration parseable here too.
+    class Pos* getSpawnPos() { return nullptr; }
     template<class... A> int  getDifficulty(A...)      { return 0; }
     template<class... A> int  getGameMode(A...)        { return 0; }
 };
@@ -359,10 +362,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
 // GameMode.h which has zero deps).
 #include "../Minecraft.Client/MultiPlayerGameMode.h"
-// Real Tutorial - PlayerList calls getTutorial()->isStateCompleted(...).
-// Tutorial.h pulls TutorialTask + TutorialEnum + a couple lighter tutorial
-// helper headers; chain is reasonable.
-#include "../Minecraft.Client/Common/Tutorial/Tutorial.h"
+// Tutorial.h transitively pulls UIScene (UI subsystem replaced by
+// SWF on iOS), so we cannot pre-include it without breaking.
+// PlayerList::placeNewPlayer's `getTutorial()->isStateCompleted` stays
+// red until the UI/render Phase D bringup or a per-call patch.
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
