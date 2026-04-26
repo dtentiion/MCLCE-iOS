@@ -12,9 +12,15 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 #include <pthread.h>
 #include <mach/mach_time.h>
+
+#ifdef __cplusplus
+#include <string>
+#endif
 
 // Basic integer aliases.
 typedef int8_t   INT8;
