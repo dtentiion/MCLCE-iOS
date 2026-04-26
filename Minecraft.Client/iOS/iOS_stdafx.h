@@ -313,6 +313,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "../Minecraft.Client/Common/Potion_Macros.h"
 #include "../Minecraft.Client/Common/Colours/ColourTable.h"
 #include "Exceptions.h"
+#include "StringHelpers.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
