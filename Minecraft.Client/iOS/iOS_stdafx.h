@@ -98,8 +98,7 @@ class Container;
 class LocalPlayer;
 class ResourceLocation;
 class SharedConstants;
-class C4JRender;
-class C4JThread;
+// C4JRender / C4JThread defined as stubs below.
 class TileEntity;
 class ServerPlayer;
 class CombatTracker;
@@ -116,6 +115,32 @@ class ConsoleSaveFile;
 enum ETelemetryChallenges {
     eTelemetryChallenges_None = 0,
 };
+
+// eTYPE_BOSS_MOB_PART is a Class.h-style RTTI enum value upstream
+// uses for runtime type ID. Stubbed as the next slot after eINSTANCEOF
+// values. Real enum lives in Class.h which we already include; this
+// gives just the missing entry.
+#ifndef eTYPE_BOSS_MOB_PART
+#  define eTYPE_BOSS_MOB_PART 0
+#endif
+
+// Stubs for upstream classes we cannot easily include without
+// pulling huge subtrees. Each is defined as an empty struct so
+// any pointer / pointer-to-incomplete reference compiles, and
+// member-access calls fall through templated catch-alls (none
+// of these methods are ever called by the probe).
+struct ConsoleGameRules { template<class... A> ConsoleGameRules(A...) {} };
+struct SharedConstants  {};
+struct C4JRenderStub    {};
+struct C4JThreadStub    {};
+
+// C4JRender / C4JThread are the heavyweight classes. Real ones live
+// in platform-specific 4JLibs/. Files like Textures.h reference
+// nested types via `C4JRender::Texture *` which need the class
+// declared. Map the names to our stubs via typedef so any
+// references resolve to a complete type.
+typedef C4JRenderStub C4JRender;
+typedef C4JThreadStub C4JThread;
 class IntArrayTag;
 class CompoundTag;
 class Player;
@@ -218,6 +243,9 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // the iOS port already targets the Windows64 string set on the
 // menu side.
 #include "../Minecraft.Client/Windows64Media/strings.h"
+#include "../Minecraft.Client/Common/Console_Awards_enum.h"
+#include "../Minecraft.Client/Common/Minecraft_Macros.h"
+#include "FileHeader.h"
 #endif
 
 #endif // !_WIN32 && !_WIN64
