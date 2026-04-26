@@ -357,9 +357,12 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define LEVEL_MAX_WIDTH       1024
 #endif
 
-// Console nether-scale ratio for legacy worlds.
+// Console nether-scale ratio for legacy worlds, plus min-scale floor.
 #ifndef HELL_LEVEL_LEGACY_SCALE
 #  define HELL_LEVEL_LEGACY_SCALE 3
+#endif
+#ifndef HELL_LEVEL_MIN_SCALE
+#  define HELL_LEVEL_MIN_SCALE   1
 #endif
 
 // Console world-size SMALL/MEDIUM constants; used alongside LEGACY/
@@ -633,6 +636,14 @@ static inline BOOL DeleteFileA(const char*) { return TRUE; }
 static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
 static inline DWORD GetFileSize(HANDLE, LPDWORD high) {
     if (high) *high = 0; return 0;
+}
+
+// Win32 thread spawn. Probe never runs threading; null handle is fine.
+// Placed after LPDWORD/INVALID_HANDLE_VALUE so the signature parses.
+typedef DWORD (*LPTHREAD_START_ROUTINE)(void*);
+static inline HANDLE CreateThread(void*, size_t, LPTHREAD_START_ROUTINE, void*, DWORD, LPDWORD outId) {
+    if (outId) *outId = 0;
+    return INVALID_HANDLE_VALUE;
 }
 static inline BOOL CreateDirectoryA(const char*, void*) { return TRUE; }
 static inline BOOL CreateDirectoryW(const wchar_t*, void*) { return TRUE; }
