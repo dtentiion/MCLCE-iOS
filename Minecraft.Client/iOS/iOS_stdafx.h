@@ -215,6 +215,10 @@ class Connection;
 // Minecraft.Client/Minecraft.h). MultiPlayerLevel etc reference it
 // via pointer, so a forward decl is enough for the probe parses.
 class Minecraft;
+// DLCPack lives in Minecraft.Client/DLCManager territory. TexturePack.h
+// references it via `DLCPack* getDLCPack()` pointer. Forward decl is
+// all we need for the probe parses.
+class DLCPack;
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif
