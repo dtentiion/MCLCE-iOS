@@ -765,6 +765,26 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/Wolf.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Zombie.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ZoneFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArmorItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Biome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BrewingStandTileEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Command.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ExperienceCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FireTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FoliageColor.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GrassTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ItemInstance.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LeafTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LightningBolt.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MapItemSavedData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/McRegionChunkStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PotionBrewing.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PreLoginPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RedStoneDustTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SparseDataStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SparseLightStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TallGrass.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WaterLilyTile.cpp
 )
 
 add_library(mcle_world_probe STATIC
