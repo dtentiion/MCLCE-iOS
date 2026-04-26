@@ -156,7 +156,7 @@ set(WORLD_PROBE_SOURCES
   # net.minecraft.world.level.biome.h which transitively hits
   # PortalForcer.h's incomplete base class.
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BasicTree.cpp
+  # BasicTree dropped - PIX profiler + app.
   # BirchFeature dropped - app + LevelGenerationOptions.
   # CactusFeature dropped - PortalForcer base class incomplete.
   # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
