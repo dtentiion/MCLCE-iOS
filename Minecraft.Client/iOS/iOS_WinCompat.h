@@ -387,43 +387,6 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define XMemSet128(dst, val, len) memset((dst), (val), (len))
 #endif
 
-// Win32 SetFilePointer entry. Probe stub; never called.
-static inline DWORD SetFilePointer(HANDLE, LONG distLow, PLONG distHigh, DWORD) {
-    if (distHigh) *distHigh = 0;
-    return (DWORD)distLow;
-}
-
-// Win32 CreateFile / WriteFile / ReadFile / CloseHandle entries.
-// Required for compile of File.cpp on the Console branch.
-#ifndef _IOS_FILE_API_DECLARED
-#define _IOS_FILE_API_DECLARED
-static inline HANDLE CreateFileA(const char*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
-    return INVALID_HANDLE_VALUE;
-}
-static inline HANDLE CreateFileW(const wchar_t*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
-    return INVALID_HANDLE_VALUE;
-}
-#  ifdef UNICODE
-#    define CreateFile CreateFileW
-#  else
-#    define CreateFile CreateFileA
-#  endif
-static inline BOOL ReadFile(HANDLE, void*, DWORD, LPDWORD got, void*) {
-    if (got) *got = 0; return FALSE;
-}
-static inline BOOL WriteFile(HANDLE, const void*, DWORD, LPDWORD wrote, void*) {
-    if (wrote) *wrote = 0; return FALSE;
-}
-static inline BOOL CloseHandle(HANDLE) { return TRUE; }
-static inline BOOL DeleteFileA(const char*) { return TRUE; }
-static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
-#  ifdef UNICODE
-#    define DeleteFile DeleteFileW
-#  else
-#    define DeleteFile DeleteFileA
-#  endif
-#endif
-
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
 #define _PLONG_DEFINED
@@ -475,6 +438,44 @@ typedef struct _XMEMDECOMPRESSION_CONTEXT { int dummy; } XMEMDECOMPRESSION_CONTE
 // it as the unset-state marker for HANDLE-typed members.
 #ifndef INVALID_HANDLE_VALUE
 #  define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
+#endif
+
+// Win32 SetFilePointer entry. Probe stub; never called.
+// Placed after PLONG/INVALID_HANDLE_VALUE/LPDWORD declarations above.
+static inline DWORD SetFilePointer(HANDLE, LONG distLow, PLONG distHigh, DWORD) {
+    if (distHigh) *distHigh = 0;
+    return (DWORD)distLow;
+}
+
+// Win32 CreateFile / WriteFile / ReadFile / CloseHandle entries.
+// Required for compile of File.cpp / RegionFile.cpp on the Console branch.
+#ifndef _IOS_FILE_API_DECLARED
+#define _IOS_FILE_API_DECLARED
+static inline HANDLE CreateFileA(const char*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
+    return INVALID_HANDLE_VALUE;
+}
+static inline HANDLE CreateFileW(const wchar_t*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
+    return INVALID_HANDLE_VALUE;
+}
+#  ifdef UNICODE
+#    define CreateFile CreateFileW
+#  else
+#    define CreateFile CreateFileA
+#  endif
+static inline BOOL ReadFile(HANDLE, void*, DWORD, LPDWORD got, void*) {
+    if (got) *got = 0; return FALSE;
+}
+static inline BOOL WriteFile(HANDLE, const void*, DWORD, LPDWORD wrote, void*) {
+    if (wrote) *wrote = 0; return FALSE;
+}
+static inline BOOL CloseHandle(HANDLE) { return TRUE; }
+static inline BOOL DeleteFileA(const char*) { return TRUE; }
+static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
+#  ifdef UNICODE
+#    define DeleteFile DeleteFileW
+#  else
+#    define DeleteFile DeleteFileA
+#  endif
 #endif
 
 // MS pointer-size max. Used as the third arg to XPhysicalAlloc by
