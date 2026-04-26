@@ -31,7 +31,10 @@ struct McleAppStub {
 
     // Direct fields upstream uses without parens.
     void* m_dlcManager = nullptr;
-    void* vSkinNames   = nullptr;
+    // Real `std::vector<wstring> vSkinNames` from Consoles_App.h. Real
+    // skin name list will populate from DLC at runtime; empty vector is
+    // fine for compile + probe.
+    std::vector<std::wstring> vSkinNames;
 
     // Generic templates - accept any args, return either a default-
     // constructible value or void. Compile-only, not link-only.
