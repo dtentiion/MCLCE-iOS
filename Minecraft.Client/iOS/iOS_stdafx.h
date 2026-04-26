@@ -138,17 +138,17 @@ enum ETelemetryChallenges {
 #  define eTYPE_BOSS_MOB_PART eTYPE_NOTSET
 #endif
 
-// MOJANG_DATA is a typedef of an unnamed struct in App_structs.h.
-// Player.cpp uses `MOJANG_DATA *pMojangData = app.GetMojangDataForXuid(...)`
-// on the path that gates skin / cape display. Real struct shape mirrors
-// upstream's App_structs.h:155 - eXUID + cape/skin filenames.
+// MOJANG_DATA mirrors App_structs.h:155 - eXUID + cape/skin filenames.
+// Named struct (not typedef of unnamed) so it composes with elaborated
+// `struct MOJANG_DATA*` references upstream code uses without any
+// pre-declaration.
 #ifndef MOJANG_DATA_DEFINED
 #define MOJANG_DATA_DEFINED
-typedef struct {
+struct MOJANG_DATA {
     int eXuid;
     wchar_t wchCape[32];
     wchar_t wchSkin[32];
-} MOJANG_DATA;
+};
 #endif
 
 // Stubs for upstream classes we cannot easily include without
