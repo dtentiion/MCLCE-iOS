@@ -98,6 +98,8 @@ public:
     int dummy_for_layout;
 };
 class HtmlString;
+class Explosion;
+class Container;
 class IntArrayTag;
 class CompoundTag;
 class Player;
