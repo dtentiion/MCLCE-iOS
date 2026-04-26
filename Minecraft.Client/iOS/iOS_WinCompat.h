@@ -339,6 +339,14 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
 #endif
 
+// Xbox-style content / device descriptors. Probe never opens XContent;
+// these typedefs satisfy DLCTexturePack / DLCManager headers that
+// declare members of these types.
+typedef uint32_t XCONTENTDEVICEID;
+#ifndef INVALID_DEVICE_ID
+#  define INVALID_DEVICE_ID ((XCONTENTDEVICEID)0xFFFFFFFF)
+#endif
+
 // Net protocol cap. Real value differs per platform (PS4/Switch use
 // 16, X1 uses 8). Probe never sends/receives so the constant just
 // needs to exist and be reasonable.
