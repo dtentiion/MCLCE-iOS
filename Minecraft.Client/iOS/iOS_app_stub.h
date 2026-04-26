@@ -71,6 +71,55 @@ struct McleAppStub {
     template<class... A> void           SetXuiServerAction(A...)      {}
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
+
+    // Common/* additions: catch-all setters / getters / state
+    // probes that upstream code in Minecraft.Client/Common/* uses.
+    // Bool-returning style for any "Is*" / "Has*" / "Get*Enabled".
+    template<class... A> bool           IsXX(A...)                    { return false; }
+    template<class... A> int            ActionDebugMask(A...)         { return 0; }
+    template<class... A> bool           CheckGameSettingsChanged(A...){ return false; }
+    template<class... A> void           ApplyGameSettingsChanged(A...){}
+    template<class... A> void           ExitGame(A...)                {}
+    template<class... A> void           CloseAllPlayersXuiScenes(A...){}
+    template<class... A> void           CloseXuiScenes(A...)          {}
+    template<class... A> void           CloseXuiScenesAndNavigateToScene(A...) {}
+    template<class... A> void           AddCreditText(A...)           {}
+    template<class... A> bool           AlreadySeenCreditText(A...)   { return false; }
+    template<class... A> void           AdjustSplitscreenScene(A...)  {}
+    template<class... A> void           AdjustSplitscreenScene_PlayerChanged(A...) {}
+    template<class... A> void           EnableDebugOverlay(A...)      {}
+    template<class... A> void           EnableMashupPackWorlds(A...)  {}
+    template<class... A> void           DisplayNewDLCTip(A...)        {}
+    template<class... A> int            FormatHTMLString(A...)        { return 0; }
+    template<class... A> void           AddMemoryTPDFile(A...)        {}
+    template<class... A> void           AddMemoryTextureFile(A...)    {}
+    template<class... A> void           ClearTerrainFeaturePosition(A...) {}
+    template<class... A> bool           DLCAlreadyPurchased(A...)     { return false; }
+    template<class... A> bool           DLCInstalled(A...)            { return false; }
+    template<class... A> bool           DLCInstallPending(A...)       { return false; }
+    template<class... A> void           DLCContentRetrieved(A...)     {}
+    template<class... A> void           DLCInstallProcessCompleted(A...) {}
+    template<class... A> void           ClearDLCInstalled(A...)       {}
+    template<class... A> void           ClearNewDLCAvailable(A...)    {}
+    template<class... A> void           ClearAndResetDLCDownloadQueue(A...) {}
+    template<class... A> void           Checkout(A...)                {}
+    template<class... A> bool           CheckTMSDLCCanStop(A...)      { return false; }
+    template<class... A> bool           CheckForEmptyStore(A...)      { return false; }
+    template<class... A> bool           DownloadAlreadyPurchased(A...){ return false; }
+    template<class... A> bool           GetBanListRead(A...)          { return false; }
+    template<class... A> bool           GetBootedFromDiscPatch(A...)  { return false; }
+    template<class... A> bool           GetChangingSessionType(A...)  { return false; }
+    template<class... A> void*          GetCommerce(A...)             { return nullptr; }
+    template<class... A> bool           GetCommerceCategoriesRetrieved(A...) { return false; }
+    template<class... A> void*          GetCommerceCategory(A...)     { return nullptr; }
+    template<class... A> bool           GetCommerceProductListInfoRetrieved(A...) { return false; }
+    template<class... A> void*          GetCategoryInfo(A...)         { return nullptr; }
+    template<class... A> const wchar_t* GetBDUsrDirPath(A...)         { return L""; }
+    template<class... A> void           ClearSignInChangeUsersMask(A...) {}
+    template<class... A> void           AddDLCRequest(A...)           {}
+    template<class... A> void           AddTMSPPFileTypeRequest(A...) {}
+    template<class... A> void           FreeLocalDLCImages(A...)      {}
+    template<class... A> void           FreeLocalTMSFiles(A...)       {}
 };
 
 // Real upstream defines `CMinecraftApp app;` as a global instance of

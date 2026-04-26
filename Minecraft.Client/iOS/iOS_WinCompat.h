@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <wchar.h>
 #include <pthread.h>
+#include <mach/mach_time.h>
 
 // Basic integer aliases.
 typedef int8_t   INT8;
@@ -348,8 +349,7 @@ static inline DWORD GetTickCount(void) {
 // in mach-time units, convertible to nanoseconds via mach_timebase_info.
 // We expose these as nanosecond counts (frequency = 1e9) so QuadPart
 // values across calls yield meaningful ns deltas without callers caring
-// about the unit.
-#include <mach/mach_time.h>
+// about the unit. (mach/mach_time.h included at top of this header.)
 
 static inline BOOL QueryPerformanceFrequency(LARGE_INTEGER *out) {
     if (!out) return FALSE;
