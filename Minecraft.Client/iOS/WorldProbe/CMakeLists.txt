@@ -640,6 +640,10 @@ target_compile_definitions(mcle_world_probe PRIVATE
   # We do not have a real `app` to bind against in the probe so we
   # take the content-only branch.
   _CONTENT_PACKAGE
+  # Marker for probe-only stubs in iOS_WinCompat.h. The main app
+  # build does not get this define, so it picks up real upstream
+  # definitions instead of conflicting stubs.
+  MCLE_PROBE_BUILD=1
 )
 
 # Pin to C++14. Upstream is 2014-era code that doesn't need anything newer,
