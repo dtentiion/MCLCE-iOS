@@ -347,6 +347,18 @@ typedef uint32_t XCONTENTDEVICEID;
 #  define INVALID_DEVICE_ID ((XCONTENTDEVICEID)0xFFFFFFFF)
 #endif
 
+// Direct3D 11 viewport descriptor. GameRenderer.h declares
+// `ComputeViewportForPlayer(int, D3D11_VIEWPORT&)`. iOS uses its own
+// renderer (Phase D); for compile we just need a same-shape struct.
+typedef struct D3D11_VIEWPORT {
+    float TopLeftX;
+    float TopLeftY;
+    float Width;
+    float Height;
+    float MinDepth;
+    float MaxDepth;
+} D3D11_VIEWPORT;
+
 // Net protocol cap. Real value differs per platform (PS4/Switch use
 // 16, X1 uses 8). Probe never sends/receives so the constant just
 // needs to exist and be reasonable.
