@@ -179,6 +179,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // inline copy() body calls System::arraycopy. System is defined by
 // this point so the call resolves.
 #include "ItemInstance.h"
+#include "AttributeInstance.h"
 #endif
 
 // Upstream enum definitions. App_enums.h has eMinecraftColour /
