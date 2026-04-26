@@ -96,6 +96,14 @@ class AttributeModifier;
 class ItemInstance {
 public:
     int dummy_for_layout;
+    ItemInstance() {}
+    // Variadic template constructor to absorb whatever arg shape
+    // upstream code calls make_shared<ItemInstance>(...) with.
+    // Compile-only: bodies are no-ops.
+    template<class A> ItemInstance(A) {}
+    template<class A, class B> ItemInstance(A, B) {}
+    template<class A, class B, class C> ItemInstance(A, B, C) {}
+    template<class A, class B, class C, class D> ItemInstance(A, B, C, D) {}
 };
 class HtmlString;
 class Explosion;
