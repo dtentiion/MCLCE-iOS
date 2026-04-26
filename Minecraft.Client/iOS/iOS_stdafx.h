@@ -204,10 +204,9 @@ class MobEffect;
 class ItemEntity;
 class StructureFeatureSavedData;
 class Connection;
-// Real `class Minecraft` is the platform client app class (lives in
-// Minecraft.Client/Minecraft.h). MultiPlayerLevel etc reference it
-// via pointer, so a forward decl is enough for the probe parses.
-class Minecraft;
+// Real `class Minecraft` (Minecraft.Client/Minecraft.h) is pre-
+// included further down, so member access on Minecraft instances
+// (->soundEngine, ->skins, ...) compiles in callers.
 // DLCPack lives in Minecraft.Client/DLCManager territory. TexturePack.h
 // references it via `DLCPack* getDLCPack()` pointer. Forward decl is
 // all we need for the probe parses.
@@ -338,6 +337,11 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // chunk of the renderer chain; we accept the compile cost for parity.
 #include "../Minecraft.Client/Common/DLC/DLCFile.h"
 #include "../Minecraft.Client/Common/DLC/DLCSkinFile.h"
+// Real Minecraft (the platform client app class). MultiPlayerLevel
+// reaches into Minecraft::soundEngine, ServerLevel reaches into
+// Minecraft::skins, etc. Forward-decl is not enough; we need the full
+// class.
+#include "../Minecraft.Client/Minecraft.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
