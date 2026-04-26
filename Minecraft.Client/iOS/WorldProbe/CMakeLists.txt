@@ -12,6 +12,8 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AABB.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AbsoptionMobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AbstractContainerMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AbstractProjectileDispenseBehavior.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddEntityPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddExperienceOrbPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddGlobalEntityPacket.cpp
@@ -22,9 +24,14 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AmbientCreature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Animal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AnimatePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnvilTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AnvilTileItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArmorDyeRecipe.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArmorRecipes.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ArmorSlot.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowDamageEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
@@ -34,6 +41,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AuxDataTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseAttributeMap.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BaseEntityTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BaseMobSpawner.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BasePressurePlateTile.cpp
@@ -41,14 +49,25 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/BasicTypeContainers.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Bat.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BeachBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BedTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BegGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BehaviorRegistry.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BinaryHeap.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BiomeInitLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BlockDestructionProgress.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BlockGenMethods.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BlockReplacements.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Boat.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BoatItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BodyControl.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BookItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BookshelfTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BottleItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BoundingBox.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BowItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BowlFoodItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BreakDoorGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BrewingStandTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Buffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BufferedOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BufferedReader.cpp
@@ -59,32 +78,54 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/CactusTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CakeTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CarrotOnAStickItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CarrotTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ChatPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ChunkStorageProfileDecorator.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityAreaPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Class.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ClayFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClayTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ClientCommandPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ClientSideMerchant.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClothDyeRecipes.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ClothTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CoalItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CocoaTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Color.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ColoredTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ColoredTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/CombatEntry.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CombatTracker.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ComplexItemDataPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Container.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ContainerAckPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ContainerButtonClickPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerClickPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ContainerClosePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ContainerOpenPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerSetContentPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ContainerSetDataPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerSetSlotPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ControlledByPlayerGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/CoralTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CraftItemPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CraftingContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CraftingMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Creature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CropTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DamageEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DaylightDetectorTileEntity.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DeadBushFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DebugOptionsPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DefaultDispenseItemBehavior.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DefaultGameModeCommand.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DefendVillageTargetGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DelayedRelease.cpp
@@ -92,6 +133,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/DesertBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DesertWellFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DetectorRailTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DigDurabilityEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DiggerItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DiggingEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DiodeTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Direction.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DirectionalTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DirtTile.cpp
@@ -100,23 +145,34 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/Distort.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DoorInfo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DoorInteractGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DoorTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DownfallLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DownfallMixerLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DragonFireball.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DummyCriteria.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DungeonFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DyePowderItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EggItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EggTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Emboss.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EmptyMapItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentCategory.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EnchantmentContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentHelper.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EnchantmentInstance.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentTableTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EnderChestTileEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnderpearlItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Enemy.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EntityActionAtPositionPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EntityEventPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EntityPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ExperienceItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ExperienceOrb.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ExplodePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ExtremeHillsBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EyeOfEnderSignal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Facing.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FacingEnum.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FallingTile.cpp
@@ -124,28 +180,40 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/FastNoise.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Feature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FenceGateTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FenceTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FileHeader.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FireAspectEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FireChargeItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FireworksMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FireworksRecipe.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FireworksRocketEntity.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FixedBiomeSource.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlatLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlatLayerInfo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlippedIcon.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FloatBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FloatGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlowerPotTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlyingMob.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FollowParentGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FoodConstants.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FoodData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FoodRecipies.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ForestBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FurnaceRecipes.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FuzzyZoomLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GameModeCommand.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GlassTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GlobalEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GlowstoneTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Goal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GoalSelector.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GoldenAppleItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Golem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GrassColor.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GravelTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GroundBushFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/GrowMushroomIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HalfTransparentTile.cpp
@@ -153,6 +221,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/HatchetItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HayBlockTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HealthBoostMobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HealthCriteria.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HeavyTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HellBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HellFireFeature.cpp
@@ -161,6 +230,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/HellSpringFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HellStoneTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HitResult.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HoeItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HopperMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HorseInventoryMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HouseFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HugeMushroomFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HugeMushroomTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/HurtByTargetGoal.cpp
@@ -175,41 +248,61 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/InteractGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/InteractPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/IslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ItemFrame.cpp
   ${UPSTREAM_DIR}/Minecraft.World/JavaMath.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/JukeboxTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/JumpControl.cpp
   ${UPSTREAM_DIR}/Minecraft.World/JungleBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KeepAlivePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KickPlayerPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/KillCommand.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KnockbackEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LadderTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Language.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LargeCaveFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LargeFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LargeFireball.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LargeHellCaveFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Layer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LeafTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LeapAtTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LeashFenceKnotEntity.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LeashItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelEventPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelParticlesPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelSettings.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelStorage.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelSummary.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelType.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LeverTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LightGemFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LightGemTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LiquidTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LiquidTileDynamic.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LiquidTileStatic.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LockedChestTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LookAtPlayerGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LookAtTradingPlayerGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LootBonusEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Material.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MaterialColor.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MeleeAttackGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MelonTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MenuBackup.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MerchantContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MerchantMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MerchantRecipe.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MerchantResultSlot.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MetalTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MilkBucketItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MineShaftStart.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MinecartItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MinecartRideable.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MinecartSpawner.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MobCategory.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MobSpawner.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ModifiableAttributeInstance.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MoveControl.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MoveEntityPacket.cpp
@@ -217,12 +310,16 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/MovePlayerPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MultiEntityMobPart.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MultiTextureTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Mushroom.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MushroomIslandBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MusicTileEntity.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MycelTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NameTagItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/NbtIo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/NearestAttackableTargetGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/NetherSphere.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NetherWartTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/NetherrackTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Node.cpp
   ${UPSTREAM_DIR}/Minecraft.World/NonTameRandomTargetGoal.cpp
@@ -232,9 +329,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ObsidianTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/OfferFlowerGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/OpenDoorGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OreRecipies.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OreTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/OwnerHurtByTargetGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/OwnerHurtTargetGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/OxygenEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Painting.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Path.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PathFinder.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PathNavigation.cpp
@@ -245,12 +345,15 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/PickaxeItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PistonExtensionTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PistonMovingPiece.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PistonTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlainsBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerActionPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerCommandPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerInputPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerTeam.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PortalTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Pos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PotatoTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PoweredMetalTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PoweredRailTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PressurePlateTile.cpp
@@ -267,55 +370,82 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/RandomStrollGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RangedAttribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Rarity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RedStoneOreTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RedlightTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Redstone.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ReedTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RegionHillsLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RemoveEntitiesPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RemoveMobEffectPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RepairContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RepairResultSlot.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RepeaterTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ResultContainer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RiverInitLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RiverLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RiverMixerLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Rotate.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RotateHeadPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RotatedPillarTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RunAroundLikeCrazyGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SaddleItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SandStoneTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Sapling.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SaplingTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SavedData.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Scale.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Score.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Scoreboard.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SeedFoodItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SeedItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Sensing.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ServerSettingsChangedPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ServersideAttributeMap.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetCarriedItemPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetCreativeModeSlotPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetDisplayObjectivePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetEntityDataPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetEntityLinkPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetEntityMotionPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetEquippedItemPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetExperiencePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetObjectivePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetScorePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetSpawnPositionPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetTimePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ShapelessRecipy.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SharedConstants.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ShearsItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ShoreLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ShovelItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SimpleFoiledItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SimplexNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Slot.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SmallFireball.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SmoothFloat.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SmoothLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SmoothStoneBrickTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SmoothStoneBrickTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SmoothZoomLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SnowItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SnowTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Snowball.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SnowballItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SoulSandTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Sponge.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StainedGlassBlock.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StainedGlassPaneBlock.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StairTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StoneButtonTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StoneMonsterTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StoneMonsterTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StoneSlabTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StoneTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StringHelpers.cpp
   ${UPSTREAM_DIR}/Minecraft.World/StructureFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StructureFeatureSavedData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StructureRecipies.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StructureStart.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SwampBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SwampRiversLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Synth.cpp
@@ -323,6 +453,8 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/TaigaBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TakeItemEntityPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TallGrassFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TamableAnimal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TargetGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Team.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TeleportEntityPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TemperatureLayer.cpp
@@ -332,10 +464,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/TheEndBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TheEndPortalFrameTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ThinFenceTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThornsEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ThreadName.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Throwable.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ThrownEgg.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ThrownExpBottle.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThrownPotion.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TickNextTickData.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TileEditorOpenPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TileEntityDataPacket.cpp
@@ -343,15 +477,21 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/TileEventPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TilePos.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TileUpdatePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ToolRecipies.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TorchTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TradeItemPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TradeWithPlayerGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TransparentTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TrapDoorTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TreeTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TreeTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TripWireSourceTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TripWireTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/UntouchingEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/UpdateAttributesPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/UpdateMobEffectPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/UpdateProgressPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/UseItemPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Vec3.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Village.cpp
   ${UPSTREAM_DIR}/Minecraft.World/VillageSiege.cpp
@@ -361,12 +501,21 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/WallTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterAnimal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterColor.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WaterLilyTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterWorkerEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterlilyFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WeaponItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WeaponRecipies.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WebTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WeighedRandom.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WeightedPressurePlateTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Witch.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WitherSkull.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WoodButtonTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WoolCarpetTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WoolTileItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WorkbenchTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/XZPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ZoomLayer.cpp
 )
 
