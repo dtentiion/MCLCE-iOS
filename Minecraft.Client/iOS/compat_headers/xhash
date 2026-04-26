@@ -1,0 +1,5 @@
+// Microsoft-specific <xhash> shim. Upstream Hasher.cpp does
+// `#include <xhash>` to get the old hash<> template; libc++ ships
+// the same names through <unordered_map>. Redirect to that.
+#pragma once
+#include <unordered_map>
