@@ -23,6 +23,7 @@ DOSCPP="$REPO_ROOT/upstream/Minecraft.World/DataOutputStream.cpp"
 DISCPP="$REPO_ROOT/upstream/Minecraft.World/DataInputStream.cpp"
 COMPCPP="$REPO_ROOT/upstream/Minecraft.World/compression.cpp"
 LEVELH="$REPO_ROOT/upstream/Minecraft.World/Level.h"
+ZCSCPP="$REPO_ROOT/upstream/Minecraft.World/ZonedChunkStorage.cpp"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -285,6 +286,28 @@ patched = src.replace(needle, addition, 1)
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: added Level::DEPTH to {path}")
+PY
+fi
+
+# ZonedChunkStorage.cpp:98 does `lc->unsaved = false` on a LevelChunk
+# but upstream LevelChunk.h has the field as private `m_unsaved` with a
+# `setUnsaved(bool)` setter. The line does not compile against this
+# revision of LevelChunk.h. Patch the call site to use the setter.
+if grep -q 'setUnsaved(false)' "$ZCSCPP" 2>/dev/null; then
+    echo "patch-upstream-stdafx: ZonedChunkStorage.cpp already patched, skipping"
+elif [ -f "$ZCSCPP" ]; then
+python3 - "$ZCSCPP" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'lc->unsaved = false;'
+if needle not in src:
+    sys.exit(f"patch-upstream-stdafx: lc->unsaved anchor not found in {path}")
+patched = src.replace(needle, 'lc->setUnsaved(false);', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: rewrote lc->unsaved as setUnsaved(false) in {path}")
 PY
 fi
 
