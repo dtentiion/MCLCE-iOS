@@ -959,6 +959,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/MerchantRecipeList.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerInfoPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TextureAndGeometryPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ServerLevel.cpp
 )
 
 add_library(mcle_world_probe STATIC

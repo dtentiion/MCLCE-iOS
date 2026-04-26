@@ -342,6 +342,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // returns LevelRuleset* and the body of postProcessPlayer comes from
 // the real GameRuleDefinition.h chain.
 #include "../Minecraft.Client/Common/GameRules/LevelRuleset.h"
+// CTelemetryManager - PlayerList / MinecraftServer use the global
+// TelemetryManager pointer for telemetry events. Real header is light
+// (only pulls UIEnums.h which has no further deps).
+#include "../Minecraft.Client/Common/Telemetry/TelemetryManager.h"
 // Real Minecraft (the platform client app class). MultiPlayerLevel
 // reaches into Minecraft::soundEngine, ServerLevel reaches into
 // Minecraft::skins, etc. Forward-decl is not enough; we need the full
