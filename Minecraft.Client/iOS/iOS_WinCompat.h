@@ -362,10 +362,31 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define HELL_LEVEL_LEGACY_SCALE 3
 #endif
 
-// Console world-size SMALL constant; used alongside LEGACY/CLASSIC in
-// world picker / server bounds.
+// Console world-size SMALL/MEDIUM constants; used alongside LEGACY/
+// CLASSIC in world picker / server bounds.
 #ifndef LEVEL_WIDTH_SMALL
 #  define LEVEL_WIDTH_SMALL     384
+#endif
+#ifndef LEVEL_WIDTH_MEDIUM
+#  define LEVEL_WIDTH_MEDIUM    640
+#endif
+
+// Console nether-scale ratio - max value used for size cap.
+#ifndef HELL_LEVEL_MAX_SCALE
+#  define HELL_LEVEL_MAX_SCALE  4
+#endif
+
+// Win32 wait sentinel - infinite timeout.
+#ifndef INFINITE
+#  define INFINITE              0xFFFFFFFF
+#endif
+
+// Win32 file open hints. Probe never opens a real file.
+#ifndef FILE_FLAG_SEQUENTIAL_SCAN
+#  define FILE_FLAG_SEQUENTIAL_SCAN 0x08000000
+#endif
+#ifndef FILE_FLAG_RANDOM_ACCESS
+#  define FILE_FLAG_RANDOM_ACCESS   0x10000000
 #endif
 
 // Net protocol revision. Probe never sends a packet; constant just
@@ -596,6 +617,9 @@ static inline BOOL WriteFile(HANDLE, const void*, DWORD, LPDWORD wrote, void*) {
 static inline BOOL CloseHandle(HANDLE) { return TRUE; }
 static inline BOOL DeleteFileA(const char*) { return TRUE; }
 static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
+static inline DWORD GetFileSize(HANDLE, LPDWORD high) {
+    if (high) *high = 0; return 0;
+}
 #  ifdef UNICODE
 #    define DeleteFile DeleteFileW
 #  else
