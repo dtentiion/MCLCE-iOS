@@ -187,6 +187,9 @@ struct LevelGenerationOptions {
     template<class... A> bool getuseFlatWorld(A...)    { return false; }
     template<class... A> bool useFlatWorld(A...)       { return false; }
     template<class... A> int  getWorldSeed(A...)       { return 0; }
+    template<class... A> void* getSpawnPos(A...)       { return nullptr; }
+    template<class... A> int  getDifficulty(A...)      { return 0; }
+    template<class... A> int  getGameMode(A...)        { return 0; }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
@@ -351,6 +354,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // Minecraft::skins, etc. Forward-decl is not enough; we need the full
 // class.
 #include "../Minecraft.Client/Minecraft.h"
+// Real MultiPlayerGameMode - PlayerList chains through
+// Minecraft::gameMode->getTutorial(). Header is light (only pulls
+// GameMode.h which has zero deps).
+#include "../Minecraft.Client/MultiPlayerGameMode.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
