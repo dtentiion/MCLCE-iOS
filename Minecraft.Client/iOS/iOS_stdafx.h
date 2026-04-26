@@ -23,6 +23,8 @@
 // 4J platform storage layer - exposes C4JStorage class with the
 // EMessageResult / ESaveGameState enums upstream code references.
 #include "4JLibs/inc/4J_Storage.h"
+// 4J profile layer - PlayerUID, C_4JProfile, ProfileManager (extern).
+#include "4JLibs/inc/4J_Profile.h"
 
 // C++ standard library bits upstream uses unguarded.
 #include <cstddef>
@@ -235,17 +237,11 @@ class DLCPack;
 typedef unsigned char byte;
 #endif
 
-// PlayerUID stub. Other platforms define this in their 4J_Profile.h;
-// our iOS 4J_Profile.h has the same definition but it does not get
-// included on iOS (upstream stdafx.h is a no-op for us, so its
-// platform-4JLibs include chain never fires). Inline the definition
-// here so the probe sees it at file scope.
-#ifdef __cplusplus
-struct PlayerUID {
-    uint8_t bytes[16];
-};
-typedef PlayerUID* PPlayerUID;
-#endif
+// PlayerUID lives in iOS/4JLibs/inc/4J_Profile.h (already pre-included
+// via the iOS_stdafx.h `#include "4JLibs/inc/4J_Storage.h"` chain at the
+// top of this file via iOS_app_stub.h forward refs). Definition kept
+// in 4J_Profile.h so it can stay in sync with the C_4JProfile class
+// declaration without duplication.
 
 // Memory-section profiler hook declared in upstream stdafx.h:
 //     void MemSect(int sect);
