@@ -22,4 +22,28 @@ struct PlayerUID {
     uint8_t bytes[16];
 };
 typedef PlayerUID* PPlayerUID;
+
+// 4J profile / pad-routing manager. Other platforms expose a real
+// C_4JProfile that owns per-pad user identity (Xbox Live signin, NP
+// authoritative user, etc). On iOS we have one local user; the stub
+// provides whatever upstream calls touch via variadic methods.
+class C_4JProfile {
+public:
+    template<class... A> int  GetPrimaryPad(A...)         { return 0; }
+    template<class... A> int  GetSignedInUsers(A...)      { return 1; }
+    template<class... A> bool IsSignedIn(A...)            { return true; }
+    template<class... A> bool IsHostPlayer(A...)          { return true; }
+    template<class... A> bool HasOnlineAccess(A...)       { return false; }
+    template<class... A> bool HasSocialAccess(A...)       { return false; }
+    template<class... A> uint64_t GetXuid(A...)           { return 0; }
+    template<class... A> const wchar_t* GetGamertag(A...) { return L"iOSPlayer"; }
+    template<class... A> int  GetUserIndexForPad(A...)    { return 0; }
+    template<class... A> int  GetPadForUserIndex(A...)    { return 0; }
+};
+
+// Real 4J_Profile.h (Durango/Orbis) defines `extern C_4JProfile
+// ProfileManager;` here. Mirror that so upstream code referencing the
+// global resolves. The actual instance is provided by a single TU
+// (Minecraft.Client/iOS/Profile/ProfileManager.cpp or similar).
+extern C_4JProfile ProfileManager;
 #endif
