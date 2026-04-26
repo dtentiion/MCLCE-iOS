@@ -116,6 +116,13 @@ enum ETelemetryChallenges {
     eTelemetryChallenges_Unknown,
 };
 
+// Debug-flag bit indices upstream uses to gate cheats / dev-tools.
+// Real enum lives in platform-specific app debug settings; just the
+// CraftAnything bit is referenced from upstream Minecraft.World/.
+enum eDebugSettings {
+    eDebugSetting_CraftAnything = 0,
+};
+
 // eTYPE_BOSS_MOB_PART is a console-branch RTTI slot upstream's Class.h
 // does not declare. BossMobPart.h GetType() returns this; using the
 // enum identifier eTYPE_NOTSET (0) means the macro substitutes a real
