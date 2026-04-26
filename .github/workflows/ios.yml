@@ -169,9 +169,10 @@ jobs:
           cmake --build build-probe --config Release --target mcle_world_probe_link_test 2>&1 | tee link-test.log
           status=${PIPESTATUS[0]}
           echo "linker exit status: $status"
-          # Pull undefined-symbol lines out for a small artifact even if the
-          # full log is huge.
-          (grep -E "Undefined symbol|undefined symbol|symbol not found|cannot find symbol" link-test.log || true) > link-test-undefined.log
+          # Pull undefined-symbol summary lines AND the leading symbol lines
+          # for a compact artifact. Apple ld writes "Undefined symbol: X"
+          # plus indented "referenced from:" continuations - we want both.
+          (grep -E '^  "[^"]+", referenced from:|Undefined symbol|symbol not found|symbol\(s\) not found' link-test.log || true) > link-test-undefined.log
           wc -l link-test-undefined.log
           exit 0
 
