@@ -31,6 +31,8 @@ typedef uint8_t* LPBYTE;
 typedef int8_t   CHAR;
 typedef uint8_t  UCHAR;
 typedef uint16_t WORD;
+typedef int16_t  SHORT;
+typedef uint16_t USHORT;
 typedef uint32_t DWORD;
 typedef uint64_t QWORD;
 typedef int32_t  LONG;

@@ -19,6 +19,7 @@
 // Win32 type aliases (DWORD, BOOL, HANDLE, ...) that upstream public headers
 // reference without guarding.
 #include "iOS_WinCompat.h"
+#include "iOS_app_stub.h"
 
 // C++ standard library bits upstream uses unguarded.
 #include <cstddef>
@@ -94,6 +95,10 @@ class ItemInstance;
 class HtmlString;
 class Explosion;
 class Container;
+class LocalPlayer;
+class AttributeInstance;
+class ResourceLocation;
+class SharedConstants;
 class IntArrayTag;
 class CompoundTag;
 class Player;
