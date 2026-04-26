@@ -18,11 +18,8 @@
 // continues to be the source of truth for compile coverage. This
 // target's failure log is the source of truth for link coverage.
 
-#include "AABB.h"
 #include "Mth.h"
 
 extern "C" int probe_link_test_main(int /*argc*/, char** /*argv*/) {
-    AABB box(0, 0, 0, 1, 1, 1);
-    float r = Mth::sqrt(2.0f);
-    return (int)(box.x0 + r);
+    return (int)Mth::sqrt(2.0f);
 }
