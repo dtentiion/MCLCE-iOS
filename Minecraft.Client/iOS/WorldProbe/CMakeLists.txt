@@ -140,6 +140,18 @@ set(WORLD_PROBE_SOURCES
   # the entity subsystem. ColourTable maps colour names to
   # eMinecraftColour values, pure data + StringHelpers.
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Colours/ColourTable.cpp
+  # Tile-derived files (small ones) - retry now Tile.h parses.
+  ${UPSTREAM_DIR}/Minecraft.World/SandStoneTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RotatedPillarTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TransparentTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TorchTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThinFenceTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellStoneTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HugeMushroomTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HayBlockTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PoweredMetalTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CarrotTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BookshelfTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
   # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
   # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
