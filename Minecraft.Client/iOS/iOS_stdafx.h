@@ -203,6 +203,7 @@ class MobEffect;
 class ItemEntity;
 class INetworkPlayer;
 class StructureFeatureSavedData;
+class Connection;
 // ListTag is a template `template<class T> class ListTag`, do not
 // forward-declare as plain class.
 #endif
@@ -302,6 +303,8 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "../Minecraft.Client/Windows64Media/strings.h"
 #include "../Minecraft.Client/Common/Console_Awards_enum.h"
 #include "../Minecraft.Client/Common/Minecraft_Macros.h"
+#include "../Minecraft.Client/Common/Potion_Macros.h"
+#include "../Minecraft.Client/Common/Colours/ColourTable.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"

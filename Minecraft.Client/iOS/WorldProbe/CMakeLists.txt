@@ -714,6 +714,57 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/Tile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TileEntity.cpp
   ${UPSTREAM_DIR}/Minecraft.World/VillageFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnvilMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BiomeSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Blaze.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CaveSpider.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Chicken.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClockItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CommandBlockEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CompassItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Cow.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Creeper.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Dimension.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EffectCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnderDragon.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnderMan.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EntityHorse.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FileOutputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Ghast.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Giant.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellDimension.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LavaSlime.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LivingEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Minecart.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Mob.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Monster.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MushroomCow.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NbtSlotFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Ocelot.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OldChunkStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Pig.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PigZombie.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PistonBaseTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PlayerEnderChestContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Sheep.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SignUpdatePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Silverfish.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Skeleton.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Slime.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SnowMan.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Spider.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Squid.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StemTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TheEndDimension.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TimeCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ToggleDownfallCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Villager.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/VillagerGolem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WeighedTreasure.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Wolf.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Zombie.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ZoneFile.cpp
 )
 
 add_library(mcle_world_probe STATIC
