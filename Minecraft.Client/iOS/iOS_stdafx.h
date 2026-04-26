@@ -210,10 +210,7 @@ class Connection;
 // Real `class Minecraft` (Minecraft.Client/Minecraft.h) is pre-
 // included further down, so member access on Minecraft instances
 // (->soundEngine, ->skins, ...) compiles in callers.
-// DLCPack lives in Minecraft.Client/DLCManager territory. TexturePack.h
-// references it via `DLCPack* getDLCPack()` pointer. Forward decl is
-// all we need for the probe parses.
-class DLCPack;
+// DLCPack: real header pre-included further down.
 // FriendSessionInfo lives in Common/Network/SessionInfo.h which has a
 // platform-conditional chain we do not cover. UIStructs.h references
 // it as a pointer field; forward-decl is enough for parses.
@@ -334,12 +331,17 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // store. DLCTexturePack reaches in for getString(); pre-include so
 // member access compiles without extra include directives in callers.
 #include "../Minecraft.Client/StringTable.h"
-// DLCFile + DLCSkinFile real headers. DLCPack.h's inline getSkinFile()
-// does static_cast<DLCSkinFile*>(DLCFile*), needs both as complete
-// types at every TU. DLCSkinFile.h pulls HumanoidModel -> Model -> a
-// chunk of the renderer chain; we accept the compile cost for parity.
+// DLCFile + DLCSkinFile + DLCPack real headers. DLCPack.h's inline
+// getSkinFile() does static_cast<DLCSkinFile*>(DLCFile*), needs both
+// as complete types. ServerLevel uses pDLCPack->hasPurchasedFile().
 #include "../Minecraft.Client/Common/DLC/DLCFile.h"
 #include "../Minecraft.Client/Common/DLC/DLCSkinFile.h"
+#include "../Minecraft.Client/Common/DLC/DLCPack.h"
+// Real LevelRuleset (game-rule root). PlayerList calls
+// app.getGameRuleDefinitions()->postProcessPlayer(player). The McleAppStub
+// returns LevelRuleset* and the body of postProcessPlayer comes from
+// the real GameRuleDefinition.h chain.
+#include "../Minecraft.Client/Common/GameRules/LevelRuleset.h"
 // Real Minecraft (the platform client app class). MultiPlayerLevel
 // reaches into Minecraft::soundEngine, ServerLevel reaches into
 // Minecraft::skins, etc. Forward-decl is not enough; we need the full

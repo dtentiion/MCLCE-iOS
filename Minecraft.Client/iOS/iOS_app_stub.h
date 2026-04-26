@@ -94,7 +94,10 @@ struct McleAppStub {
     template<class... A> void           AddMemoryTPDFile(A...)        {}
     template<class... A> void           AddMemoryTextureFile(A...)    {}
     template<class... A> void           ClearTerrainFeaturePosition(A...) {}
-    template<class... A> void*          getGameRuleDefinitions(A...)  { return nullptr; }
+    // Return LevelRuleset* so PlayerList::placeNewPlayer (and similar)
+    // can call ->postProcessPlayer(player) on it. nullptr is fine - the
+    // call site checks for non-null first.
+    template<class... A> class LevelRuleset* getGameRuleDefinitions(A...)  { return nullptr; }
     template<class... A> bool           DLCAlreadyPurchased(A...)     { return false; }
     template<class... A> bool           DLCInstalled(A...)            { return false; }
     template<class... A> bool           DLCInstallPending(A...)       { return false; }
@@ -134,12 +137,22 @@ inline McleAppStub app;
 // the receive loop; variadic template members absorb signatures and
 // every getter returns sane null/false defaults.
 struct McleNetworkManagerStub {
-    template<class... A> bool IsLeavingGame(A...)   { return false; }
-    template<class... A> bool IsInSession(A...)     { return false; }
-    template<class... A> bool IsHost(A...)          { return false; }
-    template<class... A> int  GetSmallId(A...)      { return 0; }
+    template<class... A> bool IsLeavingGame(A...)        { return false; }
+    template<class... A> bool IsInSession(A...)          { return false; }
+    template<class... A> bool IsHost(A...)               { return false; }
+    template<class... A> int  GetSmallId(A...)           { return 0; }
     template<class... A> McleNetworkManagerStub* GetHostPlayer(A...) { return this; }
-    template<class... A> void* GetPlayerByXuid(A...) { return nullptr; }
+    template<class... A> void* GetPlayerByXuid(A...)     { return nullptr; }
+    template<class... A> void* GetPlayerBySmallId(A...)  { return nullptr; }
+    template<class... A> void* GetLocalPlayerByUserIndex(A...) { return nullptr; }
+    template<class... A> void  ServerReady(A...)         {}
+    template<class... A> void  ClientReady(A...)         {}
+    template<class... A> void  Disconnect(A...)          {}
+    template<class... A> bool  IsServer(A...)            { return false; }
+    template<class... A> bool  IsClient(A...)            { return false; }
+    template<class... A> int   GetNumPlayers(A...)       { return 0; }
+    template<class... A> int   GetMaxPlayers(A...)       { return 1; }
+    template<class... A> int   GetSessionState(A...)     { return 0; }
 };
 inline McleNetworkManagerStub g_NetworkManager;
 
