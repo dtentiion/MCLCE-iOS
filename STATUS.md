@@ -27,6 +27,23 @@ The app launches straight into the real LCE main menu. Here's what works end-to-
 - Tooltips strip at the bottom of each menu. The authored SWF has it, we don't wire it yet.
 - Some rendering quirks on scrollbars, panel masking, and a couple of labels. Being cleaned up as scenes land.
 
+## Gameplay code port: progress snapshot
+
+Phase B (compile coverage) and Phase C (link coverage) target the upstream gameplay tree. Snapshot at the time of this writing:
+
+- **Auto-probe** (per-file `clang++ -fsyntax-only` against the iOS toolchain): 891+ of 831 `Minecraft.World/*.cpp` files green (95%+), plus 35 in `Minecraft.Client/Common/` and 62 in `Minecraft.Client/` root. Auto-probe runs on every push and uploads a greens artifact.
+- **Probe static library `mcle_world_probe`**: 800+ files actually compile and archive. Includes Entity, Level, LevelChunk, Tile, TileEntity, Mob, LivingEntity, Player and most of the world simulation code.
+- **Phase C link-test**: a force-load executable target tries to link the archive. Each round drops more undefined-symbol clusters as the matching `.cpp` lands.
+- **Remaining link blockers**: MinecraftServer.cpp, PlayerList.cpp, ServerLevel.cpp, Minecraft.cpp, MultiPlayerLevel.cpp. These pull the UI / renderer chain on console; iOS replaces UI with the SWF runtime so they need targeted iOS branches in upstream headers or thinner replacements.
+- **What this unlocks once it links**: world loading, chunk simulation, entity ticking. Save-format reader and renderer integration follow.
+
+Mature shim infrastructure lives in `Minecraft.Client/iOS/`:
+
+- `iOS_WinCompat.h`: Win32 type aliases, TLS, CriticalSection, mach-time bridge for QueryPerformanceCounter, file/thread/atomic stubs (CreateFile, CreateThread, Sleep, Interlocked\*64, GetFileSize, CreateDirectory, MEMORYSTATUS), level constants, PIX no-ops, secure-CRT printf, `_itow_s` template variants.
+- `iOS_stdafx.h`: pre-includes Definitions, ArrayWithLength, System, Mth, Random, IO streams, Icon, TilePos, ChunkPos, Pos, ItemInstance, AttributeInstance, App_enums, App_Defines, Class, Attribute, ConsoleGameRulesConstants, Console_Awards_enum, Console_Debug_enum, Minecraft_Macros, Potion_Macros, ColourTable, Exceptions, StringHelpers, NetworkPlayerInterface, StringTable, DLCFile, DLCSkinFile, real Minecraft.h.
+- `iOS_app_stub.h`: `McleAppStub` and `McleNetworkManagerStub` for the upstream `app` and `g_NetworkManager` globals. Variadic-template methods absorb call signatures while real iOS bindings are written.
+- `4JLibs/inc/4J_Storage.h`, `4J_Profile.h`: real-shape platform globals (StorageManager, ProfileManager) the upstream code reaches for.
+
 ## How it's put together
 
 - **UI runtime:** patched Ruffle fork (`third_party/ruffle_ios/` + branch `mclce-ios-patches` on [dtentiion/ruffle](https://github.com/dtentiion/ruffle)). Ruffle runs LCE's stock `.swf` menu files directly. Patches cover XUI bitmap imports, scene-lifecycle AS3 listener cleanup, and a handful of rendering fixes specific to LCE's authoring conventions.

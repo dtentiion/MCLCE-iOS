@@ -7,9 +7,19 @@
 
 Native iOS port of [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) (the TU19 Legacy Console Edition base).
 
-**Status: menus mostly working, gameplay not started yet.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. You can walk through the full Help & Options / Settings tree. "Play Game" opens the world list but can't actually load a world yet because the save format reader isn't wired up. See [STATUS.md](STATUS.md) for the honest breakdown.
+**Status: menus working, gameplay code at 95% compile coverage, link surface starting.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. The full Help & Options / Settings tree walks. The next big rock is gameplay: the iOS-side compile of upstream `Minecraft.World/` is at 891+ files green out of 831 (plus ~100 from `Minecraft.Client/`), the static probe library actually links, and the Phase C grind is in progress against the remaining undefined-symbol clusters (MinecraftServer, PlayerList, ServerLevel). See [STATUS.md](STATUS.md) for the honest breakdown.
 
 CI builds an `.ipa` on every push. Grab the latest from the [Actions tab](https://github.com/dtentiion/MCLCE-iOS/actions).
+
+## Distribution variants
+
+This repo ports the [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) tree (TU19 Legacy Console Edition base). If you want a different LCE flavour, look for a sibling iOS repo:
+
+- **MCLCE-iOS** (this one): TU19 base, the canonical LCE codebase.
+- **NeoLegacy-iOS** (planned): community NeoLegacy fork once that branch is cut.
+- Other variants land as their upstream trees stabilise.
+
+Pick the repo that matches the LCE flavour you want, grab the `.ipa` from its Actions tab, sideload it.
 
 ## What this is
 
