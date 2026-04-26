@@ -10,183 +10,364 @@
 
 set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AABB.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Vec3.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Class.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/StringHelpers.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/PerformanceTimer.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Random.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/TilePos.cpp
-  # NBT + IO layer. Most Tag derivatives are header-only; the
-  # .cpp files below cover Tag base + the IO read/write layer.
-  ${UPSTREAM_DIR}/Minecraft.World/Tag.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/NbtIo.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
-  # Shallow files with no Entity / ItemInstance dependencies. Each
-  # is under 600 lines with at most 4 includes.
-  # AirTile.cpp dropped: AirTile.h pulls Tile.h which references
-  # ItemInstance, LivingEntity, Explosion. The eMinecraftColour
-  # piece is now resolvable via App_enums.h pre-include but the
-  # other refs need the Tile / Item / Entity subsystems.
-  # AnimalChest.cpp dropped: needs ItemInstanceArray (patched out
-  # at ArrayWithLength.h). The IDS_ side is unblocked but Item
-  # subsystem is still gated.
-  # Re-attempt Attribute.cpp + BaseAttribute.cpp now that
-  # eATTRIBUTE_ID is pre-included via Attribute.h. They still
-  # need IDS_ATTRIBUTE_NAME_* loc constants - if those are
-  # missing this round will fail again on those.
-  ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Abilities.cpp
-  # Re-attempts after enum + IDS pre-include unlocks. Each of these
-  # was dropped earlier on a missing enum or IDS_ constant. Try
-  # again now; if any still fails it is on a different blocker
-  # (entity / item / sync subsystem) and will be dropped again.
-  # AttributeModifier.cpp dropped: needs global `app` (CMinecraftApp
-  # instance) for app.GetString(). Re-add when the global app stub
-  # lands.
-  # Add*Layer biome generators dropped (again): they include
-  # net.minecraft.world.level.biome.h -> Biome.h -> Mob.h ->
-  # LivingEntity.h -> Entity.h, hitting the entity subsystem wall.
-  # Re-add when ItemInstance + entity hierarchy land.
+  ${UPSTREAM_DIR}/Minecraft.World/AbsoptionMobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddEntityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddExperienceOrbPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddGlobalEntityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddMobPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddPaintingPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AmbientCreature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnimatePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AnvilTileItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowDamageEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowFireEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowInfiniteEnchantment.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ArrowKnockbackEnchantment.cpp
-  # Next batch: more shallow files that do not transitively pull
-  # Entity / Tile / Mob / Item / Biome.
-  # BaseAttributeMap.cpp dropped: accesses ItemInstance members via
-  # shared_ptr - needs full ItemInstance type, not forward decl.
+  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Attribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AuxDataTileItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseAttribute.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseEntityTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseMobSpawner.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BasePressurePlateTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BaseRailTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BasicTypeContainers.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Bat.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BeachBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BehaviorRegistry.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BinaryHeap.cpp
-  # BoundingBox.cpp dropped: needs full IntArrayTag type for `new
-  # IntArrayTag(...)`. Forward decl is not enough. Re-add when the
-  # full Tag hierarchy compiles.
+  ${UPSTREAM_DIR}/Minecraft.World/BiomeInitLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BlockDestructionProgress.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BlockGenMethods.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BlockReplacements.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BodyControl.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/BreakDoorGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Buffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BufferedOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/BufferedReader.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Bush.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ButtonTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ByteArrayInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteArrayOutputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ByteBuffer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CactusFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CactusTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Calendar.cpp
-  # World-gen feature files dropped: they all pull Tile.h
-  # transitively which references Entity hierarchy with non-pointer
-  # ItemInstance fields. Re-add when ItemInstance is ported.
-  # ItemInstance.cpp dropped: pulls Stat / GenericStats which
-  # references Player / Mob / DamageSource / eAward / LocalPlayer.
-  # Real port would need the whole stat + player + entity chain
-  # brought up together.
-  ${UPSTREAM_DIR}/Minecraft.World/AwardStatPacket.cpp
-  # AddExperienceOrbPacket.cpp dropped: includes
-  # net.minecraft.world.entity.h (Entity hierarchy).
+  ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ChunkStorageProfileDecorator.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityAreaPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ChunkVisibilityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Class.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClayFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClientCommandPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClientSideMerchant.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ClothTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Color.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CombatEntry.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ComplexItemDataPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Container.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerAckPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerButtonClickPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerClosePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerOpenPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ContainerSetDataPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/CoralTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Creature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DataInputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DataLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DataOutputStream.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DaylightDetectorTileEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DeadBushFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DefaultGameModeCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DefendVillageTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DelayedRelease.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DerivedLevelData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DesertBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DesertWellFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DetectorRailTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Direction.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DirectionalTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DirtTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DisconnectPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DispenseItemBehavior.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Distort.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DoorInfo.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DoorInteractGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DownfallLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DownfallMixerLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DragonFireball.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DummyCriteria.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DungeonFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EggTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Emboss.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantmentInstance.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnderChestTileEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Enemy.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EntityActionAtPositionPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EntityEventPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EntityPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ExperienceOrb.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ExplodePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ExtremeHillsBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Facing.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FacingEnum.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DoorInfo.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/DummyCriteria.cpp
-  # EnchantmentCategory.cpp dropped: pulls every item header.
-  ${UPSTREAM_DIR}/Minecraft.World/Distort.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/Emboss.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FallingTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FarmTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FastNoise.cpp
-  # File.cpp dropped: heavy Win32 file system (WIN32_FIND_DATA,
-  # MoveFile, GetLastError, MAX_PATH, wstringtofilename helper).
+  ${UPSTREAM_DIR}/Minecraft.World/Feature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FenceGateTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FileHeader.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FloatBuffer.cpp
-  # FoliageColor.cpp dropped: pulls Textures.h (C4JRender) + needs ColourTable.
-  ${UPSTREAM_DIR}/Minecraft.World/FoodConstants.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/FuzzyZoomLayer.cpp
-  # GameRules.cpp dropped: heavy use of global `app`.
-  # GameCommandPacket.cpp dropped: uses `app`.
-  ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
-  # GeneralStat.cpp dropped: pulls GenericStats with eAward + app.
-  ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
-  # FlatLayerInfo + FlatGeneratorInfo dropped, pull Biome/Tile.
+  ${UPSTREAM_DIR}/Minecraft.World/FireAspectEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FixedBiomeSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatLayerInfo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/FlippedIcon.cpp
-  # Hasher.cpp dropped: needs MSVC's <xhash> header.
-  # HtmlString.cpp dropped: needs escapeXML helper + global app.
+  ${UPSTREAM_DIR}/Minecraft.World/FloatBuffer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FloatGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlyingMob.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FollowParentGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FoodConstants.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ForestBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FuzzyZoomLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GameEventPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GameModeCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GetInfoPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GlassTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GlobalEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Goal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GoalSelector.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Golem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GrassColor.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GroundBushFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/GrowMushroomIslandLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HalfTransparentTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HangingEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HatchetItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HayBlockTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HealthBoostMobEffect.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HeavyTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellFireFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellPortalFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellSandTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellSpringFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HellStoneTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HitResult.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HugeMushroomFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HugeMushroomTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/HurtByTargetGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/I18n.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/IceBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ImprovedNoise.cpp
   ${UPSTREAM_DIR}/Minecraft.World/InputStream.cpp
   ${UPSTREAM_DIR}/Minecraft.World/InputStreamReader.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/InstantenousMobEffect.cpp
   ${UPSTREAM_DIR}/Minecraft.World/IntBuffer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/IntCache.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/InteractGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/InteractPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/IslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/JavaMath.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/JumpControl.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/JungleBiome.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KeepAlivePacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/KickPlayerPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/KnockbackEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LadderTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Language.cpp
-  # PacketListener dropped: pulls every packet header.
+  ${UPSTREAM_DIR}/Minecraft.World/LargeCaveFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LargeFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LargeHellCaveFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Layer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LeapAtTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LeashItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelEventPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelParticlesPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelSummary.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelType.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LeverTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LightGemFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LiquidTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LiquidTileDynamic.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LiquidTileStatic.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LockedChestTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LookAtPlayerGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LootBonusEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Material.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MaterialColor.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MeleeAttackGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MetalTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MineShaftStart.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MinecartSpawner.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MobCategory.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ModifiableAttributeInstance.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MoveControl.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MoveEntityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MoveEntityPacketSmall.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MovePlayerPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Mth.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MultiEntityMobPart.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Mushroom.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MushroomIslandBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MycelTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NbtIo.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NearestAttackableTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NetherSphere.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NetherrackTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Node.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/NonTameRandomTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Npc.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Objective.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ObjectiveCriteria.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ObsidianTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OfferFlowerGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OpenDoorGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OwnerHurtByTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OwnerHurtTargetGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/OxygenEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Path.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PathFinder.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PathNavigation.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PathfinderMob.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PerformanceTimer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PerlinNoise.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PerlinSimplexNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PickaxeItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PistonExtensionTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PistonMovingPiece.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PlainsBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PlayerActionPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PlayerCommandPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/PlayerInputPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PlayerTeam.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Pos.cpp
-  # PreLoginPacket dropped: SHORT type + MINECRAFT_NET constants + app.
+  ${UPSTREAM_DIR}/Minecraft.World/PoweredMetalTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PoweredRailTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PressurePlateTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PrimedTnt.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ProtectionEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PumpkinFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/PumpkinTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/QuartzBlockTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RailTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RainforestBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Random.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RandomLookAroundGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RandomPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RandomStrollGoal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RangedAttribute.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Rarity.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RedlightTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Redstone.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RegionHillsLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RemoveEntitiesPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RemoveMobEffectPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RepairContainer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RiverInitLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RiverLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RiverMixerLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Rotate.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RotateHeadPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/RotatedPillarTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SandStoneTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Sapling.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SavedData.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Scale.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Score.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Scoreboard.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Sensing.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ServersideAttributeMap.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetCarriedItemPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetDisplayObjectivePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetEntityDataPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetEntityLinkPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetEntityMotionPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetExperiencePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetObjectivePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetSpawnPositionPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetTimePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SharedConstants.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ShoreLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ShovelItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SimpleFoiledItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SimplexNoise.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SmallFireball.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SmoothFloat.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SmoothLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SmoothStoneBrickTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SmoothZoomLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Snowball.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SoulSandTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Sponge.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StairTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StoneButtonTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StoneMonsterTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StoneSlabTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StoneTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StringHelpers.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/StructureFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SwampBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SwampRiversLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Synth.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Tag.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TaigaBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TakeItemEntityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TallGrassFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Team.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TeleportEntityPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TemperatureLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TemperatureMixerLayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TextureChangePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TexturePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TheEndBiome.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TheEndPortalFrameTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThinFenceTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ThreadName.cpp
-  # TickNextTickData dropped: pulls Tile chain.
+  ${UPSTREAM_DIR}/Minecraft.World/Throwable.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThrownEgg.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ThrownExpBottle.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TickNextTickData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileEditorOpenPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileEntityDataPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TileEventData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileEventPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TilePos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TileUpdatePacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TorchTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TradeItemPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TradeWithPlayerGoal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TransparentTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TreeTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/TripWireSourceTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/UpdateAttributesPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/UpdateMobEffectPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/UpdateProgressPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Vec3.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Village.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/VillageSiege.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Villages.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/VinesFeature.cpp
   ${UPSTREAM_DIR}/Minecraft.World/VoronoiZoom.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WallTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WaterAnimal.cpp
   ${UPSTREAM_DIR}/Minecraft.World/WaterColor.cpp
-  # Biome layer files all dropped - all pull Biome -> Mob -> Entity.
-  # Pivot: try a Minecraft.Client utility cpp that does not pull
-  # the entity subsystem. ColourTable maps colour names to
-  # eMinecraftColour values, pure data + StringHelpers.
-  ${UPSTREAM_DIR}/Minecraft.Client/Common/Colours/ColourTable.cpp
-  # Tile-derived files dropped: they include real ItemInstance.h
-  # via net.minecraft.world.item.h which conflicts with our stub
-  # ItemInstance class. Need a real ItemInstance port to enable.
-  ${UPSTREAM_DIR}/Minecraft.World/LevelConflictException.cpp
-  # LevelSettings.cpp dropped: pulls level.storage.h which pulls entity.
-  # BehaviorRegistry.cpp also pulls Entity transitively, dropping.
-  # BlockReplacements.cpp dropped: includes ChestTile, HopperTile,
-  # StairTile, TntTile, etc which all reference Explosion / Random
-  # fields and Container types.
-  # AttackDamageMobEffect retry: ItemInstance now a stub class so
-  # the entity field-layout parse should succeed.
-  ${UPSTREAM_DIR}/Minecraft.World/AttackDamageMobEffect.cpp
-  # Big retry batch with ItemInstance stub.
-  ${UPSTREAM_DIR}/Minecraft.World/ChunkPos.cpp
-  ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
-  # All biome layer + override layer files dropped - they pull
-  # net.minecraft.world.level.biome.h which transitively hits
-  # PortalForcer.h's incomplete base class.
-  ${UPSTREAM_DIR}/Minecraft.World/AnimalChest.cpp
-  # BasicTree dropped - PIX profiler + app.
-  # BirchFeature dropped - app + LevelGenerationOptions.
-  # CactusFeature dropped - PortalForcer base class incomplete.
-  # CaveFeature dropped - uses global `app` + LevelGenerationOptions.
-  # CanyonFeature dropped - uses app.
-  # Bush.cpp dropped - PortalForcer chain.
-  # BaseAttributeMap dropped - calls real ItemInstance methods.
-  # Add*Layer biome generators: pull BiomeSource and friends, also
-  # heavy. Re-add with the world-gen subsystem port.
-  # Arrow enchantments dropped: Enchantment.h needs LivingEntity,
-  # HtmlString, ItemInstance, plus each cpp needs IDS_ENCHANTMENT_*
-  # localization constants. Re-add when entity / item / loc layers
-  # are ported.
-  # AttackDamageMobEffect.cpp dropped: pulls AttributeModifier.h,
-  # MobEffect.h, eMinecraftColour, LivingEntity, BaseAttributeMap.
-  ${UPSTREAM_DIR}/Minecraft.World/BasicTypeContainers.cpp
-  # compression.cpp deferred. It needs ByteOrder + LITTLEENDIAN
-  # from Definitions.h (stdafx is no-op so we have to surface
-  # those some other way), plus Win32 CriticalSection shims, plus
-  # Xbox PIX profiling no-ops, plus an XMEMCOMPRESSION_CONTEXT stub
-  # for the Xbox compression branch we will not enter. Punt until
-  # those shims land for other reasons.
-  # ChunkPos.cpp dropped: it does
-  #   #include "net.minecraft.world.entity.h"
-  # which pulls Entity / Creature / SynchedEntityData / EntityIO and a
-  # cascade of enums (eINSTANCEOF, eMinecraftColour, eTYPE_DERIVED_FROM)
-  # plus ItemInstance. Add back when the entity subsystem is brought
-  # into the probe deliberately.
+  ${UPSTREAM_DIR}/Minecraft.World/WaterWorkerEnchantment.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WaterlilyFeature.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WeighedRandom.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WitherSkull.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WoodButtonTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/WoolCarpetTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ZoomLayer.cpp
 )
 
 add_library(mcle_world_probe STATIC
