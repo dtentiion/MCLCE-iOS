@@ -187,7 +187,8 @@ struct LevelGenerationOptions {
     template<class... A> bool getuseFlatWorld(A...)    { return false; }
     template<class... A> bool useFlatWorld(A...)       { return false; }
     template<class... A> int  getWorldSeed(A...)       { return 0; }
-    template<class... A> void* getSpawnPos(A...)       { return nullptr; }
+    // Pos* return so MinecraftServer's `Pos *spawnPos = ...` typechecks.
+    Pos* getSpawnPos() { return nullptr; }
     template<class... A> int  getDifficulty(A...)      { return 0; }
     template<class... A> int  getGameMode(A...)        { return 0; }
 };
@@ -358,6 +359,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
 // GameMode.h which has zero deps).
 #include "../Minecraft.Client/MultiPlayerGameMode.h"
+// Real Tutorial - PlayerList calls getTutorial()->isStateCompleted(...).
+// Tutorial.h pulls TutorialTask + TutorialEnum + a couple lighter tutorial
+// helper headers; chain is reasonable.
+#include "../Minecraft.Client/Common/Tutorial/Tutorial.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
