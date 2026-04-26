@@ -685,6 +685,12 @@ static inline void GlobalMemoryStatus(LPMEMORYSTATUS s) {
 #ifndef PAGE_READWRITE
 #  define PAGE_READWRITE 0x04
 #endif
+// Win32 large-page hint. Level.cpp asks for 128KB pages on Xbox 360.
+// iOS uses 16KB pages and the alloc falls back to malloc; constant
+// just needs to exist.
+#ifndef MEM_LARGE_PAGES
+#  define MEM_LARGE_PAGES 0x20000000
+#endif
 
 // Xbox-style physical-memory allocator. Real one returns aligned
 // pages; on iOS we fall back to malloc since the upstream code
