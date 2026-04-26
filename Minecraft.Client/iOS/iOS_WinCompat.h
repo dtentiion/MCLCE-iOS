@@ -362,6 +362,24 @@ typedef struct _STRING_VERIFY_RESPONSE {
 #  define HELL_LEVEL_LEGACY_SCALE 3
 #endif
 
+// Console world-size SMALL constant; used alongside LEGACY/CLASSIC in
+// world picker / server bounds.
+#ifndef LEVEL_WIDTH_SMALL
+#  define LEVEL_WIDTH_SMALL     384
+#endif
+
+// Net protocol revision. Probe never sends a packet; constant just
+// needs to exist for compile.
+#ifndef MINECRAFT_NET_VERSION
+#  define MINECRAFT_NET_VERSION 0
+#endif
+
+// Win32 thread-exit-code sentinel for "still running". Probe never
+// inspects the value.
+#ifndef STILL_ACTIVE
+#  define STILL_ACTIVE          259
+#endif
+
 // Win32 file-share mask flags. Probe never opens files; constants
 // just need to exist for compile.
 #ifndef GENERIC_READ
@@ -413,6 +431,33 @@ typedef struct _STRING_VERIFY_RESPONSE {
 // constant zero satisfies the call sites.
 static inline DWORD GetLastError(void) { return 0; }
 static inline void  SetLastError(DWORD) {}
+
+// Win32 thread sleep. iOS exposes usleep; map ms to us. Probe never
+// runs the call.
+#include <unistd.h>
+static inline void Sleep(DWORD ms) { usleep(ms * 1000u); }
+
+// Wide string in-place find/replace helper. StringHelpers exposes
+// `replaceAll` on other platforms; the probe target needs the symbol
+// for compile but never executes the path.
+#ifdef __cplusplus
+static inline void replaceAll(std::wstring& s, const std::wstring& from, const std::wstring& to) {
+    if (from.empty()) return;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::wstring::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+static inline void replaceAll(std::string& s, const std::string& from, const std::string& to) {
+    if (from.empty()) return;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+#endif
 
 // Win32 atomic intrinsics for upstream's lock-free paths. iOS clang
 // supports the GCC __sync builtins which match the semantics. The
@@ -490,7 +535,9 @@ public:
     template<class... A> XLockFreeStack(A...) {}
     template<class... A> void Initialize(A...) {}
     template<class... A> bool push(A...)    { return false; }
+    template<class... A> bool Push(A...)    { return false; }
     template<class... A> T*   pop(A...)     { return nullptr; }
+    template<class... A> T*   Pop(A...)     { return nullptr; }
     template<class... A> bool empty(A...) const { return true; }
 };
 
