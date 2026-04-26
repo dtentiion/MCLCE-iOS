@@ -806,6 +806,14 @@ add_library(mcle_world_probe STATIC
 target_include_directories(mcle_world_probe PRIVATE
   ${UPSTREAM_DIR}/Minecraft.World
   ${UPSTREAM_DIR}/Minecraft.World/x64headers
+  ${UPSTREAM_DIR}/Minecraft.Client
+  ${UPSTREAM_DIR}/Minecraft.Client/Common
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Network
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Audio
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Colours
   ${UPSTREAM_DIR}/include
   ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS
   ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/compat_headers
@@ -867,6 +875,9 @@ if(ENABLE_WORLD_PROBE_LINK)
   target_include_directories(mcle_world_probe_link_test PRIVATE
     ${UPSTREAM_DIR}/Minecraft.World
     ${UPSTREAM_DIR}/Minecraft.World/x64headers
+    ${UPSTREAM_DIR}/Minecraft.Client
+    ${UPSTREAM_DIR}/Minecraft.Client/Common
+    ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules
     ${UPSTREAM_DIR}/include
     ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS
     ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/compat_headers
