@@ -181,6 +181,8 @@ struct LevelGenerationOptions {
     template<class... A> bool isFromMashup(A...)       { return false; }
     template<class... A> bool isFeatureChunk(A...)     { return false; }
     template<class... A> int  getFeatureSeed(A...)     { return 0; }
+    template<class... A> bool hasLoadedData(A...)      { return false; }
+    template<class... A> bool isReady(A...)            { return true; }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
@@ -216,6 +218,9 @@ class FriendSessionInfo;
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
+// BufferedImage lives in Minecraft.Client/BufferedImage.h. Used as
+// pointer in TexturePack.h's getDescTexture() return type.
+class BufferedImage;
 // Note: INetworkPlayer is defined by the real header pre-included
 // further down. No forward-decl here to avoid duplicate-declaration.
 // ListTag is a template `template<class T> class ListTag`, do not
@@ -299,6 +304,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // App_enums.h lives in Minecraft.Client/Common, escape upstream/
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
+#include "../Minecraft.Client/Common/App_Defines.h"
 #include "Class.h"
 #include "Attribute.h"
 #include "AttributeModifier.h"
