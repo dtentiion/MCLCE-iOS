@@ -374,6 +374,93 @@ typedef struct D3D11_VIEWPORT {
 #  define GAME_RULE_SAVENAME L"requiredGameRules.grf"
 #endif
 
+// Legacy OpenGL constants. Upstream Minecraft.cpp / LevelRenderer.cpp
+// use these against the OpenGL 1.x display-list / immediate-mode API.
+// iOS doesn't ship legacy GL; the calls eventually route through our
+// Metal-backed C4JRender_iOS in Phase D2. For compile we just need
+// the integer constants to exist and the gl* prototypes to declare.
+// stubs.h has its own copies plus a `class Color` that conflicts with
+// Minecraft.World/Color.h, so we ship the GL-only subset here.
+#ifndef GL_CONSTANTS_DEFINED
+#define GL_CONSTANTS_DEFINED
+#  define GL_BYTE                    0x1400
+#  define GL_UNSIGNED_BYTE           0x1401
+#  define GL_SHORT                   0x1402
+#  define GL_UNSIGNED_SHORT          0x1403
+#  define GL_INT                     0x1404
+#  define GL_UNSIGNED_INT            0x1405
+#  define GL_FLOAT                   0x1406
+#  define GL_TEXTURE_2D              0x0DE1
+#  define GL_TEXTURE_BINDING_2D      0x8069
+#  define GL_TEXTURE_MIN_FILTER      0x2801
+#  define GL_TEXTURE_MAG_FILTER      0x2800
+#  define GL_TEXTURE_WRAP_S          0x2802
+#  define GL_TEXTURE_WRAP_T          0x2803
+#  define GL_NEAREST                 0x2600
+#  define GL_LINEAR                  0x2601
+#  define GL_COMPILE                 0x1300
+#  define GL_COMPILE_AND_EXECUTE     0x1301
+#  define GL_RGB                     0x1907
+#  define GL_RGBA                    0x1908
+#  define GL_LUMINANCE               0x1909
+#  define GL_LUMINANCE_ALPHA         0x190A
+#  define GL_DEPTH_TEST              0x0B71
+#  define GL_DEPTH_BUFFER_BIT        0x00000100
+#  define GL_COLOR_BUFFER_BIT        0x00004000
+#  define GL_STENCIL_BUFFER_BIT      0x00000400
+#  define GL_BLEND                   0x0BE2
+#  define GL_CULL_FACE               0x0B44
+#  define GL_LIGHTING                0x0B50
+#  define GL_FOG                     0x0B60
+#  define GL_ALPHA_TEST              0x0BC0
+#  define GL_VERTEX_ARRAY            0x8074
+#  define GL_COLOR_ARRAY             0x8076
+#  define GL_NORMAL_ARRAY            0x8075
+#  define GL_TEXTURE_COORD_ARRAY     0x8078
+#  define GL_TRIANGLES               0x0004
+#  define GL_TRIANGLE_STRIP          0x0005
+#  define GL_QUADS                   0x0007
+#  define GL_PROJECTION              0x1701
+#  define GL_MODELVIEW               0x1700
+#  define GL_TEXTURE                 0x1702
+// Legacy GL function prototypes. Bodies live in
+// WorldProbe/probe_stub.cpp as no-ops; real Metal backend lands in
+// Phase D2 and replaces these via the C4JRender_iOS adapter layer.
+#  ifdef __cplusplus
+extern "C" {
+#  endif
+void glEnable(unsigned int);
+void glDisable(unsigned int);
+void glClear(unsigned int);
+void glClearColor(float, float, float, float);
+void glViewport(int, int, int, int);
+void glPushMatrix(void);
+void glPopMatrix(void);
+void glLoadIdentity(void);
+void glMatrixMode(unsigned int);
+void glTranslatef(float, float, float);
+void glRotatef(float, float, float, float);
+void glScalef(float, float, float);
+void glColor4f(float, float, float, float);
+void glBegin(unsigned int);
+void glEnd(void);
+void glVertex3f(float, float, float);
+void glTexCoord2f(float, float);
+void glNewList(int, int);
+void glEndList(void);
+void glCallList(int);
+void glDeleteLists(int, int);
+int  glGenLists(int);
+void glBindTexture(unsigned int, unsigned int);
+void glTexParameteri(unsigned int, unsigned int, int);
+void glDepthFunc(unsigned int);
+void glAlphaFunc(unsigned int, float);
+void glBlendFunc(unsigned int, unsigned int);
+#  ifdef __cplusplus
+}
+#  endif
+#endif // GL_CONSTANTS_DEFINED
+
 // Console world-size constants from upstream Minecraft.Client/MinecraftServer.h.
 // Real values match the Console Edition's legacy 864-block worlds and
 // classic 256-block worlds. Used as compile-time array sizes / loop

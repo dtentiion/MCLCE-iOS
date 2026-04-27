@@ -238,6 +238,10 @@ struct LevelGenerationOptions {
     class Pos* getSpawnPos() { return nullptr; }
     template<class... A> int  getDifficulty(A...)      { return 0; }
     template<class... A> int  getGameMode(A...)        { return 0; }
+    template<class... A> bool getLevelHasBeenInCreative(A...) { return false; }
+    template<class... A> bool getMapInteractionEnabled(A...)  { return false; }
+    template<class... A> bool getCommandBlocksEnabled(A...)   { return false; }
+    template<class... A> int  getInitialSpawnRadius(A...)     { return 0; }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
