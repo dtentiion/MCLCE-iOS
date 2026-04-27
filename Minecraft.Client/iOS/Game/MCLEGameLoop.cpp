@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <exception>
 
+#include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
 #include "../../../upstream/Minecraft.World/Level.h"
 #include "../../../upstream/Minecraft.World/LevelData.h"
@@ -56,6 +57,7 @@ enum InitState {
 
 // File-scope state. Lives for the lifetime of the app process.
 McRegionLevelStorageSource  *g_levelSource   = nullptr;
+ConsoleSaveFileOriginal     *g_saveFile      = nullptr;
 std::shared_ptr<LevelStorage> g_levelStorage;
 Level                        *g_level        = nullptr;
 std::wstring                  g_levelName;
@@ -146,10 +148,34 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
 
+    // Step 2.5: open saveData.ms inside the save folder. LCE Win64 packs
+    // every file the upstream code expects (level.dat, region/r.x.z.mcr,
+    // player .dat) into this single zlib-wrapped bundle. ConsoleSaveFile
+    // Original handles the unpack on demand.
+    std::wstring saveDataPath = savesDir + L"/" + levelId + L"/saveData.ms";
+    try {
+        g_saveFile = new ConsoleSaveFileOriginal(
+            /*fileName*/      saveDataPath,
+            /*pvSaveData*/    nullptr,
+            /*fileSize*/      0,
+            /*forceCleanSave*/false,
+            /*plat*/          SAVE_FILE_PLATFORM_LOCAL);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor threw: %{public}s", e.what());
+        g_initState = kStateFailed;
+        return;
+    }
+    if (!g_saveFile) {
+        MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor returned null");
+        g_initState = kStateFailed;
+        return;
+    }
+    MCLE_LOG("mcle_game_init: saveData.ms opened at %p", (void*)g_saveFile);
+
     // Step 3: open the storage handle for that save.
     try {
         g_levelStorage = g_levelSource->selectLevel(
-            /*saveFile*/   nullptr,
+            /*saveFile*/   g_saveFile,
             /*levelId*/    levelId,
             /*createPlayerDir*/ false);
     } catch (const std::exception &e) {
@@ -282,6 +308,10 @@ extern "C" void mcle_game_shutdown(void) {
         g_level = nullptr;
     }
     g_levelStorage.reset();
+    if (g_saveFile) {
+        try { delete g_saveFile; } catch (...) {}
+        g_saveFile = nullptr;
+    }
     if (g_levelSource) {
         try { delete g_levelSource; } catch (...) {}
         g_levelSource = nullptr;
