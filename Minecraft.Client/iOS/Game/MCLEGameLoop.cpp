@@ -38,6 +38,7 @@
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
+#include "../../../upstream/Minecraft.Client/ServerLevel.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -196,12 +197,23 @@ void initImpl() {
         return;
     }
 
-    // Step 6: construct the Level itself. Likely first real-crash point
-    // since Level pulls Dimension / ChunkSource / RNG state.
+    // Step 6: construct the Level. `Level` itself is abstract
+    // (createChunkSource, getEntity are pure virtual), so we use the
+    // concrete `ServerLevel` subclass which handles single-player
+    // chunk source + entity registry. Pass nullptr for the
+    // MinecraftServer* arg - we don't construct a MinecraftServer (the
+    // upstream class is in the lib but its init chain pulls UI), and
+    // the iOS shell drives the simulation directly. Likely first real
+    // crash point since ServerLevel pulls Dimension / ChunkSource.
     try {
-        g_level = new Level(g_levelStorage, g_levelName, settings);
+        g_level = new ServerLevel(
+            /*server*/        nullptr,
+            /*levelStorage*/  g_levelStorage,
+            /*levelName*/     g_levelName,
+            /*dimension*/     0,        // overworld
+            /*levelSettings*/ settings);
     } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: Level ctor threw: %{public}s", e.what());
+        MCLE_LOG("mcle_game_init: ServerLevel ctor threw: %{public}s", e.what());
         g_initState = kStateFailed;
         return;
     }
