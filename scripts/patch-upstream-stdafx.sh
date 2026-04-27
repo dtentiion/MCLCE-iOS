@@ -647,3 +647,25 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: renamed hellSand_Id -> soulsand_Id in {path}")
 PY
 fi
+
+# ClothTileItem.cpp uses ClothTile::getTileDataForItemAuxValue but only
+# pulls the umbrella net.minecraft.world.level.tile.h header. Add a direct
+# ClothTile.h include.
+CTIC="$REPO_ROOT/upstream/Minecraft.World/ClothTileItem.cpp"
+if grep -q '#include "ClothTile.h"' "$CTIC"; then
+    echo "patch-upstream-stdafx: ClothTileItem.cpp already patched, skipping"
+else
+python3 - "$CTIC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "ClothTileItem.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: ClothTileItem anchor not found")
+patched = src.replace(needle, '#include "ClothTile.h"\n' + needle, 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added ClothTile.h include to {path}")
+PY
+fi
