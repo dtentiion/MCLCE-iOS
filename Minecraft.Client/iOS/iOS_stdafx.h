@@ -492,6 +492,9 @@ public:
     template<class... A> int  getMusicTrackCount(A...) { return 0; }
     template<class... A> void playMusic(A...) {}
     template<class... A> void stopMusic(A...) {}
+    template<class... A> int  playStreaming(A...) { return 0; }
+    template<class... A> int  playStreamed(A...)  { return 0; }
+    template<class... A> int  playUI(A...)        { return 0; }
 };
 // Real MultiPlayerGameMode - PlayerList chains through
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
@@ -527,6 +530,17 @@ public:
     static void create() {}
     static void destroy() {}
     static bool isKeyDown(int)           { return false; }
+};
+class Display {
+public:
+    static void create() {}
+    static void destroy() {}
+    static int  getWidth()               { return 1280; }
+    static int  getHeight()              { return 720; }
+    static void update()                 {}
+    static void swapBuffers()            {}
+    static bool isCloseRequested()       { return false; }
+    static void setTitle(const char*)    {}
 };
 // Tutorial.h transitively pulls UIScene (UI subsystem replaced by
 // SWF on iOS) so we cannot pre-include the full header. The light

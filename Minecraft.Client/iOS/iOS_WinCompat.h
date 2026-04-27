@@ -211,6 +211,15 @@ typedef int32_t HRESULT;
 #ifndef PIXAddNamedCounter
 #  define PIXAddNamedCounter(value, name) ((void)0)
 #endif
+#ifndef PIXSetMarkerDeprecated
+#  define PIXSetMarkerDeprecated(...) ((void)0)
+#endif
+#ifndef PIXBeginEvent
+#  define PIXBeginEvent(...) ((void)0)
+#endif
+#ifndef PIXEndEvent
+#  define PIXEndEvent() ((void)0)
+#endif
 #ifndef CopyMemory
 #  define CopyMemory(dest, src, size)  memcpy((dest), (src), (size))
 #endif
