@@ -84,6 +84,10 @@ const int AddEntityPacket::FISH_HOOK;
 
 AddPlayerPacket::AddPlayerPacket(std::shared_ptr<Player>, PlayerUID, PlayerUID, int, int, int, int, int, int) {}
 AddPlayerPacket::~AddPlayerPacket() {}
+void AddPlayerPacket::read(DataInputStream *)   {}
+void AddPlayerPacket::write(DataOutputStream *) {}
+void AddPlayerPacket::handle(PacketListener *)  {}
+int  AddPlayerPacket::getEstimatedSize()        { return 0; }
 
 // ---------------------------------------------------------------------------
 // C4JThread::EventArray. iOS doesn't use the cross-thread waitable-event
