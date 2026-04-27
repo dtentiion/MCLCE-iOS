@@ -473,14 +473,25 @@ public:
 // complete. Header forward-decls IntBuffer/Options/Textures/
 // ResourceLocation but only via pointer; the class body is light.
 #include "../Minecraft.Client/Font.h"
-// Upstream's grab-bag stubs header. Defines `class Mouse`, `class
-// Keyboard`, plus a wall of legacy GL constants (GL_COMPILE,
-// GL_BYTE, GL_FLOAT, ...) and GL function declarations (glNewList,
-// glPushMatrix, glPopMatrix, ...). Including this satisfies
-// Minecraft.cpp (Mouse::create()) and LevelRenderer.cpp (legacy GL
-// constants) at the syntax level. Function bodies for the GL stubs
-// are provided in probe_stub.cpp for the few that get linked in.
-#include "../Minecraft.Client/stubs.h"
+// Mouse class stub. Real upstream version lives in
+// Minecraft.Client/stubs.h alongside a `class Color` that conflicts
+// with `Minecraft.World/Color.h`. We can't pre-include stubs.h
+// without breaking Color, so we ship just the Mouse + Keyboard
+// shapes the gameplay-host classes need.
+class Mouse {
+public:
+    static void create() {}
+    static void destroy() {}
+    static int  getX()                   { return 0; }
+    static int  getY()                   { return 0; }
+    static bool isButtonDown(int)        { return false; }
+};
+class Keyboard {
+public:
+    static void create() {}
+    static void destroy() {}
+    static bool isKeyDown(int)           { return false; }
+};
 // Tutorial.h transitively pulls UIScene (UI subsystem replaced by
 // SWF on iOS) so we cannot pre-include the full header. The light
 // TutorialEnum.h has no deps and brings the eTutorial_State enum
