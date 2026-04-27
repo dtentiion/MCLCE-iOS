@@ -98,6 +98,7 @@ struct McleAppStub {
     template<class... A> std::vector<class ModelPart*>* SetAdditionalSkinBoxes(A...) { return nullptr; }
     template<class... A> void           SetUniqueMapName(A...)        {}
     template<class... A> void           SetXuiServerAction(A...)      {}
+    template<class... A> int            GetXuiServerAction(A...)      { return 0; }
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
 
@@ -177,7 +178,9 @@ struct McleNetworkManagerStub {
     template<class... A> class INetworkPlayer* GetPlayerBySmallId(A...)         { return nullptr; }
     template<class... A> class INetworkPlayer* GetLocalPlayerByUserIndex(A...)  { return nullptr; }
     template<class... A> void  ServerReady(A...)         {}
+    template<class... A> void  ServerStopped(A...)       {}
     template<class... A> void  ClientReady(A...)         {}
+    template<class... A> void  ClientStopped(A...)       {}
     template<class... A> void  Disconnect(A...)          {}
     template<class... A> bool  IsServer(A...)            { return false; }
     template<class... A> bool  IsClient(A...)            { return false; }
