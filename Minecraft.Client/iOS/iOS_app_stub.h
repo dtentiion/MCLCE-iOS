@@ -98,6 +98,7 @@ struct McleAppStub {
     // Real upstream returns `vector<ModelPart*>*`. Player.cpp does
     // `m_ppAdditionalModelParts = app.SetAdditionalSkinBoxes(...)`.
     template<class... A> std::vector<class ModelPart*>* SetAdditionalSkinBoxes(A...) { return nullptr; }
+    template<class... A> std::vector<class ModelPart*>* GetAdditionalSkinBoxes(A...) { return nullptr; }
     template<class... A> void           SetUniqueMapName(A...)        {}
     template<class... A> void           SetXuiServerAction(A...)      {}
     // Returns the eXuiServerAction enum so MinecraftServer.cpp's

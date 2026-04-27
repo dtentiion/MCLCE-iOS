@@ -188,3 +188,12 @@ enum ESen_UpsellOutcome
 	eSen_UpsellOutcome_Went_To_Guide = 3,
 	eSen_UpsellOutcome_Other = 4,
 };
+
+// Game-mode telemetry id.
+enum ESen_ModeId
+{
+    eTelem_ModeId_Undefined = 0,
+    eTelem_ModeId_Survival  = 1,
+    eTelem_ModeId_Creative  = 2,
+    eTelem_ModeId_Adventure = 3,
+};

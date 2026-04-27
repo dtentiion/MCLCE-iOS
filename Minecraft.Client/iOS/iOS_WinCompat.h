@@ -352,7 +352,28 @@ typedef struct _STRING_VERIFY_RESPONSE {
     int             dwResult;
     DWORD           cchString;
     const WCHAR*    pszString;
+    DWORD           wNumStrings;   // upstream SignTileEntity reads this
 } STRING_VERIFY_RESPONSE;
+#endif
+
+// Xbox locale enums DLCSkinFile / DLCAudioFile switch on. Values pulled
+// from the upstream Xbox SDK headers; iOS doesn't need to match them
+// exactly, just be unique so the switch compiles.
+#ifndef XC_LANGUAGE_ENGLISH
+enum {
+    XC_LANGUAGE_ENGLISH    = 1,
+    XC_LANGUAGE_JAPANESE   = 2,
+    XC_LANGUAGE_GERMAN     = 3,
+    XC_LANGUAGE_FRENCH     = 4,
+    XC_LANGUAGE_SPANISH    = 5,
+    XC_LANGUAGE_ITALIAN    = 6,
+    XC_LANGUAGE_KOREAN     = 7,
+    XC_LANGUAGE_TCHINESE   = 8,
+    XC_LANGUAGE_PORTUGUESE = 9,
+    XC_LANGUAGE_SCHINESE   = 10,
+    XC_LANGUAGE_POLISH     = 11,
+    XC_LANGUAGE_RUSSIAN    = 12,
+};
 #endif
 
 // Xbox-style invalid XUID sentinel.
