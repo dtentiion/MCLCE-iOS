@@ -10,6 +10,7 @@
 #pragma once
 
 #include "iOS_WinCompat.h"
+#include <string>
 
 // Opaque player identity stub. Other platforms back this with platform-
 // specific identity (Sony NP, Xbox Live, etc). For iOS we have no online
@@ -35,6 +36,19 @@ struct PlayerUID {
         return true;
     }
     bool operator!=(const PlayerUID& o) const { return !(*this == o); }
+    // 4J Stu: Sony platforms expose toString for debug-print paths
+    // (DirectoryLevelStorage prints player UIDs while clearing old data).
+    // Render as a 32-char hex string so the log line is human-readable.
+    std::wstring toString() const {
+        wchar_t buf[33];
+        const wchar_t *hex = L"0123456789abcdef";
+        for (int i = 0; i < 16; ++i) {
+            buf[2*i]     = hex[(bytes[i] >> 4) & 0xF];
+            buf[2*i + 1] = hex[bytes[i] & 0xF];
+        }
+        buf[32] = 0;
+        return std::wstring(buf);
+    }
 };
 typedef PlayerUID* PPlayerUID;
 

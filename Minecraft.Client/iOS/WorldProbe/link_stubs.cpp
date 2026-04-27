@@ -181,36 +181,8 @@ void  ConsoleSaveFileOriginal::ConvertRegionFile(File /*src*/) {}
 void  ConsoleSaveFileOriginal::ConvertToLocalPlatform()        {}
 void *ConsoleSaveFileOriginal::getWritePointer(FileEntry *)    { return nullptr; }
 
-// ---------------------------------------------------------------------------
-// DirectoryLevelStorage. McRegionLevelStorage extends this and is in the
-// lib; its ctor calls our stubbed parent ctor.
-// ---------------------------------------------------------------------------
-DirectoryLevelStorage::DirectoryLevelStorage(ConsoleSaveFile *saveFile, const File /*dir*/, const std::wstring &/*levelId*/, bool /*createPlayerDir*/)
-    : playerDir(L""),
-      dataDir(L""),
-      sessionId(0),
-      m_bHasLoadedMapDataMappings(false),
-      m_saveFile(saveFile) {}
-DirectoryLevelStorage::~DirectoryLevelStorage() {}
-
-void                DirectoryLevelStorage::flushSaveFile(bool /*autosave*/) {}
-void                DirectoryLevelStorage::checkSession() {}
-LevelData          *DirectoryLevelStorage::prepareLevel() { return nullptr; }
-void                DirectoryLevelStorage::saveLevelData(LevelData *, std::vector<std::shared_ptr<Player>> *) {}
-void                DirectoryLevelStorage::saveLevelData(LevelData *) {}
-void                DirectoryLevelStorage::save(std::shared_ptr<Player>) {}
-CompoundTag        *DirectoryLevelStorage::load(std::shared_ptr<Player>)                { return nullptr; }
-CompoundTag        *DirectoryLevelStorage::loadPlayerDataTag(PlayerUID)                 { return nullptr; }
-void                DirectoryLevelStorage::clearOldPlayerFiles() {}
-PlayerIO           *DirectoryLevelStorage::getPlayerIO()    { return this; }
-ConsoleSavePath     DirectoryLevelStorage::getDataFile(const std::wstring &id) { return ConsoleSavePath(id); }
-std::wstring        DirectoryLevelStorage::getLevelId()    { return std::wstring(); }
-int                 DirectoryLevelStorage::getAuxValueForMap(PlayerUID, int, int, int, int) { return 0; }
-void                DirectoryLevelStorage::saveMapIdLookup() {}
-void                DirectoryLevelStorage::deleteMapFilesForPlayer(std::shared_ptr<Player>) {}
-void                DirectoryLevelStorage::saveAllCachedData() {}
-ChunkStorage       *DirectoryLevelStorage::createChunkStorage(Dimension * /*dim*/) { return nullptr; }
-void                DirectoryLevelStorage::closeAll() {}
+// DirectoryLevelStorage: real upstream now compiles via PlayerUID::toString
+// being added to the iOS PlayerUID stub. Stubs removed.
 
 // ---------------------------------------------------------------------------
 // SavedDataStorage. Stubs cover ServerLevel's references; real persistence
