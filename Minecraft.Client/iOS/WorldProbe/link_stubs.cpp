@@ -145,14 +145,8 @@ void GameRenderer::FinishedReassigning() {}
 // DirectoryLevelStorage: real upstream now compiles via PlayerUID::toString
 // being added to the iOS PlayerUID stub. Stubs removed.
 
-// ---------------------------------------------------------------------------
-// SavedDataStorage. Stubs cover ServerLevel's references; real persistence
-// is deferred until LevelStorage paths actually hit disk.
-// ---------------------------------------------------------------------------
-SavedDataStorage::SavedDataStorage(LevelStorage *storage) : levelStorage(storage) {}
-std::shared_ptr<SavedData> SavedDataStorage::get(const std::type_info &/*clazz*/, const std::wstring &/*id*/) { return nullptr; }
-void SavedDataStorage::set(const std::wstring &/*id*/, std::shared_ptr<SavedData> /*data*/) {}
-void SavedDataStorage::save() {}
+// SavedDataStorage: real upstream now compiles via the typeid include
+// patches (MapItemSavedData / Villages / StructureFeatureSavedData).
 
 // ---------------------------------------------------------------------------
 // ServerChunkCache. Constructor + the methods ServerLevel calls into.
@@ -188,20 +182,9 @@ void        ServerChunkCache::recreateLogicStructuresForChunk(int, int)         
 Chunk::Chunk()  {}
 Chunk::~Chunk() {}
 
-// ---------------------------------------------------------------------------
-// FlatGeneratorInfo. Used at world creation; no flat-world support yet.
-// ---------------------------------------------------------------------------
-FlatGeneratorInfo::~FlatGeneratorInfo() {}
-int FlatGeneratorInfo::getBiome() { return 0; }
-FlatGeneratorInfo *FlatGeneratorInfo::fromValue(const std::wstring &/*input*/) { return nullptr; }
-
-// ---------------------------------------------------------------------------
-// EnchantedBookItem. Item factory paths; not driven by the bootstrap.
-// ---------------------------------------------------------------------------
-void EnchantedBookItem::addEnchantment(std::shared_ptr<ItemInstance> /*item*/, EnchantmentInstance * /*enchantment*/) {}
-std::shared_ptr<ItemInstance> EnchantedBookItem::createForEnchantment(EnchantmentInstance * /*enchant*/) { return nullptr; }
-WeighedTreasure *EnchantedBookItem::createForRandomTreasure(Random *)                                        { return nullptr; }
-WeighedTreasure *EnchantedBookItem::createForRandomTreasure(Random *, int, int, int)                         { return nullptr; }
+// FlatGeneratorInfo: real upstream now compiles via Biome.h include patch.
+// EnchantedBookItem: real upstream now compiles via WeighedTreasure.h
+// forward-decl patch.
 
 // LevelData: real upstream LevelData.cpp now compiles (ChunkSource.h
 // include patched in). Stubs removed.

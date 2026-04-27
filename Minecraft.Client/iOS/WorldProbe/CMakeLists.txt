@@ -977,7 +977,18 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/DirectoryLevelStorage.cpp
   ${UPSTREAM_DIR}/Minecraft.World/compression.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ConsoleSaveFileOriginal.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EnchantedBookItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/FlatGeneratorInfo.cpp
   ${UPSTREAM_DIR}/Minecraft.World/RandomLevelSource.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SavedDataStorage.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/CompleteAllRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/CompoundGameRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/ConsoleGenerateStructure.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/ConsoleSchematicFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/GameRule.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/GameRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/LevelRuleset.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/UpdatePlayerRuleDefinition.cpp
 )
 
 add_library(mcle_world_probe STATIC
