@@ -31,10 +31,13 @@ struct McleAppStub {
     template<class T> T* getOpaque() { return nullptr; }
 
     // Direct fields upstream uses without parens.
-    void* m_dlcManager = nullptr;
-    // Real `std::vector<wstring> vSkinNames` from Consoles_App.h. Real
-    // skin name list will populate from DLC at runtime; empty vector is
-    // fine for compile + probe.
+    // Real Consoles_App.h:79 has `DLCManager m_dlcManager;` (by value).
+    // Player.cpp does `app.m_dlcManager.getSkinFile(...)` so we need the
+    // real DLCManager type, complete. iOS_stdafx.h pre-includes
+    // DLCFile.h -> DLCManager.h before this header so the type is
+    // visible.
+    DLCManager m_dlcManager;
+    // Real `std::vector<wstring> vSkinNames` from Consoles_App.h.
     std::vector<std::wstring> vSkinNames;
 
     // Generic templates - accept any args, return either a default-
