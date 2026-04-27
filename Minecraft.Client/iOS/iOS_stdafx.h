@@ -208,6 +208,13 @@ struct C4JRenderStub {
     template<class... A> void   BindTexture(A...)    {}
     template<class... A> int    CreateTexture(A...)  { return 0; }
     template<class... A> void   FreeTexture(A...)    {}
+    // Command buffer interface upstream LevelRenderer.cpp uses to
+    // record draws into a reusable buffer.
+    template<class... A> bool   CBuffCall(A...)      { return false; }
+    template<class... A> int    CBuffCreate(A...)    { return 0; }
+    template<class... A> void   CBuffDelete(A...)    {}
+    template<class... A> bool   CBuffLock(A...)      { return false; }
+    template<class... A> void   CBuffUnlock(A...)    {}
 };
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
