@@ -49,6 +49,10 @@ struct McleAppStub {
         template<class... A> class LevelRuleset* getGameRuleDefinitions(A...) { return nullptr; }
         template<class... A> void  loadFromBytes(A...)             {}
         template<class... A> void  saveToBytes(A...)               {}
+        template<class... A> void  saveGameRules(A...)             {}
+        template<class... A> void  loadGameRules(A...)             {}
+        template<class... A> void  applyGameRules(A...)            {}
+        template<class... A> void  resetGameRules(A...)            {}
     };
     McleGameRulesStub m_gameRules;
 
@@ -167,9 +171,11 @@ struct McleNetworkManagerStub {
     template<class... A> bool IsHost(A...)               { return false; }
     template<class... A> int  GetSmallId(A...)           { return 0; }
     template<class... A> McleNetworkManagerStub* GetHostPlayer(A...) { return this; }
-    template<class... A> void* GetPlayerByXuid(A...)     { return nullptr; }
-    template<class... A> void* GetPlayerBySmallId(A...)  { return nullptr; }
-    template<class... A> void* GetLocalPlayerByUserIndex(A...) { return nullptr; }
+    // Real upstream returns INetworkPlayer*. NetworkPlayerInterface.h
+    // is pre-included in iOS_stdafx so the type is visible.
+    template<class... A> class INetworkPlayer* GetPlayerByXuid(A...)            { return nullptr; }
+    template<class... A> class INetworkPlayer* GetPlayerBySmallId(A...)         { return nullptr; }
+    template<class... A> class INetworkPlayer* GetLocalPlayerByUserIndex(A...)  { return nullptr; }
     template<class... A> void  ServerReady(A...)         {}
     template<class... A> void  ClientReady(A...)         {}
     template<class... A> void  Disconnect(A...)          {}

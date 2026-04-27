@@ -54,6 +54,9 @@ public:
     template<class... A> const wchar_t* GetGamertag(A...) { return L"iOSPlayer"; }
     template<class... A> int  GetUserIndexForPad(A...)    { return 0; }
     template<class... A> int  GetPadForUserIndex(A...)    { return 0; }
+    template<class... A> bool IsFullVersion(A...)         { return true; }
+    template<class... A> int  AreXUIDSEqual(A...)         { return 0; }
+    template<class... A> bool HasGoldMembership(A...)     { return false; }
 };
 
 // Real 4J_Profile.h (Durango/Orbis) defines `extern C_4JProfile
