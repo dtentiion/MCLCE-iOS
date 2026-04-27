@@ -117,39 +117,34 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: level source constructed at %p", (void*)g_levelSource);
 
-    // Step 2: enumerate saves. The vector is heap-allocated by upstream
-    // (returns vector<LevelSummary*>*). We do not own the LevelSummary
-    // pointers, but we do own the outer vector pointer per upstream
-    // contract (see DirectoryLevelStorageSource.cpp).
-    std::vector<LevelSummary *> *summaries = nullptr;
-    try {
-        summaries = g_levelSource->getLevelList();
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: getLevelList threw: %{public}s", e.what());
-        g_initState = kStateFailed;
-        return;
+    // Step 2: enumerate saves. Upstream's DirectoryLevelStorageSource::
+    // getLevelList() body is `#if 0`'d (Xbox saves enumerated differently),
+    // so we list Documents/saves/ ourselves via File::listFiles. Each
+    // subdirectory there is a candidate levelId.
+    std::wstring levelId;
+    {
+        File savesRoot(savesDir);
+        std::vector<File *> *children = savesRoot.listFiles();
+        int candidateCount = children ? static_cast<int>(children->size()) : 0;
+        MCLE_LOG("mcle_game_init: Documents/saves listed %d entries", candidateCount);
+        if (children) {
+            for (File *child : *children) {
+                if (child && child->isDirectory()) {
+                    levelId = child->getName();
+                    break;
+                }
+            }
+            for (File *child : *children) delete child;
+            delete children;
+        }
     }
-    int summaryCount = summaries ? static_cast<int>(summaries->size()) : 0;
-    MCLE_LOG("mcle_game_init: getLevelList returned %d entries", summaryCount);
 
-    if (!summaries || summaries->empty()) {
+    if (levelId.empty()) {
         MCLE_LOG("mcle_game_init: no saves available, simulation idle");
-        delete summaries;
         g_initState = kStateReadyIdle;
         return;
     }
-
-    // Pick the first save. The summary owns the level id.
-    LevelSummary *first = summaries->front();
-    if (!first) {
-        MCLE_LOG("mcle_game_init: first level summary is null, idling");
-        delete summaries;
-        g_initState = kStateReadyIdle;
-        return;
-    }
-    std::wstring levelId = first->getLevelId();
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
-    delete summaries; // upstream owns the inner pointers; we delete the outer vector.
 
     // Step 3: open the storage handle for that save.
     try {
