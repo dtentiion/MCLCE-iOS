@@ -70,13 +70,9 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 // dynamic_cast'ing or RTTI-lookup'ing ServerPlayer can link.
 ServerPlayer::~ServerPlayer() {}
 
-// LevelRenderer::DestroyedTileManager::addAABBs is referenced from
-// Level.cpp:1930 but its body lives in LevelRenderer.cpp which is
-// blocked on legacy-GL display-list code. Provide an empty
-// out-of-line body here so the link resolves.
-LevelRenderer::DestroyedTileManager::DestroyedTileManager() {}
-LevelRenderer::DestroyedTileManager::~DestroyedTileManager() {}
-void LevelRenderer::DestroyedTileManager::addAABBs(Level*, AABB*, AABBList*) {}
+// LevelRenderer.cpp now compiles and is in the lib, so its real
+// `DestroyedTileManager` method bodies are emitted there. Nothing
+// to stub here for LevelRenderer anymore.
 
 // Legacy OpenGL function bodies. iOS doesn't have legacy GL; calls
 // route through the Metal-backed C4JRender_iOS in Phase D2. For now
