@@ -150,20 +150,43 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
 
-    // Step 2.5: read saveData.ms bytes off disk. Parity with upstream
-    // CScene_MultiGameJoinLoad::LoadSaveFromDisk + MinecraftServer::run -
-    // they read the file via FileInputStream, hand the byteArray to
-    // ConsoleSaveFileOriginal, then build McRegionLevelStorage directly.
-    std::wstring saveDataPath = savesDir + L"/" + levelId + L"/saveData.ms";
+    // Step 2.5: locate the .ms bundle inside the save folder. Win64 LCE
+    // names it after the world ("New World.ms" by default), not a fixed
+    // filename - so list the dir and pick the first .ms entry.
+    std::wstring saveFolder = savesDir + L"/" + levelId;
+    std::wstring saveDataPath;
+    {
+        File saveDir(saveFolder);
+        std::vector<File *> *contents = saveDir.listFiles();
+        if (contents) {
+            for (File *entry : *contents) {
+                if (!entry) continue;
+                std::wstring name = entry->getName();
+                if (name.size() >= 3 &&
+                    name.compare(name.size() - 3, 3, L".ms") == 0) {
+                    saveDataPath = saveFolder + L"/" + name;
+                    break;
+                }
+            }
+            for (File *entry : *contents) delete entry;
+            delete contents;
+        }
+    }
+    if (saveDataPath.empty()) {
+        MCLE_LOG("mcle_game_init: no .ms bundle in save folder, idling");
+        g_initState = kStateReadyIdle;
+        return;
+    }
     File saveDataFile(saveDataPath);
     int64_t saveSize = saveDataFile.length();
     if (saveSize <= 0) {
-        MCLE_LOG("mcle_game_init: saveData.ms missing or empty (%lld bytes)",
+        MCLE_LOG("mcle_game_init: .ms missing or empty (%lld bytes)",
                  (long long)saveSize);
         g_initState = kStateFailed;
         return;
     }
-    MCLE_LOG("mcle_game_init: saveData.ms size = %lld bytes", (long long)saveSize);
+    MCLE_LOG("mcle_game_init: .ms bundle = %{public}s, size = %lld bytes",
+             narrow(saveDataPath).c_str(), (long long)saveSize);
 
     byteArray saveBytes((unsigned int)saveSize);
     try {
