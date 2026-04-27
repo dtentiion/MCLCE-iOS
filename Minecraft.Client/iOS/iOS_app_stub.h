@@ -101,6 +101,9 @@ struct McleAppStub {
     template<class... A> int            GetXuiServerAction(A...)      { return 0; }
     template<class... A> void*          GetXuiServerActionParam(A...) { return nullptr; }
     template<class... A> void           SetXuiServerActionParam(A...) {}
+    template<class... A> void           EnterSaveNotificationSection(A...) {}
+    template<class... A> void           LeaveSaveNotificationSection(A...) {}
+    template<class... A> bool           IsSaveNotificationSection(A...) { return false; }
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
 
