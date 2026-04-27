@@ -42,6 +42,13 @@ target_link_libraries(Minecraft.LCE PRIVATE
   # New Rust SWF runtime. Will replace the GameSWF path in mcle_ios_ui
   # once FFI is wired.
   ruffle_ios
+  # Upstream gameplay simulation core. -force_load pulls every TU into
+  # the binary; without it the linker would dead-strip ~95% of the
+  # archive since the bootstrap hook only references one entry point.
+  # Re-add -dead_strip after Phase D2 once the actual call graph is
+  # known.
+  mcle_world_probe
+  "-Wl,-force_load,$<TARGET_FILE:mcle_world_probe>"
   "-framework UIKit"
   "-framework Foundation"
   "-framework CoreGraphics"
