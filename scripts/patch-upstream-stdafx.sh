@@ -692,3 +692,25 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: rewrote lc->blocks= as setBlockData() in {path}")
 PY
 fi
+
+# MonsterPlacerItem.cpp:278 calls mob->finalizeMobSpawn() with no args, but
+# the upstream sig now requires a MobGroupData*. Pass nullptr (the spawn
+# completes without grouping metadata).
+MPIC="$REPO_ROOT/upstream/Minecraft.World/MonsterPlacerItem.cpp"
+if grep -q 'finalizeMobSpawn(nullptr)' "$MPIC"; then
+    echo "patch-upstream-stdafx: MonsterPlacerItem.cpp already patched, skipping"
+else
+python3 - "$MPIC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+old = 'mob->finalizeMobSpawn();'
+if old not in src:
+    sys.exit("patch-upstream-stdafx: MonsterPlacerItem anchor not found")
+patched = src.replace(old, 'mob->finalizeMobSpawn(nullptr);', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added nullptr arg to finalizeMobSpawn in {path}")
+PY
+fi
