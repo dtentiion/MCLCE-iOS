@@ -62,11 +62,11 @@ add_subdirectory(Minecraft.Client/iOS/Input)
 add_subdirectory(Minecraft.Client/iOS/Render)
 add_subdirectory(Minecraft.Client/iOS/UI)
 
-# Optional probe target: attempts to compile a single upstream Minecraft.World
-# translation unit for iOS. Expected to fail until the Windows-isms in the
-# world code are portable. Flip on with -DENABLE_WORLD_PROBE=ON to start
-# chewing through them.
-option(ENABLE_WORLD_PROBE "Try to compile a single Minecraft.World source file for iOS" OFF)
+# World probe library. Originally a compile-coverage-only target; now
+# the .ipa app links against this archive (the gameplay simulation
+# core). Always built. The legacy ENABLE_WORLD_PROBE option used to
+# gate it; left as ON-by-default so existing CI configs keep working.
+option(ENABLE_WORLD_PROBE "Build mcle_world_probe gameplay library" ON)
 if(ENABLE_WORLD_PROBE)
   add_subdirectory(Minecraft.Client/iOS/WorldProbe)
 endif()

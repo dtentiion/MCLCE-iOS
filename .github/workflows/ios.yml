@@ -76,13 +76,19 @@ jobs:
           chmod +x scripts/patch-gameswf.sh
           ./scripts/patch-gameswf.sh
 
+      - name: Patch upstream Minecraft.World/.Client stdafx for iOS
+        run: |
+          chmod +x scripts/patch-upstream-stdafx.sh
+          ./scripts/patch-upstream-stdafx.sh
+
       - name: Configure (iOS device)
         run: |
           cmake -S . -B build \
             -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/ios.toolchain.cmake" \
             -DPLATFORM=OS64 \
-            -DDEPLOYMENT_TARGET=14.0
+            -DDEPLOYMENT_TARGET=14.0 \
+            -DENABLE_WORLD_PROBE=ON
 
       - name: Build (Release)
         run: |
