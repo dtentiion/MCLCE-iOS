@@ -30,3 +30,13 @@ CTelemetryManager *TelemetryManager = nullptr;
 const int ChestTile::TYPE_TRAP;
 const int ZonedChunkStorage::CHUNKS_PER_ZONE_BITS = 5;
 const int ZonedChunkStorage::CHUNKS_PER_ZONE = 1 << ZonedChunkStorage::CHUNKS_PER_ZONE_BITS;
+
+// DLCManager constructor + destructor stub bodies. Real upstream
+// implementations live in DLCManager.cpp which is blocked on the UI/
+// Iggy chain (Phase D) and cannot compile until the GL ES 3.0 renderer
+// bringup. Provide trivial bodies here so anything that holds a
+// DLCManager value (CMinecraftApp, ConsoleSaveFileConverter, ...) can
+// link. Real iOS DLC implementation lands under Minecraft.Client/iOS/
+// DLC/ in a later phase.
+DLCManager::DLCManager() {}
+DLCManager::~DLCManager() {}
