@@ -15,6 +15,7 @@
 
 #include <string>
 #include <memory>
+#include <vector>
 
 class GAME_SETTINGS;
 class C_4JProfile;
