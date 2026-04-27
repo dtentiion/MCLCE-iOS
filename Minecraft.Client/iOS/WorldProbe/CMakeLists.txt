@@ -987,8 +987,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/ConsoleSchematicFile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/GameRule.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/GameRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/LevelGenerators.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/LevelRuleset.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/UpdatePlayerRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/HorseRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/MonsterPlacerItem.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SpringTile.cpp
 )
 
 add_library(mcle_world_probe STATIC
