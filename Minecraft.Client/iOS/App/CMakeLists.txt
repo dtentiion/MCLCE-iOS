@@ -42,6 +42,10 @@ target_link_libraries(Minecraft.LCE PRIVATE
   # New Rust SWF runtime. Will replace the GameSWF path in mcle_ios_ui
   # once FFI is wired.
   ruffle_ios
+  # iOS top-level game shell. Owns the simulation lifecycle
+  # (mcle_game_init / tick / shutdown) and drives upstream Level
+  # construction directly from a sandboxed save folder.
+  mcle_ios_game
   # Upstream gameplay simulation core. -force_load pulls every TU into
   # the binary; without it the linker would dead-strip ~95% of the
   # archive since the bootstrap hook only references one entry point.
