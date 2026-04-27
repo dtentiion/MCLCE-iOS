@@ -183,6 +183,24 @@ struct C4JRenderStub {
         TEXTURE_FORMAT_DXT3 = 4,
         TEXTURE_FORMAT_DXT5 = 5,
     };
+    enum eViewportType {
+        VIEWPORT_TYPE_FULLSCREEN = 0,
+        VIEWPORT_TYPE_TOP        = 1,
+        VIEWPORT_TYPE_BOTTOM     = 2,
+        VIEWPORT_TYPE_LEFT       = 3,
+        VIEWPORT_TYPE_RIGHT      = 4,
+        VIEWPORT_TYPE_TOPLEFT    = 5,
+        VIEWPORT_TYPE_TOPRIGHT   = 6,
+        VIEWPORT_TYPE_BOTLEFT    = 7,
+        VIEWPORT_TYPE_BOTRIGHT   = 8,
+        VIEWPORT_TYPE_NONE       = 9,
+    };
+    enum ePixelShader {
+        ePixelShader_Default = 0,
+    };
+    enum eVertexFormat {
+        eVertexFormat_Default = 0,
+    };
     struct Texture {};
     struct VertexBuffer {};
     struct IndexBuffer {};
@@ -495,6 +513,13 @@ public:
     template<class... A> int  playStreaming(A...) { return 0; }
     template<class... A> int  playStreamed(A...)  { return 0; }
     template<class... A> int  playUI(A...)        { return 0; }
+    template<class... A> bool GetIsPlayingStreamingGameMusic(A...) { return false; }
+    template<class... A> bool IsPlayingMusic(A...) { return false; }
+    template<class... A> bool IsPlayingStreaming(A...) { return false; }
+    template<class... A> void StopAllStreaming(A...) {}
+    template<class... A> void StopAllSounds(A...)    {}
+    template<class... A> void SetMusicVolume(A...)   {}
+    template<class... A> void SetSFXVolume(A...)     {}
 };
 // Real MultiPlayerGameMode - PlayerList chains through
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
