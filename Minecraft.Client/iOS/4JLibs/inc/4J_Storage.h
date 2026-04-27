@@ -13,6 +13,7 @@
 #include "../../Storage/STO_iOS_Paths.h"
 
 #ifdef __cplusplus
+#include <string>
 
 #define MAX_SAVEFILENAME_LENGTH 64
 
@@ -72,6 +73,7 @@ public:
     template<class... A> void*        GetSaveData(A...)         { return nullptr; }
     template<class... A> void*        AllocateSaveData(A...)    { return nullptr; }
     template<class... A> bool         GetSaveUniqueNumber(A...) { return false; }
+    template<class... A> std::wstring GetSaveUniqueFilename(A...) { return std::wstring(); }
 };
 
 // Real upstream 4J_Storage.h declares `extern C4JStorage StorageManager;`

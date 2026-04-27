@@ -133,6 +133,9 @@ struct McleAppStub {
     template<class... A> bool           IsDemoMode(A...)              { return false; }
     template<class... A> int            CreateImageTextData(A...)     { return 0; }
     template<class... A> void           processSchematics(A...)       {}
+    template<class... A> int            getLocale(A...)               { return 1; }
+    template<class... A> bool           isXuidDeadmau5(A...)          { return false; }
+    template<class... A> void*          getArchiveFile(A...)          { return nullptr; }
 
     // Common/* additions: catch-all setters / getters / state
     // probes that upstream code in Minecraft.Client/Common/* uses.
