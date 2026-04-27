@@ -323,6 +323,12 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // eATTRIBUTE_ID. Both files are header-include-free pure-enum
 // declarations - safe to pre-include for the probe.
 #ifdef __cplusplus
+// Iggy SWF runtime API surface. iOS replaces Iggy with the Ruffle-
+// based SWF runtime in third_party/ruffle_ios/, but upstream UI
+// headers (UIScene.h, UIControl_Base.h, UIBitmapFont.h) reference
+// Iggy types as members and through pointer signatures. The shim
+// declares enough of the Iggy surface for those headers to parse.
+#include "Iggy/iggy.h"
 // App_enums.h lives in Minecraft.Client/Common, escape upstream/
 // Minecraft.World via .. then descend into the Common/ tree.
 #include "../Minecraft.Client/Common/App_enums.h"
