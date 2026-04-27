@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <exception>
 
+#include "../../../upstream/Minecraft.World/Compression.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
 #include "../../../upstream/Minecraft.World/FileInputStream.h"
@@ -94,6 +95,14 @@ std::string narrow(const std::wstring &w) {
 
 void initImpl() {
     MCLE_LOG("mcle_game_init: starting");
+
+    // Per-platform bootstrap (Windows64_Minecraft.cpp, Xbox_Minecraft.cpp,
+    // ServerMain.cpp, etc.) all call this on first thread entry. Without
+    // it, Compression::getCompression() returns garbage from TLS slot 0
+    // and Decompress is a silent no-op - which leaves saveData.ms's
+    // decompressed body empty and prepareLevel falls into the no-level.dat
+    // branch.
+    Compression::CreateNewThreadStorage();
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
