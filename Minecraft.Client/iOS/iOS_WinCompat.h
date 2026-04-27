@@ -303,6 +303,23 @@ static inline DWORD GetCurrentThreadId(void) {
 static inline HANDLE GetCurrentThread(void) {
     return (HANDLE)pthread_self();
 }
+static inline DWORD ResumeThread(HANDLE)              { return 0; }
+static inline DWORD SuspendThread(HANDLE)             { return 0; }
+static inline BOOL  SetThreadAffinityMask(HANDLE, DWORD_PTR) { return TRUE; }
+static inline BOOL  SetThreadPriority(HANDLE, int)    { return TRUE; }
+static inline int   GetThreadPriority(HANDLE)         { return 0; }
+static inline DWORD WaitForSingleObject(HANDLE, DWORD) { return 0; }
+static inline DWORD WaitForMultipleObjects(DWORD, const HANDLE*, BOOL, DWORD) { return 0; }
+static inline BOOL  TerminateThread(HANDLE, DWORD)    { return TRUE; }
+static inline HANDLE CreateEventA(void*, BOOL, BOOL, const char*)    { return INVALID_HANDLE_VALUE; }
+static inline HANDLE CreateEventW(void*, BOOL, BOOL, const wchar_t*) { return INVALID_HANDLE_VALUE; }
+#  ifdef UNICODE
+#    define CreateEvent CreateEventW
+#  else
+#    define CreateEvent CreateEventA
+#  endif
+static inline BOOL  SetEvent(HANDLE)   { return TRUE; }
+static inline BOOL  ResetEvent(HANDLE) { return TRUE; }
 
 // Critical sections backed by pthread mutexes. Upstream uses these
 // for the global-lock pattern around C4JThread, command dispatch,
