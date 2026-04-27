@@ -116,6 +116,15 @@ struct McleAppStub {
     template<class... A> void           SetLevelGenerationOptions(A...) {}
     template<class... A> void           SetMapName(A...)              {}
     template<class... A> void           SetSeed(A...)                 {}
+    template<class... A> bool           GetGameStarted(A...)          { return false; }
+    template<class... A> void           SetGameStarted(A...)          {}
+    template<class... A> bool           GetIsLoading(A...)            { return false; }
+    template<class... A> void           SetIsLoading(A...)            {}
+    template<class... A> bool           GetIsSaving(A...)             { return false; }
+    template<class... A> bool           GetIsConnecting(A...)         { return false; }
+    template<class... A> bool           GetIsHosting(A...)            { return false; }
+    template<class... A> int            GetGameTime(A...)             { return 0; }
+    template<class... A> int            GetTickCount(A...)            { return 0; }
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
 
@@ -211,6 +220,12 @@ struct McleNetworkManagerStub {
     template<class... A> int   GetRemotePlayerCount(A...) { return 0; }
     template<class... A> class INetworkPlayer* GetPlayerByIndex(A...) { return nullptr; }
     template<class... A> class INetworkPlayer* GetPlayerBySessionIndex(A...) { return nullptr; }
+    template<class... A> class INetworkPlayer* AddLocalPlayerByUserIndex(A...) { return nullptr; }
+    template<class... A> void  RemoveLocalPlayerByUserIndex(A...) {}
+    template<class... A> void  AddLocalPlayer(A...) {}
+    template<class... A> void  RemoveLocalPlayer(A...) {}
+    template<class... A> void  AddRemotePlayer(A...) {}
+    template<class... A> void  RemoveRemotePlayer(A...) {}
 };
 inline McleNetworkManagerStub g_NetworkManager;
 
