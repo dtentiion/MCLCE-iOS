@@ -292,6 +292,18 @@ static inline BOOL TlsSetValue(DWORD index, LPVOID value) {
     return pthread_setspecific((pthread_key_t)index, value) == 0 ? TRUE : FALSE;
 }
 
+// C4JThread.cpp records the current thread id + handle on entry. The Win32
+// values are opaque thread tokens; mach lets us hand back the pthread_self
+// pointer truncated to DWORD as a stand-in. Two different pthreads will
+// always produce different IDs, which is the only invariant upstream code
+// depends on.
+static inline DWORD GetCurrentThreadId(void) {
+    return (DWORD)(uintptr_t)pthread_self();
+}
+static inline HANDLE GetCurrentThread(void) {
+    return (HANDLE)pthread_self();
+}
+
 // Critical sections backed by pthread mutexes. Upstream uses these
 // for the global-lock pattern around C4JThread, command dispatch,
 // etc. Compile-only support: we only need calls to typecheck. The

@@ -513,3 +513,25 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: wrapped LevelGenerationOptions.h body in #ifndef __APPLE_IOS__")
 PY
 fi
+
+# WeighedTreasure.h forward-declares DispenserTileEntity in a shared_ptr<>.
+# The real header isn't reachable from EnchantedBookItem.cpp's include set on
+# iOS, so add a forward declaration at the top.
+WTR="$REPO_ROOT/upstream/Minecraft.World/WeighedTreasure.h"
+if grep -q '^class DispenserTileEntity;' "$WTR"; then
+    echo "patch-upstream-stdafx: WeighedTreasure.h already patched, skipping"
+else
+python3 - "$WTR" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "WeighedRandom.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: WeighedRandom anchor not found")
+patched = src.replace(needle, needle + '\nclass DispenserTileEntity;', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: forward-declared DispenserTileEntity in {path}")
+PY
+fi
