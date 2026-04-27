@@ -974,6 +974,7 @@ set(WORLD_PROBE_SOURCES
   # iOS branch.
   ${UPSTREAM_DIR}/Minecraft.World/File.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LevelData.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/DirectoryLevelStorage.cpp
 )
 
 add_library(mcle_world_probe STATIC
