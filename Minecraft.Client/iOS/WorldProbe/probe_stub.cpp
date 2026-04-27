@@ -55,12 +55,10 @@ DLCManager::~DLCManager() {}
 // these in dev-build init paths will see "no server", "no players",
 // etc and route around them.
 
-// MinecraftServer
-MinecraftServer *MinecraftServer::server = nullptr;
-PlayerList *MinecraftServer::getPlayers()                   { return nullptr; }
-bool        MinecraftServer::isNetherEnabled()              { return false; }
-bool        MinecraftServer::flagEntitiesToBeRemoved(unsigned int*) { return false; }
-ServerLevel*MinecraftServer::getLevel(int)                  { return nullptr; }
+// MinecraftServer.cpp now compiles and is linked into the lib, so its
+// real method bodies are emitted there. The static `server` pointer
+// is also defined in MinecraftServer.cpp's TU. Nothing to stub here
+// for MinecraftServer anymore.
 
 // Minecraft - the platform client app singleton accessor.
 Minecraft *Minecraft::GetInstance()                         { return nullptr; }
@@ -112,4 +110,36 @@ void glTexParameteri(unsigned int, unsigned int, int)      {}
 void glDepthFunc(unsigned int)                             {}
 void glAlphaFunc(unsigned int, float)                      {}
 void glBlendFunc(unsigned int, unsigned int)               {}
+void glShadeModel(unsigned int)                            {}
+void glDepthMask(unsigned char)                            {}
+void glColorMask(unsigned char, unsigned char, unsigned char, unsigned char) {}
+void glFrontFace(unsigned int)                             {}
+void glCullFace(unsigned int)                              {}
+void glPointSize(float)                                    {}
+void glLineWidth(float)                                    {}
+void glHint(unsigned int, unsigned int)                    {}
+void glPolygonOffset(float, float)                         {}
+void glScissor(int, int, int, int)                         {}
+void glOrtho(double, double, double, double, double, double) {}
+void glFrustum(double, double, double, double, double, double) {}
+void glStencilFunc(unsigned int, int, unsigned int)        {}
+void glStencilOp(unsigned int, unsigned int, unsigned int) {}
+void glStencilMask(unsigned int)                           {}
+void glClearStencil(int)                                   {}
+void glClearDepth(double)                                  {}
+unsigned int glGetError(void)                              { return 0; }
+void glGenTextures(int, unsigned int*)                     {}
+void glDeleteTextures(int, const unsigned int*)            {}
+void glTexImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*) {}
+void glTexSubImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*) {}
+void glPixelStorei(unsigned int, int)                      {}
+void glReadPixels(int, int, int, int, unsigned int, unsigned int, void*) {}
+void glEnableClientState(unsigned int)                     {}
+void glDisableClientState(unsigned int)                    {}
+void glVertexPointer(int, unsigned int, int, const void*)  {}
+void glColorPointer(int, unsigned int, int, const void*)   {}
+void glTexCoordPointer(int, unsigned int, int, const void*) {}
+void glNormalPointer(unsigned int, int, const void*)       {}
+void glDrawArrays(unsigned int, int, int)                  {}
+void glDrawElements(unsigned int, int, unsigned int, const void*) {}
 } // extern "C"

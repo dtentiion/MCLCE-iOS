@@ -963,6 +963,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/ServerLevel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerList.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerLevel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MinecraftServer.cpp
 )
 
 add_library(mcle_world_probe STATIC
