@@ -254,7 +254,7 @@ bool        ServerChunkCache::save(bool, ProgressListener *)                    
 bool        ServerChunkCache::tick()                                              { return false; }
 bool        ServerChunkCache::shouldSave()                                        { return false; }
 std::wstring ServerChunkCache::gatherStats()                                      { return std::wstring(); }
-std::vector<Biome::MobSpawnerData *> *ServerChunkCache::getMobsAt(MobCategory *, int, int, int, int) { return nullptr; }
+std::vector<Biome::MobSpawnerData *> *ServerChunkCache::getMobsAt(MobCategory *, int, int, int) { return nullptr; }
 TilePos    *ServerChunkCache::findNearestMapFeature(Level *, const std::wstring &, int, int, int)    { return nullptr; }
 void        ServerChunkCache::recreateLogicStructuresForChunk(int, int)           {}
 
@@ -273,7 +273,7 @@ bool        RandomLevelSource::save(bool, ProgressListener *)                   
 bool        RandomLevelSource::tick()                                            { return false; }
 bool        RandomLevelSource::shouldSave()                                      { return false; }
 std::wstring RandomLevelSource::gatherStats()                                    { return std::wstring(); }
-std::vector<Biome::MobSpawnerData *> *RandomLevelSource::getMobsAt(MobCategory *, int, int, int, int) { return nullptr; }
+std::vector<Biome::MobSpawnerData *> *RandomLevelSource::getMobsAt(MobCategory *, int, int, int) { return nullptr; }
 TilePos    *RandomLevelSource::findNearestMapFeature(Level *, const std::wstring &, int, int, int)    { return nullptr; }
 void        RandomLevelSource::recreateLogicStructuresForChunk(int, int)         {}
 
