@@ -237,6 +237,17 @@ class Connection;
 // platform-conditional chain we do not cover. UIStructs.h references
 // it as a pointer field; forward-decl is enough for parses.
 class FriendSessionInfo;
+// UIScene is the SWF-backed scene class; UIControl.h:47 references it
+// as a pointer return type without including UIScene.h (circular -
+// UIScene.h itself includes UIControl_Base.h). Forward-decl here so
+// UIControl.h parses; actual class definition comes from UIScene.h
+// when the cascade does include it.
+class UIScene;
+class UILayer;
+class UIControl;
+class UIControl_Base;
+class UIControl_TextInput;
+class ItemRenderer;
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
