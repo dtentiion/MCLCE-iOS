@@ -26,6 +26,7 @@ LEVELH="$REPO_ROOT/upstream/Minecraft.World/Level.h"
 ZCSCPP="$REPO_ROOT/upstream/Minecraft.World/ZonedChunkStorage.cpp"
 SNDENG="$REPO_ROOT/upstream/Minecraft.Client/Common/Audio/Consoles_SoundEngine.h"
 STRHLP="$REPO_ROOT/upstream/Minecraft.World/StringHelpers.cpp"
+LDATAC="$REPO_ROOT/upstream/Minecraft.World/LevelData.cpp"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -46,14 +47,14 @@ for f in "$DOSCPP" "$DISCPP" "$COMPCPP"; do
     fi
 done
 
-for f in "$LEVELH" "$CLIENT_STDAFX" "$SNDENG" "$STRHLP"; do
+for f in "$LEVELH" "$CLIENT_STDAFX" "$SNDENG" "$STRHLP" "$LDATAC"; do
     if [ ! -f "$f" ]; then
         echo "patch-upstream-stdafx: $f not found"
         exit 1
     fi
 done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX" && grep -q '__APPLE_IOS__' "$SNDENG" && grep -q '__APPLE_IOS__' "$STRHLP"; then
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX" && grep -q '__APPLE_IOS__' "$SNDENG" && grep -q '__APPLE_IOS__' "$STRHLP" && grep -q 'ChunkSource\.h' "$LDATAC"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -398,5 +399,32 @@ patched = src.replace(
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: inserted iOS branch into {path}")
+PY
+fi
+
+# LevelData.cpp uses HELL_LEVEL_MAX_WIDTH / HELL_LEVEL_MAX_SCALE inline at
+# lines 160-164, but doesn't include the header that defines them
+# (ChunkSource.h). MSVC likely has a precompiled-header that pulls it in
+# transitively; iOS clang doesn't. Add the include after the existing ones.
+if grep -q 'ChunkSource\.h' "$LDATAC"; then
+    echo "patch-upstream-stdafx: LevelData.cpp already patched, skipping"
+else
+python3 - "$LDATAC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+needle = '#include "LevelSettings.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: LevelData.cpp anchor not found")
+patched = src.replace(
+    needle,
+    needle + '\n#include "ChunkSource.h"  // HELL_LEVEL_MAX_WIDTH/SCALE',
+    1,
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: inserted ChunkSource.h include into {path}")
 PY
 fi
