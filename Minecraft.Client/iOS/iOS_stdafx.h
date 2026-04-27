@@ -253,6 +253,11 @@ class ItemRenderer;
 // exists anywhere in the upstream tree (it's a forward-decl shape).
 // Forward-decl here so UIScene.h parses.
 class CustomDrawData;
+// UIVec2D is a 2D float vector used as a value-type member in
+// IUIScene_AbstractContainerMenu.h. Upstream has no definition (the
+// type is provided by the platform UI layer); a thin float pair
+// matches the implied shape so member layout works.
+struct UIVec2D { float x; float y; };
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
@@ -422,12 +427,26 @@ public:
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
 // GameMode.h which has zero deps).
 #include "../Minecraft.Client/MultiPlayerGameMode.h"
+// MemoryTracker - LevelRenderer.cpp uses MemoryTracker::genLists()
+// and friends. Header is 28 lines, no heavy deps.
+#include "../Minecraft.Client/MemoryTracker.h"
 // Tutorial.h transitively pulls UIScene (UI subsystem replaced by
 // SWF on iOS) so we cannot pre-include the full header. The light
 // TutorialEnum.h has no deps and brings the eTutorial_State enum
 // into scope so PlayerList::placeNewPlayer's
 // `e_Tutorial_State_Food_Bar` reference resolves.
 #include "../Minecraft.Client/Common/Tutorial/TutorialEnum.h"
+// Minimal Tutorial class stub so PlayerList.cpp's
+// gameMode->getTutorial()->isStateCompleted(state) call resolves
+// without pulling Tutorial.h (which has UIScene deps). Real Tutorial
+// state lives in Tutorial.cpp which is in the lib already
+// (Common/Tutorial/AreaConstraint.cpp etc are green per the auto-probe).
+class Tutorial {
+public:
+    template<class... A> bool isStateCompleted(A...) { return false; }
+    template<class... A> void setStateCompleted(A...) {}
+    template<class... A> bool isFullTutorial(A...)   { return false; }
+};
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
