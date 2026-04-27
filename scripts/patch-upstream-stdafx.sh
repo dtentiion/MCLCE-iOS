@@ -604,3 +604,46 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: added SavedData headers to {path}")
 PY
 fi
+
+# ConsoleSchematicFile.h uses Compression::ECompressionTypes inline but only
+# forward-declares peers. Add a direct compression.h include so every
+# GameRules .cpp that pulls this header sees the Compression class.
+CSCH="$REPO_ROOT/upstream/Minecraft.Client/Common/GameRules/ConsoleSchematicFile.h"
+if grep -q '"compression.h"' "$CSCH"; then
+    echo "patch-upstream-stdafx: ConsoleSchematicFile.h already patched, skipping"
+else
+python3 - "$CSCH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "../../../Minecraft.World/ArrayWithLength.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: ConsoleSchematicFile anchor not found")
+patched = src.replace(needle,
+    needle + '\n#include "../../../Minecraft.World/compression.h"  // Compression::ECompressionTypes',
+    1,
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added compression.h include to {path}")
+PY
+fi
+
+# NetherStalkTile.cpp references Tile::hellSand_Id which was renamed to
+# soulsand_Id in the public header but the .cpp wasn't updated. Patch it.
+NSTC="$REPO_ROOT/upstream/Minecraft.World/NetherStalkTile.cpp"
+if grep -q 'soulsand_Id' "$NSTC"; then
+    echo "patch-upstream-stdafx: NetherStalkTile.cpp already patched, skipping"
+else
+python3 - "$NSTC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+patched = src.replace('Tile::hellSand_Id', 'Tile::soulsand_Id')
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: renamed hellSand_Id -> soulsand_Id in {path}")
+PY
+fi
