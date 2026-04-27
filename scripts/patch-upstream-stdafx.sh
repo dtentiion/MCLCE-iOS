@@ -714,3 +714,79 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: added nullptr arg to finalizeMobSpawn in {path}")
 PY
 fi
+
+# Ozelot.h overrides LivingEntity::getMaxHealth() (returns float) with an
+# int override. Rename to float to satisfy the covariant return rule.
+OZH="$REPO_ROOT/upstream/Minecraft.World/Ozelot.h"
+if grep -q 'virtual float getMaxHealth()' "$OZH"; then
+    echo "patch-upstream-stdafx: Ozelot.h already patched, skipping"
+else
+python3 - "$OZH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+old = 'virtual int getMaxHealth();'
+if old not in src:
+    sys.exit("patch-upstream-stdafx: Ozelot.h getMaxHealth anchor not found")
+patched = src.replace(old, 'virtual float getMaxHealth();', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: rewrote Ozelot::getMaxHealth signature")
+PY
+fi
+# And the matching .cpp definition
+OZC="$REPO_ROOT/upstream/Minecraft.World/Ozelot.cpp"
+if grep -q 'float Ozelot::getMaxHealth' "$OZC"; then
+    echo "patch-upstream-stdafx: Ozelot.cpp already patched, skipping"
+else
+python3 - "$OZC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+old = 'int Ozelot::getMaxHealth'
+if old in src:
+    src = src.replace(old, 'float Ozelot::getMaxHealth', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: rewrote Ozelot::getMaxHealth body return type")
+PY
+fi
+
+# MemoryLevelStorage.h:28 declares load() returning bool, but overrides
+# DirectoryLevelStorage::load() which returns CompoundTag*. Mismatch is an
+# upstream bug; the .cpp body actually returns bool but the inherited
+# contract is CompoundTag*. Rewrite the override return type.
+MLSH="$REPO_ROOT/upstream/Minecraft.World/MemoryLevelStorage.h"
+MLSC="$REPO_ROOT/upstream/Minecraft.World/MemoryLevelStorage.cpp"
+if grep -q 'virtual CompoundTag \*load(shared_ptr<Player>' "$MLSH"; then
+    echo "patch-upstream-stdafx: MemoryLevelStorage already patched, skipping"
+else
+python3 - "$MLSH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+old = 'virtual bool load(shared_ptr<Player> player);'
+if old in src:
+    src = src.replace(old, 'virtual CompoundTag *load(shared_ptr<Player> player);', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: rewrote MemoryLevelStorage::load signature")
+PY
+python3 - "$MLSC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+old = 'bool MemoryLevelStorage::load'
+if old in src:
+    src = src.replace(old, 'CompoundTag *MemoryLevelStorage::load', 1)
+# Also patch the body's return value: bool returns -> CompoundTag* nullptr/sentinel
+src = src.replace('return false;', 'return nullptr;').replace('return true;', 'return nullptr;')
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: rewrote MemoryLevelStorage::load body")
+PY
+fi
