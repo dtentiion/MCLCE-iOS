@@ -19,8 +19,11 @@
 
 #include "iOS_stdafx.h"
 
+#include "AddEntityPacket.h"
+#include "AddPlayerPacket.h"
 #include "AnimatePacket.h"
 #include "Biome.h"
+#include "ChunkPos.h"
 #include "Compression.h"
 #include "ConsoleSaveFile.h"
 #include "ConsoleSaveFileOriginal.h"
@@ -60,6 +63,27 @@ const int Item::emerald_Id;
 // ---------------------------------------------------------------------------
 const int AnimatePacket::SWING;
 const int SetEntityLinkPacket::LEASH;
+const int SetEntityLinkPacket::RIDING;
+const int AddEntityPacket::BOAT;
+const int AddEntityPacket::ITEM;
+const int AddEntityPacket::MINECART;
+const int AddEntityPacket::PRIMED_TNT;
+const int AddEntityPacket::ENDER_CRYSTAL;
+const int AddEntityPacket::ARROW;
+const int AddEntityPacket::SNOWBALL;
+const int AddEntityPacket::EGG;
+const int AddEntityPacket::THROWN_ENDERPEARL;
+const int AddEntityPacket::FALLING;
+const int AddEntityPacket::ITEM_FRAME;
+const int AddEntityPacket::EYEOFENDERSIGNAL;
+const int AddEntityPacket::THROWN_POTION;
+const int AddEntityPacket::THROWN_EXPBOTTLE;
+const int AddEntityPacket::FIREWORKS;
+const int AddEntityPacket::LEASH_KNOT;
+const int AddEntityPacket::FISH_HOOK;
+
+AddPlayerPacket::AddPlayerPacket(std::shared_ptr<Player>, PlayerUID, PlayerUID, int, int, int, int, int, int) {}
+AddPlayerPacket::~AddPlayerPacket() {}
 
 // ---------------------------------------------------------------------------
 // C4JThread::EventArray. iOS doesn't use the cross-thread waitable-event
@@ -79,9 +103,13 @@ bool         Minecraft::isTutorial()      { return false; }
 // PlayerConnection / ServerPlayer.
 // ---------------------------------------------------------------------------
 void PlayerConnection::send(std::shared_ptr<Packet> /*packet*/) {}
+bool PlayerConnection::isLocal() { return true; }
 
 void ServerPlayer::flushEntitiesToRemove() {}
 ServerLevel *ServerPlayer::getLevel() { return nullptr; }
+void ServerPlayer::flagEntitiesToBeRemoved(unsigned int * /*flags*/, bool * /*removedFound*/) {}
+int  ServerPlayer::getFlagIndexForChunk(const ChunkPos &/*pos*/, int /*dimension*/) { return 0; }
+int  ServerPlayer::getPlayerViewDistanceModifier() { return 0; }
 
 // ---------------------------------------------------------------------------
 // GameRenderer overload set. The renderer is an iOS-shimmed shell, so the
@@ -196,6 +224,8 @@ int                 DirectoryLevelStorage::getAuxValueForMap(PlayerUID, int, int
 void                DirectoryLevelStorage::saveMapIdLookup() {}
 void                DirectoryLevelStorage::deleteMapFilesForPlayer(std::shared_ptr<Player>) {}
 void                DirectoryLevelStorage::saveAllCachedData() {}
+ChunkStorage       *DirectoryLevelStorage::createChunkStorage(Dimension * /*dim*/) { return nullptr; }
+void                DirectoryLevelStorage::closeAll() {}
 
 // ---------------------------------------------------------------------------
 // SavedDataStorage. Stubs cover ServerLevel's references; real persistence
@@ -210,15 +240,42 @@ void SavedDataStorage::save() {}
 // ServerChunkCache. Constructor + the methods ServerLevel calls into.
 // ---------------------------------------------------------------------------
 ServerChunkCache::ServerChunkCache(ServerLevel * /*level*/, ChunkStorage * /*storage*/, ChunkSource * /*source*/) {}
-std::vector<LevelChunk *> *ServerChunkCache::getLoadedChunkList()       { return nullptr; }
-LevelChunk *ServerChunkCache::getChunkLoadedOrUnloaded(int /*x*/, int /*z*/) { return nullptr; }
-void        ServerChunkCache::drop(int /*x*/, int /*z*/) {}
+ServerChunkCache::~ServerChunkCache() {}
+bool        ServerChunkCache::hasChunk(int, int)                                  { return false; }
+std::vector<LevelChunk *> *ServerChunkCache::getLoadedChunkList()                 { return nullptr; }
+void        ServerChunkCache::drop(int, int)                                      {}
+LevelChunk *ServerChunkCache::create(int, int)                                    { return nullptr; }
+LevelChunk *ServerChunkCache::getChunk(int, int)                                  { return nullptr; }
+LevelChunk *ServerChunkCache::getChunkLoadedOrUnloaded(int, int)                  { return nullptr; }
+void        ServerChunkCache::dontDrop(int, int)                                  {}
+void        ServerChunkCache::postProcess(ChunkSource *, int, int)                {}
+bool        ServerChunkCache::saveAllEntities()                                   { return true; }
+bool        ServerChunkCache::save(bool, ProgressListener *)                      { return true; }
+bool        ServerChunkCache::tick()                                              { return false; }
+bool        ServerChunkCache::shouldSave()                                        { return false; }
+std::wstring ServerChunkCache::gatherStats()                                      { return std::wstring(); }
+std::vector<Biome::MobSpawnerData *> *ServerChunkCache::getMobsAt(MobCategory *, int, int, int, int) { return nullptr; }
+TilePos    *ServerChunkCache::findNearestMapFeature(Level *, const std::wstring &, int, int, int)    { return nullptr; }
+void        ServerChunkCache::recreateLogicStructuresForChunk(int, int)           {}
 
 // ---------------------------------------------------------------------------
 // RandomLevelSource (chunk source used by ServerLevel::createChunkSource).
 // ---------------------------------------------------------------------------
 RandomLevelSource::RandomLevelSource(Level * /*level*/, int64_t /*seed*/, bool genStructures)
     : generateStructures(genStructures) {}
+RandomLevelSource::~RandomLevelSource() {}
+LevelChunk *RandomLevelSource::create(int, int)                                  { return nullptr; }
+LevelChunk *RandomLevelSource::getChunk(int, int)                                { return nullptr; }
+void        RandomLevelSource::lightChunk(LevelChunk *)                          {}
+bool        RandomLevelSource::hasChunk(int, int)                                { return false; }
+void        RandomLevelSource::postProcess(ChunkSource *, int, int)              {}
+bool        RandomLevelSource::save(bool, ProgressListener *)                    { return true; }
+bool        RandomLevelSource::tick()                                            { return false; }
+bool        RandomLevelSource::shouldSave()                                      { return false; }
+std::wstring RandomLevelSource::gatherStats()                                    { return std::wstring(); }
+std::vector<Biome::MobSpawnerData *> *RandomLevelSource::getMobsAt(MobCategory *, int, int, int, int) { return nullptr; }
+TilePos    *RandomLevelSource::findNearestMapFeature(Level *, const std::wstring &, int, int, int)    { return nullptr; }
+void        RandomLevelSource::recreateLogicStructuresForChunk(int, int)         {}
 
 // ---------------------------------------------------------------------------
 // Chunk (the rendering chunk on Minecraft.Client side).
