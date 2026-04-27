@@ -485,6 +485,11 @@ typedef struct D3D11_VIEWPORT {
 #  define GL_POINTS                  0x0000
 #  define GL_QUAD_STRIP              0x0008
 #  define GL_POLYGON                 0x0009
+#  define GL_TRIANGLE_FAN            0x0006
+#  define GL_TEXTURE0                0x84C0
+#  define GL_TEXTURE1                0x84C1
+#  define GL_TEXTURE2                0x84C2
+#  define GL_TEXTURE3                0x84C3
 // Legacy GL function prototypes. Bodies live in
 // WorldProbe/probe_stub.cpp as no-ops; real Metal backend lands in
 // Phase D2 and replaces these via the C4JRender_iOS adapter layer.
@@ -566,6 +571,10 @@ void glMultMatrixf(const float*);
 void glLoadMatrixf(const float*);
 void glGetFloatv(unsigned int, float*);
 void glGetIntegerv(unsigned int, int*);
+void glMultiTexCoord2f(unsigned int, float, float);
+void glMultiTexCoord2fv(unsigned int, const float*);
+void glActiveTexture(unsigned int);
+void glClientActiveTexture(unsigned int);
 #  ifdef __cplusplus
 }
 #  endif
