@@ -446,6 +446,45 @@ typedef struct D3D11_VIEWPORT {
 #  define GL_LINEAR_MIPMAP_NEAREST   0x2701
 #  define GL_NEAREST_MIPMAP_LINEAR   0x2702
 #  define GL_LINEAR_MIPMAP_LINEAR    0x2703
+#  define GL_BACK                    0x0405
+#  define GL_FRONT                   0x0404
+#  define GL_FRONT_AND_BACK          0x0408
+#  define GL_CW                      0x0900
+#  define GL_CCW                     0x0901
+#  define GL_NORMALIZE               0x0BA1
+#  define GL_LIGHT0                  0x4000
+#  define GL_LIGHT1                  0x4001
+#  define GL_LIGHT2                  0x4002
+#  define GL_LIGHT3                  0x4003
+#  define GL_AMBIENT                 0x1200
+#  define GL_DIFFUSE                 0x1201
+#  define GL_SPECULAR                0x1202
+#  define GL_POSITION                0x1203
+#  define GL_FOG_MODE                0x0B65
+#  define GL_FOG_DENSITY             0x0B62
+#  define GL_FOG_START               0x0B63
+#  define GL_FOG_END                 0x0B64
+#  define GL_FOG_COLOR               0x0B66
+#  define GL_LINEAR_FOG              0x2601
+#  define GL_EXP                     0x0800
+#  define GL_EXP2                    0x0801
+#  define GL_FASTEST                 0x1101
+#  define GL_NICEST                  0x1102
+#  define GL_DONT_CARE               0x1100
+#  define GL_PERSPECTIVE_CORRECTION_HINT 0x0C50
+#  define GL_FOG_HINT                0x0C54
+#  define GL_LINE_SMOOTH_HINT        0x0C52
+#  define GL_POLYGON_SMOOTH_HINT     0x0C53
+#  define GL_INVALID_ENUM            0x0500
+#  define GL_INVALID_VALUE           0x0501
+#  define GL_INVALID_OPERATION       0x0502
+#  define GL_OUT_OF_MEMORY           0x0505
+#  define GL_LINES                   0x0001
+#  define GL_LINE_STRIP              0x0003
+#  define GL_LINE_LOOP               0x0002
+#  define GL_POINTS                  0x0000
+#  define GL_QUAD_STRIP              0x0008
+#  define GL_POLYGON                 0x0009
 // Legacy GL function prototypes. Bodies live in
 // WorldProbe/probe_stub.cpp as no-ops; real Metal backend lands in
 // Phase D2 and replaces these via the C4JRender_iOS adapter layer.
@@ -511,6 +550,22 @@ void glTexCoordPointer(int, unsigned int, int, const void*);
 void glNormalPointer(unsigned int, int, const void*);
 void glDrawArrays(unsigned int, int, int);
 void glDrawElements(unsigned int, int, unsigned int, const void*);
+void glColor3f(float, float, float);
+void glColor3ub(unsigned char, unsigned char, unsigned char);
+void glColor4ub(unsigned char, unsigned char, unsigned char, unsigned char);
+void glColor4ubv(const unsigned char*);
+void glVertex2f(float, float);
+void glVertex2i(int, int);
+void glNormal3f(float, float, float);
+void glLightfv(unsigned int, unsigned int, const float*);
+void glMaterialfv(unsigned int, unsigned int, const float*);
+void glFogf(unsigned int, float);
+void glFogi(unsigned int, int);
+void glFogfv(unsigned int, const float*);
+void glMultMatrixf(const float*);
+void glLoadMatrixf(const float*);
+void glGetFloatv(unsigned int, float*);
+void glGetIntegerv(unsigned int, int*);
 #  ifdef __cplusplus
 }
 #  endif
