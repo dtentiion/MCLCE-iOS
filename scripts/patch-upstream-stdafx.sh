@@ -252,11 +252,20 @@ with open(path, 'r', encoding='utf-8', errors='replace') as f:
 needle = '#if defined __ORBIS__ || defined __PS3__ || defined _DURANGO || defined _WIN64'
 if needle not in src:
     sys.exit(f"patch-upstream-stdafx: zlib branch anchor not found in {path}")
-new = needle + ' || defined __APPLE_IOS__'
-patched = src.replace(needle, new, 1)
+patched = src.replace(needle, needle + ' || defined __APPLE_IOS__', 1)
+# Compress/Decompress chains pick zlib for the Win64/Orbis/Vita/Durango set
+# and fall through to XMemCompress/XMemDecompress in the #else. Route iOS
+# into the zlib arms so we don't need Microsoft's XMem* APIs.
+for n in (
+    '#if defined __ORBIS__ || defined _DURANGO || defined _WIN64 || defined __PSVITA__',
+    '#if (defined _XBOX || defined _DURANGO || defined _WIN64)',
+    '#if (defined __ORBIS__ || defined __PS3__ || defined _DURANGO || defined _WIN64)',
+    '#if (defined __ORBIS__ || defined __PSVITA__ || defined _DURANGO || defined _WIN64)',
+):
+    patched = patched.replace(n, n[:-1] + ' || defined __APPLE_IOS__)' if n.endswith(')') else n + ' || defined __APPLE_IOS__')
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
-print(f"patch-upstream-stdafx: added __APPLE_IOS__ to zlib branch in {path}")
+print(f"patch-upstream-stdafx: routed iOS to zlib branches in {path}")
 PY
 fi
 
