@@ -452,45 +452,6 @@ print(f"patch-upstream-stdafx: routed iOS through Durango branch in {path}")
 PY
 fi
 
-# Same StringHelpers.h:14: a `wistringstream >> playerUid` operator that
-# only exists on Sony/Xbox. iOS PlayerUID has no stream-extract operator.
-# Hide that line from iOS via __APPLE_IOS__.
-SHEADER="$REPO_ROOT/upstream/Minecraft.World/StringHelpers.h"
-if grep -q '__APPLE_IOS__' "$SHEADER"; then
-    echo "patch-upstream-stdafx: StringHelpers.h already patched, skipping"
-else
-python3 - "$SHEADER" <<'PY'
-import sys
-path = sys.argv[1]
-with open(path, 'r', encoding='utf-8', errors='replace') as f:
-    src = f.read()
-# The toPlayerUID template body uses iss >> playerUid. PlayerUID on iOS has
-# no operator>>. Wrap the whole function body so it returns default UID.
-needle = 'inline PlayerUID toPlayerUID'
-if needle not in src:
-    sys.exit("patch-upstream-stdafx: toPlayerUID anchor not found in StringHelpers.h")
-# Find the function span (open-brace to matching close-brace).
-start = src.index(needle)
-brace_open = src.index('{', start)
-depth = 1
-i = brace_open + 1
-while i < len(src) and depth > 0:
-    if src[i] == '{': depth += 1
-    elif src[i] == '}': depth -= 1
-    i += 1
-body_start = brace_open + 1
-body_end = i - 1
-old_body = src[body_start:body_end]
-new_body = (
-    '\n#ifdef __APPLE_IOS__\n'
-    '    return PlayerUID();  // iOS has no stream-extract for PlayerUID\n'
-    '#else'
-    + old_body
-    + '#endif\n'
-)
-patched = src[:body_start] + new_body + src[body_end:]
-with open(path, 'w', encoding='utf-8', newline='\n') as f:
-    f.write(patched)
-print(f"patch-upstream-stdafx: gated toPlayerUID body on iOS in {path}")
-PY
-fi
+# StringHelpers.h's _fromString<PlayerUID> template was the second blocker;
+# fixed instead by adding `operator>>(wistream&, PlayerUID&)` to the iOS
+# PlayerUID stub in 4JLibs/inc/4J_Profile.h. No source patch needed here.

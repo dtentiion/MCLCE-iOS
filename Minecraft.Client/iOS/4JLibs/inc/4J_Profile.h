@@ -11,6 +11,7 @@
 
 #include "iOS_WinCompat.h"
 #include <string>
+#include <istream>
 
 // Opaque player identity stub. Other platforms back this with platform-
 // specific identity (Sony NP, Xbox Live, etc). For iOS we have no online
@@ -51,6 +52,27 @@ struct PlayerUID {
     }
 };
 typedef PlayerUID* PPlayerUID;
+
+// Stream-extract for the StringHelpers.h _fromString<PlayerUID> path. Reads
+// the same 32-char hex form that toString() emits; tolerates the empty
+// string case by leaving the UID zeroed.
+inline std::wistream& operator>>(std::wistream& in, PlayerUID& out) {
+    std::wstring s;
+    in >> s;
+    for (int i = 0; i < 16; ++i) out.bytes[i] = 0;
+    auto hex = [](wchar_t c) -> int {
+        if (c >= L'0' && c <= L'9') return c - L'0';
+        if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
+        if (c >= L'A' && c <= L'F') return 10 + (c - L'A');
+        return -1;
+    };
+    for (size_t i = 0; i + 1 < s.size() && i / 2 < 16; i += 2) {
+        int hi = hex(s[i]), lo = hex(s[i + 1]);
+        if (hi < 0 || lo < 0) break;
+        out.bytes[i / 2] = (uint8_t)((hi << 4) | lo);
+    }
+    return in;
+}
 
 // Hash specialization so unordered_map<PlayerUID, ...> works on iOS.
 // (Other consoles use PlayerUID::Hash; the iOS branch falls through to
