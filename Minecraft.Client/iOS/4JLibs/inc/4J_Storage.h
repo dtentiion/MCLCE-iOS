@@ -1,15 +1,16 @@
-// iOS stub for the platform 4J storage / save-game layer. Real storage
+// iOS shim for the platform 4J storage / save-game layer. Real storage
 // work lives in Minecraft.Client/iOS/Storage/ on top of NSFileManager.
-// This header exists so upstream gameplay code that includes it from
-// stdafx.h does not fail to find the file.
 //
 // The class shape mirrors upstream's Orbis / Windows 4J_Storage.h so
-// upstream `C4JStorage::EMessageResult result` parses match. Method
-// bodies are stubs - real iOS storage layer is in Storage/.
+// upstream `C4JStorage::EMessageResult result` parses match. The
+// concrete path methods forward to STO_iOS_Paths C entry points so
+// upstream gameplay code that calls StorageManager.GetSaveRootPath()
+// gets the real sandboxed iOS Documents directory.
 
 #pragma once
 
 #include "iOS_WinCompat.h"
+#include "../../Storage/STO_iOS_Paths.h"
 
 #ifdef __cplusplus
 
@@ -52,6 +53,15 @@ public:
     template<class... A> bool IsSaving(A...)               { return false; }
     template<class... A> int  GetActiveSaveSlot(A...)      { return 0; }
     template<class... A> void* GetActiveSaveFile(A...)     { return nullptr; }
+
+    // Real iOS path lookups. These forward to STO_iOS_Paths so any
+    // upstream code that walks `StorageManager.GetSaveRootPath()` lands
+    // on the sandboxed Documents directory rather than a stub.
+    const char* GetSaveRootPath()    { return ios_documents_dir(); }
+    const char* GetGameHDDRootPath() { return ios_gamehdd_dir(); }
+    const char* GetCachesPath()      { return ios_caches_dir(); }
+    const char* GetAppSupportPath()  { return ios_app_support_dir(); }
+    const char* GetBundlePath()      { return ios_bundle_resources_dir(); }
 };
 
 // Real upstream 4J_Storage.h declares `extern C4JStorage StorageManager;`
