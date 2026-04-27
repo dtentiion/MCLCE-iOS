@@ -98,12 +98,22 @@ struct McleAppStub {
     template<class... A> std::vector<class ModelPart*>* SetAdditionalSkinBoxes(A...) { return nullptr; }
     template<class... A> void           SetUniqueMapName(A...)        {}
     template<class... A> void           SetXuiServerAction(A...)      {}
-    template<class... A> int            GetXuiServerAction(A...)      { return 0; }
+    // Returns the eXuiServerAction enum so MinecraftServer.cpp's
+    // `eAction = app.GetXuiServerAction(i);` typechecks. Default value
+    // is the 0-th enumerator (eXuiServerAction_None or equivalent).
+    template<class... A> eXuiServerAction GetXuiServerAction(A...)     { return (eXuiServerAction)0; }
     template<class... A> void*          GetXuiServerActionParam(A...) { return nullptr; }
     template<class... A> void           SetXuiServerActionParam(A...) {}
     template<class... A> void           EnterSaveNotificationSection(A...) {}
     template<class... A> void           LeaveSaveNotificationSection(A...) {}
     template<class... A> bool           IsSaveNotificationSection(A...) { return false; }
+    template<class... A> void           SetDisconnectReason(A...)     {}
+    template<class... A> int            GetDisconnectReason(A...)     { return 0; }
+    template<class... A> void           SetGameRules(A...)            {}
+    template<class... A> void           ClearGameRules(A...)          {}
+    template<class... A> void           SetLevelGenerationOptions(A...) {}
+    template<class... A> void           SetMapName(A...)              {}
+    template<class... A> void           SetSeed(A...)                 {}
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
 
@@ -194,6 +204,9 @@ struct McleNetworkManagerStub {
     template<class... A> int   GetSessionState(A...)     { return 0; }
     template<class... A> bool  SystemFlagGet(A...)       { return false; }
     template<class... A> void  SystemFlagSet(A...)       {}
+    template<class... A> int   GetPlayerCount(A...)      { return 0; }
+    template<class... A> int   GetLocalPlayerCount(A...) { return 0; }
+    template<class... A> int   GetRemotePlayerCount(A...) { return 0; }
 };
 inline McleNetworkManagerStub g_NetworkManager;
 
