@@ -42,6 +42,7 @@
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
+#include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 
 #include "4JLibs/inc/4J_Storage.h"
@@ -62,7 +63,10 @@ enum InitState {
 McRegionLevelStorageSource  *g_levelSource   = nullptr;
 ConsoleSaveFileOriginal     *g_saveFile      = nullptr;
 std::shared_ptr<LevelStorage> g_levelStorage;
-Level                        *g_level        = nullptr;
+// Three dimensions per upstream: 0=overworld, 1=nether, 2=end. levels[0]
+// is a ServerLevel; levels[1] and levels[2] are DerivedServerLevel that
+// share state with levels[0]. Mirrors MinecraftServer.cpp:956-1007.
+ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
 std::wstring                  g_levelName;
 int                           g_initState    = kStateUnstarted;
 uint64_t                      g_tickCount    = 0;
@@ -277,34 +281,59 @@ void initImpl() {
         return;
     }
 
-    // Step 6: construct the Level. `Level` itself is abstract
-    // (createChunkSource, getEntity are pure virtual), so we use the
-    // concrete `ServerLevel` subclass which handles single-player
-    // chunk source + entity registry. Pass nullptr for the
-    // MinecraftServer* arg - we don't construct a MinecraftServer (the
-    // upstream class is in the lib but its init chain pulls UI), and
-    // the iOS shell drives the simulation directly. Likely first real
-    // crash point since ServerLevel pulls Dimension / ChunkSource.
-    try {
-        g_level = new ServerLevel(
-            /*server*/        nullptr,
-            /*levelStorage*/  g_levelStorage,
-            /*levelName*/     g_levelName,
-            /*dimension*/     0,        // overworld
-            /*levelSettings*/ settings);
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: ServerLevel ctor threw: %{public}s", e.what());
-        g_initState = kStateFailed;
-        return;
+    // Step 6: construct three ServerLevels (overworld + nether + end).
+    // Parity with MinecraftServer.cpp:956-1007 - levels[0] is a real
+    // ServerLevel, levels[1] (nether, dim=-1) and levels[2] (end, dim=1)
+    // are DerivedServerLevels that share state with levels[0].
+    //
+    // Server arg is nullptr for now: a real MinecraftServer instance is
+    // a separate parity step (its ctor + run() pull network init + the
+    // post-update C4JThread which we are not ready to spin up yet).
+    static const int kDimForIndex[3] = { 0, -1, 1 };
+    bool levelOk = true;
+    for (int i = 0; i < 3 && levelOk; ++i) {
+        try {
+            if (i == 0) {
+                g_levels[i] = new ServerLevel(
+                    /*server*/        nullptr,
+                    /*levelStorage*/  g_levelStorage,
+                    /*levelName*/     g_levelName,
+                    /*dimension*/     kDimForIndex[i],
+                    /*levelSettings*/ settings);
+            } else {
+                g_levels[i] = new DerivedServerLevel(
+                    /*server*/        nullptr,
+                    /*levelStorage*/  g_levelStorage,
+                    /*levelName*/     g_levelName,
+                    /*dimension*/     kDimForIndex[i],
+                    /*levelSettings*/ settings,
+                    /*wrapped*/       g_levels[0]);
+            }
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: ServerLevel[%d] ctor threw: %{public}s", i, e.what());
+            levelOk = false;
+            break;
+        }
+        if (!g_levels[i]) {
+            MCLE_LOG("mcle_game_init: ServerLevel[%d] ctor returned null", i);
+            levelOk = false;
+            break;
+        }
+        MCLE_LOG("mcle_game_init: levels[%d] (dim=%d) at %p",
+                 i, kDimForIndex[i], (void*)g_levels[i]);
     }
-    if (!g_level) {
-        MCLE_LOG("mcle_game_init: Level ctor returned null");
+
+    if (!levelOk) {
+        for (int i = 0; i < 3; ++i) {
+            if (g_levels[i]) { try { delete g_levels[i]; } catch (...) {} }
+            g_levels[i] = nullptr;
+        }
         g_initState = kStateFailed;
         return;
     }
 
     g_initState = kStateTicking;
-    MCLE_LOG("mcle_game_init: Level constructed at %p, ticking enabled", (void*)g_level);
+    MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 }
 
 } // anonymous namespace
@@ -329,7 +358,7 @@ extern "C" void mcle_game_tick(void) {
 
     g_tickCount++;
 
-    if (g_initState != kStateTicking || !g_level) {
+    if (g_initState != kStateTicking || !g_levels[0]) {
         if ((g_tickCount % kLogEveryN) == 0) {
             MCLE_LOG("tick %llu (probe lib running, simulation idle, state=%d)",
                      static_cast<unsigned long long>(g_tickCount), g_initState);
@@ -337,34 +366,43 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
+    // Tick all three dimensions in order. Parity with how the upstream
+    // server's runUpdate iterates levels[] each frame.
     try {
-        g_level->tick();
-        g_level->tickEntities();
+        for (int i = 0; i < 3; ++i) {
+            if (!g_levels[i]) continue;
+            g_levels[i]->tick();
+            g_levels[i]->tickEntities();
+        }
     } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_tick: Level::tick threw: %{public}s; pausing simulation", e.what());
+        MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
         g_initState = kStateFailed;
         return;
     } catch (...) {
-        MCLE_LOG("mcle_game_tick: Level::tick non-std exception; pausing simulation");
+        MCLE_LOG("mcle_game_tick: tick non-std exception; pausing simulation");
         g_initState = kStateFailed;
         return;
     }
 
     if ((g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
-        try { entityCount = g_level->entities.size(); } catch (...) {}
-        MCLE_LOG("tick %llu - level=%p entities=%zu",
+        try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
+        MCLE_LOG("tick %llu - overworld=%p entities=%zu",
                  static_cast<unsigned long long>(g_tickCount),
-                 (void*)g_level,
+                 (void*)g_levels[0],
                  entityCount);
     }
 }
 
 extern "C" void mcle_game_shutdown(void) {
     MCLE_LOG("mcle_game_shutdown: tearing down");
-    if (g_level) {
-        try { delete g_level; } catch (...) {}
-        g_level = nullptr;
+    // Tear levels down in reverse order: derived levels reference the
+    // overworld, so they must go before levels[0].
+    for (int i = 2; i >= 0; --i) {
+        if (g_levels[i]) {
+            try { delete g_levels[i]; } catch (...) {}
+            g_levels[i] = nullptr;
+        }
     }
     g_levelStorage.reset();
     if (g_saveFile) {
