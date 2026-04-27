@@ -189,6 +189,24 @@ struct C4JRenderStub {
         TEXTURE_FORMAT_DXT3 = 4,
         TEXTURE_FORMAT_DXT5 = 5,
     };
+    // Vertex layout enums Tesselator.cpp passes to DrawVertices. The
+    // values just need to be unique; the iOS render path doesn't honor
+    // any of them yet (every gl* call is a no-op).
+    enum eVertexType {
+        VERTEX_TYPE_NONE                       = 0,
+        VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1        = 1,
+        VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN = 2,
+        VERTEX_TYPE_PS3_TS2_CS1                = 3,
+        VERTEX_TYPE_COMPRESSED                 = 4,
+    };
+    enum ePixelShaderType {
+        PIXEL_SHADER_TYPE_STANDARD             = 0,
+        PIXEL_SHADER_TYPE_PROJECTION           = 1,
+    };
+    enum ePrimitiveType {
+        PRIMITIVE_TYPE_TRIANGLE_LIST           = 4, // matches D3DPT_TRIANGLELIST
+        PRIMITIVE_TYPE_TRIANGLE_STRIP          = 5,
+    };
     enum eViewportType {
         VIEWPORT_TYPE_FULLSCREEN = 0,
         VIEWPORT_TYPE_TOP        = 1,
@@ -266,6 +284,9 @@ struct C4JRenderStub {
     template<class... A> void   TextureBind(A...)             {}
     template<class... A> void   TextureUnbind(A...)           {}
     template<class... A> void   TextureUpdate(A...)           {}
+    template<class... A> void   MatrixMode(A...)              {}
+    template<class... A> void   CBuffClear(A...)              {}
+    template<class... A> void   CBuffReset(A...)              {}
 };
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
@@ -305,6 +326,7 @@ struct LevelGenerationOptions {
     template<class... A> int  getRequiredTexturePackId(A...)  { return 0; }
     template<class... A> void setDisplayName(A...)            {}
     template<class... A> std::wstring getDisplayName(A...)    { return std::wstring(); }
+    template<class... A> void* getSchematicFile(A...)         { return nullptr; }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
