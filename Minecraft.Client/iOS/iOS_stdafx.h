@@ -620,6 +620,7 @@ public:
     static void create() {}
     static void destroy() {}
     static bool isKeyDown(int)           { return false; }
+    static void enableRepeatEvents(bool) {}
 };
 class Display {
 public:
@@ -645,9 +646,14 @@ public:
 // (Common/Tutorial/AreaConstraint.cpp etc are green per the auto-probe).
 class Tutorial {
 public:
-    template<class... A> bool isStateCompleted(A...) { return false; }
+    bool m_fullTutorialComplete = false;
+    bool m_allTutorialsComplete = false;
+    template<class... A> bool isStateCompleted(A...)  { return false; }
     template<class... A> void setStateCompleted(A...) {}
-    template<class... A> bool isFullTutorial(A...)   { return false; }
+    template<class... A> bool isFullTutorial(A...)    { return false; }
+    template<class... A> int  getCurrentState(A...)   { return 0; }
+    template<class... A> void addMessage(A...)        {}
+    template<class... A> int  getPad(A...)            { return 0; }
 };
 #include "FileHeader.h"
 #include "SharedConstants.h"
