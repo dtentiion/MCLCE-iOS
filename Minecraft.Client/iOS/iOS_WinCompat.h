@@ -439,6 +439,16 @@ typedef struct D3D11_VIEWPORT {
 #  define GL_ONE_MINUS_SRC_ALPHA     0x0303
 #  define GL_ONE                     1
 #  define GL_ZERO                    0
+#  define GL_SRC_COLOR               0x0300
+#  define GL_ONE_MINUS_SRC_COLOR     0x0301
+#  define GL_DST_COLOR               0x0306
+#  define GL_ONE_MINUS_DST_COLOR     0x0307
+#  define GL_DST_ALPHA               0x0304
+#  define GL_ONE_MINUS_DST_ALPHA     0x0305
+#  define GL_CONSTANT_COLOR          0x8001
+#  define GL_ONE_MINUS_CONSTANT_COLOR 0x8002
+#  define GL_CONSTANT_ALPHA          0x8003
+#  define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
 #  define GL_REPEAT                  0x2901
 #  define GL_CLAMP                   0x2900
 #  define GL_CLAMP_TO_EDGE           0x812F
