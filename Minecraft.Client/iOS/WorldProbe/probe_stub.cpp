@@ -23,6 +23,7 @@ namespace mcle_world_probe { inline void _anchor() {} }
 C_4JProfile ProfileManager;
 C4JStorage  StorageManager;
 C4JRender   RenderManager;
+C_4JInput   InputManager;
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 

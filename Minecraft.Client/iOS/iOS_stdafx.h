@@ -27,6 +27,9 @@
 #include "4JLibs/inc/4J_Storage.h"
 // 4J profile layer - PlayerUID, C_4JProfile, ProfileManager (extern).
 #include "4JLibs/inc/4J_Profile.h"
+// 4J input layer - C_4JInput, InputManager (extern). LocalPlayer.cpp
+// queries InputManager directly for idle time + button state.
+#include "4JLibs/inc/4J_Input.h"
 // 4J render layer - extern declaration for the global RenderManager.
 // Note: 4J_Render.h is included AFTER iOS_stdafx.h's `typedef
 // C4JRenderStub C4JRender;` (which lives further down in this file)
