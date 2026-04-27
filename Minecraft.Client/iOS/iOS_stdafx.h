@@ -350,6 +350,15 @@ struct ConnectionProgressParams {
     int   timerTime;
     bool  setFailTimer;
 };
+// Game mode classes (FullTutorialMode, TrialMode, ConsoleGameMode,
+// DemoMode) live under upstream Common/Tutorial / Common/Trial / etc.
+// Their headers transitively pull the Tutorial.h -> UIScene chain we
+// cannot include without conflicting with our minimal Tutorial stub.
+// The Minecraft.cpp call sites that `new FullTutorialMode(...)` etc
+// are inside conditional branches the iOS app does not exercise on
+// first launch (tutorial / trial mode). Real iOS support for those
+// modes is a Phase F item; for Phase D we accept that this specific
+// branch of Minecraft.cpp keeps it red.
 // UIVec2D is a 2D float vector used as a value-type member in
 // IUIScene_AbstractContainerMenu.h. Upstream has no definition (the
 // type is provided by the platform UI layer); a thin float pair
