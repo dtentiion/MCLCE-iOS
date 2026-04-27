@@ -129,15 +129,8 @@ void GameRenderer::FinishedReassigning() {}
 // shims in iOS_WinFileShim.h plus the StringHelpers iOS path-separator
 // patch. Stubs removed; bodies live in upstream/Minecraft.World/File.cpp.
 
-// ---------------------------------------------------------------------------
-// Compression. iOS doesn't ship XBox / PS XMemCompress; without a real save
-// to read or write, every Compress/Decompress is a no-op returning S_OK.
-// ---------------------------------------------------------------------------
-Compression *Compression::getCompression() { return nullptr; }
-HRESULT Compression::Decompress(void * /*pDst*/, unsigned int * /*pDstSize*/, void * /*pSrc*/, unsigned int /*srcSize*/) { return 0; }
-HRESULT Compression::CompressLZXRLE(void *, unsigned int *, void *, unsigned int)   { return 0; }
-HRESULT Compression::DecompressLZXRLE(void *, unsigned int *, void *, unsigned int) { return 0; }
-void    Compression::SetDecompressionType(ESavePlatform /*plat*/) {}
+// Compression: real upstream compression.cpp now compiles via zlib (iOS
+// added to the Win64/Orbis/Vita/Durango branches in patch-upstream-stdafx).
 
 // ---------------------------------------------------------------------------
 // ConsoleSaveFileOriginal. The iOS shell never constructs one of these
