@@ -256,13 +256,28 @@ patched = src.replace(needle, needle + ' || defined __APPLE_IOS__', 1)
 # Compress/Decompress chains pick zlib for the Win64/Orbis/Vita/Durango set
 # and fall through to XMemCompress/XMemDecompress in the #else. Route iOS
 # into the zlib arms so we don't need Microsoft's XMem* APIs.
-for n in (
+patterns = [
     '#if defined __ORBIS__ || defined _DURANGO || defined _WIN64 || defined __PSVITA__',
     '#if (defined _XBOX || defined _DURANGO || defined _WIN64)',
     '#if (defined __ORBIS__ || defined __PS3__ || defined _DURANGO || defined _WIN64)',
     '#if (defined __ORBIS__ || defined __PSVITA__ || defined _DURANGO || defined _WIN64)',
-):
-    patched = patched.replace(n, n[:-1] + ' || defined __APPLE_IOS__)' if n.endswith(')') else n + ' || defined __APPLE_IOS__')
+]
+for n in patterns:
+    if n.endswith(')'):
+        rep = n[:-1] + ' || defined __APPLE_IOS__)'
+    else:
+        rep = n + ' || defined __APPLE_IOS__'
+    patched = patched.replace(n, rep)
+# Compression ctor/dtor allocate XMem contexts on every non-Sony platform.
+# Add iOS to the exclusion lists so the XMemCreate/Destroy calls are skipped.
+patched = patched.replace(
+    '#if !(defined __ORBIS__ || defined __PS3__)',
+    '#if !(defined __ORBIS__ || defined __PS3__ || defined __APPLE_IOS__)',
+)
+patched = patched.replace(
+    '#if !(defined __ORBIS__ || defined __PS3__ || defined __PSVITA__)',
+    '#if !(defined __ORBIS__ || defined __PS3__ || defined __PSVITA__ || defined __APPLE_IOS__)',
+)
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: routed iOS to zlib branches in {path}")
