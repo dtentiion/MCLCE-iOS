@@ -501,6 +501,8 @@ public:
 // Gui - Minecraft.cpp does `new Gui(this)`. Pre-include for the
 // constructor signature.
 #include "../Minecraft.Client/Gui.h"
+// ScreenSizeCalculator - Minecraft.cpp constructs one on the stack.
+#include "../Minecraft.Client/ScreenSizeCalculator.h"
 // Mouse class stub. Real upstream version lives in
 // Minecraft.Client/stubs.h alongside a `class Color` that conflicts
 // with `Minecraft.World/Color.h`. We can't pre-include stubs.h
