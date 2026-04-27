@@ -77,7 +77,9 @@ struct McleAppStub {
     template<class... A> std::vector<class ModelPart*>* GetAdditionalModelParts(A...) { return nullptr; }
     template<class... A> int            GetAnimOverrideBitmask(A...)  { return 0; }
     template<class... A> void           SetAnimOverrideBitmask(A...)  {}
-    template<class... A> void           SetAdditionalSkinBoxes(A...)  {}
+    // Real upstream returns `vector<ModelPart*>*`. Player.cpp does
+    // `m_ppAdditionalModelParts = app.SetAdditionalSkinBoxes(...)`.
+    template<class... A> std::vector<class ModelPart*>* SetAdditionalSkinBoxes(A...) { return nullptr; }
     template<class... A> void           SetUniqueMapName(A...)        {}
     template<class... A> void           SetXuiServerAction(A...)      {}
     template<class... A> void           CreateImageTextData(A...)     {}
