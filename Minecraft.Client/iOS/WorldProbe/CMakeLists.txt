@@ -973,6 +973,7 @@ set(WORLD_PROBE_SOURCES
   # POSIX shim (iOS_WinFileShim.h) and patch-upstream-stdafx StringHelpers
   # iOS branch.
   ${UPSTREAM_DIR}/Minecraft.World/File.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/LevelData.cpp
 )
 
 add_library(mcle_world_probe STATIC
