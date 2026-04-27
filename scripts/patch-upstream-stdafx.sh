@@ -25,6 +25,7 @@ COMPCPP="$REPO_ROOT/upstream/Minecraft.World/compression.cpp"
 LEVELH="$REPO_ROOT/upstream/Minecraft.World/Level.h"
 ZCSCPP="$REPO_ROOT/upstream/Minecraft.World/ZonedChunkStorage.cpp"
 SNDENG="$REPO_ROOT/upstream/Minecraft.Client/Common/Audio/Consoles_SoundEngine.h"
+STRHLP="$REPO_ROOT/upstream/Minecraft.World/StringHelpers.cpp"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -45,14 +46,14 @@ for f in "$DOSCPP" "$DISCPP" "$COMPCPP"; do
     fi
 done
 
-for f in "$LEVELH" "$CLIENT_STDAFX" "$SNDENG"; do
+for f in "$LEVELH" "$CLIENT_STDAFX" "$SNDENG" "$STRHLP"; do
     if [ ! -f "$f" ]; then
         echo "patch-upstream-stdafx: $f not found"
         exit 1
     fi
 done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX" && grep -q '__APPLE_IOS__' "$SNDENG"; then
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX" && grep -q '__APPLE_IOS__' "$SNDENG" && grep -q '__APPLE_IOS__' "$STRHLP"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -369,6 +370,31 @@ ios_branch = (
 )
 patched = src.replace(needle, needle + ios_branch, 1)
 
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: inserted iOS branch into {path}")
+PY
+fi
+
+# StringHelpers.cpp:wstringtofilename swaps '/' for '\' on every non-PS/Orbis
+# build. iOS uses POSIX paths, so add iOS to the no-swap branch.
+if grep -q '__APPLE_IOS__' "$STRHLP"; then
+    echo "patch-upstream-stdafx: StringHelpers.cpp already patched, skipping"
+else
+python3 - "$STRHLP" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+needle = '#if defined __PS3__ || defined __ORBIS__'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: StringHelpers anchor not found")
+patched = src.replace(
+    needle,
+    '#if defined __PS3__ || defined __ORBIS__ || defined __APPLE_IOS__',
+    1,
+)
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: inserted iOS branch into {path}")
