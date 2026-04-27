@@ -44,6 +44,7 @@
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
+#include "../../../upstream/Minecraft.Client/PlayerList.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 
 #include "4JLibs/inc/4J_Storage.h"
@@ -301,6 +302,23 @@ void initImpl() {
         return;
     }
     MCLE_LOG("mcle_game_init: MinecraftServer at %p", (void*)g_server);
+
+    // Step 5.6: attach a PlayerList. Parity with MinecraftServer.cpp:690
+    // (`setPlayers(new PlayerList(this))`). Without this, ServerLevel ctor
+    // crashes inside `server->getPlayers()->getViewDistance()`.
+    try {
+        g_server->setPlayers(new PlayerList(g_server));
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: PlayerList ctor threw: %{public}s", e.what());
+        g_initState = kStateFailed;
+        return;
+    }
+    if (!g_server->getPlayers()) {
+        MCLE_LOG("mcle_game_init: PlayerList not attached");
+        g_initState = kStateFailed;
+        return;
+    }
+    MCLE_LOG("mcle_game_init: PlayerList at %p", (void*)g_server->getPlayers());
 
     // Step 6: construct three ServerLevels (overworld + nether + end).
     // Parity with MinecraftServer.cpp:956-1007 - levels[0] is a real
