@@ -814,3 +814,42 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: rewrote setTile -> setTileAndData in {path}")
 PY
 fi
+
+# PacketListener.h is missing handleRidePacket which SetRidingPacket.cpp
+# calls. Add the virtual to the listener interface.
+PLH="$REPO_ROOT/upstream/Minecraft.World/PacketListener.h"
+if grep -q 'handleRidePacket' "$PLH"; then
+    echo "patch-upstream-stdafx: PacketListener.h already patched, skipping"
+else
+python3 - "$PLH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'virtual void handleDisconnect(shared_ptr<DisconnectPacket> packet);'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: PacketListener anchor not found")
+patched = src.replace(needle,
+    needle + '\n\tvirtual void handleRidePacket(shared_ptr<class SetRidingPacket> packet);',
+    1,
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added handleRidePacket virtual to {path}")
+PY
+fi
+
+# PacketListener.cpp needs the matching default body
+PLC="$REPO_ROOT/upstream/Minecraft.World/PacketListener.cpp"
+if [ -f "$PLC" ] && ! grep -q 'PacketListener::handleRidePacket' "$PLC"; then
+python3 - "$PLC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+src += '\nvoid PacketListener::handleRidePacket(shared_ptr<class SetRidingPacket>) {}\n'
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: added handleRidePacket body to {path}")
+PY
+fi
