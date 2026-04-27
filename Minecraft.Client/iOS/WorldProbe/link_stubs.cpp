@@ -172,21 +172,8 @@ void        ServerChunkCache::recreateLogicStructuresForChunk(int, int)         
 // ---------------------------------------------------------------------------
 // RandomLevelSource (chunk source used by ServerLevel::createChunkSource).
 // ---------------------------------------------------------------------------
-RandomLevelSource::RandomLevelSource(Level * /*level*/, int64_t /*seed*/, bool genStructures)
-    : generateStructures(genStructures) {}
-RandomLevelSource::~RandomLevelSource() {}
-LevelChunk *RandomLevelSource::create(int, int)                                  { return nullptr; }
-LevelChunk *RandomLevelSource::getChunk(int, int)                                { return nullptr; }
-void        RandomLevelSource::lightChunk(LevelChunk *)                          {}
-bool        RandomLevelSource::hasChunk(int, int)                                { return false; }
-void        RandomLevelSource::postProcess(ChunkSource *, int, int)              {}
-bool        RandomLevelSource::save(bool, ProgressListener *)                    { return true; }
-bool        RandomLevelSource::tick()                                            { return false; }
-bool        RandomLevelSource::shouldSave()                                      { return false; }
-std::wstring RandomLevelSource::gatherStats()                                    { return std::wstring(); }
-std::vector<Biome::MobSpawnerData *> *RandomLevelSource::getMobsAt(MobCategory *, int, int, int) { return nullptr; }
-TilePos    *RandomLevelSource::findNearestMapFeature(Level *, const std::wstring &, int, int, int)    { return nullptr; }
-void        RandomLevelSource::recreateLogicStructuresForChunk(int, int)         {}
+// RandomLevelSource: real upstream RandomLevelSource.cpp now compiles via
+// LevelGenerationOptions stub additions (getBiomeOverride). Stubs removed.
 
 // ---------------------------------------------------------------------------
 // Chunk (the rendering chunk on Minecraft.Client side).

@@ -294,6 +294,9 @@ struct LevelGenerationOptions {
     template<class... A> bool getMapInteractionEnabled(A...)  { return false; }
     template<class... A> bool getCommandBlocksEnabled(A...)   { return false; }
     template<class... A> int  getInitialSpawnRadius(A...)     { return 0; }
+    template<class... A> void getBiomeOverride(A...)          {}
+    template<class... A> bool requiresTexturePack(A...)       { return false; }
+    template<class... A> int  getRequiredTexturePackId(A...)  { return 0; }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
