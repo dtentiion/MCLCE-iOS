@@ -99,6 +99,8 @@ struct McleAppStub {
     template<class... A> void           SetUniqueMapName(A...)        {}
     template<class... A> void           SetXuiServerAction(A...)      {}
     template<class... A> int            GetXuiServerAction(A...)      { return 0; }
+    template<class... A> void*          GetXuiServerActionParam(A...) { return nullptr; }
+    template<class... A> void           SetXuiServerActionParam(A...) {}
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
 
