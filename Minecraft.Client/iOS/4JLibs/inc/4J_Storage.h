@@ -62,6 +62,16 @@ public:
     const char* GetCachesPath()      { return ios_caches_dir(); }
     const char* GetAppSupportPath()  { return ios_app_support_dir(); }
     const char* GetBundlePath()      { return ios_bundle_resources_dir(); }
+
+    // Save-buffer helpers ConsoleSaveFileOriginal calls when constructed
+    // with no in-memory bytes (Xbox/PS path picks up the OS-resident save).
+    // iOS hands raw bytes to the ctor directly via mcle_ios_game so these
+    // safe defaults are never reached at runtime; the symbols just need
+    // to exist at compile time.
+    template<class... A> unsigned int GetSaveSize(A...)         { return 0; }
+    template<class... A> void*        GetSaveData(A...)         { return nullptr; }
+    template<class... A> void*        AllocateSaveData(A...)    { return nullptr; }
+    template<class... A> bool         GetSaveUniqueNumber(A...) { return false; }
 };
 
 // Real upstream 4J_Storage.h declares `extern C4JStorage StorageManager;`
