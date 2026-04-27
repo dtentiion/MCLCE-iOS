@@ -480,3 +480,36 @@ fi
 # StringHelpers.h's _fromString<PlayerUID> template was the second blocker;
 # fixed instead by adding `operator>>(wistream&, PlayerUID&)` to the iOS
 # PlayerUID stub in 4JLibs/inc/4J_Profile.h. No source patch needed here.
+
+# LevelGenerationOptions.h's class is redefined when both the iOS_stdafx.h
+# stub and the real header are visible (e.g. ConsoleSaveFileOriginal.cpp
+# pulls the real one). iOS only needs the stub, so wrap the real header
+# body in #ifndef __APPLE_IOS__.
+LGOHDR="$REPO_ROOT/upstream/Minecraft.Client/Common/GameRules/LevelGenerationOptions.h"
+if grep -q '__APPLE_IOS__' "$LGOHDR"; then
+    echo "patch-upstream-stdafx: LevelGenerationOptions.h already patched, skipping"
+else
+python3 - "$LGOHDR" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+pragma = '#pragma once'
+idx = src.find(pragma)
+if idx < 0:
+    sys.exit("patch-upstream-stdafx: #pragma once not found in LevelGenerationOptions.h")
+split_at = idx + len(pragma)
+prefix = src[:split_at]
+body   = src[split_at:]
+wrapped = (
+    prefix
+    + '\n\n// iOS provides a stub LevelGenerationOptions in iOS_stdafx.h\n'
+    + '#ifndef __APPLE_IOS__\n'
+    + body
+    + '\n#endif // !__APPLE_IOS__\n'
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(wrapped)
+print(f"patch-upstream-stdafx: wrapped LevelGenerationOptions.h body in #ifndef __APPLE_IOS__")
+PY
+fi
