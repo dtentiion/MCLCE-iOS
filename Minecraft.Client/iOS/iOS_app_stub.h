@@ -130,7 +130,7 @@ struct McleAppStub {
     template<class... A> bool           IsTutorialActive(A...)        { return false; }
     template<class... A> bool           IsTrialMode(A...)             { return false; }
     template<class... A> bool           IsDemoMode(A...)              { return false; }
-    template<class... A> void           CreateImageTextData(A...)     {}
+    template<class... A> int            CreateImageTextData(A...)     { return 0; }
     template<class... A> void           processSchematics(A...)       {}
 
     // Common/* additions: catch-all setters / getters / state

@@ -1005,6 +1005,29 @@ static inline void GlobalMemoryStatus(LPMEMORYSTATUS s) {
 #ifndef MEM_LARGE_PAGES
 #  define MEM_LARGE_PAGES 0x20000000
 #endif
+// VirtualAlloc / VirtualFree flags used by ConsoleSaveFileOriginal to
+// reserve a 2GB save heap on Win64 and commit pages incrementally.
+// iOS doesn't have VirtualAlloc; the shims below fall back to malloc.
+#ifndef MEM_RESERVE
+#  define MEM_RESERVE  0x00002000
+#endif
+#ifndef MEM_COMMIT
+#  define MEM_COMMIT   0x00001000
+#endif
+#ifndef MEM_DECOMMIT
+#  define MEM_DECOMMIT 0x00004000
+#endif
+#ifndef MEM_RELEASE
+#  define MEM_RELEASE  0x00008000
+#endif
+static inline void *VirtualAlloc(void *addr, size_t size, DWORD type, DWORD /*protect*/) {
+    if (type & MEM_RESERVE) return malloc(size);
+    return addr; // MEM_COMMIT on top of an existing reservation - already mapped
+}
+static inline BOOL VirtualFree(void *addr, size_t /*size*/, DWORD type) {
+    if (type & MEM_RELEASE) free(addr);
+    return TRUE;
+}
 
 // Xbox-style physical-memory allocator. Real one returns aligned
 // pages; on iOS we fall back to malloc since the upstream code
