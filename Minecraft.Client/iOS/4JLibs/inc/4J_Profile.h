@@ -106,6 +106,7 @@ public:
     template<class... A> bool IsFullVersion(A...)         { return true; }
     template<class... A> int  AreXUIDSEqual(A...)         { return 0; }
     template<class... A> bool HasGoldMembership(A...)     { return false; }
+    template<class... A> void SetCurrentGameActivity(A...) {}
 };
 
 // Real 4J_Profile.h (Durango/Orbis) defines `extern C_4JProfile
