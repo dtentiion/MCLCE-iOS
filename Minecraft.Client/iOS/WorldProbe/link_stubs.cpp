@@ -23,6 +23,9 @@
 #include "AddPlayerPacket.h"
 #include "AnimatePacket.h"
 #include "Biome.h"
+#include "GameEventPacket.h"
+#include "PotionBrewing.h"
+#include "WeighedTreasure.h"
 #include "ChunkPos.h"
 #include "Compression.h"
 #include "ConsoleSaveFile.h"
@@ -64,6 +67,8 @@ const int Item::emerald_Id;
 const int AnimatePacket::SWING;
 const int SetEntityLinkPacket::LEASH;
 const int SetEntityLinkPacket::RIDING;
+const int GameEventPacket::SUCCESSFUL_BOW_HIT;
+const int PotionBrewing::POTION_ID_SPLASH_DAMAGE;
 const int AddEntityPacket::BOAT;
 const int AddEntityPacket::ITEM;
 const int AddEntityPacket::MINECART;
@@ -90,9 +95,10 @@ void AddPlayerPacket::handle(PacketListener *)  {}
 int  AddPlayerPacket::getEstimatedSize()        { return 0; }
 
 // ---------------------------------------------------------------------------
-// C4JThread::EventArray. iOS doesn't use the cross-thread waitable-event
-// pattern; every call resolves to a no-op.
+// C4JThread::Event + EventArray. iOS doesn't use the cross-thread waitable
+// event pattern at runtime; every call resolves to a no-op.
 // ---------------------------------------------------------------------------
+C4JThread::Event::Event(C4JThread::Event::EMode /*mode*/) {}
 void C4JThread::EventArray::ClearAll() {}
 void C4JThread::EventArray::Set(int /*index*/) {}
 
@@ -108,6 +114,7 @@ bool         Minecraft::isTutorial()      { return false; }
 // ---------------------------------------------------------------------------
 void PlayerConnection::send(std::shared_ptr<Packet> /*packet*/) {}
 bool PlayerConnection::isLocal() { return true; }
+void PlayerConnection::teleport(double, double, double, float, float, bool) {}
 
 void ServerPlayer::flushEntitiesToRemove() {}
 ServerLevel *ServerPlayer::getLevel() { return nullptr; }
@@ -193,6 +200,8 @@ FlatGeneratorInfo *FlatGeneratorInfo::fromValue(const std::wstring &/*input*/) {
 // ---------------------------------------------------------------------------
 void EnchantedBookItem::addEnchantment(std::shared_ptr<ItemInstance> /*item*/, EnchantmentInstance * /*enchantment*/) {}
 std::shared_ptr<ItemInstance> EnchantedBookItem::createForEnchantment(EnchantmentInstance * /*enchant*/) { return nullptr; }
+WeighedTreasure *EnchantedBookItem::createForRandomTreasure(Random *)                                        { return nullptr; }
+WeighedTreasure *EnchantedBookItem::createForRandomTreasure(Random *, int, int, int)                         { return nullptr; }
 
 // LevelData: real upstream LevelData.cpp now compiles (ChunkSource.h
 // include patched in). Stubs removed.
