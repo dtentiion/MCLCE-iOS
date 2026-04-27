@@ -68,7 +68,10 @@ struct McleAppStub {
     template<class... A> struct MOJANG_DATA* GetMojangDataForXuid(A...) { return nullptr; }
     template<class... A> int            GetTerrainFeaturePosition(A...) { return 0; }
     template<class... A> void           AddTerrainFeaturePosition(A...) {}
-    template<class... A> int            GetAdditionalModelParts(A...) { return 0; }
+    // Real upstream return type is `std::vector<ModelPart*>*`. ModelPart
+    // is forward-declared so the pointer type composes; the body returns
+    // nullptr (Player.cpp checks for null before iterating).
+    template<class... A> std::vector<class ModelPart*>* GetAdditionalModelParts(A...) { return nullptr; }
     template<class... A> int            GetAnimOverrideBitmask(A...)  { return 0; }
     template<class... A> void           SetAnimOverrideBitmask(A...)  {}
     template<class... A> void           SetAdditionalSkinBoxes(A...)  {}
