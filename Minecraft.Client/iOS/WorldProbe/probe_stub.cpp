@@ -79,3 +79,37 @@ ServerPlayer::~ServerPlayer() {}
 LevelRenderer::DestroyedTileManager::DestroyedTileManager() {}
 LevelRenderer::DestroyedTileManager::~DestroyedTileManager() {}
 void LevelRenderer::DestroyedTileManager::addAABBs(Level*, AABB*, AABBList*) {}
+
+// Legacy OpenGL function bodies. iOS doesn't have legacy GL; calls
+// route through the Metal-backed C4JRender_iOS in Phase D2. For now
+// these are no-ops so any TU that calls them links cleanly without
+// pulling actual GL into the .ipa.
+extern "C" {
+void glEnable(unsigned int)                                {}
+void glDisable(unsigned int)                               {}
+void glClear(unsigned int)                                 {}
+void glClearColor(float, float, float, float)              {}
+void glViewport(int, int, int, int)                        {}
+void glPushMatrix(void)                                    {}
+void glPopMatrix(void)                                     {}
+void glLoadIdentity(void)                                  {}
+void glMatrixMode(unsigned int)                            {}
+void glTranslatef(float, float, float)                     {}
+void glRotatef(float, float, float, float)                 {}
+void glScalef(float, float, float)                         {}
+void glColor4f(float, float, float, float)                 {}
+void glBegin(unsigned int)                                 {}
+void glEnd(void)                                           {}
+void glVertex3f(float, float, float)                       {}
+void glTexCoord2f(float, float)                            {}
+void glNewList(int, int)                                   {}
+void glEndList(void)                                       {}
+void glCallList(int)                                       {}
+void glDeleteLists(int, int)                               {}
+int  glGenLists(int)                                       { return 0; }
+void glBindTexture(unsigned int, unsigned int)             {}
+void glTexParameteri(unsigned int, unsigned int, int)      {}
+void glDepthFunc(unsigned int)                             {}
+void glAlphaFunc(unsigned int, float)                      {}
+void glBlendFunc(unsigned int, unsigned int)               {}
+} // extern "C"
