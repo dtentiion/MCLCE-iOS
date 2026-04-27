@@ -210,11 +210,25 @@ struct C4JRenderStub {
     template<class... A> void   FreeTexture(A...)    {}
     // Command buffer interface upstream LevelRenderer.cpp uses to
     // record draws into a reusable buffer.
-    template<class... A> bool   CBuffCall(A...)      { return false; }
-    template<class... A> int    CBuffCreate(A...)    { return 0; }
-    template<class... A> void   CBuffDelete(A...)    {}
-    template<class... A> bool   CBuffLock(A...)      { return false; }
-    template<class... A> void   CBuffUnlock(A...)    {}
+    template<class... A> bool   CBuffCall(A...)               { return false; }
+    template<class... A> bool   CBuffCallCutOut(A...)         { return false; }
+    template<class... A> bool   CBuffCallMultiple(A...)       { return false; }
+    template<class... A> void   CBuffDeferredModeStart(A...)  {}
+    template<class... A> void   CBuffLockStaticCreations(A...) {}
+    template<class... A> int    CBuffSize(A...)               { return 0; }
+    template<class... A> int    CBuffCreate(A...)             { return 0; }
+    template<class... A> void   CBuffDelete(A...)             {}
+    template<class... A> bool   CBuffLock(A...)               { return false; }
+    template<class... A> void   CBuffUnlock(A...)             {}
+    // Render-state setters Minecraft.cpp / LevelRenderer.cpp call.
+    template<class... A> void   StateSetEnableViewportClipPlanes(A...) {}
+    template<class... A> void   StateSetForceLOD(A...)        {}
+    template<class... A> void   StateSetViewport(A...)        {}
+    template<class... A> void   SetCameraPosition(A...)       {}
+    template<class... A> void   InitialiseContext(A...)       {}
+    template<class... A> void   DoScreenGrabOnNextPresent(A...) {}
+    template<class... A> void   InternalScreenCapture(A...)   {}
+    template<class... A> bool   IsHiDef(A...)                 { return true; }
 };
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
