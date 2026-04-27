@@ -24,6 +24,7 @@ DISCPP="$REPO_ROOT/upstream/Minecraft.World/DataInputStream.cpp"
 COMPCPP="$REPO_ROOT/upstream/Minecraft.World/compression.cpp"
 LEVELH="$REPO_ROOT/upstream/Minecraft.World/Level.h"
 ZCSCPP="$REPO_ROOT/upstream/Minecraft.World/ZonedChunkStorage.cpp"
+SNDENG="$REPO_ROOT/upstream/Minecraft.Client/Common/Audio/Consoles_SoundEngine.h"
 
 if [ ! -f "$STDAFX" ]; then
     echo "patch-upstream-stdafx: $STDAFX not found"
@@ -44,14 +45,14 @@ for f in "$DOSCPP" "$DISCPP" "$COMPCPP"; do
     fi
 done
 
-for f in "$LEVELH" "$CLIENT_STDAFX"; do
+for f in "$LEVELH" "$CLIENT_STDAFX" "$SNDENG"; do
     if [ ! -f "$f" ]; then
         echo "patch-upstream-stdafx: $f not found"
         exit 1
     fi
 done
 
-if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX"; then
+if grep -q '__APPLE_IOS__' "$STDAFX" && grep -q '__APPLE_IOS__' "$FILEHEADER" && grep -q '__APPLE_IOS__' "$ARRWITHLEN" && grep -q '__APPLE_IOS__' "$DOSCPP" && grep -q '__APPLE_IOS__' "$DISCPP" && grep -q '__APPLE_IOS__' "$COMPCPP" && grep -q '__APPLE_IOS__' "$LEVELH" && grep -q '__APPLE_IOS__' "$CLIENT_STDAFX" && grep -q '__APPLE_IOS__' "$SNDENG"; then
     echo "patch-upstream-stdafx: iOS branches already present in all files, nothing to do"
     exit 0
 fi
@@ -308,6 +309,44 @@ patched = src.replace(needle, 'lc->setUnsaved(false);', 1)
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: rewrote lc->unsaved as setUnsaved(false) in {path}")
+PY
+fi
+
+# Consoles_SoundEngine.h has a per-platform if/elif chain that picks an
+# RAD Miles `mss.h` for audio. iOS isn't covered, so it falls through to
+# the `#else // PS4` branch and pulls Orbis/Miles/include/mss.h, which
+# requires RAD platform macros (RADDEFSTART/RADDEFEND) that conflict
+# with our Iggy stub's RADLINK / RADEXPLINK guard logic. iOS uses
+# miniaudio (Common/Audio/SoundEngine.cpp) instead, so we want the
+# RAD Miles include to be skipped entirely on iOS. Insert an iOS branch
+# before the `#else // PS4` arm that does nothing.
+if grep -q '__APPLE_IOS__' "$SNDENG"; then
+    echo "patch-upstream-stdafx: Consoles_SoundEngine.h already patched, skipping"
+else
+python3 - "$SNDENG" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+# Insert iOS branch right before the bare `#else` that catches PS4.
+# Anchor: the line `#elif defined _WINDOWS64`. Insert iOS branch
+# AFTER the trailing `#else // PS4` so iOS gets its own arm with no
+# Miles include.
+needle = '#elif defined _WINDOWS64\n#else // PS4'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: Consoles_SoundEngine.h anchor not found")
+patched = src.replace(
+    needle,
+    '#elif defined _WINDOWS64\n'
+    + '#elif defined __APPLE_IOS__\n'
+    + '// iOS uses miniaudio (Common/Audio/SoundEngine.cpp) - skip RAD Miles\n'
+    + '#else // PS4',
+    1,
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: inserted iOS branch into {path}")
 PY
 fi
 
