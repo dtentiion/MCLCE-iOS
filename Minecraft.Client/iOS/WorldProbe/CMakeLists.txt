@@ -965,11 +965,18 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerLevel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MinecraftServer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/LevelRenderer.cpp
+  # Phase E: pulled in to satisfy ServerLevel/MinecraftServer link refs.
+  # Both are auto-probe greens; just weren't in the lib source list yet.
+  ${UPSTREAM_DIR}/Minecraft.Client/PlayerChunkMap.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TrackedEntity.cpp
 )
 
 add_library(mcle_world_probe STATIC
   ${WORLD_PROBE_SOURCES}
   probe_stub.cpp
+  # Phase E: bodies for upstream symbols whose owning .cpp files don't
+  # compile yet. See link_stubs.cpp comments for the per-class story.
+  link_stubs.cpp
 )
 
 target_include_directories(mcle_world_probe PRIVATE
