@@ -260,6 +260,9 @@ struct C4JRenderStub {
     template<class... A> void   DoScreenGrabOnNextPresent(A...) {}
     template<class... A> void   InternalScreenCapture(A...)   {}
     template<class... A> bool   IsHiDef(A...)                 { return true; }
+    template<class... A> void   TextureBind(A...)             {}
+    template<class... A> void   TextureUnbind(A...)           {}
+    template<class... A> void   TextureUpdate(A...)           {}
 };
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
@@ -297,6 +300,8 @@ struct LevelGenerationOptions {
     template<class... A> void getBiomeOverride(A...)          {}
     template<class... A> bool requiresTexturePack(A...)       { return false; }
     template<class... A> int  getRequiredTexturePackId(A...)  { return 0; }
+    template<class... A> void setDisplayName(A...)            {}
+    template<class... A> std::wstring getDisplayName(A...)    { return std::wstring(); }
 };
 
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
