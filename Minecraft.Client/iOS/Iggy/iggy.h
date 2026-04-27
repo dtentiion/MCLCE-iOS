@@ -69,7 +69,6 @@ typedef S32 IggyName;
 // Forward-declared opaque types. Upstream UI headers reference these
 // only as pointers, so a forward decl is enough to compile.
 struct Iggy;
-struct IggyValuePath;
 struct IggyMemoryUseInfo;
 struct IggyCustomDrawCallbackRegion;
 struct IggyExternalFunctionCallUTF16;
@@ -82,6 +81,17 @@ struct IggyKey;
 struct IggyEvent;
 struct IggyMouseEvent;
 struct IggyPlatformExternalFunctionCallback;
+
+// IggyValuePath is held BY VALUE as a member (`IggyValuePath m_iggyPath;`)
+// in upstream UIControl.h, so it needs a complete type with a non-zero
+// size. Real upstream IggyValuePath is a struct holding a pointer chain
+// and an Iggy*. The probe never traverses the path so dummy body is
+// fine; the size just has to be reasonable so member layout works.
+typedef struct IggyValuePath {
+    void *iggy;
+    void *root;
+    int   path_token;
+} IggyValuePath;
 
 // Iggy macro upstream UIScene.h uses at file scope. Real version
 // returns an IggyValuePath* pointing at the SWF root. The probe

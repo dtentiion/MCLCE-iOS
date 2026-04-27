@@ -398,9 +398,11 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // GameMode.h which has zero deps).
 #include "../Minecraft.Client/MultiPlayerGameMode.h"
 // Tutorial.h transitively pulls UIScene (UI subsystem replaced by
-// SWF on iOS), so we cannot pre-include it without breaking.
-// PlayerList::placeNewPlayer's `getTutorial()->isStateCompleted` stays
-// red until the UI/render Phase D bringup or a per-call patch.
+// SWF on iOS) so we cannot pre-include the full header. The light
+// TutorialEnum.h has no deps and brings the eTutorial_State enum
+// into scope so PlayerList::placeNewPlayer's
+// `e_Tutorial_State_Food_Bar` reference resolves.
+#include "../Minecraft.Client/Common/Tutorial/TutorialEnum.h"
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"

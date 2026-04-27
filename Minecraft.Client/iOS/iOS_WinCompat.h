@@ -366,6 +366,14 @@ typedef struct D3D11_VIEWPORT {
 #  define MINECRAFT_NET_MAX_PLAYERS 8
 #endif
 
+// 4J game-rules save filename. Defined in upstream
+// Common/GameRules/GameRuleManager.h:18 - we mirror the string so
+// callers that use the constant directly without pulling that header
+// (MinecraftServer.cpp does) compile cleanly.
+#ifndef GAME_RULE_SAVENAME
+#  define GAME_RULE_SAVENAME L"requiredGameRules.grf"
+#endif
+
 // Console world-size constants from upstream Minecraft.Client/MinecraftServer.h.
 // Real values match the Console Edition's legacy 864-block worlds and
 // classic 256-block worlds. Used as compile-time array sizes / loop
@@ -424,6 +432,25 @@ typedef struct D3D11_VIEWPORT {
 // just needs to exist for compile.
 #ifndef CREATE_SUSPENDED
 #  define CREATE_SUSPENDED      0x00000004
+#endif
+
+// Win32 thread priority levels. MinecraftServer.cpp sets above-normal
+// priority on its post-update thread; iOS uses pthread priority
+// classes so these are compile-only constants.
+#ifndef THREAD_PRIORITY_NORMAL
+#  define THREAD_PRIORITY_NORMAL        0
+#endif
+#ifndef THREAD_PRIORITY_ABOVE_NORMAL
+#  define THREAD_PRIORITY_ABOVE_NORMAL  1
+#endif
+#ifndef THREAD_PRIORITY_BELOW_NORMAL
+#  define THREAD_PRIORITY_BELOW_NORMAL (-1)
+#endif
+#ifndef THREAD_PRIORITY_HIGHEST
+#  define THREAD_PRIORITY_HIGHEST       2
+#endif
+#ifndef THREAD_PRIORITY_LOWEST
+#  define THREAD_PRIORITY_LOWEST       (-2)
 #endif
 
 // 4J QNet send-flags. Console-only; probe never sends a packet.

@@ -39,6 +39,18 @@ struct McleAppStub {
     DLCManager m_dlcManager;
     // Real `std::vector<wstring> vSkinNames` from Consoles_App.h.
     std::vector<std::wstring> vSkinNames;
+    // Real Consoles_App.h:737 has `GameRuleManager m_gameRules;` by
+    // value. MinecraftServer.cpp reads members of it directly. The
+    // probe doesn't run game-rule logic; an empty stub class with the
+    // members upstream touches is enough for compile.
+    struct McleGameRulesStub {
+        template<class... A> void* getLevelGenerators(A...)        { return nullptr; }
+        template<class... A> void* getLevelGenerationOptions(A...) { return nullptr; }
+        template<class... A> class LevelRuleset* getGameRuleDefinitions(A...) { return nullptr; }
+        template<class... A> void  loadFromBytes(A...)             {}
+        template<class... A> void  saveToBytes(A...)               {}
+    };
+    McleGameRulesStub m_gameRules;
 
     // Generic templates - accept any args, return either a default-
     // constructible value or void. Compile-only, not link-only.
@@ -166,6 +178,8 @@ struct McleNetworkManagerStub {
     template<class... A> int   GetNumPlayers(A...)       { return 0; }
     template<class... A> int   GetMaxPlayers(A...)       { return 1; }
     template<class... A> int   GetSessionState(A...)     { return 0; }
+    template<class... A> bool  SystemFlagGet(A...)       { return false; }
+    template<class... A> void  SystemFlagSet(A...)       {}
 };
 inline McleNetworkManagerStub g_NetworkManager;
 
