@@ -88,7 +88,10 @@ probe_one_file() {
         rm -f "$log"
     else
         red=$((red + 1))
-        head -3 "$log" >> "$LOG_DIR/_failures.txt"
+        # Capture enough log lines to see the actual error, not just the
+        # include chain leading to it. 10 lines reaches the first error
+        # for most upstream files.
+        head -10 "$log" >> "$LOG_DIR/_failures.txt"
         echo "  -> $rel" >> "$LOG_DIR/_failures.txt"
     fi
 }
