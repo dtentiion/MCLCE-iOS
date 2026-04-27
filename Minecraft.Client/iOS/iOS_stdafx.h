@@ -19,7 +19,6 @@
 // Win32 type aliases (DWORD, BOOL, HANDLE, ...) that upstream public headers
 // reference without guarding.
 #include "iOS_WinCompat.h"
-#include "iOS_app_stub.h"
 // 4J platform storage layer - exposes C4JStorage class with the
 // EMessageResult / ESaveGameState enums upstream code references.
 #include "4JLibs/inc/4J_Storage.h"
@@ -29,6 +28,9 @@
 // PSVita/Durango copies which are byte-identical). TelemetryManager.h
 // references ESen_CompeteOrCoop / ESen_FriendOrMatch by type.
 #include "Sentient/SentientTelemetryCommon.h"
+// iOS_app_stub.h goes later in this file (after the DLC headers are
+// pre-included) so McleAppStub's m_dlcManager can hold a real
+// DLCManager value rather than void*.
 
 // C++ standard library bits upstream uses unguarded.
 #include <cstddef>
@@ -385,6 +387,10 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
+// iOS_app_stub.h is pre-included LAST so the McleAppStub has full
+// access to upstream types like DLCManager, ModelPart, MOJANG_DATA
+// without forward-decl gymnastics.
+#include "iOS_app_stub.h"
 #endif
 
 #endif // !_WIN32 && !_WIN64
