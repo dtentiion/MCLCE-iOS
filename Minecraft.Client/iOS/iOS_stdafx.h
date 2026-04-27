@@ -248,6 +248,11 @@ class UIControl;
 class UIControl_Base;
 class UIControl_TextInput;
 class ItemRenderer;
+// CustomDrawData is an Iggy-adjacent opaque type used as
+// `CustomDrawData*` in UIScene.h:231 and UIController.h. No definition
+// exists anywhere in the upstream tree (it's a forward-decl shape).
+// Forward-decl here so UIScene.h parses.
+class CustomDrawData;
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
@@ -393,6 +398,26 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // Minecraft::skins, etc. Forward-decl is not enough; we need the full
 // class.
 #include "../Minecraft.Client/Minecraft.h"
+
+// Minimal SoundEngine class for the probe. Real upstream SoundEngine.h
+// pulls miniaudio.h (~95k lines) which is too heavy for force-include.
+// MultiPlayerLevel.cpp invokes only `play(...)` and `schedule(...)` on
+// Minecraft::soundEngine; provide variadic-template stubs that absorb
+// the argument list. Real audio playback comes through the iOS-side
+// Audio/SoundEngine.cpp which ships its own miniaudio integration.
+//
+// This class is defined AFTER Minecraft.h's forward decl so the two
+// agree on the name. No probe TU pulls real SoundEngine.h directly so
+// there's no redefinition risk.
+class SoundEngine {
+public:
+    SoundEngine() {}
+    template<class... A> void play(A...)     {}
+    template<class... A> void schedule(A...) {}
+    template<class... A> void stop(A...)     {}
+    template<class... A> void setVolume(A...) {}
+    template<class... A> bool isPlaying(A...) { return false; }
+};
 // Real MultiPlayerGameMode - PlayerList chains through
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
 // GameMode.h which has zero deps).
