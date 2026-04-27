@@ -6,6 +6,7 @@
 #include "iOS_stdafx.h"
 #include "4JLibs/inc/4J_Profile.h"
 #include "4JLibs/inc/4J_Storage.h"
+#include "4JLibs/inc/4J_Render.h"
 #include "ChestTile.h"
 #include "ZonedChunkStorage.h"
 
@@ -17,6 +18,7 @@ namespace mcle_world_probe { inline void _anchor() {} }
 // owns the symbol so the link resolves.
 C_4JProfile ProfileManager;
 C4JStorage  StorageManager;
+C4JRender   RenderManager;
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 
