@@ -535,3 +535,72 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: forward-declared DispenserTileEntity in {path}")
 PY
 fi
+
+# FlatGeneratorInfo.cpp uses Biome::plains->id but only forward-declares
+# Biome via its header chain. Add a direct Biome.h include.
+FGIC="$REPO_ROOT/upstream/Minecraft.World/FlatGeneratorInfo.cpp"
+if grep -q '#include "Biome.h"' "$FGIC"; then
+    echo "patch-upstream-stdafx: FlatGeneratorInfo.cpp already patched, skipping"
+else
+python3 - "$FGIC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "FlatGeneratorInfo.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: FlatGeneratorInfo anchor not found")
+patched = src.replace(needle, needle + '\n#include "Biome.h"  // Biome::plains', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added Biome.h include to {path}")
+PY
+fi
+
+# EntitySelector.cpp dereferences shared_ptr<Entity> but only includes the
+# forward-decl chain. Add Entity.h directly.
+ESCPP="$REPO_ROOT/upstream/Minecraft.World/EntitySelector.cpp"
+if grep -q '#include "Entity.h"' "$ESCPP"; then
+    echo "patch-upstream-stdafx: EntitySelector.cpp already patched, skipping"
+else
+python3 - "$ESCPP" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "EntitySelector.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: EntitySelector anchor not found")
+patched = src.replace(needle, needle + '\n#include "Entity.h"  // shared_ptr<Entity> deref', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added Entity.h include to {path}")
+PY
+fi
+
+# SavedDataStorage.cpp uses typeid() on three SavedData subclasses but only
+# pulls forward-decl headers. Add the three concrete headers directly.
+SDSC="$REPO_ROOT/upstream/Minecraft.World/SavedDataStorage.cpp"
+if grep -q '#include "MapItemSavedData.h"' "$SDSC"; then
+    echo "patch-upstream-stdafx: SavedDataStorage.cpp already patched, skipping"
+else
+python3 - "$SDSC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "SavedDataStorage.h"'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: SavedDataStorage anchor not found")
+add = (
+    needle
+    + '\n#include "MapItemSavedData.h"'
+    + '\n#include "StructureFeatureSavedData.h"'
+    + '\n#include "Villages.h"'
+)
+patched = src.replace(needle, add, 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: added SavedData headers to {path}")
+PY
+fi
