@@ -38,6 +38,8 @@ static inline std::string ios_wcs_to_utf8(const wchar_t *p) {
 }
 #endif
 
+// Non-UNICODE shape: upstream File.cpp's #else branch is what we hit on iOS,
+// and its filenametowstring helper takes `const char *`. So cFileName is char.
 typedef struct _WIN32_FIND_DATA {
     DWORD   dwFileAttributes;
     DWORD   _ftCreationTime[2];
@@ -47,8 +49,8 @@ typedef struct _WIN32_FIND_DATA {
     DWORD   nFileSizeLow;
     DWORD   dwReserved0;
     DWORD   dwReserved1;
-    wchar_t cFileName[260];
-    wchar_t cAlternateFileName[14];
+    char    cFileName[260];
+    char    cAlternateFileName[14];
 } WIN32_FIND_DATA, *LPWIN32_FIND_DATA;
 
 typedef struct _WIN32_FILE_ATTRIBUTE_DATA {
@@ -126,8 +128,7 @@ static inline BOOL MoveFileW(const wchar_t *src, const wchar_t *dst) {
 static inline bool _ios_fill_find_data_(WIN32_FIND_DATA *out, struct dirent *de) {
     out->dwFileAttributes = (de->d_type == DT_DIR) ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
     size_t i = 0;
-    for (; de->d_name[i] && i < 259; ++i)
-        out->cFileName[i] = (wchar_t)(unsigned char)de->d_name[i];
+    for (; de->d_name[i] && i < 259; ++i) out->cFileName[i] = de->d_name[i];
     out->cFileName[i] = 0;
     return true;
 }
