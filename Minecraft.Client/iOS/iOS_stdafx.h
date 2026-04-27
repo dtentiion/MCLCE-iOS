@@ -194,6 +194,16 @@ struct C4JRenderStub {
         VIEWPORT_TYPE_BOTLEFT    = 7,
         VIEWPORT_TYPE_BOTRIGHT   = 8,
         VIEWPORT_TYPE_NONE       = 9,
+        // Aliases for upstream split-screen naming (Minecraft.cpp uses
+        // VIEWPORT_TYPE_SPLIT_LEFT + offset arithmetic).
+        VIEWPORT_TYPE_SPLIT_LEFT  = 10,
+        VIEWPORT_TYPE_SPLIT_RIGHT = 11,
+        VIEWPORT_TYPE_SPLIT_TOP   = 12,
+        VIEWPORT_TYPE_SPLIT_BOTTOM = 13,
+        VIEWPORT_TYPE_QUAD_TOPLEFT = 14,
+        VIEWPORT_TYPE_QUAD_TOPRIGHT = 15,
+        VIEWPORT_TYPE_QUAD_BOTLEFT  = 16,
+        VIEWPORT_TYPE_QUAD_BOTRIGHT = 17,
     };
     enum ePixelShader {
         ePixelShader_Default = 0,
