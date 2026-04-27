@@ -961,6 +961,8 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/PlayerInfoPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/TextureAndGeometryPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ServerLevel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/PlayerList.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerLevel.cpp
 )
 
 add_library(mcle_world_probe STATIC

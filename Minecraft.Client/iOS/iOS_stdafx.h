@@ -451,11 +451,16 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 class SoundEngine {
 public:
     SoundEngine() {}
+    template<class... A> void init(A...)     {}
+    template<class... A> void shutdown(A...) {}
     template<class... A> void play(A...)     {}
     template<class... A> void schedule(A...) {}
     template<class... A> void stop(A...)     {}
+    template<class... A> void stopAll(A...)  {}
     template<class... A> void setVolume(A...) {}
+    template<class... A> void update(A...)   {}
     template<class... A> bool isPlaying(A...) { return false; }
+    template<class... A> int  getMusicTrackCount(A...) { return 0; }
 };
 // Real MultiPlayerGameMode - PlayerList chains through
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
