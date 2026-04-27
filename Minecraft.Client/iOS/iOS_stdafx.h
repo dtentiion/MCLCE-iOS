@@ -340,6 +340,10 @@ class ItemRenderer;
 // exists anywhere in the upstream tree (it's a forward-decl shape).
 // Forward-decl here so UIScene.h parses.
 class CustomDrawData;
+// ConnectionProgressParams - Minecraft.cpp constructs one with `new`
+// in a network connection path. No upstream definition; stub with
+// enough body for `new` + member access if any.
+struct ConnectionProgressParams { int dummy; };
 // UIVec2D is a 2D float vector used as a value-type member in
 // IUIScene_AbstractContainerMenu.h. Upstream has no definition (the
 // type is provided by the platform UI layer); a thin float pair

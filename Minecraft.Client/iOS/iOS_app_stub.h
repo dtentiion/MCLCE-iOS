@@ -125,6 +125,11 @@ struct McleAppStub {
     template<class... A> bool           GetIsHosting(A...)            { return false; }
     template<class... A> int            GetGameTime(A...)             { return 0; }
     template<class... A> int            GetTickCount(A...)            { return 0; }
+    template<class... A> int            GetTutorialMode(A...)         { return 0; }
+    template<class... A> void           SetTutorialMode(A...)         {}
+    template<class... A> bool           IsTutorialActive(A...)        { return false; }
+    template<class... A> bool           IsTrialMode(A...)             { return false; }
+    template<class... A> bool           IsDemoMode(A...)              { return false; }
     template<class... A> void           CreateImageTextData(A...)     {}
     template<class... A> void           processSchematics(A...)       {}
 
