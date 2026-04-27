@@ -969,6 +969,10 @@ set(WORLD_PROBE_SOURCES
   # Both are auto-probe greens; just weren't in the lib source list yet.
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerChunkMap.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TrackedEntity.cpp
+  # Phase F: real upstream save-loading sources, unblocked by the iOS Win32
+  # POSIX shim (iOS_WinFileShim.h) and patch-upstream-stdafx StringHelpers
+  # iOS branch.
+  ${UPSTREAM_DIR}/Minecraft.World/File.cpp
 )
 
 add_library(mcle_world_probe STATIC

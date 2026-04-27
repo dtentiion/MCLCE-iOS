@@ -19,6 +19,9 @@
 // Win32 type aliases (DWORD, BOOL, HANDLE, ...) that upstream public headers
 // reference without guarding.
 #include "iOS_WinCompat.h"
+// POSIX-backed shims for the Win32 file APIs (GetFileAttributes, MoveFile,
+// FindFirstFile, etc.) so upstream File.cpp can read real iOS sandbox state.
+#include "iOS_WinFileShim.h"
 // 4J platform storage layer - exposes C4JStorage class with the
 // EMessageResult / ESaveGameState enums upstream code references.
 #include "4JLibs/inc/4J_Storage.h"

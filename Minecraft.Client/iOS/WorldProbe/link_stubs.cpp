@@ -125,28 +125,9 @@ void GameRenderer::AddForDelete(SparseLightStorage    * /*p*/) {}
 void GameRenderer::AddForDelete(CompressedTileStorage * /*p*/) {}
 void GameRenderer::FinishedReassigning() {}
 
-// ---------------------------------------------------------------------------
-// File. iOS doesn't have GetFileAttributes / Win32 file APIs in the way
-// upstream File.cpp uses them; treat every file as non-existent and every
-// list as empty. McRegionLevelStorageSource::getLevelList sees no saves and
-// the bootstrap idles, which is the expected first-launch behaviour.
-// ---------------------------------------------------------------------------
-File::File(const File &/*parent*/, const std::wstring &child) {
-    (void)child;
-}
-File::File(const std::wstring &/*pathname*/) {}
-bool File::_delete()                  { return false; }
-bool File::mkdir() const              { return false; }
-bool File::exists() const             { return false; }
-bool File::isDirectory() const        { return false; }
-int64_t File::length()                { return 0; }
-std::wstring File::getName() const    { return std::wstring(); }
-const std::wstring File::getPath() const { return std::wstring(); }
-std::vector<File *> *File::listFiles() const { return nullptr; }
-bool File::renameTo(File /*dest*/)    { return false; }
-
-int  FileKeyHash::operator()(const File &/*k*/) const                    { return 0; }
-bool FileKeyEq::  operator()(const File &/*a*/, const File &/*b*/) const { return false; }
+// File: real upstream File.cpp now compiles in via the POSIX file API
+// shims in iOS_WinFileShim.h plus the StringHelpers iOS path-separator
+// patch. Stubs removed; bodies live in upstream/Minecraft.World/File.cpp.
 
 // ---------------------------------------------------------------------------
 // Compression. iOS doesn't ship XBox / PS XMemCompress; without a real save
