@@ -438,16 +438,16 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // class.
 #include "../Minecraft.Client/Minecraft.h"
 
-// Minimal SoundEngine class for the probe. Real upstream SoundEngine.h
-// pulls miniaudio.h (~95k lines) which is too heavy for force-include.
-// MultiPlayerLevel.cpp invokes only `play(...)` and `schedule(...)` on
-// Minecraft::soundEngine; provide variadic-template stubs that absorb
-// the argument list. Real audio playback comes through the iOS-side
-// Audio/SoundEngine.cpp which ships its own miniaudio integration.
+// Minimal SoundEngine for the probe. Real upstream SoundEngine.h pulls
+// miniaudio.h (~95k lines) which would balloon every-TU compile time.
+// MultiPlayerLevel.cpp invokes only play() and schedule() on
+// minecraft->soundEngine; the variadic stubs absorb the call shape.
+// Real audio runs through the iOS Audio/SoundEngine.cpp at runtime,
+// not through this stub.
 //
-// This class is defined AFTER Minecraft.h's forward decl so the two
-// agree on the name. No probe TU pulls real SoundEngine.h directly so
-// there's no redefinition risk.
+// Defined AFTER Minecraft.h's forward decl so the names match. TUs
+// that include real SoundEngine.h directly (only ServerPlayer.cpp at
+// the moment) don't get added to the probe lib for now.
 class SoundEngine {
 public:
     SoundEngine() {}
@@ -469,6 +469,10 @@ public:
 // MemoryTracker - LevelRenderer.cpp uses MemoryTracker::genLists()
 // and friends. Header is 28 lines, no heavy deps.
 #include "../Minecraft.Client/MemoryTracker.h"
+// Font - Minecraft.cpp does `new Font(...)` so the type must be
+// complete. Header forward-decls IntBuffer/Options/Textures/
+// ResourceLocation but only via pointer; the class body is light.
+#include "../Minecraft.Client/Font.h"
 // Tutorial.h transitively pulls UIScene (UI subsystem replaced by
 // SWF on iOS) so we cannot pre-include the full header. The light
 // TutorialEnum.h has no deps and brings the eTutorial_State enum
