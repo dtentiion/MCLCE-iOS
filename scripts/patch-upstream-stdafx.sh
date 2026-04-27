@@ -669,3 +669,26 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: added ClothTile.h include to {path}")
 PY
 fi
+
+# ZonedChunkStorage.cpp:101 assigns to LevelChunk::blocks directly but the
+# field was made private and replaced with setBlockData(). Rewrite that one
+# assignment.
+ZCS="$REPO_ROOT/upstream/Minecraft.World/ZonedChunkStorage.cpp"
+if grep -q 'setBlockData(zoneIo->read' "$ZCS"; then
+    echo "patch-upstream-stdafx: ZonedChunkStorage.cpp blocks=>setBlockData already patched, skipping"
+else
+python3 - "$ZCS" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+old = 'lc->blocks = zoneIo->read(CHUNK_SIZE)->array();'
+new = 'lc->setBlockData(zoneIo->read(CHUNK_SIZE)->array());'
+if old not in src:
+    sys.exit("patch-upstream-stdafx: ZonedChunkStorage blocks anchor not found")
+patched = src.replace(old, new, 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: rewrote lc->blocks= as setBlockData() in {path}")
+PY
+fi
