@@ -76,5 +76,10 @@ if(ENABLE_GAMESWF_PROBE)
   add_subdirectory(Minecraft.Client/iOS/GameswfProbe)
 endif()
 
+# iOS top-level game shell. Drives the upstream Level / Mob / NBT path
+# from a sandboxed save folder, replacing the upstream Minecraft.cpp
+# init that we cannot compile cleanly on iOS.
+add_subdirectory(Minecraft.Client/iOS/Game)
+
 # App target (Objective-C++ shell + game bootstrap).
 add_subdirectory(Minecraft.Client/iOS/App)
