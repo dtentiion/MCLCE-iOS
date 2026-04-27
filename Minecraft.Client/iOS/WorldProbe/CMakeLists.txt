@@ -976,6 +976,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/LevelData.cpp
   ${UPSTREAM_DIR}/Minecraft.World/DirectoryLevelStorage.cpp
   ${UPSTREAM_DIR}/Minecraft.World/compression.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ConsoleSaveFileOriginal.cpp
 )
 
 add_library(mcle_world_probe STATIC

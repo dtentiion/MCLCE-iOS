@@ -132,47 +132,8 @@ void GameRenderer::FinishedReassigning() {}
 // Compression: real upstream compression.cpp now compiles via zlib (iOS
 // added to the Win64/Orbis/Vita/Durango branches in patch-upstream-stdafx).
 
-// ---------------------------------------------------------------------------
-// ConsoleSaveFileOriginal. The iOS shell never constructs one of these
-// directly; the symbol is only pulled in because DirectoryLevelStorageSource
-// has a `ConsoleSaveFileOriginal tempSave(levelId)` reference. Stub the
-// entire virtual surface so the vtable resolves cleanly.
-// ---------------------------------------------------------------------------
-ConsoleSaveFileOriginal::ConsoleSaveFileOriginal(const std::wstring &/*fileName*/, LPVOID /*pvSaveData*/, DWORD /*fileSize*/, bool /*forceCleanSave*/, ESavePlatform /*plat*/) {}
-ConsoleSaveFileOriginal::~ConsoleSaveFileOriginal() {}
-
-FileEntry *ConsoleSaveFileOriginal::createFile(const ConsoleSavePath &/*fileName*/) { return nullptr; }
-void  ConsoleSaveFileOriginal::deleteFile(FileEntry * /*file*/) {}
-void  ConsoleSaveFileOriginal::setFilePointer(FileEntry *, LONG, PLONG, DWORD) {}
-BOOL  ConsoleSaveFileOriginal::writeFile(FileEntry *, LPCVOID, DWORD, LPDWORD) { return 0; }
-BOOL  ConsoleSaveFileOriginal::zeroFile(FileEntry *, DWORD, LPDWORD)           { return 0; }
-BOOL  ConsoleSaveFileOriginal::readFile(FileEntry *, LPVOID, DWORD, LPDWORD)   { return 0; }
-BOOL  ConsoleSaveFileOriginal::closeHandle(FileEntry *)                        { return 0; }
-void  ConsoleSaveFileOriginal::finalizeWrite() {}
-bool  ConsoleSaveFileOriginal::doesFileExist(ConsoleSavePath /*file*/)         { return false; }
-void  ConsoleSaveFileOriginal::Flush(bool /*autosave*/, bool /*updateThumbnail*/) {}
-#ifndef _CONTENT_PACKAGE
-void  ConsoleSaveFileOriginal::DebugFlushToFile(void *, unsigned int) {}
-#endif
-unsigned int ConsoleSaveFileOriginal::getSizeOnDisk()                          { return 0; }
-std::wstring ConsoleSaveFileOriginal::getFilename()                            { return std::wstring(); }
-std::vector<FileEntry *> *ConsoleSaveFileOriginal::getFilesWithPrefix(const std::wstring &)         { return nullptr; }
-std::vector<FileEntry *> *ConsoleSaveFileOriginal::getRegionFilesByDimension(unsigned int)          { return nullptr; }
-int   ConsoleSaveFileOriginal::getSaveVersion()         { return 0; }
-int   ConsoleSaveFileOriginal::getOriginalSaveVersion() { return 0; }
-void  ConsoleSaveFileOriginal::LockSaveAccess()    {}
-void  ConsoleSaveFileOriginal::ReleaseSaveAccess() {}
-ESavePlatform ConsoleSaveFileOriginal::getSavePlatform()        { return SAVE_FILE_PLATFORM_LOCAL; }
-bool  ConsoleSaveFileOriginal::isSaveEndianDifferent()           { return false; }
-void  ConsoleSaveFileOriginal::setLocalPlatform()                {}
-void  ConsoleSaveFileOriginal::setPlatform(ESavePlatform /*p*/)  {}
-ByteOrder ConsoleSaveFileOriginal::getSaveEndian()               { return LITTLEENDIAN; }
-ByteOrder ConsoleSaveFileOriginal::getLocalEndian()              { return LITTLEENDIAN; }
-void  ConsoleSaveFileOriginal::setEndian(ByteOrder /*e*/)        {}
-bool  ConsoleSaveFileOriginal::isLocalEndianDifferent(ESavePlatform /*p*/) { return false; }
-void  ConsoleSaveFileOriginal::ConvertRegionFile(File /*src*/) {}
-void  ConsoleSaveFileOriginal::ConvertToLocalPlatform()        {}
-void *ConsoleSaveFileOriginal::getWritePointer(FileEntry *)    { return nullptr; }
+// ConsoleSaveFileOriginal: real upstream now compiles via the
+// LevelGenerationOptions.h iOS guard.
 
 // DirectoryLevelStorage: real upstream now compiles via PlayerUID::toString
 // being added to the iOS PlayerUID stub. Stubs removed.
