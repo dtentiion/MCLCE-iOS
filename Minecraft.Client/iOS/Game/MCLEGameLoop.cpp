@@ -33,11 +33,13 @@
 
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
+#include "../../../upstream/Minecraft.World/FileInputStream.h"
 #include "../../../upstream/Minecraft.World/Level.h"
 #include "../../../upstream/Minecraft.World/LevelData.h"
 #include "../../../upstream/Minecraft.World/LevelSettings.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
+#include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 
@@ -148,16 +150,39 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
 
-    // Step 2.5: open saveData.ms inside the save folder. LCE Win64 packs
-    // every file the upstream code expects (level.dat, region/r.x.z.mcr,
-    // player .dat) into this single zlib-wrapped bundle. ConsoleSaveFile
-    // Original handles the unpack on demand.
+    // Step 2.5: read saveData.ms bytes off disk. Parity with upstream
+    // CScene_MultiGameJoinLoad::LoadSaveFromDisk + MinecraftServer::run -
+    // they read the file via FileInputStream, hand the byteArray to
+    // ConsoleSaveFileOriginal, then build McRegionLevelStorage directly.
     std::wstring saveDataPath = savesDir + L"/" + levelId + L"/saveData.ms";
+    File saveDataFile(saveDataPath);
+    int64_t saveSize = saveDataFile.length();
+    if (saveSize <= 0) {
+        MCLE_LOG("mcle_game_init: saveData.ms missing or empty (%lld bytes)",
+                 (long long)saveSize);
+        g_initState = kStateFailed;
+        return;
+    }
+    MCLE_LOG("mcle_game_init: saveData.ms size = %lld bytes", (long long)saveSize);
+
+    byteArray saveBytes((unsigned int)saveSize);
+    try {
+        FileInputStream fis(saveDataFile);
+        fis.read(saveBytes);
+        fis.close();
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: saveData.ms read threw: %{public}s", e.what());
+        g_initState = kStateFailed;
+        return;
+    }
+
+    // Construct the upstream save-file wrapper around the in-memory bytes.
+    // Matches MinecraftServer.cpp:913 exactly.
     try {
         g_saveFile = new ConsoleSaveFileOriginal(
             /*fileName*/      saveDataPath,
-            /*pvSaveData*/    nullptr,
-            /*fileSize*/      0,
+            /*pvSaveData*/    saveBytes.data,
+            /*fileSize*/      saveBytes.length,
             /*forceCleanSave*/false,
             /*plat*/          SAVE_FILE_PLATFORM_LOCAL);
     } catch (const std::exception &e) {
@@ -170,25 +195,27 @@ void initImpl() {
         g_initState = kStateFailed;
         return;
     }
-    MCLE_LOG("mcle_game_init: saveData.ms opened at %p", (void*)g_saveFile);
+    g_saveFile->ConvertToLocalPlatform();
+    MCLE_LOG("mcle_game_init: saveData.ms parsed at %p", (void*)g_saveFile);
 
-    // Step 3: open the storage handle for that save.
+    // Step 3: build the storage directly. Parity with MinecraftServer.cpp:919
+    // (`storage = make_shared<McRegionLevelStorage>(pSave, File(L"."), name, true)`).
+    // The McRegionLevelStorageSource->selectLevel path is for Xbox-style save
+    // folders; for in-memory bundle storage we wrap pSave straight away.
     try {
-        g_levelStorage = g_levelSource->selectLevel(
-            /*saveFile*/   g_saveFile,
-            /*levelId*/    levelId,
-            /*createPlayerDir*/ false);
+        g_levelStorage = std::make_shared<McRegionLevelStorage>(
+            g_saveFile, File(L"."), levelId, /*createPlayerDir*/ true);
     } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: selectLevel threw: %{public}s", e.what());
+        MCLE_LOG("mcle_game_init: McRegionLevelStorage ctor threw: %{public}s", e.what());
         g_initState = kStateFailed;
         return;
     }
     if (!g_levelStorage) {
-        MCLE_LOG("mcle_game_init: selectLevel returned null");
+        MCLE_LOG("mcle_game_init: McRegionLevelStorage ctor returned null");
         g_initState = kStateFailed;
         return;
     }
-    MCLE_LOG("mcle_game_init: selectLevel returned storage at %p", (void*)g_levelStorage.get());
+    MCLE_LOG("mcle_game_init: McRegionLevelStorage at %p", (void*)g_levelStorage.get());
 
     // Step 4: read level metadata.
     LevelData *levelData = nullptr;
