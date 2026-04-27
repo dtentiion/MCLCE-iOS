@@ -7,7 +7,7 @@
 
 Native iOS port of [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) (the TU19 Legacy Console Edition base).
 
-**Status: menus working, gameplay code at 95% compile coverage, link surface starting.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. The full Help & Options / Settings tree walks. The next big rock is gameplay: the iOS-side compile of upstream `Minecraft.World/` is at 891+ files green out of 831 (plus ~100 from `Minecraft.Client/`), the static probe library actually links, and the Phase C grind is in progress against the remaining undefined-symbol clusters (MinecraftServer, PlayerList, ServerLevel). See [STATUS.md](STATUS.md) for the honest breakdown.
+**Status: menus working, gameplay code linked into the .ipa, simulation hook ticking on device.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. The full Help & Options / Settings tree walks. Underneath, the upstream gameplay simulation library (Entity, Level, LevelChunk, Player, Tile, TileEntity, Mob, LivingEntity, ItemInstance, Container, ServerLevel, PlayerList, MultiPlayerLevel and ~840 supporting files) is now linked into the binary. A bootstrap entry point fires from the render loop on launch and ticks once per frame, confirmed via live device log. The next phase constructs a real `Minecraft` instance and drives the tick against a loaded save. See [STATUS.md](STATUS.md) for the full breakdown.
 
 CI builds an `.ipa` on every push. Grab the latest from the [Actions tab](https://github.com/dtentiion/MCLCE-iOS/actions).
 
