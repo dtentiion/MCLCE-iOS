@@ -29,13 +29,21 @@ The app launches straight into the real LCE main menu. Here's what works end-to-
 
 ## Gameplay code port: progress snapshot
 
-Phase B (compile coverage), Phase C (link coverage), and Phase D Step 1 (probe lib wired into the .ipa) are all done.
+Phase B (compile coverage), Phase C (link coverage), and Phase D Step 1 (probe lib wired into the .ipa) are done. Phase D2 (gameplay-host class compilation) is in progress.
 
-- **Auto-probe** (per-file `clang++ -fsyntax-only` against the iOS toolchain): 977 greens. ~795 of 831 `Minecraft.World/*.cpp` files (96%), 39 in `Minecraft.Client/Common/`, ~143 in `Minecraft.Client/` root including ServerLevel.cpp, PlayerList.cpp, MultiPlayerLevel.cpp, RemotePlayer, EntityTracker, entity models, particles, screens.
-- **Probe static library `mcle_world_probe`**: 850+ files compile and archive. Core simulation classes are all in: Entity, Level, LevelChunk, Player, Tile, TileEntity, Mob, LivingEntity, ItemInstance, Container, ServerLevel, PlayerList, MultiPlayerLevel.
-- **Phase C link-test**: started at 32 undefined symbols, ended at zero. Cleared every cluster (Entity::, Level::, ServerLevel::, Player::, PlayerList::, ChestTile::, ZonedChunkStorage::, DLCManager::) by either adding the matching .cpp files to the lib or providing thin out-of-line stub bodies in `probe_stub.cpp` for the few methods whose source files are still blocked on the upstream UI/legacy-GL chain.
-- **Phase D Step 1 wire-up**: `mcle_world_probe.a` is now linked into the .ipa via `-Wl,-force_load` so every TU survives dead-strip. A `mcle_game_init` + `mcle_game_tick` bootstrap pair in `App/GameBootstrap.cpp` is called from the existing render loop and logs to iOS Console via `os_log`. **Confirmed working on device**: the .ipa launches, the menu shell still works, the bootstrap line + per-second tick lines appear in the live device log.
-- **What still needs to happen for visible gameplay**: the tick body is currently a no-op log. The next phase constructs a real `Minecraft` instance, exercises its init chain, and starts ticking the simulation against a loaded save. Renderer + save-format wiring follow on from there.
+- **Auto-probe** (per-file `clang++ -fsyntax-only` against the iOS toolchain): 1042 greens. ~795 of 831 `Minecraft.World/*.cpp` files (96%), 39 in `Minecraft.Client/Common/`, ~208 in `Minecraft.Client/` root.
+- **Gameplay-host class status:**
+  - ✅ ServerLevel.cpp green and in the lib
+  - ✅ PlayerList.cpp green and in the lib
+  - ✅ MultiPlayerLevel.cpp green and in the lib
+  - ✅ MinecraftServer.cpp green and in the lib
+  - ✅ LevelRenderer.cpp green and in the lib
+  - 🔄 Minecraft.cpp red, blocked on upstream tutorial/trial/demo gamemode subclasses whose headers transitively pull the UI cascade we cannot pre-include
+- **Probe static library `mcle_world_probe`**: 855+ files compile and archive. Core simulation classes plus all the gameplay-host classes above. All clusters of undefined symbols at link time are cleared.
+- **Phase C link-test**: zero undefined symbols. The lib archives clean and links into the .ipa.
+- **Phase D Step 1 wire-up**: `mcle_world_probe.a` is linked into the .ipa via `-Wl,-force_load`. A `mcle_game_init` + `mcle_game_tick` bootstrap pair in `App/GameBootstrap.cpp` is called from the existing render loop and logs to iOS Console via `os_log`. **Confirmed working on device** (iPhone 16e, 2026-04-27): the .ipa launches, the menu shell is unregressed, the bootstrap line + per-second tick lines stream cleanly.
+- **Phase D2 grind status**: the `Minecraft.cpp` constructor / init chain references about a dozen upstream-only types (FullTutorialMode, TrialMode, ConsoleGameMode, etc.) whose headers each pull a UI/Iggy cascade. Continuing the per-symbol grind has diminishing returns; the next strategic move is either to write an iOS-specific top-level shell that bypasses the upstream Minecraft constructor (parity-breaking only at the top level) or to land Phase E (save loading) and Phase D real-renderer in parallel and stub through the Minecraft init via a custom simpler entry.
+- **What still needs to happen for visible gameplay**: instantiate Minecraft (Phase D2 finish or top-level shell), wire NSFileManager save loading (Phase E), replace `gl*` and `C4JRender::*` no-op stubs with real Metal-backed bodies (Phase D-real renderer).
 
 Mature shim infrastructure lives in `Minecraft.Client/iOS/`:
 
