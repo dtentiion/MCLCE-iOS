@@ -311,8 +311,12 @@ static inline int   GetThreadPriority(HANDLE)         { return 0; }
 static inline DWORD WaitForSingleObject(HANDLE, DWORD) { return 0; }
 static inline DWORD WaitForMultipleObjects(DWORD, const HANDLE*, BOOL, DWORD) { return 0; }
 static inline BOOL  TerminateThread(HANDLE, DWORD)    { return TRUE; }
-static inline HANDLE CreateEventA(void*, BOOL, BOOL, const char*)    { return INVALID_HANDLE_VALUE; }
-static inline HANDLE CreateEventW(void*, BOOL, BOOL, const wchar_t*) { return INVALID_HANDLE_VALUE; }
+// INVALID_HANDLE_VALUE is defined further down in this header so we
+// can't use it as the sentinel here without a forward macro. Return
+// nullptr - upstream callers don't compare events to that sentinel,
+// only to NULL.
+static inline HANDLE CreateEventA(void*, BOOL, BOOL, const char*)    { return (HANDLE)0; }
+static inline HANDLE CreateEventW(void*, BOOL, BOOL, const wchar_t*) { return (HANDLE)0; }
 #  ifdef UNICODE
 #    define CreateEvent CreateEventW
 #  else
