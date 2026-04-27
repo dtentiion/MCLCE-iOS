@@ -790,3 +790,27 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: rewrote MemoryLevelStorage::load body")
 PY
 fi
+
+# SpringTile.cpp uses Level::setTile which was renamed to setTileAndData
+# (extra args data + updateFlags). Pass (data=0, flags=3) for tile-update
+# parity with Level::setTile()'s historical default.
+SPT="$REPO_ROOT/upstream/Minecraft.World/SpringTile.cpp"
+if grep -q 'setTileAndData(' "$SPT"; then
+    echo "patch-upstream-stdafx: SpringTile.cpp already patched, skipping"
+else
+python3 - "$SPT" <<'PY'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+# Match `level->setTile(x.., y.., z.., liquidTileId)` with various offsets.
+patched = re.sub(
+    r'level->setTile\(([^,]+),\s*([^,]+),\s*([^,]+),\s*liquidTileId\)',
+    r'level->setTileAndData(\1, \2, \3, liquidTileId, 0, 3)',
+    src,
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: rewrote setTile -> setTileAndData in {path}")
+PY
+fi
