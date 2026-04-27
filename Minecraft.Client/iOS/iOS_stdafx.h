@@ -24,6 +24,13 @@
 #include "4JLibs/inc/4J_Storage.h"
 // 4J profile layer - PlayerUID, C_4JProfile, ProfileManager (extern).
 #include "4JLibs/inc/4J_Profile.h"
+// 4J render layer - extern declaration for the global RenderManager.
+// Note: 4J_Render.h is included AFTER iOS_stdafx.h's `typedef
+// C4JRenderStub C4JRender;` (which lives further down in this file)
+// so the typedef is in scope by the time 4J_Render.h declares the
+// global. We pull it in here near the top via a forward-declared
+// pointer wrapper, with the actual definition in WorldProbe/probe_stub.cpp.
+// See the include further down for the typedef of C4JRender.
 // Sentient telemetry enum tags (mirrored from upstream's Orbis/PS3/
 // PSVita/Durango copies which are byte-identical). TelemetryManager.h
 // references ESen_CompeteOrCoop / ESen_FriendOrMatch by type.
@@ -179,6 +186,28 @@ struct C4JRenderStub {
     struct Texture {};
     struct VertexBuffer {};
     struct IndexBuffer {};
+    // Variadic catch-alls for upstream RenderManager.X() call sites.
+    // The probe never executes rendering; real Metal-backed C4JRender
+    // for the app-linked variant lives in Render/C4JRender_iOS.{h,mm}.
+    template<class... A> bool   IsWidescreen(A...)   { return false; }
+    template<class... A> int    GetWidth(A...)       { return 0; }
+    template<class... A> int    GetHeight(A...)      { return 0; }
+    template<class... A> void   StartFrame(A...)     {}
+    template<class... A> void   Present(A...)        {}
+    template<class... A> void   Clear(A...)          {}
+    template<class... A> void   Tick(A...)           {}
+    template<class... A> void   MatrixSetIdentity(A...) {}
+    template<class... A> void   MatrixPush(A...)     {}
+    template<class... A> void   MatrixPop(A...)      {}
+    template<class... A> void   MatrixMult(A...)     {}
+    template<class... A> void   DrawVertices(A...)   {}
+    template<class... A> void   DrawVertexBuffer(A...) {}
+    template<class... A> void   SetViewport(A...)    {}
+    template<class... A> void   SetBlendMode(A...)   {}
+    template<class... A> void   SetDepthTest(A...)   {}
+    template<class... A> void   BindTexture(A...)    {}
+    template<class... A> int    CreateTexture(A...)  { return 0; }
+    template<class... A> void   FreeTexture(A...)    {}
 };
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
@@ -220,6 +249,11 @@ struct LevelGenerationOptions {
 // reference nested types via `C4JRender::Texture *` which need the
 // class declared. Map the name to our stub via typedef.
 typedef C4JRenderStub C4JRender;
+// Now that C4JRender is a known type (alias to C4JRenderStub), pull
+// in the iOS 4J_Render.h header which declares
+// `extern C4JRender RenderManager;` so callers see the global.
+// The actual instance is defined in WorldProbe/probe_stub.cpp.
+#include "4JLibs/inc/4J_Render.h"
 class IntArrayTag;
 class CompoundTag;
 class Player;
