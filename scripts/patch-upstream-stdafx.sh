@@ -240,9 +240,7 @@ add_ios_to_sony_branch "$DISCPP"
 # (line 3) selects upstream's bundled Common/zlib for Orbis / PS3 /
 # Durango / Win64. iOS has the same file accessible, so add iOS to
 # this same set so the standard zlib.h is included.
-if grep -q '__APPLE_IOS__' "$COMPCPP"; then
-    echo "patch-upstream-stdafx: compression.cpp already patched, skipping"
-else
+# Always run; each replace below is idempotent (no-op if already patched).
 python3 - "$COMPCPP" <<'PY'
 import sys
 path = sys.argv[1]
@@ -250,17 +248,21 @@ with open(path, 'r', encoding='utf-8', errors='replace') as f:
     src = f.read()
 
 needle = '#if defined __ORBIS__ || defined __PS3__ || defined _DURANGO || defined _WIN64'
-if needle not in src:
-    sys.exit(f"patch-upstream-stdafx: zlib branch anchor not found in {path}")
-patched = src.replace(needle, needle + ' || defined __APPLE_IOS__', 1)
+patched = src
+if needle in patched and (needle + ' || defined __APPLE_IOS__') not in patched:
+    patched = patched.replace(needle, needle + ' || defined __APPLE_IOS__', 1)
 # Compress/Decompress chains pick zlib for the Win64/Orbis/Vita/Durango set
 # and fall through to XMemCompress/XMemDecompress in the #else. Route iOS
 # into the zlib arms so we don't need Microsoft's XMem* APIs.
 patterns = [
+    # Compress/Decompress chains - bodies use zlib ::compress/::uncompress.
     '#if defined __ORBIS__ || defined _DURANGO || defined _WIN64 || defined __PSVITA__',
-    '#if (defined _XBOX || defined _DURANGO || defined _WIN64)',
+    # ZLIBRLE / PS3ZLIB cases in DecompressWithType - bodies use zlib too.
     '#if (defined __ORBIS__ || defined __PS3__ || defined _DURANGO || defined _WIN64)',
     '#if (defined __ORBIS__ || defined __PSVITA__ || defined _DURANGO || defined _WIN64)',
+    # NOTE: do NOT add iOS to '#if (defined _XBOX || defined _DURANGO || defined _WIN64)'.
+    # That guards the LZXRLE case which calls XMemDecompress, an Xbox-only API.
+    # iOS should fall through to the #else assert(0) arm.
 ]
 for n in patterns:
     if n.endswith(')'):
@@ -282,7 +284,6 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: routed iOS to zlib branches in {path}")
 PY
-fi
 
 # Level.h is missing a `static const int DEPTH` member - the only place
 # it is referenced is ZonedChunkStorage.cpp:21, which uses it to size
