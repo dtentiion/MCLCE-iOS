@@ -753,8 +753,14 @@ void glClientActiveTexture(unsigned int);
 #ifndef FILE_ATTRIBUTE_NORMAL
 #  define FILE_ATTRIBUTE_NORMAL 0x00000080
 #endif
+#ifndef FILE_ATTRIBUTE_DIRECTORY
+#  define FILE_ATTRIBUTE_DIRECTORY 0x00000010
+#endif
 #ifndef FILE_SHARE_READ
 #  define FILE_SHARE_READ       0x00000001
+#endif
+#ifndef INVALID_FILE_ATTRIBUTES
+#  define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
 #endif
 
 // Xbox-style memset intrinsics. Real platforms use SIMD-aligned memset.
@@ -948,6 +954,10 @@ static inline BOOL CreateDirectoryW(const wchar_t*, void*) { return TRUE; }
 #  else
 #    define CreateDirectory CreateDirectoryA
 #  endif
+
+// POSIX-backed file/directory shim lives in iOS_WinFileShim.h and is
+// pulled in by iOS_stdafx.h after this file. Keeps the C/C++ extern-C
+// scoping clean rather than weaving the C++ helpers through this block.
 
 // Win32 memory status report struct. Compression code reads available
 // physical memory before doing big allocations; probe never executes
