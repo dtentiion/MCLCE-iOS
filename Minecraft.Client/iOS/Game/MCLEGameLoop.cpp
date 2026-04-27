@@ -43,6 +43,7 @@
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
+#include "../../../upstream/Minecraft.Client/MinecraftServer.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 
 #include "4JLibs/inc/4J_Storage.h"
@@ -62,6 +63,7 @@ enum InitState {
 // File-scope state. Lives for the lifetime of the app process.
 McRegionLevelStorageSource  *g_levelSource   = nullptr;
 ConsoleSaveFileOriginal     *g_saveFile      = nullptr;
+MinecraftServer             *g_server        = nullptr;
 std::shared_ptr<LevelStorage> g_levelStorage;
 // Three dimensions per upstream: 0=overworld, 1=nether, 2=end. levels[0]
 // is a ServerLevel; levels[1] and levels[2] are DerivedServerLevel that
@@ -281,28 +283,43 @@ void initImpl() {
         return;
     }
 
+    // Step 5.5: construct a real MinecraftServer instance. Parity with
+    // MinecraftServer::main:2251 (`server = new MinecraftServer()`).
+    // The ctor sets up command dispatcher + dispenser bootstrap +
+    // pause-event - all things ServerLevel ctor expects to call back
+    // into.
+    try {
+        g_server = new MinecraftServer();
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: MinecraftServer ctor threw: %{public}s", e.what());
+        g_initState = kStateFailed;
+        return;
+    }
+    if (!g_server) {
+        MCLE_LOG("mcle_game_init: MinecraftServer ctor returned null");
+        g_initState = kStateFailed;
+        return;
+    }
+    MCLE_LOG("mcle_game_init: MinecraftServer at %p", (void*)g_server);
+
     // Step 6: construct three ServerLevels (overworld + nether + end).
     // Parity with MinecraftServer.cpp:956-1007 - levels[0] is a real
     // ServerLevel, levels[1] (nether, dim=-1) and levels[2] (end, dim=1)
     // are DerivedServerLevels that share state with levels[0].
-    //
-    // Server arg is nullptr for now: a real MinecraftServer instance is
-    // a separate parity step (its ctor + run() pull network init + the
-    // post-update C4JThread which we are not ready to spin up yet).
     static const int kDimForIndex[3] = { 0, -1, 1 };
     bool levelOk = true;
     for (int i = 0; i < 3 && levelOk; ++i) {
         try {
             if (i == 0) {
                 g_levels[i] = new ServerLevel(
-                    /*server*/        nullptr,
+                    /*server*/        g_server,
                     /*levelStorage*/  g_levelStorage,
                     /*levelName*/     g_levelName,
                     /*dimension*/     kDimForIndex[i],
                     /*levelSettings*/ settings);
             } else {
                 g_levels[i] = new DerivedServerLevel(
-                    /*server*/        nullptr,
+                    /*server*/        g_server,
                     /*levelStorage*/  g_levelStorage,
                     /*levelName*/     g_levelName,
                     /*dimension*/     kDimForIndex[i],
@@ -397,12 +414,17 @@ extern "C" void mcle_game_tick(void) {
 extern "C" void mcle_game_shutdown(void) {
     MCLE_LOG("mcle_game_shutdown: tearing down");
     // Tear levels down in reverse order: derived levels reference the
-    // overworld, so they must go before levels[0].
+    // overworld, so they must go before levels[0]. Server is destroyed
+    // after the levels because they hold raw pointers to it.
     for (int i = 2; i >= 0; --i) {
         if (g_levels[i]) {
             try { delete g_levels[i]; } catch (...) {}
             g_levels[i] = nullptr;
         }
+    }
+    if (g_server) {
+        try { delete g_server; } catch (...) {}
+        g_server = nullptr;
     }
     g_levelStorage.reset();
     if (g_saveFile) {
