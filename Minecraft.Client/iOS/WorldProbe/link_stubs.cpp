@@ -173,7 +173,11 @@ void *ConsoleSaveFileOriginal::getWritePointer(FileEntry *)    { return nullptr;
 // lib; its ctor calls our stubbed parent ctor.
 // ---------------------------------------------------------------------------
 DirectoryLevelStorage::DirectoryLevelStorage(ConsoleSaveFile *saveFile, const File /*dir*/, const std::wstring &/*levelId*/, bool /*createPlayerDir*/)
-    : m_bHasLoadedMapDataMappings(false), m_saveFile(saveFile) {}
+    : playerDir(L""),
+      dataDir(L""),
+      sessionId(0),
+      m_bHasLoadedMapDataMappings(false),
+      m_saveFile(saveFile) {}
 DirectoryLevelStorage::~DirectoryLevelStorage() {}
 
 void                DirectoryLevelStorage::flushSaveFile(bool /*autosave*/) {}
@@ -206,14 +210,15 @@ void SavedDataStorage::save() {}
 // ServerChunkCache. Constructor + the methods ServerLevel calls into.
 // ---------------------------------------------------------------------------
 ServerChunkCache::ServerChunkCache(ServerLevel * /*level*/, ChunkStorage * /*storage*/, ChunkSource * /*source*/) {}
-std::vector<LevelChunk *> ServerChunkCache::getLoadedChunkList()        { return std::vector<LevelChunk *>(); }
+std::vector<LevelChunk *> *ServerChunkCache::getLoadedChunkList()       { return nullptr; }
 LevelChunk *ServerChunkCache::getChunkLoadedOrUnloaded(int /*x*/, int /*z*/) { return nullptr; }
 void        ServerChunkCache::drop(int /*x*/, int /*z*/) {}
 
 // ---------------------------------------------------------------------------
 // RandomLevelSource (chunk source used by ServerLevel::createChunkSource).
 // ---------------------------------------------------------------------------
-RandomLevelSource::RandomLevelSource(Level * /*level*/, int64_t /*seed*/, bool /*generateStructures*/) {}
+RandomLevelSource::RandomLevelSource(Level * /*level*/, int64_t /*seed*/, bool genStructures)
+    : generateStructures(genStructures) {}
 
 // ---------------------------------------------------------------------------
 // Chunk (the rendering chunk on Minecraft.Client side).

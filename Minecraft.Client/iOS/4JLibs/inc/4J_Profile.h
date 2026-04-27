@@ -38,6 +38,19 @@ struct PlayerUID {
 };
 typedef PlayerUID* PPlayerUID;
 
+// Hash specialization so unordered_map<PlayerUID, ...> works on iOS.
+// (Other consoles use PlayerUID::Hash; the iOS branch falls through to
+// std::hash<PlayerUID> in DirectoryLevelStorage's m_playerMappings.)
+namespace std {
+    template<> struct hash<PlayerUID> {
+        size_t operator()(const PlayerUID &k) const noexcept {
+            size_t h = 0;
+            for (int i = 0; i < 16; ++i) h = (h * 131) + k.bytes[i];
+            return h;
+        }
+    };
+}
+
 // 4J profile / pad-routing manager. Other platforms expose a real
 // C_4JProfile that owns per-pad user identity (Xbox Live signin, NP
 // authoritative user, etc). On iOS we have one local user; the stub
