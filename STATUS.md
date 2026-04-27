@@ -31,11 +31,11 @@ The app launches straight into the real LCE main menu. Here's what works end-to-
 
 Phase B (compile coverage) and Phase C (link coverage) target the upstream gameplay tree. Snapshot at the time of this writing:
 
-- **Auto-probe** (per-file `clang++ -fsyntax-only` against the iOS toolchain): 891+ of 831 `Minecraft.World/*.cpp` files green (95%+), plus 35 in `Minecraft.Client/Common/` and 62 in `Minecraft.Client/` root. Auto-probe runs on every push and uploads a greens artifact.
-- **Probe static library `mcle_world_probe`**: 800+ files actually compile and archive. Includes Entity, Level, LevelChunk, Tile, TileEntity, Mob, LivingEntity, Player and most of the world simulation code.
-- **Phase C link-test**: a force-load executable target tries to link the archive. Each round drops more undefined-symbol clusters as the matching `.cpp` lands.
-- **Remaining link blockers**: MinecraftServer.cpp, PlayerList.cpp, ServerLevel.cpp, Minecraft.cpp, MultiPlayerLevel.cpp. These pull the UI / renderer chain on console; iOS replaces UI with the SWF runtime so they need targeted iOS branches in upstream headers or thinner replacements.
-- **What this unlocks once it links**: world loading, chunk simulation, entity ticking. Save-format reader and renderer integration follow.
+- **Auto-probe** (per-file `clang++ -fsyntax-only` against the iOS toolchain): 960 greens. ~795 of 831 `Minecraft.World/*.cpp` files (96%), ~37 in `Minecraft.Client/Common/`, ~123 in `Minecraft.Client/` root including ServerLevel.cpp + DerivedServerLevel + RemotePlayer + EntityTracker + a chunk of entity models + particles + screens.
+- **Probe static library `mcle_world_probe`**: 850+ files compile and archive. Core simulation classes are all in: Entity, Level, LevelChunk, Player, Tile, TileEntity, Mob, LivingEntity, ItemInstance, Container, ServerLevel.
+- **Phase C link-test**: force-load executable target started this stretch with 32 undefined symbols. Now down to 9. Cleared the Entity::, Level::, ServerLevel::, Player::, ChestTile::, ZonedChunkStorage::, and DLCManager:: clusters by adding the matching .cpp files to the lib (or providing out-of-line static defs / ctor/dtor stubs in `probe_stub.cpp`).
+- **Remaining 9 link blockers**: 5 specific gameplay-host classes (Minecraft.cpp, MinecraftServer.cpp, PlayerList.cpp, MultiPlayerLevel.cpp, LevelRenderer.cpp). All transitively pull the UI/Iggy/render chain (UIControl_Base.h, IggyBitmapFontProvider, etc.) which is replaced on iOS by the SWF runtime. Phase D's GL ES 3.0 renderer bringup is what unblocks these.
+- **What this unlocks once Phase D lands**: world loading, chunk simulation, entity ticking, the full gameplay loop. Save-format reader is the next rock after that.
 
 Mature shim infrastructure lives in `Minecraft.Client/iOS/`:
 
