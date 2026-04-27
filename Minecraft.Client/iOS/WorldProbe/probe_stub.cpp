@@ -142,4 +142,20 @@ void glTexCoordPointer(int, unsigned int, int, const void*) {}
 void glNormalPointer(unsigned int, int, const void*)       {}
 void glDrawArrays(unsigned int, int, int)                  {}
 void glDrawElements(unsigned int, int, unsigned int, const void*) {}
+void glColor3f(float, float, float)                        {}
+void glColor3ub(unsigned char, unsigned char, unsigned char) {}
+void glColor4ub(unsigned char, unsigned char, unsigned char, unsigned char) {}
+void glColor4ubv(const unsigned char*)                     {}
+void glVertex2f(float, float)                              {}
+void glVertex2i(int, int)                                  {}
+void glNormal3f(float, float, float)                       {}
+void glLightfv(unsigned int, unsigned int, const float*)   {}
+void glMaterialfv(unsigned int, unsigned int, const float*) {}
+void glFogf(unsigned int, float)                           {}
+void glFogi(unsigned int, int)                             {}
+void glFogfv(unsigned int, const float*)                   {}
+void glMultMatrixf(const float*)                           {}
+void glLoadMatrixf(const float*)                           {}
+void glGetFloatv(unsigned int, float*)                     {}
+void glGetIntegerv(unsigned int, int*)                     {}
 } // extern "C"
