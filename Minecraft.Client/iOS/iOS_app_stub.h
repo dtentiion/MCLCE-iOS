@@ -207,6 +207,8 @@ struct McleNetworkManagerStub {
     template<class... A> int   GetPlayerCount(A...)      { return 0; }
     template<class... A> int   GetLocalPlayerCount(A...) { return 0; }
     template<class... A> int   GetRemotePlayerCount(A...) { return 0; }
+    template<class... A> class INetworkPlayer* GetPlayerByIndex(A...) { return nullptr; }
+    template<class... A> class INetworkPlayer* GetPlayerBySessionIndex(A...) { return nullptr; }
 };
 inline McleNetworkManagerStub g_NetworkManager;
 
