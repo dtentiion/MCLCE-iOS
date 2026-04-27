@@ -9,6 +9,10 @@
 #include "4JLibs/inc/4J_Render.h"
 #include "ChestTile.h"
 #include "ZonedChunkStorage.h"
+#include "../Minecraft.Client/MinecraftServer.h"
+#include "../Minecraft.Client/PlayerConnection.h"
+#include "../Minecraft.Client/ServerPlayer.h"
+#include "../Minecraft.Client/LevelRenderer.h"
 
 namespace mcle_world_probe { inline void _anchor() {} }
 
@@ -42,3 +46,36 @@ const int ZonedChunkStorage::CHUNKS_PER_ZONE = 1 << ZonedChunkStorage::CHUNKS_PE
 // DLC/ in a later phase.
 DLCManager::DLCManager() {}
 DLCManager::~DLCManager() {}
+
+// Stubs for upstream gameplay-host class methods whose .cpp files are
+// blocked on the UI / render chain (Minecraft.cpp, MinecraftServer.cpp,
+// LevelRenderer.cpp). The real bodies come back when Phase D2's GL ES
+// renderer lands and unblocks those TUs. Until then, every stub is a
+// safe no-op returning nullptr / false / 0; gameplay code that calls
+// these in dev-build init paths will see "no server", "no players",
+// etc and route around them.
+
+// MinecraftServer
+MinecraftServer *MinecraftServer::server = nullptr;
+PlayerList *MinecraftServer::getPlayers()                   { return nullptr; }
+bool        MinecraftServer::isNetherEnabled()              { return false; }
+bool        MinecraftServer::flagEntitiesToBeRemoved(unsigned int*) { return false; }
+ServerLevel*MinecraftServer::getLevel(int)                  { return nullptr; }
+
+// Minecraft - the platform client app singleton accessor.
+Minecraft *Minecraft::GetInstance()                         { return nullptr; }
+
+// PlayerConnection
+INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
+
+// ServerPlayer destructor - emits the vtable + typeinfo so any TU
+// dynamic_cast'ing or RTTI-lookup'ing ServerPlayer can link.
+ServerPlayer::~ServerPlayer() {}
+
+// LevelRenderer::DestroyedTileManager::addAABBs is referenced from
+// Level.cpp:1930 but its body lives in LevelRenderer.cpp which is
+// blocked on legacy-GL display-list code. Provide an empty
+// out-of-line body here so the link resolves.
+LevelRenderer::DestroyedTileManager::DestroyedTileManager() {}
+LevelRenderer::DestroyedTileManager::~DestroyedTileManager() {}
+void LevelRenderer::DestroyedTileManager::addAABBs(Level*, AABB*, AABBList*) {}
