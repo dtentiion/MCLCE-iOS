@@ -353,6 +353,7 @@ typedef struct _STRING_VERIFY_RESPONSE {
     DWORD           cchString;
     const WCHAR*    pszString;
     DWORD           wNumStrings;   // upstream SignTileEntity reads this
+    HRESULT*        pStringResult;
 } STRING_VERIFY_RESPONSE;
 #endif
 
@@ -795,6 +796,12 @@ void glClientActiveTexture(unsigned int);
 #ifndef INVALID_FILE_ATTRIBUTES
 #  define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
 #endif
+#ifndef INVALID_SET_FILE_POINTER
+#  define INVALID_SET_FILE_POINTER ((DWORD)-1)
+#endif
+#ifndef ERROR_SUCCESS
+#  define ERROR_SUCCESS 0L
+#endif
 
 // Xbox-style memset intrinsics. Real platforms use SIMD-aligned memset.
 // Map to the standard memset on iOS - probe never executes these.
@@ -882,6 +889,18 @@ template<size_t N>
 static inline int _itow_s(int v, wchar_t (&buf)[N], int radix) {
     return _itow_s(v, buf, N, radix);
 }
+
+// More secure-CRT variants upstream calls. wcscpy_s + swscanf_s map to
+// the standard non-_s versions on POSIX (no buffer-size enforcement).
+#ifndef wcscpy_s
+#  define wcscpy_s(dst, n, src) (wcsncpy((dst), (src), (n)), (dst)[(n) - 1] = 0, 0)
+#endif
+#ifndef swscanf_s
+#  define swscanf_s swscanf
+#endif
+#ifndef sscanf_s
+#  define sscanf_s sscanf
+#endif
 
 // PLONG = long*. MS pointer-aliased.
 #ifndef _PLONG_DEFINED
