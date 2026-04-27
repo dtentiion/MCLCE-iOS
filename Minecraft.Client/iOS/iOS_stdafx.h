@@ -484,6 +484,9 @@ public:
 // complete. Header forward-decls IntBuffer/Options/Textures/
 // ResourceLocation but only via pointer; the class body is light.
 #include "../Minecraft.Client/Font.h"
+// Gui - Minecraft.cpp does `new Gui(this)`. Pre-include for the
+// constructor signature.
+#include "../Minecraft.Client/Gui.h"
 // Mouse class stub. Real upstream version lives in
 // Minecraft.Client/stubs.h alongside a `class Color` that conflicts
 // with `Minecraft.World/Color.h`. We can't pre-include stubs.h

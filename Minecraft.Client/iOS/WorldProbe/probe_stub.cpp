@@ -158,4 +158,8 @@ void glMultMatrixf(const float*)                           {}
 void glLoadMatrixf(const float*)                           {}
 void glGetFloatv(unsigned int, float*)                     {}
 void glGetIntegerv(unsigned int, int*)                     {}
+void glMultiTexCoord2f(unsigned int, float, float)         {}
+void glMultiTexCoord2fv(unsigned int, const float*)        {}
+void glActiveTexture(unsigned int)                         {}
+void glClientActiveTexture(unsigned int)                   {}
 } // extern "C"
