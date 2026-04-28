@@ -935,3 +935,21 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: rewrote SetFilePointer nullptr->FILE_BEGIN in {path}")
 PY
 fi
+
+# OzelotModel.cpp uses Ozelot class but only pulls the umbrella entity
+# header. Add a direct Ozelot.h include.
+OMC="$REPO_ROOT/upstream/Minecraft.Client/OzelotModel.cpp"
+if [ -f "$OMC" ] && ! grep -q '#include "../Minecraft.World/Ozelot.h"' "$OMC"; then
+python3 - "$OMC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "OzelotModel.h"'
+if needle in src:
+    src = src.replace(needle, needle + '\n#include "../Minecraft.World/Ozelot.h"', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: added Ozelot.h include to {path}")
+PY
+fi
