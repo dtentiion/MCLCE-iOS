@@ -46,6 +46,8 @@ typedef int32_t  LONG;
 typedef uint32_t ULONG;
 typedef int64_t  LONGLONG;
 typedef uint64_t ULONGLONG;
+typedef int64_t  LONG64;
+typedef uint64_t ULONG64;
 
 // MSVC integer aliases. __int64 is widely used in upstream IO code
 // (ByteArrayInputStream, FileInputStream) instead of long long /
