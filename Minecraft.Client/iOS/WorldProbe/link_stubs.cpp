@@ -109,12 +109,7 @@ const int AddEntityPacket::FIREWORKS;
 const int AddEntityPacket::LEASH_KNOT;
 const int AddEntityPacket::FISH_HOOK;
 
-AddPlayerPacket::AddPlayerPacket(std::shared_ptr<Player>, PlayerUID, PlayerUID, int, int, int, int, int, int) {}
-AddPlayerPacket::~AddPlayerPacket() {}
-void AddPlayerPacket::read(DataInputStream *)   {}
-void AddPlayerPacket::write(DataOutputStream *) {}
-void AddPlayerPacket::handle(PacketListener *)  {}
-int  AddPlayerPacket::getEstimatedSize()        { return 0; }
+// AddPlayerPacket: real upstream now compiles. Stubs removed.
 
 // C4JThread + Event + EventArray: real upstream C4JThread.cpp now compiles
 // via the Win32 thread/event API shims (ResumeThread, CreateEvent,
