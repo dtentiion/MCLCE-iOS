@@ -1023,6 +1023,14 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/WolfModel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ClockTexture.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/CompassTexture.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/StitchedTexture.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Stitcher.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TextureHolder.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/FrustumCuller.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ParticleEngine.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/FootstepParticle.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/HugeExplosionParticle.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TakeAnimationParticle.cpp
 )
 
 add_library(mcle_world_probe STATIC
