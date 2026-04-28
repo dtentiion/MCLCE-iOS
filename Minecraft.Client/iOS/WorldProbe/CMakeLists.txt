@@ -1009,6 +1009,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerChunkCache.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ServerChunkCache.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ServerPlayer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ServerPlayerGameMode.cpp
 )
 
 add_library(mcle_world_probe STATIC
