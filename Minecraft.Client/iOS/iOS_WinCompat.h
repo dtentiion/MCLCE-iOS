@@ -884,6 +884,41 @@ void glClientActiveTexture(unsigned int);
 #ifndef CONTEXT_PRESENCE_MULTIPLAYER_4POFFLINE
 #  define CONTEXT_PRESENCE_MULTIPLAYER_4POFFLINE 9
 #endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_1P
+#  define CONTEXT_PRESENCE_MULTIPLAYER_1P 10
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_2P
+#  define CONTEXT_PRESENCE_MULTIPLAYER_2P 11
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_3P
+#  define CONTEXT_PRESENCE_MULTIPLAYER_3P 12
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_4P
+#  define CONTEXT_PRESENCE_MULTIPLAYER_4P 13
+#endif
+
+// More legacy GL constants for renderer files.
+#ifndef GL_OBJECT_LINEAR
+#  define GL_OBJECT_LINEAR           0x2401
+#endif
+#ifndef GL_EYE_LINEAR
+#  define GL_EYE_LINEAR              0x2400
+#endif
+#ifndef GL_OBJECT_PLANE
+#  define GL_OBJECT_PLANE            0x2501
+#endif
+#ifndef GL_EYE_PLANE
+#  define GL_EYE_PLANE               0x2502
+#endif
+#ifndef GL_TEXTURE_GEN_MODE
+#  define GL_TEXTURE_GEN_MODE        0x2500
+#endif
+#ifndef GL_TEXTURE_GEN_S
+#  define GL_TEXTURE_GEN_S           0x0C60
+#endif
+#ifndef GL_TEXTURE_GEN_T
+#  define GL_TEXTURE_GEN_T           0x0C61
+#endif
 
 // Win32 thread-exit query. Returns the exit code of a finished thread;
 // upstream uses it after WaitForSingleObject. iOS hands back 0.
