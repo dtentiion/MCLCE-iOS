@@ -853,3 +853,26 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: added handleRidePacket body to {path}")
 PY
 fi
+
+# UIStructs.h's typedef _UIVec2D conflicts with the iOS_stdafx.h stub
+# (both define `typedef struct _UIVec2D { ... } UIVec2D;`). Gate the
+# upstream definition on the macro we set in iOS_stdafx.h.
+UISC="$REPO_ROOT/upstream/Minecraft.Client/Common/UI/UIStructs.h"
+if grep -q '_UIVEC2D_DEFINED' "$UISC"; then
+    echo "patch-upstream-stdafx: UIStructs.h already patched, skipping"
+else
+python3 - "$UISC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'typedef struct _UIVec2D'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: UIStructs anchor not found")
+patched = src.replace(needle, '#ifndef _UIVEC2D_DEFINED\n#define _UIVEC2D_DEFINED\n' + needle, 1)
+patched = patched.replace('} UIVec2D;', '} UIVec2D;\n#endif // _UIVEC2D_DEFINED', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: gated UIVec2D in {path}")
+PY
+fi

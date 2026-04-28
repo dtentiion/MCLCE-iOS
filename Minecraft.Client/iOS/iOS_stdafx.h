@@ -399,7 +399,14 @@ struct ConnectionProgressParams {
 // IUIScene_AbstractContainerMenu.h. Upstream has no definition (the
 // type is provided by the platform UI layer); a thin float pair
 // matches the implied shape so member layout works.
-struct UIVec2D { float x; float y; };
+// Match upstream UIStructs.h's `typedef struct _UIVec2D { ... } UIVec2D;`
+// shape. The guard lets files that pull the real UIStructs.h still
+// compile (no redefinition); files that don't get the real header use
+// this stub.
+#ifndef _UIVEC2D_DEFINED
+#  define _UIVEC2D_DEFINED
+typedef struct _UIVec2D { float x; float y; } UIVec2D;
+#endif
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
