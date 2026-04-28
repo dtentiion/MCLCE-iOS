@@ -997,6 +997,13 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/PendingConnection.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/StringTable.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SetRidingPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/SignTileEntity.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/AbstractContainerScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ArchiveFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SignRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/UIString.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Trial/TrialMode.cpp
 )
 
 add_library(mcle_world_probe STATIC
