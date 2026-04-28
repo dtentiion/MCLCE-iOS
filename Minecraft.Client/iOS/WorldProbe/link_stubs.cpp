@@ -157,6 +157,7 @@ bool        ServerChunkCache::hasChunk(int, int)                                
 std::vector<LevelChunk *> *ServerChunkCache::getLoadedChunkList()                 { return nullptr; }
 void        ServerChunkCache::drop(int, int)                                      {}
 LevelChunk *ServerChunkCache::create(int, int)                                    { return nullptr; }
+LevelChunk *ServerChunkCache::create(int, int, bool)                              { return nullptr; }
 LevelChunk *ServerChunkCache::getChunk(int, int)                                  { return nullptr; }
 LevelChunk *ServerChunkCache::getChunkLoadedOrUnloaded(int, int)                  { return nullptr; }
 void        ServerChunkCache::dontDrop(int, int)                                  {}
