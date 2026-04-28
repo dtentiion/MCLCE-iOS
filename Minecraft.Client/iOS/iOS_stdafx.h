@@ -642,6 +642,7 @@ public:
         KEY_DOWN     = 208,
         KEY_LCONTROL = 29,
         KEY_LSHIFT   = 42,
+        KEY_RSHIFT   = 54,
         KEY_LALT     = 56,
         KEY_HOME     = 199,
         KEY_END      = 207,
