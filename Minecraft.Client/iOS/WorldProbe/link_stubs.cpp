@@ -112,11 +112,7 @@ void PlayerConnection::send(std::shared_ptr<Packet> /*packet*/) {}
 bool PlayerConnection::isLocal() { return true; }
 void PlayerConnection::teleport(double, double, double, float, float, bool) {}
 
-void ServerPlayer::flushEntitiesToRemove() {}
-ServerLevel *ServerPlayer::getLevel() { return nullptr; }
-void ServerPlayer::flagEntitiesToBeRemoved(unsigned int * /*flags*/, bool * /*removedFound*/) {}
-int  ServerPlayer::getFlagIndexForChunk(const ChunkPos &/*pos*/, int /*dimension*/) { return 0; }
-int  ServerPlayer::getPlayerViewDistanceModifier() { return 0; }
+// ServerPlayer: real upstream now compiles, all methods come from the .cpp.
 
 // ---------------------------------------------------------------------------
 // GameRenderer overload set. The renderer is an iOS-shimmed shell, so the
