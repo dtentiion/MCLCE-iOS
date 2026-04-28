@@ -1031,6 +1031,60 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/FootstepParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/HugeExplosionParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TakeAnimationParticle.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ArrowRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/BatRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/BeaconRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/BoatRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/CaveSpiderRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ChestRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ClientConstants.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/CreeperRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/DefaultRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EnchantTableRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EnderChestRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EndermanRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EntityRenderDispatcher.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EntityRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ExperienceOrbRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/FallingTileRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/FireballRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/FishingHookRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/GhastRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/GiantMobRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/GuiComponent.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/HumanoidMobRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ItemFrameRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ItemInHandRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ItemRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ItemSpriteRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/LavaSlimeRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/LeashKnotRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/LightningBoltRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/LivingEntityRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MinecartRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MobRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MobSpawnerRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MushroomCowRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/OcelotRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Options.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/PaintingRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/PistonPieceRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SheepRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SkeletonRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SkullTileRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SlimeRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SnowManRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SpiderRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SquidRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TileEntityRenderDispatcher.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TileRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TntMinecartRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TntRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/VillagerGolemRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/VillagerRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/WitherBossRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/WitherSkullRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/WolfRenderer.cpp
 )
 
 add_library(mcle_world_probe STATIC
