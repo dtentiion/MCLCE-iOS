@@ -16,6 +16,9 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <cstdarg>
+#include <cstdio>
+#include <os/log.h>
 
 class GAME_SETTINGS;
 class C_4JProfile;
@@ -61,7 +64,21 @@ struct McleAppStub {
     // Generic templates - accept any args, return either a default-
     // constructible value or void. Compile-only, not link-only.
     template<class... A> const wchar_t* GetString(A...)         { return L""; }
-    template<class... A> int            DebugPrintf(A...)       { return 0; }
+    // Real CMinecraftApp::DebugPrintf is a printf wrapper. Route it
+    // through os_log so upstream progress prints (`Loading %d mappings`,
+    // `prepareLevel returned ...`, etc.) show up in the iOS live log
+    // alongside our own MCLE_LOG lines.
+    int DebugPrintf(const char *fmt, ...) {
+        char buf[1024];
+        va_list ap; va_start(ap, fmt);
+        int n = ::vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        if (n < 0) return n;
+        if (n > 0 && buf[n-1] == '\n') buf[n-1] = 0;
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT, "[MCLE/up] %{public}s", buf);
+        return n;
+    }
+    int DebugPrintf(const wchar_t *, ...) { return 0; }
     template<class... A> void           FatalLoadError(A...)    {}
     template<class... A> int            GetGameSetting(A...)    { return 0; }
     template<class... A> GAME_SETTINGS* GetGameSettings(A...)   { return nullptr; }
