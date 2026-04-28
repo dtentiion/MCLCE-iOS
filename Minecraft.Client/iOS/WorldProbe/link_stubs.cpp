@@ -46,6 +46,15 @@
 #include "SavedDataStorage.h"
 #include "SetEntityLinkPacket.h"
 #include "C4JThread.h"
+#include "../Minecraft.Client/PS3/PS3Extras/ShutdownManager.h"
+#include "../Minecraft.Client/StatsCounter.h"
+#include "EntitySelector.h"
+#include "QuartzBlockTile.h"
+#include "Sapling.h"
+#include "SkullTileEntity.h"
+#include "TallGrass.h"
+#include "Tile.h"
+#include "TileEntityDataPacket.h"
 #include "../Minecraft.Client/Minecraft.h"
 #include "../Minecraft.Client/PlayerConnection.h"
 #include "../Minecraft.Client/ServerPlayer.h"
@@ -63,6 +72,118 @@
 // ---------------------------------------------------------------------------
 const int Item::flint_Id;
 const int Item::emerald_Id;
+const int Item::apple_Id;
+const int Item::arrow_Id;
+const int Item::beef_cooked_Id;
+const int Item::beef_raw_Id;
+const int Item::book_Id;
+const int Item::boots_chain_Id;
+const int Item::boots_diamond_Id;
+const int Item::boots_iron_Id;
+const int Item::boots_leather_Id;
+const int Item::bread_Id;
+const int Item::bucket_lava_Id;
+const int Item::bucket_water_Id;
+const int Item::chestplate_chain_Id;
+const int Item::chestplate_diamond_Id;
+const int Item::chestplate_iron_Id;
+const int Item::chestplate_leather_Id;
+const int Item::chicken_cooked_Id;
+const int Item::chicken_raw_Id;
+const int Item::clock_Id;
+const int Item::coal_Id;
+const int Item::compass_Id;
+const int Item::cookie_Id;
+const int Item::diamond_Id;
+const int Item::enderPearl_Id;
+const int Item::expBottle_Id;
+const int Item::eyeOfEnder_Id;
+const int Item::fish_cooked_Id;
+const int Item::flintAndSteel_Id;
+const int Item::goldIngot_Id;
+const int Item::hatchet_diamond_Id;
+const int Item::hatchet_iron_Id;
+const int Item::helmet_chain_Id;
+const int Item::helmet_diamond_Id;
+const int Item::helmet_iron_Id;
+const int Item::helmet_leather_Id;
+const int Item::hoe_diamond_Id;
+const int Item::hoe_iron_Id;
+const int Item::ironIngot_Id;
+const int Item::leggings_chain_Id;
+const int Item::leggings_diamond_Id;
+const int Item::leggings_iron_Id;
+const int Item::leggings_leather_Id;
+const int Item::melon_Id;
+const int Item::paper_Id;
+const int Item::pickAxe_diamond_Id;
+const int Item::pickAxe_iron_Id;
+const int Item::porkChop_cooked_Id;
+const int Item::porkChop_raw_Id;
+const int Item::potion_Id;
+const int Item::redStone_Id;
+const int Item::rotten_flesh_Id;
+const int Item::saddle_Id;
+const int Item::seeds_melon_Id;
+const int Item::seeds_pumpkin_Id;
+const int Item::seeds_wheat_Id;
+const int Item::shears_Id;
+const int Item::shovel_diamond_Id;
+const int Item::shovel_iron_Id;
+const int Item::skull_Id;
+const int Item::sword_diamond_Id;
+const int Item::sword_iron_Id;
+const int Item::wheat_Id;
+
+// ---------------------------------------------------------------------------
+// Tile statics.
+// ---------------------------------------------------------------------------
+const int Tile::bookshelf_Id;
+const int Tile::glass_Id;
+const int Tile::glowstone_Id;
+const int Tile::leaves_Id;
+const int Tile::stoneSlabHalf_Id;
+const int Tile::wool_Id;
+
+// ---------------------------------------------------------------------------
+// Misc tile/entity statics.
+// ---------------------------------------------------------------------------
+const int QuartzBlockTile::TYPE_LINES_Y;
+const int Sapling::TYPE_DEFAULT;
+const int Sapling::TYPE_EVERGREEN;
+const int Sapling::TYPE_BIRCH;
+const int Sapling::TYPE_JUNGLE;
+const int TallGrass::FERN;
+const int SkullTileEntity::TYPE_WITHER;
+const int TileEntityDataPacket::TYPE_MOB_SPAWNER;
+const int TileEntityDataPacket::TYPE_ADV_COMMAND;
+const int TileEntityDataPacket::TYPE_BEACON;
+const int TileEntityDataPacket::TYPE_SKULL;
+
+// EntitySelector pointer-to-singleton statics. Real upstream constructs
+// these in a registration block we don't pull in; nullptr keeps the
+// container/hopper code paths inert (returns "no eligible entity").
+const EntitySelector *EntitySelector::ENTITY_STILL_ALIVE = nullptr;
+const EntitySelector *EntitySelector::CONTAINER_ENTITY_SELECTOR = nullptr;
+
+// MobCanWearArmourEntitySelector: real bodies live in
+// EntitySelector.cpp which doesn't compile yet. Dispenser-armor path
+// short-circuits to "no match" until that source is in.
+MobCanWearArmourEntitySelector::MobCanWearArmourEntitySelector(std::shared_ptr<ItemInstance> i) : item(i) {}
+bool MobCanWearArmourEntitySelector::matches(std::shared_ptr<Entity>) const { return false; }
+
+// StatsCounter::setupStatBoards: real body lives in StatsCounter.cpp;
+// noop is fine because no boards means leaderboard panels render empty.
+void StatsCounter::setupStatBoards() {}
+
+// ShutdownManager: PS3-style co-op shutdown gate. iOS shell never tears
+// down threads cleanly so HasStarted is recorded as a noop and
+// ShouldRun always says yes (matches Windows64 shim behaviour).
+namespace { struct C4J_EvArrFwd; }
+void ShutdownManager::HasStarted(EThreadId) {}
+void ShutdownManager::HasStarted(EThreadId, C4JThread::EventArray *) {}
+bool ShutdownManager::ShouldRun(EThreadId)  { return true; }
+void ShutdownManager::HasFinished(EThreadId) {}
 
 // ---------------------------------------------------------------------------
 // Packet statics.
