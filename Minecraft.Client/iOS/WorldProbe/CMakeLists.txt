@@ -904,6 +904,16 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/BookModel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/BreakingItemParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/StatTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/AreaHint.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/AreaTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/ControllerTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/DiggerItemHint.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/FullTutorialActiveTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/FullTutorialMode.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/HorseChoiceTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/ProgressFlagTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/RideEntityTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialHint.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_CommandBlockMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ControlsScreen.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/CowModel.cpp
