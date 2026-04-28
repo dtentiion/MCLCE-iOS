@@ -384,15 +384,19 @@ class ItemRenderer;
 // Forward-decl here so UIScene.h parses.
 class CustomDrawData;
 // ConnectionProgressParams - Minecraft.cpp constructs one with `new`
-// in a network connection path. No upstream definition exists;
-// matched fields are derived from access patterns in Minecraft.cpp.
-struct ConnectionProgressParams {
+// in a network connection path. iOS_stdafx provides this stub for
+// files that don't pull upstream UIStructs.h. Guard so the real
+// header (UIStructs.h:205) skips its body when our stub is in scope.
+#ifndef _CONNECTIONPROGRESSPARAMS_DEFINED
+#define _CONNECTIONPROGRESSPARAMS_DEFINED
+typedef struct _ConnectionProgressParams {
     int   iPad;
     int   stringId;
     bool  showTooltips;
     int   timerTime;
     bool  setFailTimer;
-};
+} ConnectionProgressParams;
+#endif
 // Game mode classes (FullTutorialMode, TrialMode, ConsoleGameMode,
 // DemoMode) live under upstream Common/Tutorial / Common/Trial / etc.
 // Their headers transitively pull the Tutorial.h -> UIScene chain we
