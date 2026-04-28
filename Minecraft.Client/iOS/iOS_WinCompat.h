@@ -1147,6 +1147,12 @@ static inline BOOL SystemTimeToFileTime(const SYSTEMTIME*, FILETIME* ft) {
     if (ft) { ft->dwLowDateTime = 0; ft->dwHighDateTime = 0; }
     return TRUE;
 }
+static inline BOOL FileTimeToSystemTime(const FILETIME*, SYSTEMTIME* st) {
+    if (!st) return FALSE;
+    st->wYear = 2026; st->wMonth = 1; st->wDayOfWeek = 0; st->wDay = 1;
+    st->wHour = 0; st->wMinute = 0; st->wSecond = 0; st->wMilliseconds = 0;
+    return TRUE;
+}
 
 // GetSystemTime for upstream system.cpp. Fills SYSTEMTIME from
 // localtime. Compile-only correctness; we never call this.
