@@ -197,3 +197,10 @@ enum ESen_ModeId
     eTelem_ModeId_Creative  = 2,
     eTelem_ModeId_Adventure = 3,
 };
+
+enum ESen_SubModeId
+{
+    eTelem_SubModeId_Undefined = 0,
+    eTelem_SubModeId_Tutorial  = 1,
+    eTelem_SubModeId_Normal    = 2,
+};
