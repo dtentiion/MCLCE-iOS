@@ -1007,6 +1007,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/C4JThread.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ZoneIo.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerChunkCache.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ServerChunkCache.cpp
 )
 
 add_library(mcle_world_probe STATIC
