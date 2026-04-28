@@ -993,6 +993,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/HorseRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/MonsterPlacerItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SpringTile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Chunk.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/PendingConnection.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/PlayerRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/StringTable.cpp
 )
 
 add_library(mcle_world_probe STATIC

@@ -176,11 +176,8 @@ void        ServerChunkCache::recreateLogicStructuresForChunk(int, int)         
 // RandomLevelSource: real upstream RandomLevelSource.cpp now compiles via
 // LevelGenerationOptions stub additions (getBiomeOverride). Stubs removed.
 
-// ---------------------------------------------------------------------------
-// Chunk (the rendering chunk on Minecraft.Client side).
-// ---------------------------------------------------------------------------
-Chunk::Chunk()  {}
-Chunk::~Chunk() {}
+// Chunk: real upstream Chunk.cpp now compiles via the C4JRender stub
+// additions (CBuffClear, MatrixMode, etc).
 
 // FlatGeneratorInfo: real upstream now compiles via Biome.h include patch.
 // EnchantedBookItem: real upstream now compiles via WeighedTreasure.h
