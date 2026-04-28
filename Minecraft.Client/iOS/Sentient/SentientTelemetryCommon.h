@@ -204,3 +204,11 @@ enum ESen_SubModeId
     eTelem_SubModeId_Tutorial  = 1,
     eTelem_SubModeId_Normal    = 2,
 };
+
+enum ESen_SubLevelId
+{
+    eTelem_SubLevelId_Undefined = 0,
+    eTelem_SubLevelId_Overworld = 1,
+    eTelem_SubLevelId_Nether    = 2,
+    eTelem_SubLevelId_End       = 3,
+};

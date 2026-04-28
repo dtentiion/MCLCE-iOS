@@ -410,6 +410,11 @@ static inline int XGetLocale(void)   { return XC_LANGUAGE_ENGLISH; }
 #  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
 #endif
 
+// Xbox-style user name size constant from XUSER_API.
+#ifndef XUSER_NAME_SIZE
+#  define XUSER_NAME_SIZE 16
+#endif
+
 // SessionID type from upstream's Sony SQRNetworkManager. iOS doesn't
 // ship PSN, so we provide an opaque 16-byte buffer matching the Sony
 // layout. SessionInfo.h declares fields of this type.
