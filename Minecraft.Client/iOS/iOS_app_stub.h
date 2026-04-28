@@ -240,6 +240,8 @@ struct McleNetworkManagerStub {
     template<class... A> void  RemoveLocalPlayer(A...) {}
     template<class... A> void  AddRemotePlayer(A...) {}
     template<class... A> void  RemoveRemotePlayer(A...) {}
+    template<class... A> int   GetSendQueueSizeMessages(A...) { return 0; }
+    template<class... A> int   GetSendQueueSizeBytes(A...)    { return 0; }
 };
 inline McleNetworkManagerStub g_NetworkManager;
 
