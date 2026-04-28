@@ -973,3 +973,25 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: rewrote setTile -> setTileAndData in {path}")
 PY
 fi
+
+# UIStructs.h ConnectionProgressParams typedef redefinition (same pattern
+# as UIVec2D). Gate the upstream definition.
+UISC2="$REPO_ROOT/upstream/Minecraft.Client/Common/UI/UIStructs.h"
+if grep -q '_CONNECTIONPROGRESSPARAMS_DEFINED' "$UISC2"; then
+    echo "patch-upstream-stdafx: UIStructs.h ConnectionProgressParams already patched, skipping"
+else
+python3 - "$UISC2" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'typedef struct _ConnectionProgressParams'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: UIStructs ConnectionProgressParams anchor not found")
+patched = src.replace(needle, '#ifndef _CONNECTIONPROGRESSPARAMS_DEFINED\n#define _CONNECTIONPROGRESSPARAMS_DEFINED\n' + needle, 1)
+patched = patched.replace('} ConnectionProgressParams;', '} ConnectionProgressParams;\n#endif // _CONNECTIONPROGRESSPARAMS_DEFINED', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: gated ConnectionProgressParams in {path}")
+PY
+fi
