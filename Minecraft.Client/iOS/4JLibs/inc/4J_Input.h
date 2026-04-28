@@ -25,6 +25,7 @@ public:
     template<class... A> bool  IsConnected(A...)            { return true; }
     template<class... A> int   GetValue(A...)               { return 0; }
     template<class... A> void* GetGameJoypadMaps(A...)      { return nullptr; }
+    template<class... A> int   GetJoypadMapVal(A...)        { return 0; }
 };
 
 extern C_4JInput InputManager;

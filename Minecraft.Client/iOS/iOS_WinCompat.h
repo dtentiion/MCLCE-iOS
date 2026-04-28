@@ -916,6 +916,9 @@ void glClientActiveTexture(unsigned int);
 #ifndef CONTEXT_PRESENCE_MULTIPLAYER_4P
 #  define CONTEXT_PRESENCE_MULTIPLAYER_4P 13
 #endif
+#ifndef CONTEXT_PRESENCE_IDLE
+#  define CONTEXT_PRESENCE_IDLE 14
+#endif
 
 // More legacy GL constants for renderer files.
 #ifndef GL_OBJECT_LINEAR

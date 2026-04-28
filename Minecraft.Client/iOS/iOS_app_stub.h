@@ -139,7 +139,7 @@ struct McleAppStub {
     template<class... A> void*          getArchiveFile(A...)          { return nullptr; }
     template<class... A> int            GetLocalPlayerCount(A...)     { return 1; }
     template<class... A> int            getSkinIdFromPath(A...)       { return 0; }
-    template<class... A> void           LoadSignEntryMenu(A...)       {}
+    template<class... A> bool           LoadSignEntryMenu(A...)       { return false; }
 
     // Common/* additions: catch-all setters / getters / state
     // probes that upstream code in Minecraft.Client/Common/* uses.
