@@ -213,31 +213,6 @@ enum ESen_SubLevelId
     eTelem_SubLevelId_End       = 3,
 };
 
-// Telemetry: how a player died.
-enum ETelemetryPlayerDeathSource
-{
-    eTelemetryPlayerDeathSource_Undefined         = 0,
-    eTelemetryPlayerDeathSource_Fall              = 1,
-    eTelemetryPlayerDeathSource_Fire              = 2,
-    eTelemetryPlayerDeathSource_Lava              = 3,
-    eTelemetryPlayerDeathSource_Water             = 4,
-    eTelemetryPlayerDeathSource_Suffocate         = 5,
-    eTelemetryPlayerDeathSource_OutOfWorld        = 6,
-    eTelemetryPlayerDeathSource_Cactus            = 7,
-    eTelemetryPlayerDeathSource_Player_Weapon     = 8,
-    eTelemetryPlayerDeathSource_Player_Arrow      = 9,
-    eTelemetryPlayerDeathSource_Wolf              = 10,
-    eTelemetryPlayerDeathSource_Explosion_Creeper = 11,
-    eTelemetryPlayerDeathSource_Explosion_Tnt     = 12,
-    eTelemetryPlayerDeathSource_Skeleton          = 13,
-    eTelemetryPlayerDeathSource_Spider            = 14,
-    eTelemetryPlayerDeathSource_Slime             = 15,
-    eTelemetryPlayerDeathSource_Ghast             = 16,
-    eTelemetryPlayerDeathSource_Zombie            = 17,
-    eTelemetryPlayerDeathSource_ZombiePigman      = 18,
-};
-
-// ETelemetryChallenges holds both challenge IDs and the player-death-source
-// values upstream stuffs into m_lastDamageSource. Define as an int alias
-// so the enum-set and the field type compose.
-typedef int ETelemetryChallenges;
+// ETelemetryChallenges + the death-source enumerators are folded into
+// the enum in iOS_stdafx.h since ServerPlayer.cpp assigns death-source
+// values directly to a field of ETelemetryChallenges type.

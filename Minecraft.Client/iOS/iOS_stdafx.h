@@ -132,12 +132,32 @@ class CDLCManager;
 class FileNameMap;
 class ConsoleSaveFile;
 
-// Telemetry enum stub for ServerPlayer.h family. Real enum lives in
-// platform-specific Sentient/TelemetryEnum.h. Few enumerators give
-// upstream code something to compile against.
+// Telemetry enum stub. Real enum lives in platform-specific
+// Sentient/TelemetryEnum.h. The leak's ServerPlayer.cpp assigns the
+// player-death-source values directly to a field of this type, so we
+// fold both sets of identifiers into the same enum.
 enum ETelemetryChallenges {
     eTelemetryChallenges_None = 0,
     eTelemetryChallenges_Unknown,
+    eTelemetryPlayerDeathSource_Undefined         = 100,
+    eTelemetryPlayerDeathSource_Fall              = 101,
+    eTelemetryPlayerDeathSource_Fire              = 102,
+    eTelemetryPlayerDeathSource_Lava              = 103,
+    eTelemetryPlayerDeathSource_Water             = 104,
+    eTelemetryPlayerDeathSource_Suffocate         = 105,
+    eTelemetryPlayerDeathSource_OutOfWorld        = 106,
+    eTelemetryPlayerDeathSource_Cactus            = 107,
+    eTelemetryPlayerDeathSource_Player_Weapon     = 108,
+    eTelemetryPlayerDeathSource_Player_Arrow      = 109,
+    eTelemetryPlayerDeathSource_Wolf              = 110,
+    eTelemetryPlayerDeathSource_Explosion_Creeper = 111,
+    eTelemetryPlayerDeathSource_Explosion_Tnt     = 112,
+    eTelemetryPlayerDeathSource_Skeleton          = 113,
+    eTelemetryPlayerDeathSource_Spider            = 114,
+    eTelemetryPlayerDeathSource_Slime             = 115,
+    eTelemetryPlayerDeathSource_Ghast             = 116,
+    eTelemetryPlayerDeathSource_Zombie            = 117,
+    eTelemetryPlayerDeathSource_ZombiePigman      = 118,
 };
 
 // Real eDebugSetting enum lives in Common/Console_Debug_enum.h; pre-
