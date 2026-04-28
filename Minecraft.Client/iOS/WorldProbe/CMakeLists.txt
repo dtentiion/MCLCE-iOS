@@ -1011,6 +1011,18 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/ServerChunkCache.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ServerPlayer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ServerPlayerGameMode.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ChestModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ChickenModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EnderCrystalModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/GhastModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/HumanoidModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ModelHorse.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ModelPart.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/OcelotModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/QuadrupedModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/WolfModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ClockTexture.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/CompassTexture.cpp
 )
 
 add_library(mcle_world_probe STATIC
