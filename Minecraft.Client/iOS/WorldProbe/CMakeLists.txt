@@ -24,6 +24,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AddPlayerPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/LoginPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ConsoleSaveFileConverter.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Minecraft.World.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/stdafx.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/stdafx.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/stubs.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AmbientCreature.cpp
