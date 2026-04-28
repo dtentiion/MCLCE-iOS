@@ -1017,3 +1017,28 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: gated CustomDrawData in {path}")
 PY
 fi
+
+# SoundEngine.h declares `class SoundEngine : public ConsoleSoundEngine`.
+# iOS_stdafx provides a stub `class SoundEngine` (no inheritance). Gate
+# the upstream header on _SOUNDENGINE_H_DEFINED so it skips its body if
+# our stub is in scope first.
+SEH="$REPO_ROOT/upstream/Minecraft.Client/Common/Audio/SoundEngine.h"
+if grep -q '_SOUNDENGINE_H_DEFINED' "$SEH"; then
+    echo "patch-upstream-stdafx: SoundEngine.h already patched, skipping"
+else
+python3 - "$SEH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'class SoundEngine : public ConsoleSoundEngine'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: SoundEngine class anchor not found")
+patched = src.replace(needle,
+    '#ifndef _SOUNDENGINE_H_DEFINED\n#define _SOUNDENGINE_H_DEFINED\n' + needle, 1)
+patched = patched + '\n#endif // _SOUNDENGINE_H_DEFINED\n'
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: gated SoundEngine.h")
+PY
+fi

@@ -575,7 +575,11 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 //
 // Defined AFTER Minecraft.h's forward decl so the names match. TUs
 // that include real SoundEngine.h directly (only ServerPlayer.cpp at
-// the moment) don't get added to the probe lib for now.
+// the moment) don't get added to the probe lib for now. Guard so the
+// real upstream header (Common/Audio/SoundEngine.h:112) skips its body
+// when our stub is in scope first.
+#ifndef _SOUNDENGINE_H_DEFINED
+#define _SOUNDENGINE_H_DEFINED
 class SoundEngine {
 public:
     SoundEngine() {}
@@ -609,6 +613,7 @@ public:
     template<class... A> void updateSFXVolume(A...)   {}
     template<class... A> void updateSoundEffectVolume(A...) {}
 };
+#endif // _SOUNDENGINE_H_DEFINED
 // Real MultiPlayerGameMode - PlayerList chains through
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls
 // GameMode.h which has zero deps).
