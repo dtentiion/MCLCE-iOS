@@ -229,6 +229,16 @@ void initImpl() {
         g_initState = kStateFailed;
         return;
     }
+    if (saveBytes.length >= 16 && saveBytes.data) {
+        unsigned char *b = (unsigned char *)saveBytes.data;
+        unsigned int u0 = (unsigned int)b[0] | ((unsigned int)b[1]<<8) | ((unsigned int)b[2]<<16) | ((unsigned int)b[3]<<24);
+        unsigned int u1 = (unsigned int)b[4] | ((unsigned int)b[5]<<8) | ((unsigned int)b[6]<<16) | ((unsigned int)b[7]<<24);
+        MCLE_LOG("mcle_game_init: .ms head: u0(LE)=%u u1(LE)=%u "
+                 "raw=%02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
+                 u0, u1,
+                 b[0],b[1],b[2],b[3], b[4],b[5],b[6],b[7],
+                 b[8],b[9],b[10],b[11], b[12],b[13],b[14],b[15]);
+    }
 
     // Construct the upstream save-file wrapper around the in-memory bytes.
     // Matches MinecraftServer.cpp:913 exactly.
