@@ -1113,43 +1113,140 @@ typedef struct _XMEMDECOMPRESSION_CONTEXT { int dummy; } XMEMDECOMPRESSION_CONTE
 #  define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
 #endif
 
-// Win32 SetFilePointer entry. Probe stub; never called.
-// Placed after PLONG/INVALID_HANDLE_VALUE/LPDWORD declarations above.
-static inline DWORD SetFilePointer(HANDLE, LONG distLow, PLONG distHigh, DWORD) {
-    if (distHigh) *distHigh = 0;
-    return (DWORD)distLow;
+// Win32 SetFilePointer entry, POSIX-backed via lseek. HANDLE is the
+// underlying fd. dwMoveMethod: FILE_BEGIN(0) FILE_CURRENT(1) FILE_END(2).
+static inline DWORD SetFilePointer(HANDLE h, LONG distLow, PLONG distHigh, DWORD method) {
+    if (h == INVALID_HANDLE_VALUE) return 0xFFFFFFFFu;
+    int fd = (int)(intptr_t)h;
+    int whence = SEEK_SET;
+    if      (method == 1) whence = SEEK_CUR;
+    else if (method == 2) whence = SEEK_END;
+    int64_t off = (int64_t)distLow;
+    if (distHigh) off |= ((int64_t)*distHigh) << 32;
+    off_t r = ::lseek(fd, (off_t)off, whence);
+    if (r == (off_t)-1) {
+        if (distHigh) *distHigh = 0;
+        return 0xFFFFFFFFu;
+    }
+    if (distHigh) *distHigh = (LONG)((uint64_t)r >> 32);
+    return (DWORD)((uint64_t)r & 0xFFFFFFFFu);
 }
 // ZoneIo.cpp passes nullptr for the DWORD moveMethod arg. The nullptr_t
 // overload approach made other call sites ambiguous because they pass
 // `0` literals; patched in patch-upstream-stdafx.sh instead to use
 // FILE_BEGIN explicitly.
 
-// Win32 CreateFile / WriteFile / ReadFile / CloseHandle entries.
-// Required for compile of File.cpp / RegionFile.cpp on the Console branch.
+// Win32 CreateFile / WriteFile / ReadFile / CloseHandle entries,
+// POSIX-backed via open/read/write/close. HANDLE encodes the fd directly
+// as (HANDLE)(intptr_t)fd so a fd of -1 (POSIX failure) maps cleanly to
+// (HANDLE)(LONG_PTR)-1 == INVALID_HANDLE_VALUE.
 #ifndef _IOS_FILE_API_DECLARED
 #define _IOS_FILE_API_DECLARED
-static inline HANDLE CreateFileA(const char*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
-    return INVALID_HANDLE_VALUE;
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#ifndef GENERIC_READ
+#  define GENERIC_READ  0x80000000UL
+#endif
+#ifndef GENERIC_WRITE
+#  define GENERIC_WRITE 0x40000000UL
+#endif
+#ifndef CREATE_NEW
+#  define CREATE_NEW         1
+#  define CREATE_ALWAYS      2
+#  define OPEN_EXISTING      3
+#  define OPEN_ALWAYS        4
+#  define TRUNCATE_EXISTING  5
+#endif
+
+static inline int _ios_oflags(DWORD access, DWORD disposition) {
+    int flags = 0;
+    const bool wantRead  = (access & GENERIC_READ)  != 0;
+    const bool wantWrite = (access & GENERIC_WRITE) != 0;
+    if      (wantRead && wantWrite) flags = O_RDWR;
+    else if (wantWrite)             flags = O_WRONLY;
+    else                            flags = O_RDONLY;
+    switch (disposition) {
+        case CREATE_NEW:        flags |= O_CREAT | O_EXCL;  break;
+        case CREATE_ALWAYS:     flags |= O_CREAT | O_TRUNC; break;
+        case OPEN_ALWAYS:       flags |= O_CREAT;           break;
+        case TRUNCATE_EXISTING: flags |= O_TRUNC;           break;
+        case OPEN_EXISTING:
+        default: break;
+    }
+    return flags;
 }
-static inline HANDLE CreateFileW(const wchar_t*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE) {
-    return INVALID_HANDLE_VALUE;
+
+static inline HANDLE CreateFileA(const char *path, DWORD access, DWORD /*share*/,
+                                  void* /*sec*/, DWORD disposition, DWORD /*flags*/, HANDLE /*tmpl*/) {
+    if (!path) return INVALID_HANDLE_VALUE;
+    int fd = ::open(path, _ios_oflags(access, disposition), 0644);
+    return (HANDLE)(intptr_t)fd; // fd == -1 → INVALID_HANDLE_VALUE
 }
+#ifdef __cplusplus
+extern "C++" {
+static inline HANDLE CreateFileW(const wchar_t *path, DWORD access, DWORD share,
+                                  void *sec, DWORD disposition, DWORD flags, HANDLE tmpl) {
+    if (!path) return INVALID_HANDLE_VALUE;
+    char buf[1024]; size_t i = 0;
+    while (path[i] && i < sizeof(buf)-1) { buf[i] = (char)(path[i] & 0x7F); ++i; }
+    buf[i] = 0;
+    return CreateFileA(buf, access, share, sec, disposition, flags, tmpl);
+}
+}
+#endif
 #  ifdef UNICODE
 #    define CreateFile CreateFileW
 #  else
 #    define CreateFile CreateFileA
 #  endif
-static inline BOOL ReadFile(HANDLE, void*, DWORD, LPDWORD got, void*) {
-    if (got) *got = 0; return FALSE;
+static inline BOOL ReadFile(HANDLE h, void *buf, DWORD toRead, LPDWORD got, void*) {
+    if (got) *got = 0;
+    if (h == INVALID_HANDLE_VALUE || !buf) return FALSE;
+    int fd = (int)(intptr_t)h;
+    ssize_t n = ::read(fd, buf, (size_t)toRead);
+    if (n < 0) return FALSE;
+    if (got) *got = (DWORD)n;
+    return TRUE;
 }
-static inline BOOL WriteFile(HANDLE, const void*, DWORD, LPDWORD wrote, void*) {
-    if (wrote) *wrote = 0; return FALSE;
+static inline BOOL WriteFile(HANDLE h, const void *buf, DWORD toWrite, LPDWORD wrote, void*) {
+    if (wrote) *wrote = 0;
+    if (h == INVALID_HANDLE_VALUE || !buf) return FALSE;
+    int fd = (int)(intptr_t)h;
+    ssize_t n = ::write(fd, buf, (size_t)toWrite);
+    if (n < 0) return FALSE;
+    if (wrote) *wrote = (DWORD)n;
+    return TRUE;
 }
-static inline BOOL CloseHandle(HANDLE) { return TRUE; }
-static inline BOOL DeleteFileA(const char*) { return TRUE; }
-static inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
-static inline DWORD GetFileSize(HANDLE, LPDWORD high) {
-    if (high) *high = 0; return 0;
+static inline BOOL CloseHandle(HANDLE h) {
+    if (h == INVALID_HANDLE_VALUE) return FALSE;
+    int fd = (int)(intptr_t)h;
+    return ::close(fd) == 0 ? TRUE : FALSE;
+}
+static inline BOOL DeleteFileA(const char *path) {
+    if (!path) return FALSE;
+    return ::unlink(path) == 0 ? TRUE : FALSE;
+}
+#ifdef __cplusplus
+extern "C++" {
+static inline BOOL DeleteFileW(const wchar_t *path) {
+    if (!path) return FALSE;
+    char buf[1024]; size_t i = 0;
+    while (path[i] && i < sizeof(buf)-1) { buf[i] = (char)(path[i] & 0x7F); ++i; }
+    buf[i] = 0;
+    return DeleteFileA(buf);
+}
+}
+#endif
+static inline DWORD GetFileSize(HANDLE h, LPDWORD high) {
+    if (high) *high = 0;
+    if (h == INVALID_HANDLE_VALUE) return 0xFFFFFFFFu; // INVALID_FILE_SIZE
+    int fd = (int)(intptr_t)h;
+    struct stat st;
+    if (::fstat(fd, &st) != 0) return 0xFFFFFFFFu;
+    if (high) *high = (DWORD)((uint64_t)st.st_size >> 32);
+    return (DWORD)((uint64_t)st.st_size & 0xFFFFFFFFu);
 }
 
 // Win32 thread spawn. Probe never runs threading; null handle is fine.
