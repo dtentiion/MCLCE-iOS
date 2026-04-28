@@ -252,6 +252,30 @@ void initImpl() {
     g_saveFile->ConvertToLocalPlatform();
     MCLE_LOG("mcle_game_init: saveData.ms parsed at %p", (void*)g_saveFile);
 
+    // Diagnostic: enumerate the parsed bundle's file table. If level.dat
+    // isn't here, prepareLevel() will return null and the bootstrap idles
+    // with "simulation idle, state=-1".
+    try {
+        std::vector<FileEntry *> *files = g_saveFile->getFilesWithPrefix(std::wstring(L""));
+        if (!files) {
+            MCLE_LOG("mcle_game_init: bundle file table is null");
+        } else {
+            MCLE_LOG("mcle_game_init: bundle has %zu file entries", files->size());
+            int n = 0;
+            for (FileEntry *fe : *files) {
+                if (!fe) continue;
+                std::wstring fn(fe->data.filename);
+                MCLE_LOG("mcle_game_init: file[%d] = %{public}s (%u bytes)",
+                         n++, narrow(fn).c_str(), (unsigned)fe->getFileSize());
+                if (n >= 64) { MCLE_LOG("mcle_game_init: ...truncated"); break; }
+            }
+        }
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: file-table dump threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: file-table dump threw non-std exception");
+    }
+
     // Step 3: build the storage directly. Parity with MinecraftServer.cpp:919
     // (`storage = make_shared<McRegionLevelStorage>(pSave, File(L"."), name, true)`).
     // The McRegionLevelStorageSource->selectLevel path is for Xbox-style save
