@@ -398,6 +398,10 @@ enum {
 };
 #endif
 
+// Xbox helper for fetching the system locale id. iOS hands back English.
+static inline int XGetLanguage(void) { return XC_LANGUAGE_ENGLISH; }
+static inline int XGetLocale(void)   { return XC_LANGUAGE_ENGLISH; }
+
 // Xbox-style invalid XUID sentinel.
 #ifndef INVALID_XUID
 #  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
@@ -822,6 +826,16 @@ void glClientActiveTexture(unsigned int);
 #endif
 #ifndef ERROR_SUCCESS
 #  define ERROR_SUCCESS 0L
+#endif
+
+// Build identifier upstream embeds in the splash. Real Win64 build
+// generates this from the perforce branch; iOS just hands back a
+// static string.
+#ifndef VER_BRANCHVERSION_STR_W
+#  define VER_BRANCHVERSION_STR_W L"iOS"
+#endif
+#ifndef VER_BRANCHVERSION_STR
+#  define VER_BRANCHVERSION_STR "iOS"
 #endif
 
 // Xbox-style memset intrinsics. Real platforms use SIMD-aligned memset.
