@@ -52,13 +52,6 @@ add_compile_definitions(
   __APPLE_IOS__=1
 )
 
-# Upstream save / NBT format stores wchar_t as 2 bytes (Win64 layout). Apple
-# clang defaults wchar_t to 4 bytes; -fshort-wchar makes it 2 bytes so the
-# binary struct layouts (FileEntrySaveData, level.dat NBT names) line up.
-# Replacement wcs* impls live in iOS_WinCompat.h since system <wchar.h>
-# functions are still compiled against 4-byte wchar_t.
-add_compile_options(-fshort-wchar)
-
 # ---------------------------------------------------------------------------
 # Subdirectories
 # ---------------------------------------------------------------------------
