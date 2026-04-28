@@ -144,28 +144,8 @@ void GameRenderer::FinishedReassigning() {}
 // SavedDataStorage: real upstream now compiles via the typeid include
 // patches (MapItemSavedData / Villages / StructureFeatureSavedData).
 
-// ---------------------------------------------------------------------------
-// ServerChunkCache. Constructor + the methods ServerLevel calls into.
-// ---------------------------------------------------------------------------
-ServerChunkCache::ServerChunkCache(ServerLevel * /*level*/, ChunkStorage * /*storage*/, ChunkSource * /*source*/) {}
-ServerChunkCache::~ServerChunkCache() {}
-bool        ServerChunkCache::hasChunk(int, int)                                  { return false; }
-std::vector<LevelChunk *> *ServerChunkCache::getLoadedChunkList()                 { return nullptr; }
-void        ServerChunkCache::drop(int, int)                                      {}
-LevelChunk *ServerChunkCache::create(int, int)                                    { return nullptr; }
-LevelChunk *ServerChunkCache::create(int, int, bool)                              { return nullptr; }
-LevelChunk *ServerChunkCache::getChunk(int, int)                                  { return nullptr; }
-LevelChunk *ServerChunkCache::getChunkLoadedOrUnloaded(int, int)                  { return nullptr; }
-void        ServerChunkCache::dontDrop(int, int)                                  {}
-void        ServerChunkCache::postProcess(ChunkSource *, int, int)                {}
-bool        ServerChunkCache::saveAllEntities()                                   { return true; }
-bool        ServerChunkCache::save(bool, ProgressListener *)                      { return true; }
-bool        ServerChunkCache::tick()                                              { return false; }
-bool        ServerChunkCache::shouldSave()                                        { return false; }
-std::wstring ServerChunkCache::gatherStats()                                      { return std::wstring(); }
-std::vector<Biome::MobSpawnerData *> *ServerChunkCache::getMobsAt(MobCategory *, int, int, int) { return nullptr; }
-TilePos    *ServerChunkCache::findNearestMapFeature(Level *, const std::wstring &, int, int, int)    { return nullptr; }
-void        ServerChunkCache::recreateLogicStructuresForChunk(int, int)           {}
+// ServerChunkCache: real upstream now compiles (LONG64 typedef +
+// processSchematicsLighting stub). All methods come from the .cpp.
 
 // ---------------------------------------------------------------------------
 // RandomLevelSource (chunk source used by ServerLevel::createChunkSource).
