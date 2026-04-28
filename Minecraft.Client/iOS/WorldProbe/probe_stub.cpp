@@ -147,6 +147,7 @@ void glVertex2f(float, float)                              {}
 void glVertex2i(int, int)                                  {}
 void glNormal3f(float, float, float)                       {}
 void glLightfv(unsigned int, unsigned int, const float*)   {}
+void glLight(unsigned int, unsigned int, float)            {} // upstream Lighting.cpp
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
 void glFogf(unsigned int, float)                           {}
 void glFogi(unsigned int, int)                             {}

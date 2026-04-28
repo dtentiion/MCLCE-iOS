@@ -285,6 +285,9 @@ struct C4JRenderStub {
     template<class... A> void   TextureUnbind(A...)           {}
     template<class... A> void   TextureUpdate(A...)           {}
     template<class... A> void   MatrixMode(A...)              {}
+    template<class... A> void   MatrixRotate(A...)            {}
+    template<class... A> void   MatrixTranslate(A...)         {}
+    template<class... A> void   MatrixScale(A...)             {}
     template<class... A> void   CBuffClear(A...)              {}
     template<class... A> void   CBuffReset(A...)              {}
 };
@@ -624,6 +627,55 @@ public:
 };
 class Keyboard {
 public:
+    // Keyboard scancodes upstream Screen / EditBox / Options / etc. read
+    // for hotkey handling. Values pulled from upstream's Win64 layer
+    // (matching DirectInput key codes); only the ones used as compares
+    // need to be unique.
+    enum {
+        KEY_NONE     = 0,
+        KEY_ESCAPE   = 1,
+        KEY_BACK     = 14,
+        KEY_RETURN   = 28,
+        KEY_LEFT     = 203,
+        KEY_RIGHT    = 205,
+        KEY_UP       = 200,
+        KEY_DOWN     = 208,
+        KEY_LCONTROL = 29,
+        KEY_LSHIFT   = 42,
+        KEY_LALT     = 56,
+        KEY_HOME     = 199,
+        KEY_END      = 207,
+        KEY_DELETE   = 211,
+        KEY_INSERT   = 210,
+        KEY_TAB      = 15,
+        KEY_SPACE    = 57,
+        KEY_A        = 30,
+        KEY_B        = 48,
+        KEY_C        = 46,
+        KEY_D        = 32,
+        KEY_E        = 18,
+        KEY_F        = 33,
+        KEY_G        = 34,
+        KEY_H        = 35,
+        KEY_I        = 23,
+        KEY_J        = 36,
+        KEY_K        = 37,
+        KEY_L        = 38,
+        KEY_M        = 50,
+        KEY_N        = 49,
+        KEY_O        = 24,
+        KEY_P        = 25,
+        KEY_Q        = 16,
+        KEY_R        = 19,
+        KEY_S        = 31,
+        KEY_T        = 20,
+        KEY_U        = 22,
+        KEY_V        = 47,
+        KEY_W        = 17,
+        KEY_X        = 45,
+        KEY_Y        = 21,
+        KEY_Z        = 44,
+    };
     static void create() {}
     static void destroy() {}
     static bool isKeyDown(int)           { return false; }

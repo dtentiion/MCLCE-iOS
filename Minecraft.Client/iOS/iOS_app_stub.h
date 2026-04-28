@@ -136,6 +136,7 @@ struct McleAppStub {
     template<class... A> int            getLocale(A...)               { return 1; }
     template<class... A> bool           isXuidDeadmau5(A...)          { return false; }
     template<class... A> void*          getArchiveFile(A...)          { return nullptr; }
+    template<class... A> int            GetLocalPlayerCount(A...)     { return 1; }
 
     // Common/* additions: catch-all setters / getters / state
     // probes that upstream code in Minecraft.Client/Common/* uses.
@@ -205,6 +206,7 @@ struct McleNetworkManagerStub {
     template<class... A> bool IsLeavingGame(A...)        { return false; }
     template<class... A> bool IsInSession(A...)          { return false; }
     template<class... A> bool IsHost(A...)               { return false; }
+    template<class... A> bool IsLocalGame(A...)          { return true; }
     template<class... A> int  GetSmallId(A...)           { return 0; }
     template<class... A> McleNetworkManagerStub* GetHostPlayer(A...) { return this; }
     // Real upstream returns INetworkPlayer*. NetworkPlayerInterface.h
