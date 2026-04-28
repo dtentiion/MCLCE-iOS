@@ -688,6 +688,7 @@ public:
     static void destroy() {}
     static bool isKeyDown(int)           { return false; }
     static void enableRepeatEvents(bool) {}
+    static std::wstring getKeyName(int)  { return std::wstring(); }
 };
 class Display {
 public:
