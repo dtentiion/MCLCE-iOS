@@ -491,6 +491,28 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.blackColor;
 
+    // Print every file the app's sandbox Documents folder actually
+    // contains. This is the only ground truth for "did MainMenu1080.swf
+    // make it into the right container" - independent of how 3uTools /
+    // AltStore / Sideloadly chose to copy it in.
+    {
+        NSFileManager* fm = NSFileManager.defaultManager;
+        NSURL* docs = [fm URLsForDirectory:NSDocumentDirectory
+                                 inDomains:NSUserDomainMask].firstObject;
+        NSLog(@"[MCLE/docs] sandbox Documents = %@", docs.path);
+        NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs.path error:nil];
+        NSLog(@"[MCLE/docs] %lu entries", (unsigned long)entries.count);
+        for (NSString* e in entries) {
+            NSString* full = [docs.path stringByAppendingPathComponent:e];
+            BOOL isDir = NO;
+            [fm fileExistsAtPath:full isDirectory:&isDir];
+            NSDictionary* attrs = [fm attributesOfItemAtPath:full error:nil];
+            unsigned long long sz = isDir ? 0 : [attrs[NSFileSize] unsignedLongLongValue];
+            NSLog(@"[MCLE/docs]   %@%@ (%llu bytes)",
+                  e, isDir ? @"/" : @"", sz);
+        }
+    }
+
     // Lay down the platform-skin alias before any SWF parses
     // imports. Without this, ToolTips1080.swf (and any other
     // 1080p scene that imports platformskinHD.swf) 404s on the
