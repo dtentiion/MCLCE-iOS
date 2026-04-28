@@ -47,6 +47,8 @@
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
 #include "../../../upstream/Minecraft.Client/PlayerList.h"
+#include "../../../upstream/Minecraft.Client/ServerPlayer.h"
+#include "../../../upstream/Minecraft.Client/ServerPlayerGameMode.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 
 #include "4JLibs/inc/4J_Storage.h"
@@ -72,6 +74,8 @@ std::shared_ptr<LevelStorage> g_levelStorage;
 // is a ServerLevel; levels[1] and levels[2] are DerivedServerLevel that
 // share state with levels[0]. Mirrors MinecraftServer.cpp:956-1007.
 ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
+std::shared_ptr<ServerPlayer> g_player;
+ServerPlayerGameMode         *g_playerGameMode = nullptr;
 std::wstring                  g_levelName;
 int                           g_initState    = kStateUnstarted;
 uint64_t                      g_tickCount    = 0;
@@ -407,6 +411,32 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: chunk preload done, %d loaded, %d failed", loaded, failed);
     }
 
+    // Step 8: spawn a ServerPlayer at the overworld's shared spawn pos
+    // and register it. Parity-light: upstream's full network flow runs
+    // through PendingConnection -> AddPlayerPacket -> PlayerList::add;
+    // for a single-player iOS shell we shortcut to the same end state
+    // that PlayerList::add would produce (player constructed against
+    // levels[0], registered with the server, added to the level).
+    try {
+        g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
+        g_player = std::make_shared<ServerPlayer>(
+            /*server*/    g_server,
+            /*level*/     static_cast<Level *>(g_levels[0]),
+            /*name*/      std::wstring(L"iOSPlayer"),
+            /*gameMode*/  g_playerGameMode);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
+        // Don't fail the whole bootstrap - levels are still ticking.
+    }
+    if (g_player) {
+        MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
+        try {
+            g_levels[0]->addEntity(g_player);
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: addEntity threw: %{public}s", e.what());
+        }
+    }
+
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 }
@@ -471,6 +501,12 @@ extern "C" void mcle_game_tick(void) {
 
 extern "C" void mcle_game_shutdown(void) {
     MCLE_LOG("mcle_game_shutdown: tearing down");
+    // Drop the player first so its dtor runs before the level it lives in.
+    g_player.reset();
+    if (g_playerGameMode) {
+        try { delete g_playerGameMode; } catch (...) {}
+        g_playerGameMode = nullptr;
+    }
     // Tear levels down in reverse order: derived levels reference the
     // overworld, so they must go before levels[0]. Server is destroyed
     // after the levels because they hold raw pointers to it.
