@@ -21,6 +21,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/AddMobPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddMushroomIslandLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddPaintingPacket.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/AddPlayerPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AddSnowLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AirTile.cpp
   ${UPSTREAM_DIR}/Minecraft.World/AmbientCreature.cpp
