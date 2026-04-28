@@ -22,6 +22,9 @@
 #include "AddEntityPacket.h"
 #include "AddPlayerPacket.h"
 #include "AnimatePacket.h"
+#include "ContainerOpenPacket.h"
+#include "EntityEvent.h"
+#include "TileEditorOpenPacket.h"
 #include "Biome.h"
 #include "GameEventPacket.h"
 #include "PotionBrewing.h"
@@ -65,8 +68,27 @@ const int Item::emerald_Id;
 // Packet statics.
 // ---------------------------------------------------------------------------
 const int AnimatePacket::SWING;
+const int AnimatePacket::WAKE_UP;
+const int AnimatePacket::EAT;
+const int AnimatePacket::CRITICAL_HIT;
+const int AnimatePacket::MAGIC_CRITICAL_HIT;
 const int SetEntityLinkPacket::LEASH;
 const int SetEntityLinkPacket::RIDING;
+const int Level::maxBuildHeight;
+const BYTE EntityEvent::USE_ITEM_COMPLETE;
+const int TileEditorOpenPacket::SIGN;
+const int ContainerOpenPacket::WORKBENCH;
+const int ContainerOpenPacket::FURNACE;
+const int ContainerOpenPacket::TRAP;
+const int ContainerOpenPacket::ENCHANTMENT;
+const int ContainerOpenPacket::BREWING_STAND;
+const int ContainerOpenPacket::TRADER_NPC;
+const int ContainerOpenPacket::BEACON;
+const int ContainerOpenPacket::REPAIR_TABLE;
+const int ContainerOpenPacket::HOPPER;
+const int ContainerOpenPacket::DROPPER;
+const int ContainerOpenPacket::HORSE;
+const int ContainerOpenPacket::FIREWORKS;
 const int GameEventPacket::SUCCESSFUL_BOW_HIT;
 const int PotionBrewing::POTION_ID_SPLASH_DAMAGE;
 const int AddEntityPacket::BOAT;
@@ -104,6 +126,7 @@ int  AddPlayerPacket::getEstimatedSize()        { return 0; }
 // ---------------------------------------------------------------------------
 ColourTable *Minecraft::getColourTable() { return nullptr; }
 bool         Minecraft::isTutorial()      { return false; }
+MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 
 // ---------------------------------------------------------------------------
 // PlayerConnection / ServerPlayer.
@@ -111,6 +134,8 @@ bool         Minecraft::isTutorial()      { return false; }
 void PlayerConnection::send(std::shared_ptr<Packet> /*packet*/) {}
 bool PlayerConnection::isLocal() { return true; }
 void PlayerConnection::teleport(double, double, double, float, float, bool) {}
+void PlayerConnection::queueSend(std::shared_ptr<Packet> /*packet*/) {}
+int  PlayerConnection::countDelayedPackets() { return 0; }
 
 // ServerPlayer: real upstream now compiles, all methods come from the .cpp.
 
