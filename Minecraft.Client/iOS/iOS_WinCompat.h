@@ -20,6 +20,7 @@
 
 #ifdef __cplusplus
 #include <string>
+#include <cstddef>
 #endif
 
 // Basic integer aliases.
@@ -1060,6 +1061,15 @@ static inline DWORD SetFilePointer(HANDLE, LONG distLow, PLONG distHigh, DWORD) 
     if (distHigh) *distHigh = 0;
     return (DWORD)distLow;
 }
+// Upstream ZoneIo.cpp passes nullptr for both PLONG distHigh AND DWORD
+// moveMethod (`SetFilePointer(ch, pos, nullptr, nullptr)`). Add an
+// overload that accepts std::nullptr_t for the move-method slot so the
+// ambiguity resolves cleanly.
+#ifdef __cplusplus
+static inline DWORD SetFilePointer(HANDLE h, LONG distLow, PLONG distHigh, std::nullptr_t) {
+    return SetFilePointer(h, distLow, distHigh, (DWORD)0);
+}
+#endif
 
 // Win32 CreateFile / WriteFile / ReadFile / CloseHandle entries.
 // Required for compile of File.cpp / RegionFile.cpp on the Console branch.
