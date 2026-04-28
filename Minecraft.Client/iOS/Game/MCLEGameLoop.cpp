@@ -310,9 +310,11 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: McRegionLevelStorage at %p", (void*)g_levelStorage.get());
 
     // Step 4: read level metadata.
+    MCLE_LOG("mcle_game_init: calling prepareLevel...");
     LevelData *levelData = nullptr;
     try {
         levelData = g_levelStorage->prepareLevel();
+        MCLE_LOG("mcle_game_init: prepareLevel returned %p", (void*)levelData);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: prepareLevel threw: %{public}s", e.what());
         g_initState = kStateFailed;
