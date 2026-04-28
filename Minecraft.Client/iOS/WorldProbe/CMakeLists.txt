@@ -1004,6 +1004,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/SignRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/UIString.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Trial/TrialMode.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/C4JThread.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/ZoneIo.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerChunkCache.cpp
 )
 
 add_library(mcle_world_probe STATIC

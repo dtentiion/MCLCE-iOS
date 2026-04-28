@@ -94,13 +94,9 @@ void AddPlayerPacket::write(DataOutputStream *) {}
 void AddPlayerPacket::handle(PacketListener *)  {}
 int  AddPlayerPacket::getEstimatedSize()        { return 0; }
 
-// ---------------------------------------------------------------------------
-// C4JThread::Event + EventArray. iOS doesn't use the cross-thread waitable
-// event pattern at runtime; every call resolves to a no-op.
-// ---------------------------------------------------------------------------
-C4JThread::Event::Event(C4JThread::Event::EMode /*mode*/) {}
-void C4JThread::EventArray::ClearAll() {}
-void C4JThread::EventArray::Set(int /*index*/) {}
+// C4JThread + Event + EventArray: real upstream C4JThread.cpp now compiles
+// via the Win32 thread/event API shims (ResumeThread, CreateEvent,
+// WaitForSingleObject, GetCurrentThreadId, GetExitCodeThread, etc).
 
 // ---------------------------------------------------------------------------
 // Minecraft (singleton client app). Real app uses these to gate UI; the
