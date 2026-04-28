@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <exception>
 
+#include "../../../upstream/Minecraft.World/Minecraft.World.h"
 #include "../../../upstream/Minecraft.World/Compression.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
@@ -116,6 +117,18 @@ void initImpl() {
     // decompressed body empty and prepareLevel falls into the no-level.dat
     // branch.
     Compression::CreateNewThreadStorage();
+
+    // Upstream Minecraft::main() does this first thing: walks every static
+    // ctor in dependency order (Tile, Item, Biome, ...). Without it any
+    // tile/item lookup returns a default-constructed object.
+    try {
+        MinecraftWorld_RunStaticCtors();
+        MCLE_LOG("mcle_game_init: MinecraftWorld_RunStaticCtors done");
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: RunStaticCtors threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: RunStaticCtors threw non-std exception");
+    }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
