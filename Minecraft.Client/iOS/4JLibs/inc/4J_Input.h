@@ -23,6 +23,8 @@ public:
     template<class... A> void  SetVibration(A...)           {}
     template<class... A> void  ResetIdleTimer(A...)         {}
     template<class... A> bool  IsConnected(A...)            { return true; }
+    template<class... A> int   GetValue(A...)               { return 0; }
+    template<class... A> void* GetGameJoypadMaps(A...)      { return nullptr; }
 };
 
 extern C_4JInput InputManager;

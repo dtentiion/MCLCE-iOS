@@ -651,10 +651,16 @@ public:
 // without pulling Tutorial.h (which has UIScene deps). Real Tutorial
 // state lives in Tutorial.cpp which is in the lib already
 // (Common/Tutorial/AreaConstraint.cpp etc are green per the auto-probe).
+// iOS_stdafx provides this stub for files that don't include the real
+// Tutorial.h. The real header guards itself on _TUTORIAL_H_DEFINED so
+// it will skip its body when this stub is in scope first.
+#ifndef _TUTORIAL_H_DEFINED
+#define _TUTORIAL_H_DEFINED
 class Tutorial {
 public:
     bool m_fullTutorialComplete = false;
     bool m_allTutorialsComplete = false;
+    struct PopupMessageDetails {};
     template<class... A> bool isStateCompleted(A...)  { return false; }
     template<class... A> void setStateCompleted(A...) {}
     template<class... A> bool isFullTutorial(A...)    { return false; }
@@ -662,6 +668,7 @@ public:
     template<class... A> void addMessage(A...)        {}
     template<class... A> int  getPad(A...)            { return 0; }
 };
+#endif
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
