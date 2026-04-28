@@ -491,6 +491,16 @@ typedef struct D3D11_VIEWPORT {
 #  define GL_PROJECTION              0x1701
 #  define GL_MODELVIEW               0x1700
 #  define GL_TEXTURE                 0x1702
+#  define GL_PROJECTION_MATRIX       0x0BA7
+#  define GL_MODELVIEW_MATRIX        0x0BA6
+#  define GL_TEXTURE_MATRIX          0x0BA8
+#  define GL_VIEWPORT                0x0BA2
+#  define GL_RESCALE_NORMAL          0x803A
+#  define GL_NORMALIZE               0x0BA1
+#  define GL_T                       0x2001  // texgen S/T enum group
+#  define GL_S                       0x2000
+#  define GL_R                       0x2002
+#  define GL_Q                       0x2003
 #  define GL_SMOOTH                  0x1D01
 #  define GL_FLAT                    0x1D00
 #  define GL_TRUE                    1
@@ -849,6 +859,15 @@ void glClientActiveTexture(unsigned int);
 // parse. We never report presence on iOS.
 #ifndef CONTEXT_PRESENCE_MULTIPLAYEROFFLINE
 #  define CONTEXT_PRESENCE_MULTIPLAYEROFFLINE 0
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER
+#  define CONTEXT_PRESENCE_MULTIPLAYER 3
+#endif
+#ifndef CONTEXT_PRESENCE_TUTORIAL
+#  define CONTEXT_PRESENCE_TUTORIAL 4
+#endif
+#ifndef CONTEXT_PRESENCE_MENU
+#  define CONTEXT_PRESENCE_MENU 5
 #endif
 #ifndef CONTEXT_PRESENCE_MULTIPLAYERONLINE
 #  define CONTEXT_PRESENCE_MULTIPLAYERONLINE 1
