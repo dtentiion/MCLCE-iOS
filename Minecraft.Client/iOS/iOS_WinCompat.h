@@ -410,6 +410,21 @@ static inline int XGetLocale(void)   { return XC_LANGUAGE_ENGLISH; }
 #  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
 #endif
 
+// SessionID type from upstream's Sony SQRNetworkManager. iOS doesn't
+// ship PSN, so we provide an opaque 16-byte buffer matching the Sony
+// layout. SessionInfo.h declares fields of this type.
+#ifdef __cplusplus
+struct SessionID {
+    uint8_t bytes[16];
+    SessionID() { for (int i = 0; i < 16; ++i) bytes[i] = 0; }
+    bool operator==(const SessionID& o) const {
+        for (int i = 0; i < 16; ++i) if (bytes[i] != o.bytes[i]) return false;
+        return true;
+    }
+    bool operator!=(const SessionID& o) const { return !(*this == o); }
+};
+#endif
+
 // Xbox-style content / device descriptors. Probe never opens XContent;
 // these typedefs satisfy DLCTexturePack / DLCManager headers that
 // declare members of these types.
