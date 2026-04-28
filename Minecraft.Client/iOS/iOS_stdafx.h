@@ -379,10 +379,12 @@ class UIControl_Base;
 class UIControl_TextInput;
 class ItemRenderer;
 // CustomDrawData is defined in upstream UIStructs.h as a typedef'd
-// struct. Forward-decl as `struct` so the eventual typedef matches
-// (declaring `class` here clashes with the upstream struct typedef).
-struct _CustomDrawData;
-typedef struct _CustomDrawData CustomDrawData;
+// struct. Provide an empty stub gated on _CUSTOMDRAWDATA_DEFINED so
+// the real header can skip its body when our stub is in scope first.
+#ifndef _CUSTOMDRAWDATA_DEFINED
+#define _CUSTOMDRAWDATA_DEFINED
+typedef struct _CustomDrawData {} CustomDrawData;
+#endif
 // ConnectionProgressParams - Minecraft.cpp constructs one with `new`
 // in a network connection path. iOS_stdafx provides this stub for
 // files that don't pull upstream UIStructs.h. Guard so the real

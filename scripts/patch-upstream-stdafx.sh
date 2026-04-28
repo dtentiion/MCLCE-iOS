@@ -995,3 +995,25 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: gated ConnectionProgressParams in {path}")
 PY
 fi
+
+# UIStructs.h CustomDrawData typedef redefinition (same pattern as
+# UIVec2D and ConnectionProgressParams). Gate the upstream definition.
+UISC3="$REPO_ROOT/upstream/Minecraft.Client/Common/UI/UIStructs.h"
+if grep -q '_CUSTOMDRAWDATA_DEFINED' "$UISC3"; then
+    echo "patch-upstream-stdafx: UIStructs.h CustomDrawData already patched, skipping"
+else
+python3 - "$UISC3" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'typedef struct _CustomDrawData'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: UIStructs CustomDrawData anchor not found")
+patched = src.replace(needle, '#ifndef _CUSTOMDRAWDATA_DEFINED\n#define _CUSTOMDRAWDATA_DEFINED\n' + needle, 1)
+patched = patched.replace('} CustomDrawData;', '} CustomDrawData;\n#endif // _CUSTOMDRAWDATA_DEFINED', 1)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: gated CustomDrawData in {path}")
+PY
+fi
