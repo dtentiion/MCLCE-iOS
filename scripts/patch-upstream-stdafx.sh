@@ -1042,3 +1042,114 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: gated SoundEngine.h")
 PY
 fi
+
+# FileHeader.cpp ReadHeader: per-FileEntry memcpy reads sizeof(FileEntrySaveData)
+# bytes from the .ms bundle. On Win64 sizeof is 144 (wchar_t=2). On iOS clang
+# wchar_t defaults to 4 so sizeof becomes 272, which both reads past the
+# real disk record AND mis-aligns subsequent entries. Gate the iOS path so
+# it reads 64 little-endian uint16_t -> 64 wchar_t (zero-extend), then reads
+# length / startOffset / lastModifiedTime as 16 raw bytes, advancing the
+# cursor by 144 bytes per entry to match the on-disk Win64 layout.
+FHCPP="$REPO_ROOT/upstream/Minecraft.World/FileHeader.cpp"
+if grep -q 'IOS_FH_FILEENTRY_DISK_SIZE' "$FHCPP"; then
+    echo "patch-upstream-stdafx: FileHeader.cpp already patched, skipping"
+else
+python3 - "$FHCPP" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+
+# V2 read loop (current save versions). Replace the memcpy + post-loop
+# fesdHeaderPosition++.
+v2_old = (
+    '#ifdef __PSVITA__\n'
+    '\t\t\t\tVirtualCopyFrom( &entry->data, fesdHeaderPosition, sizeof(FileEntrySaveData) );\n'
+    '#else\n'
+    '\t\t\t\tmemcpy( &entry->data, fesdHeaderPosition, sizeof(FileEntrySaveData) );\n'
+    '#endif'
+)
+v2_new = (
+    '// IOS_FH_FILEENTRY_DISK_SIZE 144\n'
+    '#if defined(__APPLE_IOS__)\n'
+    '\t\t\t\t{ const uint8_t *_p = (const uint8_t *)fesdHeaderPosition;\n'
+    '\t\t\t\t  for (int _j = 0; _j < 64; ++_j) {\n'
+    '\t\t\t\t      uint16_t _c = (uint16_t)_p[_j*2] | ((uint16_t)_p[_j*2+1] << 8);\n'
+    '\t\t\t\t      entry->data.filename[_j] = (wchar_t)_c;\n'
+    '\t\t\t\t  }\n'
+    '\t\t\t\t  _p += 128;\n'
+    '\t\t\t\t  memcpy(&entry->data.length, _p, 4); _p += 4;\n'
+    '\t\t\t\t  memcpy(&entry->data.startOffset, _p, 4); _p += 4;\n'
+    '\t\t\t\t  memcpy(&entry->data.lastModifiedTime, _p, 8); }\n'
+    '#elif defined(__PSVITA__)\n'
+    '\t\t\t\tVirtualCopyFrom( &entry->data, fesdHeaderPosition, sizeof(FileEntrySaveData) );\n'
+    '#else\n'
+    '\t\t\t\tmemcpy( &entry->data, fesdHeaderPosition, sizeof(FileEntrySaveData) );\n'
+    '#endif'
+)
+if v2_old not in src:
+    sys.exit("patch-upstream-stdafx: V2 memcpy anchor not found in FileHeader.cpp")
+patched = src.replace(v2_old, v2_new, 1)
+
+# V2 advance: fesdHeaderPosition++; (sizeof FileEntrySaveData on iOS = 272, on
+# disk = 144). Replace with iOS-aware byte advance.
+v2_adv_old = '\t\t\t\tfesdHeaderPosition++;'
+v2_adv_new = (
+    '#if defined(__APPLE_IOS__)\n'
+    '\t\t\t\tfesdHeaderPosition = (FileEntrySaveData *)((char *)fesdHeaderPosition + 144);\n'
+    '#else\n'
+    '\t\t\t\tfesdHeaderPosition++;\n'
+    '#endif'
+)
+if v2_adv_old not in patched:
+    sys.exit("patch-upstream-stdafx: V2 advance anchor not found in FileHeader.cpp")
+patched = patched.replace(v2_adv_old, v2_adv_new, 1)
+
+# V1 legacy read loop (FileEntrySaveDataV1). Disk size = 64*2 + 4 + 4 = 136.
+# Same shape of fix.
+v1_old = (
+    '#ifdef __PSVITA__\n'
+    '\t\t\t\tVirtualCopyFrom( &entry->data, headerPosition, sizeof(FileEntrySaveDataV1) );\n'
+    '#else\n'
+    '\t\t\t\tmemcpy( &entry->data, headerPosition, sizeof(FileEntrySaveDataV1) );\n'
+    '#endif'
+)
+v1_new = (
+    '#if defined(__APPLE_IOS__)\n'
+    '\t\t\t\t{ const uint8_t *_p = (const uint8_t *)headerPosition;\n'
+    '\t\t\t\t  for (int _j = 0; _j < 64; ++_j) {\n'
+    '\t\t\t\t      uint16_t _c = (uint16_t)_p[_j*2] | ((uint16_t)_p[_j*2+1] << 8);\n'
+    '\t\t\t\t      entry->data.filename[_j] = (wchar_t)_c;\n'
+    '\t\t\t\t  }\n'
+    '\t\t\t\t  _p += 128;\n'
+    '\t\t\t\t  memcpy(&entry->data.length, _p, 4); _p += 4;\n'
+    '\t\t\t\t  memcpy(&entry->data.startOffset, _p, 4); }\n'
+    '#elif defined(__PSVITA__)\n'
+    '\t\t\t\tVirtualCopyFrom( &entry->data, headerPosition, sizeof(FileEntrySaveDataV1) );\n'
+    '#else\n'
+    '\t\t\t\tmemcpy( &entry->data, headerPosition, sizeof(FileEntrySaveDataV1) );\n'
+    '#endif'
+)
+if v1_old in patched:
+    patched = patched.replace(v1_old, v1_new, 1)
+
+# V1 loop advances by sizeof(FileEntrySaveDataV1) twice (i increment + headerPosition
+# advance). Replace both with 136 on iOS.
+v1_inc_old = '\t\t\t\ti += sizeof(FileEntrySaveDataV1);\n\t\t\t\theaderPosition += sizeof(FileEntrySaveDataV1);'
+v1_inc_new = (
+    '#if defined(__APPLE_IOS__)\n'
+    '\t\t\t\ti += 136;\n'
+    '\t\t\t\theaderPosition += 136;\n'
+    '#else\n'
+    '\t\t\t\ti += sizeof(FileEntrySaveDataV1);\n'
+    '\t\t\t\theaderPosition += sizeof(FileEntrySaveDataV1);\n'
+    '#endif'
+)
+if v1_inc_old in patched:
+    patched = patched.replace(v1_inc_old, v1_inc_new, 1)
+
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: rewrote FileEntrySaveData read for iOS in {path}")
+PY
+fi
