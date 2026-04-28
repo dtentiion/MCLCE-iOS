@@ -1154,9 +1154,17 @@ static inline DWORD SetFilePointer(HANDLE h, LONG distLow, PLONG distHigh, DWORD
 #endif
 #ifndef CREATE_NEW
 #  define CREATE_NEW         1
+#endif
+#ifndef CREATE_ALWAYS
 #  define CREATE_ALWAYS      2
+#endif
+#ifndef OPEN_EXISTING
 #  define OPEN_EXISTING      3
+#endif
+#ifndef OPEN_ALWAYS
 #  define OPEN_ALWAYS        4
+#endif
+#ifndef TRUNCATE_EXISTING
 #  define TRUNCATE_EXISTING  5
 #endif
 
