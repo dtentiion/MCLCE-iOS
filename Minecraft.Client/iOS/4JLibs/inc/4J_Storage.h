@@ -74,6 +74,7 @@ public:
     template<class... A> void*        AllocateSaveData(A...)    { return nullptr; }
     template<class... A> bool         GetSaveUniqueNumber(A...) { return false; }
     template<class... A> std::wstring GetSaveUniqueFilename(A...) { return std::wstring(); }
+    template<class... A> int          DLC_FILE_PARAM(A...)         { return 0; }
 };
 
 // Real upstream 4J_Storage.h declares `extern C4JStorage StorageManager;`
