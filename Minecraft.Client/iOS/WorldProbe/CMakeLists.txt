@@ -1097,6 +1097,38 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/WitherBossRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/WitherSkullRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/WolfRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Button.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SlideButton.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Screen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/AchievementPopup.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/AchievementScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/ChatScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/CraftingScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/CreateWorldScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/DeathScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/InBedChatScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/JoinMultiplayerScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/NameEntryScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/RenameWorldScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/SelectWorldScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/StatsScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TextEditScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TrapScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/VideoSettingsScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCGameRulesFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCSkinFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Leaderboards/LeaderboardManager.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_AnvilMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_BrewingMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_ContainerMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_DispenserMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_EnchantingMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_FireworksMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_FurnaceMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_HopperMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_HorseInventoryMenu.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_InventoryMenu.cpp
 )
 
 add_library(mcle_world_probe STATIC
