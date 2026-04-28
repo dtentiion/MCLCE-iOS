@@ -876,3 +876,46 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: gated UIVec2D in {path}")
 PY
 fi
+
+# Tutorial.h gets redefined when both iOS_stdafx (stub) and upstream
+# Tutorial.h are visible. Add an include-guard macro to the upstream
+# header and gate the stub against it.
+TH="$REPO_ROOT/upstream/Minecraft.Client/Common/Tutorial/Tutorial.h"
+if grep -q '_TUTORIAL_H_DEFINED' "$TH"; then
+    echo "patch-upstream-stdafx: Tutorial.h already patched, skipping"
+else
+python3 - "$TH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'class Tutorial'
+if needle not in src:
+    sys.exit("patch-upstream-stdafx: Tutorial anchor not found")
+patched = src.replace(needle,
+    '#ifndef _TUTORIAL_H_DEFINED\n#define _TUTORIAL_H_DEFINED\n' + needle, 1)
+# Append closing #endif at file end.
+patched = patched + '\n#endif // _TUTORIAL_H_DEFINED\n'
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: gated Tutorial.h")
+PY
+fi
+
+# AbstractContainerScreen.cpp uses AbstractContainerMenu::CLICKED_OUTSIDE
+# but the header defines SLOT_CLICKED_OUTSIDE. Rename in the .cpp.
+ACSC="$REPO_ROOT/upstream/Minecraft.Client/AbstractContainerScreen.cpp"
+if grep -q 'SLOT_CLICKED_OUTSIDE' "$ACSC"; then
+    echo "patch-upstream-stdafx: AbstractContainerScreen.cpp already patched, skipping"
+else
+python3 - "$ACSC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+src = src.replace('AbstractContainerMenu::CLICKED_OUTSIDE', 'AbstractContainerMenu::SLOT_CLICKED_OUTSIDE')
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: renamed CLICKED_OUTSIDE -> SLOT_CLICKED_OUTSIDE in {path}")
+PY
+fi
