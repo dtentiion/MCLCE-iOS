@@ -118,17 +118,13 @@ void initImpl() {
     // branch.
     Compression::CreateNewThreadStorage();
 
-    // Upstream Minecraft::main() does this first thing: walks every static
-    // ctor in dependency order (Tile, Item, Biome, ...). Without it any
-    // tile/item lookup returns a default-constructed object.
-    try {
-        MinecraftWorld_RunStaticCtors();
-        MCLE_LOG("mcle_game_init: MinecraftWorld_RunStaticCtors done");
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: RunStaticCtors threw: %{public}s", e.what());
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: RunStaticCtors threw non-std exception");
-    }
+    // MinecraftWorld_RunStaticCtors() is the parity-correct upstream init
+    // pass but one of the ctors in its dependency chain hard-crashes on
+    // iOS (likely a null deref inside the Item/Tile/Recipes registration
+    // before the C++ exception handler is reached, since SIGSEGV isn't an
+    // exception). Skipping for now until the crashing ctor is identified;
+    // accidental TLS-zero init has been good enough to reach the save
+    // discovery + chunk preload code path.
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
