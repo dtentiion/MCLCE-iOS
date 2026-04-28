@@ -236,3 +236,8 @@ enum ETelemetryPlayerDeathSource
     eTelemetryPlayerDeathSource_Zombie            = 17,
     eTelemetryPlayerDeathSource_ZombiePigman      = 18,
 };
+
+// ETelemetryChallenges holds both challenge IDs and the player-death-source
+// values upstream stuffs into m_lastDamageSource. Define as an int alias
+// so the enum-set and the field type compose.
+typedef int ETelemetryChallenges;
