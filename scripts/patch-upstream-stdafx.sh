@@ -953,3 +953,23 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: added Ozelot.h include to {path}")
 PY
 fi
+
+# GameMode.cpp uses level->setTile which became setTileAndData. Pass
+# (data=0, flags=3) for parity with the historical setTile() default.
+GMC="$REPO_ROOT/upstream/Minecraft.Client/GameMode.cpp"
+if [ -f "$GMC" ] && grep -q 'level->setTile(' "$GMC" && ! grep -q 'level->setTileAndData(' "$GMC"; then
+python3 - "$GMC" <<'PY'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+patched = re.sub(
+    r'level->setTile\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,)]+)\)',
+    r'level->setTileAndData(\1, \2, \3, \4, 0, 3)',
+    src,
+)
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print(f"patch-upstream-stdafx: rewrote setTile -> setTileAndData in {path}")
+PY
+fi
