@@ -290,6 +290,8 @@ struct C4JRenderStub {
     template<class... A> void   MatrixScale(A...)             {}
     template<class... A> void   CBuffClear(A...)              {}
     template<class... A> void   CBuffReset(A...)              {}
+    template<class... A> void   CBuffStart(A...)              {}
+    template<class... A> void   CBuffEnd(A...)                {}
 };
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
@@ -595,6 +597,8 @@ public:
     template<class... A> void StopAllSounds(A...)    {}
     template<class... A> void SetMusicVolume(A...)   {}
     template<class... A> void SetSFXVolume(A...)     {}
+    template<class... A> void updateMusicVolume(A...) {}
+    template<class... A> void updateSFXVolume(A...)   {}
 };
 // Real MultiPlayerGameMode - PlayerList chains through
 // Minecraft::gameMode->getTutorial(). Header is light (only pulls

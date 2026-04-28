@@ -837,6 +837,28 @@ void glClientActiveTexture(unsigned int);
 #ifndef VER_BRANCHVERSION_STR
 #  define VER_BRANCHVERSION_STR "iOS"
 #endif
+#ifndef VER_FILEVERSION_STR_W
+#  define VER_FILEVERSION_STR_W L"0.0.1"
+#endif
+#ifndef VER_FILEVERSION_STR
+#  define VER_FILEVERSION_STR "0.0.1"
+#endif
+
+// Xbox Live presence-context constants. Real values are in xbox-secrets;
+// our shim just needs each name to resolve so switch/case statements
+// parse. We never report presence on iOS.
+#ifndef CONTEXT_PRESENCE_MULTIPLAYEROFFLINE
+#  define CONTEXT_PRESENCE_MULTIPLAYEROFFLINE 0
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYERONLINE
+#  define CONTEXT_PRESENCE_MULTIPLAYERONLINE 1
+#endif
+#ifndef CONTEXT_PRESENCE_SINGLEPLAYER
+#  define CONTEXT_PRESENCE_SINGLEPLAYER 2
+#endif
+
+// Xbox-specific thread-affinity helper. Maps to no-op on iOS.
+static inline DWORD XSetThreadProcessor(HANDLE, DWORD) { return 0; }
 
 // Xbox-style memset intrinsics. Real platforms use SIMD-aligned memset.
 // Map to the standard memset on iOS - probe never executes these.
