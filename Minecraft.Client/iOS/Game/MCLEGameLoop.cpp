@@ -24,6 +24,8 @@
 #include "iOS_stdafx.h"
 
 #include <os/log.h>
+#include <pthread.h>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -78,8 +80,16 @@ ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
 std::shared_ptr<ServerPlayer> g_player;
 ServerPlayerGameMode         *g_playerGameMode = nullptr;
 std::wstring                  g_levelName;
-int                           g_initState    = kStateUnstarted;
+// std::atomic so the main-thread tick reliably reads progress from the
+// background init thread. On arm64 plain int loads/stores are atomic
+// but the compiler can still reorder them with surrounding writes
+// (g_levels[0] = ...) and starve the tick of a happens-before edge.
+std::atomic<int>              g_initState{ kStateUnstarted };
 uint64_t                      g_tickCount    = 0;
+// Init runs on a background pthread so the main-thread tick stays free
+// to render the placeholder SWF + handle input while save loading is
+// in progress. Set once on first tick, never reset.
+std::atomic<bool>             g_initStarted{ false };
 constexpr uint64_t            kLogEveryN     = 60; // ~1 log/sec at 60 fps
 
 // UTF-8 -> wide string conversion. Documents path comes back as char*.
@@ -507,15 +517,25 @@ extern "C" void mcle_game_init(void) {
 
 extern "C" void mcle_game_tick(void) {
     // Lazy-init on the first tick so the bootstrap runs after the SWF
-    // menu has had a chance to draw at least one frame.
-    if (g_initState == kStateUnstarted) mcle_game_init();
+    // menu has had a chance to draw at least one frame. Init runs on a
+    // pthread so a long save-load doesn't block the main-thread render
+    // loop and freeze the placeholder.
+    if (!g_initStarted && g_initState == kStateUnstarted) {
+        g_initStarted = true;
+        pthread_t t;
+        pthread_create(&t, nullptr, [](void *) -> void * {
+            mcle_game_init();
+            return nullptr;
+        }, nullptr);
+        pthread_detach(t);
+    }
 
     g_tickCount++;
 
     if (g_initState != kStateTicking || !g_levels[0]) {
         if ((g_tickCount % kLogEveryN) == 0) {
             MCLE_LOG("tick %llu (probe lib running, simulation idle, state=%d)",
-                     static_cast<unsigned long long>(g_tickCount), g_initState);
+                     static_cast<unsigned long long>(g_tickCount), g_initState.load());
         }
         return;
     }
