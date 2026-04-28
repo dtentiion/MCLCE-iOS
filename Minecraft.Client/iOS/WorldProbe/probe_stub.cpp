@@ -67,9 +67,8 @@ Minecraft *Minecraft::GetInstance()                         { return nullptr; }
 // PlayerConnection
 INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 
-// ServerPlayer destructor - emits the vtable + typeinfo so any TU
-// dynamic_cast'ing or RTTI-lookup'ing ServerPlayer can link.
-ServerPlayer::~ServerPlayer() {}
+// ServerPlayer.cpp now compiles and is in the lib, so its real method
+// bodies (incl ~ServerPlayer + vtable) are emitted there.
 
 // LevelRenderer.cpp now compiles and is in the lib, so its real
 // `DestroyedTileManager` method bodies are emitted there. Nothing
