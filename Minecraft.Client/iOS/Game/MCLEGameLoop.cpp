@@ -42,6 +42,8 @@
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
+#include "../../../upstream/Minecraft.World/Pos.h"
+#include "../../../upstream/Minecraft.Client/ServerChunkCache.h"
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
 #include "../../../upstream/Minecraft.Client/PlayerList.h"
@@ -365,6 +367,44 @@ void initImpl() {
         }
         g_initState = kStateFailed;
         return;
+    }
+
+    // Step 7: preload chunks around spawn for the overworld. Parity with
+    // MinecraftServer::run lines 1115-1146. Iterates a 13x13 chunk grid
+    // (208-block radius) calling ServerChunkCache::create which loads
+    // existing chunks from saveData.ms's region data or generates new
+    // ones for missing tiles. Wrapped per-chunk so a single bad chunk
+    // doesn't kill the whole bootstrap.
+    {
+        static constexpr int kPreloadRadiusChunks = 6;  // ~96 blocks; r=196 in upstream is too aggressive for first boot
+        Pos *spawnPos = nullptr;
+        try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
+        int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
+        int spawnCz = spawnPos ? (spawnPos->z >> 4) : 0;
+        delete spawnPos;
+        MCLE_LOG("mcle_game_init: preloading chunks around (cx=%d, cz=%d), r=%d",
+                 spawnCx, spawnCz, kPreloadRadiusChunks);
+
+        int loaded = 0;
+        int failed = 0;
+        for (int dx = -kPreloadRadiusChunks; dx <= kPreloadRadiusChunks; ++dx) {
+            for (int dz = -kPreloadRadiusChunks; dz <= kPreloadRadiusChunks; ++dz) {
+                try {
+                    if (g_levels[0]->cache && g_levels[0]->cache->create(spawnCx + dx, spawnCz + dz, true)) {
+                        loaded++;
+                    }
+                } catch (const std::exception &e) {
+                    failed++;
+                    if (failed <= 4) {
+                        MCLE_LOG("mcle_game_init: chunk (%d,%d) ctor threw: %{public}s",
+                                 spawnCx + dx, spawnCz + dz, e.what());
+                    }
+                } catch (...) {
+                    failed++;
+                }
+            }
+        }
+        MCLE_LOG("mcle_game_init: chunk preload done, %d loaded, %d failed", loaded, failed);
     }
 
     g_initState = kStateTicking;
