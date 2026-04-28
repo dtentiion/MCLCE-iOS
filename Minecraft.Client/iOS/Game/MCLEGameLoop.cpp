@@ -163,10 +163,14 @@ void initImpl() {
         int candidateCount = children ? static_cast<int>(children->size()) : 0;
         MCLE_LOG("mcle_game_init: Documents/saves listed %d entries", candidateCount);
         if (children) {
+            int idx = 0;
             for (File *child : *children) {
-                if (child && child->isDirectory()) {
-                    levelId = child->getName();
-                    break;
+                if (!child) { ++idx; continue; }
+                std::wstring nm = child->getName();
+                MCLE_LOG("mcle_game_init: saves[%d] = %{public}s (%zu wchars, isDir=%d)",
+                         idx++, narrow(nm).c_str(), nm.size(), child->isDirectory() ? 1 : 0);
+                if (levelId.empty() && child->isDirectory()) {
+                    levelId = nm;
                 }
             }
             for (File *child : *children) delete child;
