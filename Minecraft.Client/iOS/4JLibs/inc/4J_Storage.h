@@ -75,6 +75,12 @@ public:
     template<class... A> bool         GetSaveUniqueNumber(A...) { return false; }
     template<class... A> std::wstring GetSaveUniqueFilename(A...) { return std::wstring(); }
     template<class... A> int          DLC_FILE_PARAM(A...)         { return 0; }
+
+    enum ESavingMessage {
+        ESavingMessage_None    = 0,
+        ESavingMessage_Saving  = 1,
+        ESavingMessage_Loading = 2,
+    };
 };
 
 // Real upstream 4J_Storage.h declares `extern C4JStorage StorageManager;`
