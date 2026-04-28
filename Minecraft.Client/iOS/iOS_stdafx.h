@@ -378,11 +378,11 @@ class UIControl;
 class UIControl_Base;
 class UIControl_TextInput;
 class ItemRenderer;
-// CustomDrawData is an Iggy-adjacent opaque type used as
-// `CustomDrawData*` in UIScene.h:231 and UIController.h. No definition
-// exists anywhere in the upstream tree (it's a forward-decl shape).
-// Forward-decl here so UIScene.h parses.
-class CustomDrawData;
+// CustomDrawData is defined in upstream UIStructs.h as a typedef'd
+// struct. Forward-decl as `struct` so the eventual typedef matches
+// (declaring `class` here clashes with the upstream struct typedef).
+struct _CustomDrawData;
+typedef struct _CustomDrawData CustomDrawData;
 // ConnectionProgressParams - Minecraft.cpp constructs one with `new`
 // in a network connection path. iOS_stdafx provides this stub for
 // files that don't pull upstream UIStructs.h. Guard so the real
