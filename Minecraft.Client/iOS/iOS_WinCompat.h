@@ -869,6 +869,25 @@ void glClientActiveTexture(unsigned int);
 #ifndef CONTEXT_PRESENCE_MENU
 #  define CONTEXT_PRESENCE_MENU 5
 #endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_1POFFLINE
+#  define CONTEXT_PRESENCE_MULTIPLAYER_1POFFLINE 6
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_2POFFLINE
+#  define CONTEXT_PRESENCE_MULTIPLAYER_2POFFLINE 7
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_3POFFLINE
+#  define CONTEXT_PRESENCE_MULTIPLAYER_3POFFLINE 8
+#endif
+#ifndef CONTEXT_PRESENCE_MULTIPLAYER_4POFFLINE
+#  define CONTEXT_PRESENCE_MULTIPLAYER_4POFFLINE 9
+#endif
+
+// Win32 thread-exit query. Returns the exit code of a finished thread;
+// upstream uses it after WaitForSingleObject. iOS hands back 0.
+static inline BOOL GetExitCodeThread(HANDLE, DWORD *out) {
+    if (out) *out = 0;
+    return TRUE;
+}
 #ifndef CONTEXT_PRESENCE_MULTIPLAYERONLINE
 #  define CONTEXT_PRESENCE_MULTIPLAYERONLINE 1
 #endif
