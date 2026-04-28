@@ -919,3 +919,19 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: renamed CLICKED_OUTSIDE -> SLOT_CLICKED_OUTSIDE in {path}")
 PY
 fi
+
+# ZoneIo.cpp calls SetFilePointer(ch, pos, nullptr, nullptr) - the
+# moveMethod slot needs a DWORD, not nullptr. Replace with FILE_BEGIN.
+ZIOC="$REPO_ROOT/upstream/Minecraft.World/ZoneIo.cpp"
+if [ -f "$ZIOC" ] && grep -q 'SetFilePointer.*nullptr,nullptr' "$ZIOC"; then
+python3 - "$ZIOC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+src = src.replace(',nullptr,nullptr)', ',nullptr,FILE_BEGIN)')
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(src)
+print(f"patch-upstream-stdafx: rewrote SetFilePointer nullptr->FILE_BEGIN in {path}")
+PY
+fi
