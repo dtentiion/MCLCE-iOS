@@ -934,6 +934,12 @@ void glCallLists(int, unsigned int, const void*);
 #endif
 
 // More legacy GL constants for renderer files.
+#ifndef GL_COLOR_MATERIAL
+#  define GL_COLOR_MATERIAL          0x0B57
+#endif
+#ifndef GL_AMBIENT_AND_DIFFUSE
+#  define GL_AMBIENT_AND_DIFFUSE     0x1602
+#endif
 #ifndef GL_OBJECT_LINEAR
 #  define GL_OBJECT_LINEAR           0x2401
 #endif
