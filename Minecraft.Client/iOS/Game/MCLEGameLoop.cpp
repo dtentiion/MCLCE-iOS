@@ -32,6 +32,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <exception>
+#include <signal.h>
+#include <unistd.h>
 
 #include "../../../upstream/Minecraft.World/Minecraft.World.h"
 #include "../../../upstream/Minecraft.World/Compression.h"
@@ -495,7 +497,9 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        static constexpr int kPreloadRadiusChunks = 6;  // ~96 blocks; r=196 in upstream is too aggressive for first boot
+        // Narrow first: load only the spawn chunk to isolate the SIGSEGV.
+        // r=0 means just (cx,cz). If this single chunk loads we'll widen.
+        static constexpr int kPreloadRadiusChunks = 0;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
@@ -508,18 +512,23 @@ void initImpl() {
         int failed = 0;
         for (int dx = -kPreloadRadiusChunks; dx <= kPreloadRadiusChunks; ++dx) {
             for (int dz = -kPreloadRadiusChunks; dz <= kPreloadRadiusChunks; ++dz) {
+                int cx = spawnCx + dx;
+                int cz = spawnCz + dz;
+                MCLE_LOG("mcle_game_init: chunk preload (%d,%d) start", cx, cz);
                 try {
-                    if (g_levels[0]->cache && g_levels[0]->cache->create(spawnCx + dx, spawnCz + dz, true)) {
+                    if (g_levels[0]->cache && g_levels[0]->cache->create(cx, cz, true)) {
                         loaded++;
+                        MCLE_LOG("mcle_game_init: chunk preload (%d,%d) ok", cx, cz);
+                    } else {
+                        MCLE_LOG("mcle_game_init: chunk preload (%d,%d) returned null", cx, cz);
                     }
                 } catch (const std::exception &e) {
                     failed++;
-                    if (failed <= 4) {
-                        MCLE_LOG("mcle_game_init: chunk (%d,%d) ctor threw: %{public}s",
-                                 spawnCx + dx, spawnCz + dz, e.what());
-                    }
+                    MCLE_LOG("mcle_game_init: chunk (%d,%d) ctor threw: %{public}s",
+                             cx, cz, e.what());
                 } catch (...) {
                     failed++;
+                    MCLE_LOG("mcle_game_init: chunk (%d,%d) ctor threw unknown", cx, cz);
                 }
             }
         }
@@ -558,8 +567,36 @@ void initImpl() {
 
 } // anonymous namespace
 
+// Crash logger: install handlers for SIGSEGV/SIGBUS that print the
+// faulting signal + address before re-raising the default handler so
+// the os_log capture has the information even though iOS still kills
+// the process. One-shot - resets to default after firing.
+static void mcle_crash_handler(int sig, siginfo_t *info, void *) {
+    MCLE_LOG("mcle: caught signal %d at addr %p (code=%d)",
+             sig,
+             info ? info->si_addr : (void *)0,
+             info ? info->si_code : 0);
+    struct sigaction dfl{};
+    dfl.sa_handler = SIG_DFL;
+    sigemptyset(&dfl.sa_mask);
+    sigaction(sig, &dfl, nullptr);
+    raise(sig);
+}
+
+static void mcle_install_crash_handler() {
+    struct sigaction sa{};
+    sa.sa_sigaction = &mcle_crash_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGBUS,  &sa, nullptr);
+    sigaction(SIGILL,  &sa, nullptr);
+    sigaction(SIGFPE,  &sa, nullptr);
+}
+
 extern "C" void mcle_game_init(void) {
     if (g_initState != kStateUnstarted) return;
+    mcle_install_crash_handler();
     try {
         initImpl();
     } catch (const std::exception &e) {
