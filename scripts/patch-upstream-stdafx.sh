@@ -1325,3 +1325,8 @@ LVLINIT_PY="$REPO_ROOT/scripts/patch-level-init-checkpoints.py"
 if [ -f "$LVLINIT_PY" ]; then
     python3 "$LVLINIT_PY"
 fi
+
+SLVL_PY="$REPO_ROOT/scripts/patch-serverlevel-checkpoints.py"
+if [ -f "$SLVL_PY" ]; then
+    python3 "$SLVL_PY"
+fi
