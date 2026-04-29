@@ -1205,3 +1205,50 @@ if needle in src:
     print("patch-upstream-stdafx: added GameMode subclass includes to Minecraft.cpp")
 PY
 fi
+
+# PostProcesser.h includes <d3d11.h> unconditionally, breaking iOS
+# compile of any TU that pulls it (GameRenderer.cpp at minimum). Wrap
+# the body in #ifndef __APPLE_IOS__ and provide a stub class on iOS.
+PPH="$REPO_ROOT/upstream/Minecraft.Client/Common/PostProcesser.h"
+if [ -f "$PPH" ] && ! grep -q '__APPLE_IOS__' "$PPH"; then
+    python3 - "$PPH" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#pragma once\n'
+if needle not in src:
+    sys.exit("anchor missing in PostProcesser.h")
+prefix = needle + (
+    '\n'
+    '#ifdef __APPLE_IOS__\n'
+    '// d3d11 isn\'t available on iOS; provide a minimal stub class so any\n'
+    '// TU pulling this header compiles. Real post-processing on iOS will\n'
+    '// be implemented in Metal.\n'
+    'class PostProcesser {\n'
+    'public:\n'
+    '    static PostProcesser& GetInstance() { static PostProcesser i; return i; }\n'
+    '    template<class... A> void Init(A...)            {}\n'
+    '    template<class... A> void Apply(A...) const     {}\n'
+    '    template<class... A> void SetViewport(A...)     {}\n'
+    '    void ResetViewport()                            {}\n'
+    '    void CopyBackbuffer()                           {}\n'
+    '    void ApplyFromCopied() const                    {}\n'
+    '    void Cleanup()                                  {}\n'
+    '    void SetGamma(float)                            {}\n'
+    '    float GetGamma() const                          { return 1.0f; }\n'
+    'private:\n'
+    '    PostProcesser() {}\n'
+    '    ~PostProcesser() {}\n'
+    '    PostProcesser(const PostProcesser&) = delete;\n'
+    '    PostProcesser& operator=(const PostProcesser&) = delete;\n'
+    '};\n'
+    '#else\n'
+)
+patched = src.replace(needle, prefix, 1)
+patched = patched + '\n#endif // __APPLE_IOS__\n'
+with open(path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(patched)
+print("patch-upstream-stdafx: gated PostProcesser.h body for iOS")
+PY
+fi
