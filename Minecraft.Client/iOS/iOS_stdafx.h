@@ -771,12 +771,17 @@ public:
 // Iggy is the SCE/RAD Game Tools UI runtime used on Durango/Orbis. The
 // real iggy.h ships only in the Durango/Orbis SDK trees so iOS builds
 // can't pull it in. Upstream UIController.h declares
-// `IggyLibrary m_iggyLibraries[...]`, so the typedef must be visible.
-// Mirrors `typedef S32 IggyLibrary;` from Durango/Iggy/include/iggy.h.
+// `IggyLibrary m_iggyLibraries[...]`, `GDrawFunctions *gdraw_funcs;`,
+// `HIGGYEXP iggy_explorer;`, so the typedef/forward-decl must be
+// visible. Mirrors iggy.h on Durango/Orbis.
 typedef int IggyLibrary;
 #ifndef IGGY_INVALID_LIBRARY
 #  define IGGY_INVALID_LIBRARY ((IggyLibrary)0)
 #endif
+struct GDrawFunctions;        // opaque, never deref'd by iOS code
+typedef void *HIGGYEXP;       // opaque handle
+typedef void *HXUIOBJ;        // opaque Xbox UI handle
+typedef void *HXUIBRUSH;      // Xbox UI brush handle
 
 // Per-platform UIController. Real one inherits from UIController (which
 // pulls Iggy/D3D types). Upstream Minecraft.cpp/LocalPlayer.cpp/etc.
