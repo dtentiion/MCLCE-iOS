@@ -47,6 +47,7 @@
 #include "../../../upstream/Minecraft.World/MaterialColor.h"
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/Recipes.h"
+#include "../../../upstream/Minecraft.World/Tile.h"
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
@@ -560,6 +561,14 @@ void initImpl() {
 
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
+
+    // F3 prep: probe Tile::staticCtor to find where it crashes. Done
+    // AFTER state=ticking so the blue sky stays visible if it dies.
+    // Once the crash is fixed this call moves up next to Material::
+    // staticCtor where it belongs (before world construction).
+    MCLE_LOG("mcle_game_init: F3-probe Tile::staticCtor...");
+    try { Tile::staticCtor(); MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
 }
 
 } // anonymous namespace
