@@ -1158,3 +1158,25 @@ PREPLVL_PY="$REPO_ROOT/scripts/patch-prepare-level-checkpoints.py"
 if [ -f "$PREPLVL_PY" ]; then
     python3 "$PREPLVL_PY"
 fi
+
+# IUIController.h declares PlayUISFX(ESoundEffect) but only includes
+# UIEnums.h. ESoundEffect lives in Minecraft.World/SoundTypes.h. Add a
+# direct include so every TU pulling IUIController.h sees the enum.
+IUIC="$REPO_ROOT/upstream/Minecraft.Client/Common/UI/IUIController.h"
+if [ -f "$IUIC" ] && ! grep -q 'SoundTypes\.h' "$IUIC"; then
+    python3 - "$IUIC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "UIEnums.h"'
+if needle in src:
+    patched = src.replace(needle,
+        needle + '\n#include "../../../Minecraft.World/SoundTypes.h"  // ESoundEffect',
+        1,
+    )
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(patched)
+    print("patch-upstream-stdafx: added SoundTypes.h include to IUIController.h")
+PY
+fi

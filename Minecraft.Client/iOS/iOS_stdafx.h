@@ -765,6 +765,16 @@ public:
     template<class... A> int  getPad(A...)            { return 0; }
 };
 #endif
+// Iggy is the SCE/RAD Game Tools UI runtime used on Durango/Orbis. The
+// real iggy.h ships only in the Durango/Orbis SDK trees so iOS builds
+// can't pull it in. Upstream UIController.h declares
+// `IggyLibrary m_iggyLibraries[...]`, so the typedef must be visible.
+// Mirrors `typedef S32 IggyLibrary;` from Durango/Iggy/include/iggy.h.
+typedef int IggyLibrary;
+#ifndef IGGY_INVALID_LIBRARY
+#  define IGGY_INVALID_LIBRARY ((IggyLibrary)0)
+#endif
+
 // Per-platform UIController. Real one inherits from UIController (which
 // pulls Iggy/D3D types). Upstream Minecraft.cpp/LocalPlayer.cpp/etc.
 // reference a global `ui` and call ~30 methods on it. Stub matches the
