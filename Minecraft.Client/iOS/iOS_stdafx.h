@@ -761,6 +761,46 @@ public:
     template<class... A> int  getPad(A...)            { return 0; }
 };
 #endif
+// Per-platform UIController. Real one inherits from UIController (which
+// pulls Iggy/D3D types). Upstream Minecraft.cpp/LocalPlayer.cpp/etc.
+// reference a global `ui` and call ~30 methods on it. Stub matches the
+// call surface as no-ops so the TUs compile. Real UIController duties
+// (scene push/pop, dialog routing) are handled by the iOS Ruffle SWF
+// runtime in MinecraftViewController.mm.
+#ifndef _CONSOLEUICONTROLLER_DEFINED
+#define _CONSOLEUICONTROLLER_DEFINED
+class ConsoleUIController {
+public:
+    template<class... A> bool GetMenuDisplayed(A...)         { return false; }
+    template<class... A> void NavigateToScene(A...)          {}
+    template<class... A> void UpdatePlayerBasePositions(A...) {}
+    template<class... A> void CloseUIScenes(A...)            {}
+    template<class... A> bool IsPauseMenuDisplayed(A...)     { return false; }
+    template<class... A> bool IsIgnoreAutosaveMenuDisplayed(A...) { return false; }
+    template<class... A> void ShowAutosaveCountdownTimer(A...) {}
+    template<class... A> void UpdateAutosaveCountdownTimer(A...) {}
+    template<class... A> bool PressStartPlaying(A...)        { return false; }
+    template<class... A> void ShowPressStart(A...)           {}
+    template<class... A> void RequestErrorMessage(A...)      {}
+    template<class... A> bool IsSceneInStack(A...)           { return false; }
+    template<class... A> void PlayUISFX(A...)                {}
+    template<class... A> void render(A...)                   {}
+    template<class... A> void shutdown(A...)                 {}
+    template<class... A> int  GetCurrentScene(A...)          { return 0; }
+    template<class... A> bool IsAnyMenuDisplayed(A...)       { return false; }
+    template<class... A> void Init(A...)                     {}
+    template<class... A> void Tick(A...)                     {}
+    template<class... A> bool HandleControllerInput(A...)    { return false; }
+    template<class... A> void OpenMenu(A...)                 {}
+    template<class... A> void CloseMenu(A...)                {}
+    template<class... A> void RefreshUI(A...)                {}
+    template<class... A> int  getActivePad(A...)             { return 0; }
+    template<class... A> void SetActivePad(A...)             {}
+    template<class... A> void *setupCustomDraw(A...)         { return nullptr; }
+    template<class... A> void *calculateCustomDraw(A...)     { return nullptr; }
+    template<class... A> void  endCustomDraw(A...)           {}
+};
+#endif
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
