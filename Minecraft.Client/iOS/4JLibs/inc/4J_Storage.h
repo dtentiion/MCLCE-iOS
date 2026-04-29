@@ -17,6 +17,11 @@
 
 #define MAX_SAVEFILENAME_LENGTH 64
 
+// Real SAVE_DETAILS lives in the platform 4J_Storage lib (Xbox/Sony). On
+// iOS we only need a forward decl so upstream UI headers that store
+// `SAVE_DETAILS *m_pSaveDetails` parse.
+struct SAVE_DETAILS;
+
 class C4JStorage
 {
 public:
