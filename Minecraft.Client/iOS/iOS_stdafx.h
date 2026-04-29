@@ -308,6 +308,14 @@ struct C4JRenderStub {
     template<class... A> void   MatrixRotate(A...)            {}
     template<class... A> void   MatrixTranslate(A...)         {}
     template<class... A> void   MatrixScale(A...)             {}
+    template<class... A> void   MatrixPerspective(A...)       {}
+    template<class... A> void   MatrixOrthogonal(A...)        {}
+    template<class... A> void   MatrixGet(A...)               {}
+    template<class... A> void   MatrixPush(A...)              {}
+    template<class... A> void   MatrixPop(A...)               {}
+    template<class... A> void   MatrixIdentity(A...)          {}
+    template<class... A> void   MatrixLoad(A...)              {}
+    template<class... A> void   MatrixMult(A...)              {}
     template<class... A> void   CBuffClear(A...)              {}
     template<class... A> void   CBuffReset(A...)              {}
     template<class... A> void   CBuffStart(A...)              {}
@@ -766,6 +774,15 @@ public:
     template<class... A> int  getCurrentState(A...)   { return 0; }
     template<class... A> void addMessage(A...)        {}
     template<class... A> int  getPad(A...)            { return 0; }
+    template<class... A> void changeTutorialState(A...) {}
+    template<class... A> void tick(A...)              {}
+    template<class... A> void startDestroyBlock(A...) {}
+    template<class... A> void destroyBlock(A...)      {}
+    template<class... A> void setMessage(A...)        {}
+    template<class... A> void itemDamaged(A...)       {}
+    template<class... A> bool canMoveToPosition(A...) { return true; }
+    template<class... A> void AddConstraint(A...)     {}
+    template<class... A> void RemoveConstraint(A...)  {}
 };
 #endif
 // Iggy is the SCE/RAD Game Tools UI runtime used on Durango/Orbis. The
