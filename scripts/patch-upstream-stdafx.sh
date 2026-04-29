@@ -1335,3 +1335,8 @@ ENT_PY="$REPO_ROOT/scripts/patch-entity-ctor-checkpoints.py"
 if [ -f "$ENT_PY" ]; then
     python3 "$ENT_PY"
 fi
+
+TILESC_PY="$REPO_ROOT/scripts/patch-tile-staticctor-checkpoints.py"
+if [ -f "$TILESC_PY" ]; then
+    python3 "$TILESC_PY"
+fi
