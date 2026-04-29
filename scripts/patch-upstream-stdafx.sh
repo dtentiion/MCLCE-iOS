@@ -1320,3 +1320,8 @@ LDCK_PY="$REPO_ROOT/scripts/patch-leveldata-checkpoints.py"
 if [ -f "$LDCK_PY" ]; then
     python3 "$LDCK_PY"
 fi
+
+LVLINIT_PY="$REPO_ROOT/scripts/patch-level-init-checkpoints.py"
+if [ -f "$LVLINIT_PY" ]; then
+    python3 "$LVLINIT_PY"
+fi
