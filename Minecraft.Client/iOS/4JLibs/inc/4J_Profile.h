@@ -100,6 +100,12 @@ public:
     template<class... A> bool HasOnlineAccess(A...)       { return false; }
     template<class... A> bool HasSocialAccess(A...)       { return false; }
     template<class... A> uint64_t GetXuid(A...)           { return 0; }
+    // Upstream Minecraft.cpp calls profile.GetXUID(...) (uppercase ID).
+    template<class... A> uint64_t GetXUID(A...)           { return 0; }
+    template<class... A> bool IsGuest(A...)               { return false; }
+    template<class... A> const wchar_t* GetDisplayName(A...) { return L"iOSPlayer"; }
+    template<class... A> bool IsSignedInLive(A...)        { return false; }
+    template<class... A> bool IsSystemUIDisplayed(A...)   { return false; }
     template<class... A> const wchar_t* GetGamertag(A...) { return L"iOSPlayer"; }
     template<class... A> int  GetUserIndexForPad(A...)    { return 0; }
     template<class... A> int  GetPadForUserIndex(A...)    { return 0; }
