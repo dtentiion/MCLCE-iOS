@@ -168,14 +168,14 @@ void initImpl() {
     // try { Item::staticInit();       MCLE_LOG("mcle_game_init: Item::staticInit done"); }
     // catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
 
-    // Recipes::staticCtor builds the global Recipes singleton. Without it,
-    // Recipes::getInstance() returns null and InventoryMenu::slotsChanged
-    // null-derefs at the end of Player ctor. ADD_OBJECT just push_backs a
-    // pointer so null Item pointers (Item::staticCtor is skipped above) do
-    // not cause a crash here; the resulting recipe list is bogus but the
-    // singleton exists, which is what slotsChanged needs to not segfault.
-    try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
+    // Recipes::staticCtor cannot run without Tile::staticCtor first
+    // (Recipes::Recipes does `new ItemInstance(Tile::wood, ...)` which
+    // derefs the null Tile::wood -> SIGSEGV). Tile::staticCtor itself
+    // crashes on iOS (separate investigation, in the same family as the
+    // Item::staticCtor crash) so this whole branch waits for that fix.
+    // F3 is deferred until the Tile/Item static cascade is sorted.
+    // try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
+    // catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
@@ -551,42 +551,15 @@ void initImpl() {
     // for a single-player iOS shell we shortcut to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
-    // Flip to ticking state BEFORE attempting player construction. If the
-    // Player ctor SIGSEGVs the app dies, but the render thread will have
-    // already switched to the sky-color clear path so the F2/G1A milestone
-    // stays visible (and the user knows we got that far) while the F3
-    // checkpoints in the log show where the ctor chain died.
+    // F3 (Player) needs InventoryMenu, which needs the Recipes singleton,
+    // which needs Tile::wood / Item::stick statics. Tile::staticCtor and
+    // Item::staticCtor both crash on iOS in the same family - that's the
+    // next focused investigation. Until then the world ticks at
+    // entities=0 with the blue sky from G1A.
+    MCLE_LOG("mcle_game_init: skipping ServerPlayer (deferred pending Tile/Item static-init fix)");
+
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
-
-    // Step 8: Player. F3 hunt - upstream Entity / LivingEntity / Player
-    // ctor bodies now have checkpoints; this re-enables construction so
-    // the next sideload pins the null deref.
-    MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
-    try {
-        g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
-        MCLE_LOG("mcle_game_init: ServerPlayerGameMode at %p", (void*)g_playerGameMode);
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw: %{public}s", e.what());
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw unknown");
-    }
-
-    if (g_playerGameMode) {
-        MCLE_LOG("mcle_game_init: building ServerPlayer...");
-        try {
-            g_player = std::make_shared<ServerPlayer>(
-                g_server,
-                static_cast<Level *>(g_levels[0]),
-                std::wstring(L"iOSPlayer"),
-                g_playerGameMode);
-            MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
-        } catch (const std::exception &e) {
-            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
-        } catch (...) {
-            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw unknown");
-        }
-    }
 }
 
 } // anonymous namespace
