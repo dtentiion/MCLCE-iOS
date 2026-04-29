@@ -1287,3 +1287,8 @@ CSFO_PY="$REPO_ROOT/scripts/patch-csfo-close-checkpoints.py"
 if [ -f "$CSFO_PY" ]; then
     python3 "$CSFO_PY"
 fi
+
+FHWRITE_PY="$REPO_ROOT/scripts/patch-fileheader-write.py"
+if [ -f "$FHWRITE_PY" ]; then
+    python3 "$FHWRITE_PY"
+fi
