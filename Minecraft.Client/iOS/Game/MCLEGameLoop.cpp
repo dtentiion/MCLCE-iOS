@@ -434,6 +434,13 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: PlayerList at %p", (void*)g_server->getPlayers());
 
+    // Parity with MinecraftServer.cpp:891 - levels array must be sized to 3
+    // before any ServerLevel ctor runs setLevel(dim, this) on the server.
+    // Default-constructed ServerLevelArray has data=nullptr/length=0 so
+    // levels[0] = level would null-deref.
+    g_server->levels = ServerLevelArray(3);
+    MCLE_LOG("mcle_game_init: server->levels sized to 3");
+
     // Step 6: construct three ServerLevels (overworld + nether + end).
     // Parity with MinecraftServer.cpp:956-1007 - levels[0] is a real
     // ServerLevel, levels[1] (nether, dim=-1) and levels[2] (end, dim=1)
