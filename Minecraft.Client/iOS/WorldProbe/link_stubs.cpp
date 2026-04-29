@@ -299,3 +299,14 @@ void GameRenderer::FinishedReassigning() {}
 
 // LevelData: real upstream LevelData.cpp now compiles (ChunkSource.h
 // include patched in). Stubs removed.
+
+// MemoryTracker: real upstream MemoryTracker.cpp doesn't compile (uses
+// the upstream-wrapper variants of glGenTextures/glDeleteTextures
+// without args). Frustum.cpp has a static FloatBuffer initialized via
+// MemoryTracker::createFloatBuffer; without a body, link fails. Stub
+// returns a fresh FloatBuffer of the requested size.
+#include "FloatBuffer.h"
+#include "MemoryTracker.h"
+FloatBuffer *MemoryTracker::createFloatBuffer(int size) {
+    return new FloatBuffer((unsigned int)size);
+}
