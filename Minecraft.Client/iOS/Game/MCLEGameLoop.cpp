@@ -648,6 +648,23 @@ extern "C" void mcle_game_tick(void) {
     }
 }
 
+// Render-side bridge: lets the iOS frame driver know whether the world
+// simulation is alive so it can switch the clear color and stop drawing
+// the SWF menu over the world.
+extern "C" int mcle_world_is_ticking(void) {
+    return (g_initState == kStateTicking && g_levels[0] != nullptr) ? 1 : 0;
+}
+
+// Phase G phase 1A: hardcoded overworld day-sky for the Metal-bridge
+// proof. Phase 1B will route this through Level::getSkyColor(player, a)
+// once F3 lands a real Player entity (sky color needs an Entity for the
+// biome lookup). Until then this stays static.
+extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
+    if (r) *r = 0.45f;
+    if (g) *g = 0.65f;
+    if (b) *b = 1.0f;
+}
+
 extern "C" void mcle_game_shutdown(void) {
     MCLE_LOG("mcle_game_shutdown: tearing down");
     // Drop the player first so its dtor runs before the level it lives in.

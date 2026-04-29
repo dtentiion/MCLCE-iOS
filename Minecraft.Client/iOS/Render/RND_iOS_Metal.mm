@@ -20,6 +20,12 @@ extern "C" void mcle_swf_draw_test_rect(int vp_w, int vp_h);
 extern "C" int  mcle_swf_is_ready(void);
 extern "C" int  mcle_swf_has_movie(void);
 
+// World render bridge (MCLEGameLoop.cpp). Once the world simulation goes
+// to ticking state the iOS frame switches from charcoal+menu to a sky
+// clear so we have a visible signal that bootstrap is alive.
+extern "C" int  mcle_world_is_ticking(void);
+extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
+
 #include <atomic>
 
 extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);
@@ -99,26 +105,35 @@ extern "C" void mcle_render_resize(int width, int height) {
 extern "C" void mcle_render_frame(void) {
     if (!g_ready.load(std::memory_order_acquire)) return;
 
-    // Dark charcoal clear, matches the original shell so the user can see
-    // that Metal is alive even if every draw call below is a no-op.
-    if (mcle_metal_frame_begin(0.07f, 0.07f, 0.09f, 1.0f) != 0) return;
+    const bool worldAlive = (mcle_world_is_ticking() != 0);
 
-    id<MTLRenderCommandEncoder> enc =
-        (__bridge id<MTLRenderCommandEncoder>)mcle_metal_current_encoder();
-    if (enc && g_pipeline) {
-        [enc setRenderPipelineState:g_pipeline];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    // Pre-bootstrap: charcoal clear + SWF menu. Once the world simulation
+    // is ticking, switch to the world's sky color and stop overlaying the
+    // SWF so the bootstrap-alive signal is visible.
+    float cr, cg, cb;
+    if (worldAlive) {
+        mcle_world_get_sky_color(&cr, &cg, &cb);
+    } else {
+        cr = 0.07f; cg = 0.07f; cb = 0.09f;
     }
+    if (mcle_metal_frame_begin(cr, cg, cb, 1.0f) != 0) return;
 
-    // GameSWF drawing happens here. If no movie is loaded, it is a no-op.
     int vw = 0, vh = 0;
     mcle_metal_current_size(&vw, &vh);
-    mcle_swf_tick_with_viewport(1.0f / 60.0f, vw, vh);
 
-    // Synthetic test rect only when no movie is loaded, so a real SWF
-    // does not get painted over.
-    if (mcle_swf_is_ready() && !mcle_swf_has_movie()) {
-        mcle_swf_draw_test_rect(vw, vh);
+    if (!worldAlive) {
+        id<MTLRenderCommandEncoder> enc =
+            (__bridge id<MTLRenderCommandEncoder>)mcle_metal_current_encoder();
+        if (enc && g_pipeline) {
+            [enc setRenderPipelineState:g_pipeline];
+            [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+        }
+
+        mcle_swf_tick_with_viewport(1.0f / 60.0f, vw, vh);
+
+        if (mcle_swf_is_ready() && !mcle_swf_has_movie()) {
+            mcle_swf_draw_test_rect(vw, vh);
+        }
     }
 
     mcle_metal_frame_end();
