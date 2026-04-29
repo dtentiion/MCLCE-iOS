@@ -1277,3 +1277,8 @@ TAGCK_PY="$REPO_ROOT/scripts/patch-tag-readnamed-checkpoints.py"
 if [ -f "$TAGCK_PY" ]; then
     python3 "$TAGCK_PY"
 fi
+
+NBTIO_PY="$REPO_ROOT/scripts/patch-nbtio-close-checkpoints.py"
+if [ -f "$NBTIO_PY" ]; then
+    python3 "$NBTIO_PY"
+fi
