@@ -1292,3 +1292,26 @@ FHWRITE_PY="$REPO_ROOT/scripts/patch-fileheader-write.py"
 if [ -f "$FHWRITE_PY" ]; then
     python3 "$FHWRITE_PY"
 fi
+
+# Lighting.cpp uses glLight(int, int, FloatBuffer*) which is defined in
+# glWrapper.cpp without a header decl. Add the forward decl + FloatBuffer
+# fwd-decl so Lighting.cpp compiles standalone.
+LIGHTC="$REPO_ROOT/upstream/Minecraft.Client/Lighting.cpp"
+if [ -f "$LIGHTC" ] && ! grep -q 'class FloatBuffer;' "$LIGHTC"; then
+    python3 - "$LIGHTC" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "stdafx.h"'
+if needle in src:
+    add = (
+        needle
+        + '\nclass FloatBuffer;\nvoid glLight(int light, int mode, FloatBuffer *values);'
+    )
+    patched = src.replace(needle, add, 1)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(patched)
+    print("patch-upstream-stdafx: added glLight fwd decl to Lighting.cpp")
+PY
+fi
