@@ -758,8 +758,10 @@ public:
     bool m_fullTutorialComplete = false;
     bool m_allTutorialsComplete = false;
     struct PopupMessageDetails {
-        int  m_icon  = 0;
-        bool m_delay = false;
+        int  m_icon       = 0;
+        bool m_delay      = false;
+        int  m_titleId    = 0;
+        int  m_messageId  = 0;
     };
     // Variadic ctor so subclasses (TutorialMode -> ConsoleGameMode etc.)
     // that pass args up the inheritance chain can compile against the
@@ -794,8 +796,12 @@ typedef int IggyLibrary;
 #endif
 struct GDrawFunctions;        // opaque, never deref'd by iOS code
 typedef void *HIGGYEXP;       // opaque handle
+typedef void *HIGGYPERFMON;   // opaque perfmon handle
 typedef void *HXUIOBJ;        // opaque Xbox UI handle
 typedef void *HXUIBRUSH;      // Xbox UI brush handle
+// D3D11_RECT is the standard RECT layout used as a clip-rect in
+// UIController. Mirrors Microsoft d3d11.h's typedef.
+typedef struct _MCLE_D3D11_RECT { long left, top, right, bottom; } D3D11_RECT;
 
 // Per-platform UIController. Real one inherits from UIController (which
 // pulls Iggy/D3D types). Upstream Minecraft.cpp/LocalPlayer.cpp/etc.
