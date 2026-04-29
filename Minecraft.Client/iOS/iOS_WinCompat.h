@@ -333,7 +333,18 @@ static inline BOOL  ResetEvent(HANDLE) { return TRUE; }
 // etc. Compile-only support: we only need calls to typecheck. The
 // CRITICAL_SECTION type is already declared in this header above.
 static inline void InitializeCriticalSection(LPCRITICAL_SECTION cs) {
-    if (cs) pthread_mutex_init(&cs->_mu, NULL);
+    if (!cs) return;
+    // Win32 CRITICAL_SECTION is recursive: the same thread can Enter
+    // the same section multiple times without deadlocking. Upstream
+    // ConsoleSaveFileOriginal::closeHandle relies on this (it calls
+    // LockSaveAccess, then finalizeWrite, which calls LockSaveAccess
+    // again). Default pthread mutex isn't recursive - explicitly opt
+    // in.
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&cs->_mu, &attr);
+    pthread_mutexattr_destroy(&attr);
 }
 static inline void DeleteCriticalSection(LPCRITICAL_SECTION cs) {
     if (cs) pthread_mutex_destroy(&cs->_mu);
