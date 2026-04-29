@@ -42,6 +42,9 @@
 #include "../../../upstream/Minecraft.World/LevelData.h"
 #include "../../../upstream/Minecraft.World/LevelSettings.h"
 #include "../../../upstream/Minecraft.World/LevelType.h"
+#include "../../../upstream/Minecraft.World/MaterialColor.h"
+#include "../../../upstream/Minecraft.World/Material.h"
+#include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -146,6 +149,16 @@ void initImpl() {
     } catch (...) {
         MCLE_LOG("mcle_game_init: LevelType::staticCtor threw");
     }
+    // MinecraftServer ctor calls DispenserBootstrap::bootStrap() which
+    // registers behaviors keyed off Item::* statics; null without these.
+    try { MaterialColor::staticCtor(); MCLE_LOG("mcle_game_init: MaterialColor::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: MaterialColor::staticCtor threw"); }
+    try { Material::staticCtor();      MCLE_LOG("mcle_game_init: Material::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Material::staticCtor threw"); }
+    try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
+    try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
