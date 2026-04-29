@@ -1041,10 +1041,16 @@ static inline void Sleep(DWORD ms) { usleep(ms * 1000u); }
 #  define InterlockedDecrement(p)   __sync_sub_and_fetch((p), 1)
 #endif
 
-// Win32 spin-count critical-section initializer. The spin parameter
-// is a Win-only optimization; on iOS we just init like a regular CS.
+// Win32 spin-count critical-section initializer. Recursive on Win32 so
+// match that here. ConsoleSaveFileOriginal uses this entrypoint and
+// nests LockSaveAccess via finalizeWrite - non-recursive deadlocks.
 static inline BOOL InitializeCriticalSectionAndSpinCount(LPCRITICAL_SECTION cs, DWORD) {
-    if (cs) pthread_mutex_init(&cs->_mu, NULL);
+    if (!cs) return FALSE;
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&cs->_mu, &attr);
+    pthread_mutexattr_destroy(&attr);
     return TRUE;
 }
 
