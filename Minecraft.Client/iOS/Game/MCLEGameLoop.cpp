@@ -398,6 +398,7 @@ void initImpl() {
         return;
     }
     MCLE_LOG("mcle_game_init: MinecraftServer at %p", (void*)g_server);
+    MCLE_LOG("mcle_game_init: SENTINEL_AFTER_MS_CTOR_BUILD_1a2db2b");
 
     // Step 5.6: attach a PlayerList. Parity with MinecraftServer.cpp:690
     // (`setPlayers(new PlayerList(this))`). Without this, ServerLevel ctor
