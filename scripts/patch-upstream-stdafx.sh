@@ -1180,3 +1180,28 @@ if needle in src:
     print("patch-upstream-stdafx: added SoundTypes.h include to IUIController.h")
 PY
 fi
+
+# Minecraft.cpp uses `new FullTutorialMode(...)`, `new TrialMode(...)`,
+# `new ConsoleGameMode(...)` but only includes the GameMode base header.
+# Add direct includes so those concrete types are visible.
+MCCPP="$REPO_ROOT/upstream/Minecraft.Client/Minecraft.cpp"
+if [ -f "$MCCPP" ] && ! grep -q '"FullTutorialMode\.h"' "$MCCPP"; then
+    python3 - "$MCCPP" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = '#include "GameMode.h"'
+if needle in src:
+    add = (
+        needle +
+        '\n#include "Common/Tutorial/FullTutorialMode.h"' +
+        '\n#include "Common/Trial/TrialMode.h"' +
+        '\n#include "Common/ConsoleGameMode.h"'
+    )
+    patched = src.replace(needle, add, 1)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(patched)
+    print("patch-upstream-stdafx: added GameMode subclass includes to Minecraft.cpp")
+PY
+fi
