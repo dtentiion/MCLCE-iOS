@@ -147,6 +147,10 @@ void glVertex2i(int, int)                                  {}
 void glNormal3f(float, float, float)                       {}
 void glLightfv(unsigned int, unsigned int, const float*)   {}
 void glLight(unsigned int, unsigned int, float)            {} // upstream Lighting.cpp
+void glColorMaterial(unsigned int, unsigned int)           {}
+void glLightModelfv(unsigned int, const float*)            {}
+class FloatBuffer;
+void glGetFloat(int, FloatBuffer*)                         {} // upstream Frustum.cpp
 void glTexGeni(unsigned int, unsigned int, int)            {} // TheEndPortalRenderer.cpp
 void glTexGenfv(unsigned int, unsigned int, const float*)  {} // TheEndPortalRenderer.cpp
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
