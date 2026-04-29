@@ -216,6 +216,8 @@ struct McleAppStub {
     template<class... A> void           LoadInventoryMenu(A...)       {}
     template<class... A> const wchar_t* FormatChatMessage(A...)       { return L""; }
     template<class... A> bool           GetMemFileDetails(A...)       { return false; }
+    template<class... A> void           SetBanListCheck(A...)         {}
+    template<class... A> bool           IsLocalMultiplayerAvailable(A...) { return false; }
     template<class... A> bool           GetBootedFromDiscPatch(A...)  { return false; }
     template<class... A> bool           GetChangingSessionType(A...)  { return false; }
     template<class... A> void*          GetCommerce(A...)             { return nullptr; }
@@ -266,6 +268,7 @@ struct McleNetworkManagerStub {
     template<class... A> bool  SystemFlagGet(A...)       { return false; }
     template<class... A> void  SystemFlagSet(A...)       {}
     template<class... A> int   GetPlayerCount(A...)      { return 0; }
+    template<class... A> bool  SessionHasSpace(A...)     { return true; }
     template<class... A> int   GetLocalPlayerCount(A...) { return 0; }
     template<class... A> int   GetRemotePlayerCount(A...) { return 0; }
     template<class... A> class INetworkPlayer* GetPlayerByIndex(A...) { return nullptr; }
