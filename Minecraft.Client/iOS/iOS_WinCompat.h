@@ -715,6 +715,17 @@ void glMultiTexCoord2f(unsigned int, float, float);
 void glMultiTexCoord2fv(unsigned int, const float*);
 void glActiveTexture(unsigned int);
 void glClientActiveTexture(unsigned int);
+// Old fixed-function texture-coord generation. Real impl lives on
+// desktop GL; on iOS Metal these become no-ops at the leaf calls
+// (Phase G will swap the gl* layer for real Metal anyway).
+void glTexGeni(unsigned int, unsigned int, int);
+void glTexGenf(unsigned int, unsigned int, float);
+void glTexGenfv(unsigned int, unsigned int, const float*);
+// Fixed-function lighting (set/query light parameters).
+void glLighti(unsigned int, unsigned int, int);
+void glLightf(unsigned int, unsigned int, float);
+// Display lists - upstream uses these for batched draw command capture.
+void glCallLists(int, unsigned int, const void*);
 #  ifdef __cplusplus
 }
 #  endif
