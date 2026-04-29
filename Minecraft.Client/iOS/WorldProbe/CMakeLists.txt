@@ -920,6 +920,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/ProgressFlagTask.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/RideEntityTask.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialHint.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialTask.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_CommandBlockMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ControlsScreen.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/CowModel.cpp
