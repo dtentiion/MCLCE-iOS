@@ -922,6 +922,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialHint.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialTask.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Input.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Frustum.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_CommandBlockMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ControlsScreen.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/CowModel.cpp
