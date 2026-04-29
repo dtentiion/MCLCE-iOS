@@ -541,15 +541,42 @@ void initImpl() {
     // for a single-player iOS shell we shortcut to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
-    // Step 8 (player) is deferred to F3. Player::Player parent ctor null-derefs
-    // somewhere up the Entity hierarchy and untangling that needs a focused
-    // pass with checkpoints across Entity / LivingEntity / Mob / Player.
-    // For now skip player creation - the world will tick with entities=0,
-    // proving the simulation half (Phase F2 minimum-viable).
-    MCLE_LOG("mcle_game_init: skipping ServerPlayer (deferred to F3)");
-
+    // Flip to ticking state BEFORE attempting player construction. If the
+    // Player ctor SIGSEGVs the app dies, but the render thread will have
+    // already switched to the sky-color clear path so the F2/G1A milestone
+    // stays visible (and the user knows we got that far) while the F3
+    // checkpoints in the log show where the ctor chain died.
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
+
+    // Step 8: Player. F3 hunt - upstream Entity / LivingEntity / Player
+    // ctor bodies now have checkpoints; this re-enables construction so
+    // the next sideload pins the null deref.
+    MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
+    try {
+        g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode at %p", (void*)g_playerGameMode);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw unknown");
+    }
+
+    if (g_playerGameMode) {
+        MCLE_LOG("mcle_game_init: building ServerPlayer...");
+        try {
+            g_player = std::make_shared<ServerPlayer>(
+                g_server,
+                static_cast<Level *>(g_levels[0]),
+                std::wstring(L"iOSPlayer"),
+                g_playerGameMode);
+            MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw unknown");
+        }
+    }
 }
 
 } // anonymous namespace
