@@ -1282,3 +1282,8 @@ NBTIO_PY="$REPO_ROOT/scripts/patch-nbtio-close-checkpoints.py"
 if [ -f "$NBTIO_PY" ]; then
     python3 "$NBTIO_PY"
 fi
+
+CSFO_PY="$REPO_ROOT/scripts/patch-csfo-close-checkpoints.py"
+if [ -f "$CSFO_PY" ]; then
+    python3 "$CSFO_PY"
+fi
