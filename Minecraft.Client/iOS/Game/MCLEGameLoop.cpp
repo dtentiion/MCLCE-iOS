@@ -155,10 +155,14 @@ void initImpl() {
     catch (...) { MCLE_LOG("mcle_game_init: MaterialColor::staticCtor threw"); }
     try { Material::staticCtor();      MCLE_LOG("mcle_game_init: Material::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Material::staticCtor threw"); }
-    try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
-    try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
+    // Item::staticCtor crashes on iOS (separate investigation, same family
+    // as the Tile::staticCtor crash). DispenserBootstrap registers
+    // behaviors keyed off Item::* statics, but registering a nullptr key
+    // is just a map insert with no deref - should be safe.
+    // try { Item::staticCtor();       MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
+    // catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
+    // try { Item::staticInit();       MCLE_LOG("mcle_game_init: Item::staticInit done"); }
+    // catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
