@@ -46,6 +46,7 @@
 #include "../../../upstream/Minecraft.World/LevelType.h"
 #include "../../../upstream/Minecraft.World/MaterialColor.h"
 #include "../../../upstream/Minecraft.World/Material.h"
+#include "../../../upstream/Minecraft.World/Recipes.h"
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
@@ -166,6 +167,15 @@ void initImpl() {
     // catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
     // try { Item::staticInit();       MCLE_LOG("mcle_game_init: Item::staticInit done"); }
     // catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
+
+    // Recipes::staticCtor builds the global Recipes singleton. Without it,
+    // Recipes::getInstance() returns null and InventoryMenu::slotsChanged
+    // null-derefs at the end of Player ctor. ADD_OBJECT just push_backs a
+    // pointer so null Item pointers (Item::staticCtor is skipped above) do
+    // not cause a crash here; the resulting recipe list is bogus but the
+    // singleton exists, which is what slotsChanged needs to not segfault.
+    try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
