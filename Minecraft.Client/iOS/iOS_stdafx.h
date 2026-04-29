@@ -753,6 +753,10 @@ public:
     bool m_fullTutorialComplete = false;
     bool m_allTutorialsComplete = false;
     struct PopupMessageDetails {};
+    // Variadic ctor so subclasses (TutorialMode -> ConsoleGameMode etc.)
+    // that pass args up the inheritance chain can compile against the
+    // stub regardless of what the real upstream Tutorial signature is.
+    template<class... A> Tutorial(A...) {}
     template<class... A> bool isStateCompleted(A...)  { return false; }
     template<class... A> void setStateCompleted(A...) {}
     template<class... A> bool isFullTutorial(A...)    { return false; }
