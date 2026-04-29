@@ -41,6 +41,7 @@
 #include "../../../upstream/Minecraft.World/Level.h"
 #include "../../../upstream/Minecraft.World/LevelData.h"
 #include "../../../upstream/Minecraft.World/LevelSettings.h"
+#include "../../../upstream/Minecraft.World/LevelType.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -129,12 +130,22 @@ void initImpl() {
     Compression::CreateNewThreadStorage();
 
     // MinecraftWorld_RunStaticCtors() is the parity-correct upstream init
-    // pass but one of the ctors in its dependency chain hard-crashes on
-    // iOS (likely a null deref inside the Item/Tile/Recipes registration
-    // before the C++ exception handler is reached, since SIGSEGV isn't an
-    // exception). Skipping for now until the crashing ctor is identified;
-    // accidental TLS-zero init has been good enough to reach the save
-    // discovery + chunk preload code path.
+    // pass but Tile::staticCtor SIGSEGVs on iOS (separate investigation).
+    // For now, call the lightweight static ctors that downstream code
+    // actually needs: GameType (LevelData ctor calls byId), LevelType
+    // (LevelData reads lvl_normal). These have no Tile/Material deps.
+    try {
+        GameType::staticCtor();
+        MCLE_LOG("mcle_game_init: GameType::staticCtor done");
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: GameType::staticCtor threw");
+    }
+    try {
+        LevelType::staticCtor();
+        MCLE_LOG("mcle_game_init: LevelType::staticCtor done");
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: LevelType::staticCtor threw");
+    }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
