@@ -722,6 +722,12 @@ void glGetFloatv(unsigned int, float*);
 void glGetIntegerv(unsigned int, int*);
 // Upstream Frustum.cpp uses the older non-vector spelling.
 static inline void glGetFloat(unsigned int pname, float *out) { glGetFloatv(pname, out); }
+// Frustum.cpp also calls glGetFloat with a FloatBuffer* (real impl in
+// glWrapper.cpp). Forward-declare and stub so the call resolves.
+class FloatBuffer;
+void glGetFloat(int type, FloatBuffer *buff);
+void glColorMaterial(unsigned int face, unsigned int mode);
+void glLightModelfv(unsigned int pname, const float *params);
 void glMultiTexCoord2f(unsigned int, float, float);
 void glMultiTexCoord2fv(unsigned int, const float*);
 void glActiveTexture(unsigned int);
@@ -950,6 +956,12 @@ void glCallLists(int, unsigned int, const void*);
 #endif
 #ifndef GL_AMBIENT_AND_DIFFUSE
 #  define GL_AMBIENT_AND_DIFFUSE     0x1602
+#endif
+#ifndef GL_LIGHT_MODEL_AMBIENT
+#  define GL_LIGHT_MODEL_AMBIENT     0x0B53
+#endif
+#ifndef GL_LIGHT_MODEL_LOCAL_VIEWER
+#  define GL_LIGHT_MODEL_LOCAL_VIEWER 0x0B51
 #endif
 #ifndef GL_OBJECT_LINEAR
 #  define GL_OBJECT_LINEAR           0x2401
