@@ -1252,3 +1252,23 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print("patch-upstream-stdafx: gated PostProcesser.h body for iOS")
 PY
 fi
+
+# StringHelpers.h declares convStringToWstring(const string&). Upstream
+# Minecraft.cpp passes a const wchar_t* (from ProfileManager.GetGamertag);
+# add the wchar_t* overload so the call resolves on iOS.
+SHHDR="$REPO_ROOT/upstream/Minecraft.World/StringHelpers.h"
+if [ -f "$SHHDR" ] && ! grep -q 'convStringToWstring\(const wchar_t' "$SHHDR"; then
+    python3 - "$SHHDR" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    src = f.read()
+needle = 'wstring convStringToWstring(const string& converting);'
+if needle in src:
+    add = needle + '\ninline wstring convStringToWstring(const wchar_t *s) { return s ? wstring(s) : wstring(); }'
+    patched = src.replace(needle, add, 1)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(patched)
+    print("patch-upstream-stdafx: added wchar_t overload for convStringToWstring")
+PY
+fi
