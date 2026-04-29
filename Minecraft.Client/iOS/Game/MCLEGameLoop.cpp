@@ -54,6 +54,7 @@
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
 #include "../../../upstream/Minecraft.Client/PlayerList.h"
+#include "../../../upstream/Minecraft.Client/Settings.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayerGameMode.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
@@ -398,7 +399,19 @@ void initImpl() {
         return;
     }
     MCLE_LOG("mcle_game_init: MinecraftServer at %p", (void*)g_server);
-    MCLE_LOG("mcle_game_init: SENTINEL_AFTER_MS_CTOR_BUILD_1a2db2b");
+
+    // Step 5.55: server-side Settings. Upstream initServer() does
+    // `settings = new Settings(new File(L"server.properties"))` before
+    // PlayerList is built. PlayerList ctor calls
+    // server->settings->getInt(L"max-players", 8) - null defaults aren't
+    // safe. Settings ctor reads server.properties (file may be missing
+    // - that's fine; getInt then returns the supplied default).
+    try {
+        g_server->settings = new Settings(new File(std::wstring(L"server.properties")));
+        MCLE_LOG("mcle_game_init: server->settings at %p", (void*)g_server->settings);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: Settings ctor threw: %{public}s", e.what());
+    }
 
     // Step 5.6: attach a PlayerList. Parity with MinecraftServer.cpp:690
     // (`setPlayers(new PlayerList(this))`). Without this, ServerLevel ctor
