@@ -202,6 +202,20 @@ struct McleAppStub {
     template<class... A> bool           AutosaveDue(A...)             { return false; }
     template<class... A> void           SetAction(A...)               {}
     template<class... A> int            SecondsToAutosave(A...)       { return 0; }
+    template<class... A> void           LoadCommandBlockMenu(A...)    {}
+    template<class... A> void           LoadContainerMenu(A...)       {}
+    template<class... A> void           LoadHopperMenu(A...)          {}
+    template<class... A> void           LoadAnvilMenu(A...)           {}
+    template<class... A> void           LoadDispenserMenu(A...)       {}
+    template<class... A> void           LoadFurnaceMenu(A...)         {}
+    template<class... A> void           LoadEnchantmentMenu(A...)     {}
+    template<class... A> void           LoadBeaconMenu(A...)          {}
+    template<class... A> void           LoadBrewingStandMenu(A...)    {}
+    template<class... A> void           LoadHorseInventoryMenu(A...)  {}
+    template<class... A> void           LoadFireworksMenu(A...)       {}
+    template<class... A> void           LoadInventoryMenu(A...)       {}
+    template<class... A> const wchar_t* FormatChatMessage(A...)       { return L""; }
+    template<class... A> bool           GetMemFileDetails(A...)       { return false; }
     template<class... A> bool           GetBootedFromDiscPatch(A...)  { return false; }
     template<class... A> bool           GetChangingSessionType(A...)  { return false; }
     template<class... A> void*          GetCommerce(A...)             { return nullptr; }
