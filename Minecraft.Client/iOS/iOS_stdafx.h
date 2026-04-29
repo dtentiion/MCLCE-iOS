@@ -311,11 +311,8 @@ struct C4JRenderStub {
     template<class... A> void   MatrixPerspective(A...)       {}
     template<class... A> void   MatrixOrthogonal(A...)        {}
     template<class... A> void   MatrixGet(A...)               {}
-    template<class... A> void   MatrixPush(A...)              {}
-    template<class... A> void   MatrixPop(A...)               {}
     template<class... A> void   MatrixIdentity(A...)          {}
     template<class... A> void   MatrixLoad(A...)              {}
-    template<class... A> void   MatrixMult(A...)              {}
     template<class... A> void   CBuffClear(A...)              {}
     template<class... A> void   CBuffReset(A...)              {}
     template<class... A> void   CBuffStart(A...)              {}
