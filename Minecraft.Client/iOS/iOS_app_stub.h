@@ -197,6 +197,13 @@ struct McleAppStub {
     template<class... A> bool           CheckForEmptyStore(A...)      { return false; }
     template<class... A> bool           DownloadAlreadyPurchased(A...){ return false; }
     template<class... A> bool           GetBanListRead(A...)          { return false; }
+    template<class... A> bool           GetBanListCheck(A...)         { return false; }
+    template<class... A> int            GetXuiAction(A...)            { return 0; }
+    template<class... A> bool           AutosaveDue(A...)             { return false; }
+    template<class... A> void           SetAction(A...)               {}
+    template<class... A> int            SecondsToAutosave(A...)       { return 0; }
+    template<class... A> bool           GetTutorialMode(A...)         { return false; }
+    template<class... A> bool           GetGameStarted(A...)          { return false; }
     template<class... A> bool           GetBootedFromDiscPatch(A...)  { return false; }
     template<class... A> bool           GetChangingSessionType(A...)  { return false; }
     template<class... A> void*          GetCommerce(A...)             { return nullptr; }
