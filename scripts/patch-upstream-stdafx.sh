@@ -1153,3 +1153,8 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: rewrote FileEntrySaveData read for iOS in {path}")
 PY
 fi
+
+PREPLVL_PY="$REPO_ROOT/scripts/patch-prepare-level-checkpoints.py"
+if [ -f "$PREPLVL_PY" ]; then
+    python3 "$PREPLVL_PY"
+fi
