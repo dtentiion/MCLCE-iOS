@@ -81,7 +81,13 @@ struct McleAppStub {
     int DebugPrintf(const wchar_t *, ...) { return 0; }
     template<class... A> void           FatalLoadError(A...)    {}
     template<class... A> int            GetGameSetting(A...)    { return 0; }
-    template<class... A> GAME_SETTINGS* GetGameSettings(A...)   { return nullptr; }
+    // Real upstream has two overloads:
+    //   GAME_SETTINGS* GetGameSettings(int pad)
+    //   int            GetGameSettings(int pad, int settingId)   <-- Input.cpp uses this
+    // Our stub now provides both so static_cast<float>(GetGameSettings(p,s))
+    // resolves to int->float instead of pointer->float.
+    GAME_SETTINGS *GetGameSettings(int /*pad*/)               { return nullptr; }
+    int            GetGameSettings(int /*pad*/, int /*setting*/) { return 100; }
     template<class... A> int            GetGameSettingsDebugMask(A...) { return 0; }
     template<class... A> int            GetGameHostOption(A...) { return 0; }
     template<class... A> void           SetGameHostOption(A...) {}
