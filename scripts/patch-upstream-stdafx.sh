@@ -1330,3 +1330,8 @@ SLVL_PY="$REPO_ROOT/scripts/patch-serverlevel-checkpoints.py"
 if [ -f "$SLVL_PY" ]; then
     python3 "$SLVL_PY"
 fi
+
+ENT_PY="$REPO_ROOT/scripts/patch-entity-ctor-checkpoints.py"
+if [ -f "$ENT_PY" ]; then
+    python3 "$ENT_PY"
+fi
