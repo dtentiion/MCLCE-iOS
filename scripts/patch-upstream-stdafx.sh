@@ -1315,3 +1315,8 @@ if needle in src:
     print("patch-upstream-stdafx: added glLight fwd decl to Lighting.cpp")
 PY
 fi
+
+LDCK_PY="$REPO_ROOT/scripts/patch-leveldata-checkpoints.py"
+if [ -f "$LDCK_PY" ]; then
+    python3 "$LDCK_PY"
+fi
