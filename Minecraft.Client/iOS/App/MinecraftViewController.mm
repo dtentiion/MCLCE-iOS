@@ -12,6 +12,8 @@
 #include "MCLE_iOS_Settings.h"
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
+extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
+extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 
 // Name of the currently loaded menu SWF, set whenever we enter a
 // new scene. The settings-event bridge reads this to decide which
@@ -792,10 +794,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
     if (!self.loadedSwfName) self.loadedSwfName = @"<none>";
 
-    if (!g_ruffle_player) {
-        // Fallback: our hand-rolled Metal pipeline drew the triangle before.
-        mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
-    }
+    // Always init the legacy Metal renderer too. Ruffle drives the SWF
+    // panorama frame-by-frame, but once the world goes to ticking state
+    // the tick handler routes to mcle_render_frame() instead. Both
+    // pipelines share the same CAMetalLayer; only one renders per
+    // frame so the drawable contention is naturally serialised.
+    mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
@@ -2327,6 +2331,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 - (void)tick:(CADisplayLink*)link {
     mcle_game_tick();
+
+    // Phase G phase 1A: once the world simulation is ticking, take over
+    // the screen with the legacy Metal path (sky-color clear via
+    // mcle_render_frame). Bypasses Ruffle entirely so the SWF menu
+    // doesn't keep drawing on top of the world output.
+    if (mcle_world_is_ticking()) {
+        if (self.splashLabel) self.splashLabel.hidden = YES;
+        mcle_render_frame();
+        return;
+    }
 
     // Splash text pulse + position. Mirrors CXuiCtrlSplashPulser::
     // OnRender (Common/XUI/XUI_Ctrl_SplashPulser.cpp): pulses with
