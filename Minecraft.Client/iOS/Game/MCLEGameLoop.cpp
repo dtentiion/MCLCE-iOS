@@ -541,23 +541,40 @@ void initImpl() {
     // for a single-player iOS shell we shortcut to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
+    MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
     try {
         g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
-        g_player = std::make_shared<ServerPlayer>(
-            /*server*/    g_server,
-            /*level*/     static_cast<Level *>(g_levels[0]),
-            /*name*/      std::wstring(L"iOSPlayer"),
-            /*gameMode*/  g_playerGameMode);
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode at %p", (void*)g_playerGameMode);
     } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
-        // Don't fail the whole bootstrap - levels are still ticking.
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw unknown");
     }
+
+    if (g_playerGameMode) {
+        MCLE_LOG("mcle_game_init: building ServerPlayer...");
+        try {
+            g_player = std::make_shared<ServerPlayer>(
+                /*server*/    g_server,
+                /*level*/     static_cast<Level *>(g_levels[0]),
+                /*name*/      std::wstring(L"iOSPlayer"),
+                /*gameMode*/  g_playerGameMode);
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw unknown");
+        }
+    }
+
     if (g_player) {
-        MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
+        MCLE_LOG("mcle_game_init: ServerPlayer at %p, calling addEntity", (void*)g_player.get());
         try {
             g_levels[0]->addEntity(g_player);
+            MCLE_LOG("mcle_game_init: addEntity returned");
         } catch (const std::exception &e) {
             MCLE_LOG("mcle_game_init: addEntity threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: addEntity threw unknown");
         }
     }
 
