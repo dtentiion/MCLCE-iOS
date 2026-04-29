@@ -26,6 +26,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/ConsoleSaveFileConverter.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Connection.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/ConsoleGameMode.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Minecraft.cpp
   ${UPSTREAM_DIR}/Minecraft.World/Minecraft.World.cpp
   ${UPSTREAM_DIR}/Minecraft.World/stdafx.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/stdafx.cpp
