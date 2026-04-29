@@ -57,7 +57,7 @@ edits = [
     # checkpoint around the LevelData ctor
     (
         "LevelData *ret = new LevelData(tag);",
-        'app.DebugPrintf("PREP_LEVEL_CKPT calling LevelData ctor");\n'
+        'app.DebugPrintf("PREP_LEVEL_CKPT calling LevelData ctor (tag=%p)", tag);\n'
         '\t\tLevelData *ret = new LevelData(tag);\n'
         '\t\tapp.DebugPrintf("PREP_LEVEL_CKPT LevelData ctor done = %p", ret);',
     ),
