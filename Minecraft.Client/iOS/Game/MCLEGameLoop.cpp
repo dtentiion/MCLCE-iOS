@@ -351,9 +351,11 @@ void initImpl() {
              narrow(g_levelName).c_str());
 
     // Step 5: build LevelSettings from the metadata.
+    MCLE_LOG("mcle_game_init: building LevelSettings...");
     LevelSettings *settings = nullptr;
     try {
         settings = new LevelSettings(levelData);
+        MCLE_LOG("mcle_game_init: LevelSettings at %p", (void*)settings);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: LevelSettings ctor threw: %{public}s", e.what());
         g_initState = kStateFailed;
@@ -365,6 +367,7 @@ void initImpl() {
     // The ctor sets up command dispatcher + dispenser bootstrap +
     // pause-event - all things ServerLevel ctor expects to call back
     // into.
+    MCLE_LOG("mcle_game_init: constructing MinecraftServer...");
     try {
         g_server = new MinecraftServer();
     } catch (const std::exception &e) {
