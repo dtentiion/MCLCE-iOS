@@ -402,8 +402,12 @@ void initImpl() {
     // Step 5.6: attach a PlayerList. Parity with MinecraftServer.cpp:690
     // (`setPlayers(new PlayerList(this))`). Without this, ServerLevel ctor
     // crashes inside `server->getPlayers()->getViewDistance()`.
+    MCLE_LOG("mcle_game_init: constructing PlayerList...");
     try {
-        g_server->setPlayers(new PlayerList(g_server));
+        PlayerList *pl = new PlayerList(g_server);
+        MCLE_LOG("mcle_game_init: PlayerList allocated at %p, attaching...", (void*)pl);
+        g_server->setPlayers(pl);
+        MCLE_LOG("mcle_game_init: PlayerList attached");
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: PlayerList ctor threw: %{public}s", e.what());
         g_initState = kStateFailed;
