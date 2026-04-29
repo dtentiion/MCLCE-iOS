@@ -1272,3 +1272,8 @@ if needle in src:
     print("patch-upstream-stdafx: added wchar_t overload for convStringToWstring")
 PY
 fi
+
+TAGCK_PY="$REPO_ROOT/scripts/patch-tag-readnamed-checkpoints.py"
+if [ -f "$TAGCK_PY" ]; then
+    python3 "$TAGCK_PY"
+fi
