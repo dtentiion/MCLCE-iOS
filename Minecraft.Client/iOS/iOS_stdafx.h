@@ -752,7 +752,10 @@ class Tutorial {
 public:
     bool m_fullTutorialComplete = false;
     bool m_allTutorialsComplete = false;
-    struct PopupMessageDetails {};
+    struct PopupMessageDetails {
+        int  m_icon  = 0;
+        bool m_delay = false;
+    };
     // Variadic ctor so subclasses (TutorialMode -> ConsoleGameMode etc.)
     // that pass args up the inheritance chain can compile against the
     // stub regardless of what the real upstream Tutorial signature is.

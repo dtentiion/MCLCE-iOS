@@ -26,6 +26,16 @@ public:
     template<class... A> int   GetValue(A...)               { return 0; }
     template<class... A> void* GetGameJoypadMaps(A...)      { return nullptr; }
     template<class... A> int   GetJoypadMapVal(A...)        { return 0; }
+    // Joypad stick axes upstream Input.cpp reads each tick. Returning
+    // 0 keeps the player stationary on the simulation thread until
+    // INP_iOS_Controller wires real GameController.framework axes
+    // through here in Phase F3.
+    template<class... A> float GetJoypadStick_LX(A...)      { return 0.0f; }
+    template<class... A> float GetJoypadStick_LY(A...)      { return 0.0f; }
+    template<class... A> float GetJoypadStick_RX(A...)      { return 0.0f; }
+    template<class... A> float GetJoypadStick_RY(A...)      { return 0.0f; }
+    template<class... A> float GetJoypadTrigger_L(A...)     { return 0.0f; }
+    template<class... A> float GetJoypadTrigger_R(A...)     { return 0.0f; }
 };
 
 extern C_4JInput InputManager;
