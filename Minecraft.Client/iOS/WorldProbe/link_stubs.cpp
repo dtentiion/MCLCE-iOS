@@ -300,16 +300,10 @@ void GameRenderer::FinishedReassigning() {}
 // LevelData: real upstream LevelData.cpp now compiles (ChunkSource.h
 // include patched in). Stubs removed.
 
-// MemoryTracker: real upstream MemoryTracker.cpp doesn't compile (uses
-// the upstream-wrapper variants of glGenTextures/glDeleteTextures
-// without args). Frustum.cpp has a static FloatBuffer initialized via
-// MemoryTracker::createFloatBuffer; without a body, link fails. Stub
-// returns a fresh FloatBuffer of the requested size.
-#include "FloatBuffer.h"
-#include "MemoryTracker.h"
-FloatBuffer *MemoryTracker::createFloatBuffer(int size) {
-    return new FloatBuffer((unsigned int)size);
-}
+// MemoryTracker: real upstream MemoryTracker.cpp now compiles via the
+// upstream-wrapper glGenTextures()/glDeleteTextures(int) variants added
+// in iOS_WinCompat.h and probe_stub.cpp. createFloatBuffer body comes
+// from the .cpp; old stub removed.
 
 // ---------------------------------------------------------------------------
 // G2b: leaf-symbol stubs so LevelRenderer.cpp links. Each upstream class
@@ -321,7 +315,9 @@ FloatBuffer *MemoryTracker::createFloatBuffer(int size) {
 
 // Tesselator: real upstream Tesselator.cpp now compiles. Stubs removed.
 
-int MemoryTracker::genLists(int /*range*/) { return 0; }
+// MemoryTracker: real upstream MemoryTracker.cpp now compiles via the
+// upstream-wrapper glGenTextures()/glDeleteTextures(int) variants we
+// added. Stubs removed.
 
 #include "OffsettedRenderList.h"
 OffsettedRenderList::OffsettedRenderList() {}
