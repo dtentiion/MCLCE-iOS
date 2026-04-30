@@ -714,7 +714,7 @@ extern "C" void mcle_game_tick(void) {
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
-    bool diag = g_tickCount <= 10;
+    bool diag = g_tickCount <= 60;
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
@@ -739,7 +739,7 @@ extern "C" void mcle_game_tick(void) {
 
     // Log every tick for the first 10 frames so we can see exactly which
     // tick number crashes mid-loop. After that drop to 1Hz.
-    bool earlyTick = g_tickCount <= 10;
+    bool earlyTick = g_tickCount <= 60;
     if (earlyTick || (g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
