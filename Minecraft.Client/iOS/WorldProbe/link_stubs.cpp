@@ -310,3 +310,52 @@ void GameRenderer::FinishedReassigning() {}
 FloatBuffer *MemoryTracker::createFloatBuffer(int size) {
     return new FloatBuffer((unsigned int)size);
 }
+
+// ---------------------------------------------------------------------------
+// G2b: leaf-symbol stubs so LevelRenderer.cpp links. Each upstream class
+// owning these would normally define them in its .cpp, but the matching
+// .cpp doesn't compile cleanly on iOS yet (missing GL wrapper variants,
+// transitive deps). No-op stubs let the rest of the renderer link; G3 +
+// real C4JRender_iOS impls replace them with working bodies.
+// ---------------------------------------------------------------------------
+
+#include "Tesselator.h"
+void Tesselator::vertex(float /*x*/, float /*y*/, float /*z*/) {}
+void Tesselator::vertexUV(float /*x*/, float /*y*/, float /*z*/,
+                          float /*u*/, float /*v*/) {}
+void Tesselator::normal(float /*x*/, float /*y*/, float /*z*/) {}
+void Tesselator::color(int /*c*/) {}
+
+int MemoryTracker::genLists(int /*range*/) { return 0; }
+
+#include "OffsettedRenderList.h"
+OffsettedRenderList::OffsettedRenderList() {}
+
+#include "Lighting.h"
+void Lighting::turnOff() {}
+
+#include "Textures.h"
+class ResourceLocation;
+class MemTextureProcessor;
+class MemTexture;
+void Textures::bindTexture(ResourceLocation * /*resource*/) {}
+MemTexture *Textures::addMemTexture(const std::wstring & /*url*/,
+                                     MemTextureProcessor * /*p*/) { return nullptr; }
+void Textures::removeMemTexture(const std::wstring & /*url*/) {}
+
+#include "GameRenderer.h"
+void GameRenderer::EnableUpdateThread() {}
+void GameRenderer::DisableUpdateThread() {}
+
+#include "LocalPlayer.h"
+void LocalPlayer::updateRichPresence() {}
+
+#include "Gui.h"
+void Gui::setNowPlaying(const std::wstring & /*s*/) {}
+
+#include "Common/UI/UIScene_SettingsGraphicsMenu.h"
+int UIScene_SettingsGraphicsMenu::LevelToDistance(int /*dist*/) { return 16; }
+
+// MobSkinMemTextureProcessor: define one virtual to anchor the vtable.
+#include "MobSkinMemTextureProcessor.h"
+BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return in; }
