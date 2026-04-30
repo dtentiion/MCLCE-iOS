@@ -94,6 +94,7 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayerGameMode.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
+#include "../../../upstream/Minecraft.Client/LevelRenderer.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -120,6 +121,7 @@ std::shared_ptr<LevelStorage> g_levelStorage;
 ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
 std::shared_ptr<ServerPlayer> g_player;
 ServerPlayerGameMode         *g_playerGameMode = nullptr;
+LevelRenderer                *g_levelRenderer  = nullptr;
 std::wstring                  g_levelName;
 // std::atomic so the main-thread tick reliably reads progress from the
 // background init thread. On arm64 plain int loads/stores are atomic
@@ -644,6 +646,21 @@ void initImpl() {
     // first tick runs entities=0, second tick runs entities=1 mid-init.
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
+
+    // G2b: probe LevelRenderer construction AFTER state=ticking so a
+    // crash in the upstream ctor (renderStars / createCloudMesh / sky
+    // list build) doesn't kill the blue-sky milestone. Upstream ctor
+    // takes (Minecraft *, Textures *) - both nullable per the ctor body.
+    MCLE_LOG("mcle_game_init: G2b probe new LevelRenderer(nullptr, nullptr)...");
+    try {
+        g_levelRenderer = new LevelRenderer(nullptr, nullptr);
+        MCLE_LOG("mcle_game_init: LevelRenderer at %p", (void*)g_levelRenderer);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: LevelRenderer ctor threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: LevelRenderer ctor threw unknown");
+    }
+
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
