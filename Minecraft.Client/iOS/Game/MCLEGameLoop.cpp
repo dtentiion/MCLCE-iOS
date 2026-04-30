@@ -49,6 +49,7 @@
 #include "../../../upstream/Minecraft.World/Recipes.h"
 #include "../../../upstream/Minecraft.World/Tile.h"
 #include "../../../upstream/Minecraft.World/Item.h"
+#include "../../../upstream/Minecraft.World/MobEffect.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -558,6 +559,13 @@ void initImpl() {
 
     // F3 prep - Item + Recipes static init. Run AFTER state=ticking so a
     // SIGSEGV during diagnosis preserves the blue-sky milestone.
+    //
+    // MobEffect::staticCtor must run before Item::staticCtor: the
+    // GoldenAppleItem ctor chain references MobEffect::regeneration->id
+    // (Item.cpp:432) which null-derefs at offset 0x8 if the singleton
+    // isn't built.
+    try { MobEffect::staticCtor();     MCLE_LOG("mcle_game_init: MobEffect::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: MobEffect::staticCtor threw"); }
     try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
     try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
