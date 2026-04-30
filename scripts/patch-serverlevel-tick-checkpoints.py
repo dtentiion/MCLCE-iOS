@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""F3: bracket ServerLevel::tick body to find the null deref in the very
-first per-frame tick (after Player has been added).
+"""F3: bracket ServerLevel::tick body to find the null deref. Logs every
+tick (no gating) so we can see which step crashes on tick 8 specifically.
 
 Idempotent.
 """
@@ -23,74 +23,73 @@ edits = [
         "void ServerLevel::tick()\n{\n"
         "\tLevel::tick();",
         "void ServerLevel::tick()\n{\n"
-        '\tstatic bool _tk = false; if (!_tk) { app.DebugPrintf("STICK_CKPT enter dim=%d", dimension ? ((Dimension *)dimension)->id : -99); }\n'
+        '\tapp.DebugPrintf("STICK_CKPT enter dim=%d", dimension ? ((Dimension *)dimension)->id : -99);\n'
         "\tLevel::tick();\n"
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT after Level::tick");',
+        '\tapp.DebugPrintf("STICK_CKPT after Level::tick");',
     ),
     (
         "\tif (getLevelData()->isHardcore() && difficulty < 3)\n\t{",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before isHardcore check");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before isHardcore check");\n'
         "\tif (getLevelData()->isHardcore() && difficulty < 3)\n\t{",
     ),
     (
         "\tdimension->biomeSource->update();",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before biomeSource->update dim=%p bs=%p", dimension, dimension ? ((Dimension *)dimension)->biomeSource : nullptr);\n'
+        '\tapp.DebugPrintf("STICK_CKPT before biomeSource->update");\n'
         "\tdimension->biomeSource->update();\n"
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT after biomeSource->update");',
+        '\tapp.DebugPrintf("STICK_CKPT after biomeSource->update");',
     ),
     (
         "\tif (allPlayersAreSleeping())\n\t{",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before allPlayersAreSleeping");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before allPlayersAreSleeping");\n'
         "\tif (allPlayersAreSleeping())\n\t{",
     ),
     (
         "\tPIXBeginNamedEvent(0,\"Mob spawner tick\");",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before mob spawner block");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before mob spawner block");\n'
         "\tPIXBeginNamedEvent(0,\"Mob spawner tick\");",
     ),
     (
         "\tif (getGameRules()->getBoolean(GameRules::RULE_DOMOBSPAWNING))\n\t{",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before getGameRules()");\n'
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT mobspawner=%p chunkSource=%p", mobSpawner, chunkSource);\n'
+        '\tapp.DebugPrintf("STICK_CKPT before getGameRules()");\n'
         "\tif (getGameRules()->getBoolean(GameRules::RULE_DOMOBSPAWNING))\n\t{",
     ),
     (
         "\t\tmobSpawner->tick(this, finalSpawnEnemies, finalSpawnFriendlies, finalSpawnPersistent);",
-        '\t\tif (!_tk) app.DebugPrintf("STICK_CKPT before mobSpawner->tick");\n'
+        '\t\tapp.DebugPrintf("STICK_CKPT before mobSpawner->tick");\n'
         "\t\tmobSpawner->tick(this, finalSpawnEnemies, finalSpawnFriendlies, finalSpawnPersistent);\n"
-        '\t\tif (!_tk) app.DebugPrintf("STICK_CKPT after mobSpawner->tick");',
+        '\t\tapp.DebugPrintf("STICK_CKPT after mobSpawner->tick");',
     ),
     (
         "\tchunkSource->tick();",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before chunkSource->tick");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before chunkSource->tick");\n'
         "\tchunkSource->tick();\n"
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT after chunkSource->tick");',
+        '\tapp.DebugPrintf("STICK_CKPT after chunkSource->tick");',
     ),
     (
         "\tint newDark = getOldSkyDarken(1);",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before getOldSkyDarken");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before getOldSkyDarken");\n'
         "\tint newDark = getOldSkyDarken(1);\n"
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT skyDarken=%d skyChanged=%d", newDark, (int)(newDark != skyDarken));',
+        '\tapp.DebugPrintf("STICK_CKPT after getOldSkyDarken=%d", newDark);',
     ),
     (
         "\tif (newDark != skyDarken)\n\t{",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before sky listeners");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before sky listeners");\n'
         "\tif (newDark != skyDarken)\n\t{",
     ),
     (
         "\tint64_t time = levelData->getGameTime() + 1;",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before save block");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before save block");\n'
         "\tint64_t time = levelData->getGameTime() + 1;",
     ),
     (
         "\tsetGameTime(levelData->getGameTime() + 1);",
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before setGameTime");\n'
+        '\tapp.DebugPrintf("STICK_CKPT before setGameTime");\n'
         "\tsetGameTime(levelData->getGameTime() + 1);\n"
-        '\tif (!_tk) app.DebugPrintf("STICK_CKPT after setGameTime");',
+        '\tapp.DebugPrintf("STICK_CKPT after setGameTime");',
     ),
     (
         "\tif (getGameRules()->getBoolean(GameRules::RULE_DAYLIGHT))\n\t{",
-        '\tif (!_tk) { app.DebugPrintf("STICK_CKPT before RULE_DAYLIGHT check"); _tk = true; }\n'
+        '\tapp.DebugPrintf("STICK_CKPT before RULE_DAYLIGHT check");\n'
         "\tif (getGameRules()->getBoolean(GameRules::RULE_DAYLIGHT))\n\t{",
     ),
 ]
