@@ -40,6 +40,10 @@
 // the tick log can read the cumulative DrawVertices count.
 extern "C" unsigned long long mcle_metal_draw_count(void);
 
+// G1B-probe: defined later in this same TU; forward-declared here so
+// the tick path can call it before the definition appears.
+extern "C" void mcle_world_g1b_probe_tick(void);
+
 #include "../../../upstream/Minecraft.World/Minecraft.World.h"
 #include "../../../upstream/Minecraft.World/Compression.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
@@ -780,7 +784,6 @@ extern "C" void mcle_game_tick(void) {
     // render thread, where the upstream getSkyColor crash actually fires).
     // Different thread but same upstream code path - if the probe lands
     // cleanly here, the crash is render-thread-specific (TLS / state).
-    extern "C" void mcle_world_g1b_probe_tick(void);
     mcle_world_g1b_probe_tick();
 }
 
