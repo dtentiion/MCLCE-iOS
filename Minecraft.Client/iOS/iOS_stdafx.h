@@ -673,6 +673,23 @@ public:
 #include "../Minecraft.Client/Gui.h"
 // ScreenSizeCalculator - Minecraft.cpp constructs one on the stack.
 #include "../Minecraft.Client/ScreenSizeCalculator.h"
+// G2b: ARB VBO namespace stub. Tesselator's ctor references
+// ARBVertexBufferObject::glGenBuffersARB only when USE_VBO is true,
+// which it isn't (defaulted false in Tesselator.cpp). Code is dead
+// at runtime but still needs to compile.
+class ByteBuffer;
+class IntBuffer;
+class ARBVertexBufferObject {
+public:
+    static const int GL_ARRAY_BUFFER_ARB = 0;
+    static const int GL_STREAM_DRAW_ARB  = 0;
+    static const int GL_STATIC_DRAW_ARB  = 0;
+    static void glBindBufferARB(int, int)            {}
+    static void glBufferDataARB(int, ByteBuffer *, int) {}
+    static void glGenBuffersARB(IntBuffer *)         {}
+    static void glDeleteBuffersARB(int, const unsigned int *) {}
+};
+
 // Mouse class stub. Real upstream version lives in
 // Minecraft.Client/stubs.h alongside a `class Color` that conflicts
 // with `Minecraft.World/Color.h`. We can't pre-include stubs.h
