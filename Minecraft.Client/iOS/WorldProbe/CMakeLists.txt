@@ -991,6 +991,10 @@ set(WORLD_PROBE_SOURCES
   # link_stubs.cpp; routes vertex pushes into our Metal DrawVertices hook
   # via Tesselator::end() -> RenderManager.DrawVertices(...).
   ${UPSTREAM_DIR}/Minecraft.Client/Tesselator.cpp
+  # G2b: real MemoryTracker (genLists, genTextures wrappers). Needs the
+  # upstream-wrapper glGenTextures()/glDeleteTextures(int) variants we
+  # added in iOS_WinCompat.h + probe_stub.cpp.
+  ${UPSTREAM_DIR}/Minecraft.Client/MemoryTracker.cpp
   # Phase E: pulled in to satisfy ServerLevel/MinecraftServer link refs.
   # Both are auto-probe greens; just weren't in the lib source list yet.
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerChunkMap.cpp

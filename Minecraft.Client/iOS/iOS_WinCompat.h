@@ -692,6 +692,9 @@ void glClearDepth(double);
 unsigned int glGetError(void);
 void glGenTextures(int, unsigned int*);
 void glDeleteTextures(int, const unsigned int*);
+// Upstream-wrapper variants used by MemoryTracker.cpp.
+unsigned int glGenTextures(void);
+void         glDeleteTextures(unsigned int);
 void glTexImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*);
 void glTexSubImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*);
 void glPixelStorei(unsigned int, int);
