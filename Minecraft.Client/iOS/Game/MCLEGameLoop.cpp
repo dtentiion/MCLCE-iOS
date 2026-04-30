@@ -556,16 +556,10 @@ void initImpl() {
     // for a single-player iOS shell we shortcut to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
-    // Flip to ticking state BEFORE attempting player construction. If
-    // the Player ctor SIGSEGVs the app dies, but the render thread will
-    // already have switched to the sky-color clear path so the F2/G1A
-    // milestone stays visible (and the user knows we got that far) while
-    // the F3 checkpoints in the log show where the ctor chain died.
-    g_initState = kStateTicking;
-    MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
-
-    // F3 prep - Item + Recipes static init. Run AFTER state=ticking so a
-    // SIGSEGV during diagnosis preserves the blue-sky milestone.
+    // F3 - Item + Recipes static init. Must run BEFORE state=ticking so
+    // the render thread doesn't observe the world half-built (race that
+    // bit us once: render ticked entities=0, then bootstrap added Player,
+    // next tick crashed mid-construction).
     //
     // MobEffect::staticCtor must run before Item::staticCtor: the
     // GoldenAppleItem ctor chain references MobEffect::regeneration->id
@@ -618,6 +612,11 @@ void initImpl() {
         }
     }
 
+    // Flip to ticking state ONLY after the player is fully registered.
+    // Otherwise the render thread tick races against the bootstrap and
+    // first tick runs entities=0, second tick runs entities=1 mid-init.
+    g_initState = kStateTicking;
+    MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
