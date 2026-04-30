@@ -1355,3 +1355,8 @@ STICK_PY="$REPO_ROOT/scripts/patch-serverlevel-tick-checkpoints.py"
 if [ -f "$STICK_PY" ]; then
     python3 "$STICK_PY"
 fi
+
+TT_PY="$REPO_ROOT/scripts/patch-ticktiles-checkpoints.py"
+if [ -f "$TT_PY" ]; then
+    python3 "$TT_PY"
+fi
