@@ -55,6 +55,27 @@
 #include "../../../upstream/Minecraft.World/GenericStats.h"
 #include "../../../upstream/Minecraft.World/CommonStats.h"
 #include "../../../upstream/Minecraft.World/Stats.h"
+#include "../../../upstream/Minecraft.World/Packet.h"
+#include "../../../upstream/Minecraft.World/HatchetItem.h"
+#include "../../../upstream/Minecraft.World/PickaxeItem.h"
+#include "../../../upstream/Minecraft.World/ShovelItem.h"
+#include "../../../upstream/Minecraft.World/BlockReplacements.h"
+#include "../../../upstream/Minecraft.World/FurnaceRecipes.h"
+#include "../../../upstream/Minecraft.World/TileEntity.h"
+#include "../../../upstream/Minecraft.World/EntityIO.h"
+#include "../../../upstream/Minecraft.World/MobCategory.h"
+#include "../../../upstream/Minecraft.World/LevelChunk.h"
+#include "../../../upstream/Minecraft.World/StructureFeatureIO.h"
+#include "../../../upstream/Minecraft.World/MineShaftPieces.h"
+#include "../../../upstream/Minecraft.World/StrongholdFeature.h"
+#include "../../../upstream/Minecraft.World/VillagePieces.h"
+#include "../../../upstream/Minecraft.World/VillageFeature.h"
+#include "../../../upstream/Minecraft.World/RandomScatteredLargeFeature.h"
+#include "../../../upstream/Minecraft.World/EnderMan.h"
+#include "../../../upstream/Minecraft.World/PotionBrewing.h"
+#include "../../../upstream/Minecraft.World/Enchantment.h"
+#include "../../../upstream/Minecraft.World/SharedConstants.h"
+#include "../../../upstream/Minecraft.World/SparseLightStorage.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -149,49 +170,57 @@ void initImpl() {
     // hits __debugbreak().
     Entity::useSmallIds();
 
-    // MinecraftWorld_RunStaticCtors() is the parity-correct upstream init
-    // pass but Tile::staticCtor SIGSEGVs on iOS (separate investigation).
-    // For now, call the lightweight static ctors that downstream code
-    // actually needs: GameType (LevelData ctor calls byId), LevelType
-    // (LevelData reads lvl_normal). These have no Tile/Material deps.
-    try {
-        GameType::staticCtor();
-        MCLE_LOG("mcle_game_init: GameType::staticCtor done");
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: GameType::staticCtor threw");
-    }
-    try {
-        LevelType::staticCtor();
-        MCLE_LOG("mcle_game_init: LevelType::staticCtor done");
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: LevelType::staticCtor threw");
-    }
-    // MinecraftServer ctor calls DispenserBootstrap::bootStrap() which
-    // registers behaviors keyed off Item::* statics; null without these.
-    try { MaterialColor::staticCtor(); MCLE_LOG("mcle_game_init: MaterialColor::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: MaterialColor::staticCtor threw"); }
-    try { Material::staticCtor();      MCLE_LOG("mcle_game_init: Material::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Material::staticCtor threw"); }
-
-    // Tile::setShape (called from every tile ctor via updateDefaultShape)
-    // writes through a TLS-owned ThreadStorage. Without this on the
-    // bootstrap thread the very first tile ctor null-derefs at offset 0x8.
+    // Tile::setShape needs TLS-owned ThreadStorage on every thread that
+    // touches the world. Bootstrap thread first, render thread on its
+    // first tick (see mcle_game_tick).
     Tile::CreateNewThreadStorage();
     MCLE_LOG("mcle_game_init: Tile::CreateNewThreadStorage done");
 
-    try { Tile::staticCtor();          MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
+    // Parity-correct upstream static init order, mirroring
+    // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
+    // Each call wrapped in try/catch so a single C++ throw doesn't kill
+    // the whole sequence (SIGSEGV will still terminate; that's by design
+    // - we want to know which static init has a bad dep on iOS).
+    #define MCLE_STATIC(name, body) \
+        try { body; MCLE_LOG("mcle_game_init: " name " done"); } \
+        catch (...) { MCLE_LOG("mcle_game_init: " name " threw"); }
 
-    // Biome::staticCtor builds the global biome table referenced by
-    // shouldFreeze / shouldSnow / handleRain in tickTiles. Without it
-    // getBiome can return a partially-zero singleton causing offset-0x68
-    // null derefs.
-    try { Biome::staticCtor();         MCLE_LOG("mcle_game_init: Biome::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Biome::staticCtor threw"); }
+    MCLE_STATIC("Packet::staticCtor",          Packet::staticCtor());
+    MCLE_STATIC("GameType::staticCtor",        GameType::staticCtor());
+    MCLE_STATIC("MaterialColor::staticCtor",   MaterialColor::staticCtor());
+    MCLE_STATIC("Material::staticCtor",        Material::staticCtor());
+    MCLE_STATIC("Tile::staticCtor",            Tile::staticCtor());
+    MCLE_STATIC("HatchetItem::staticCtor",     HatchetItem::staticCtor());
+    MCLE_STATIC("PickaxeItem::staticCtor",     PickaxeItem::staticCtor());
+    MCLE_STATIC("ShovelItem::staticCtor",      ShovelItem::staticCtor());
+    MCLE_STATIC("BlockReplacements::staticCtor", BlockReplacements::staticCtor());
+    MCLE_STATIC("Biome::staticCtor",           Biome::staticCtor());
+    MCLE_STATIC("MobEffect::staticCtor",       MobEffect::staticCtor());
+    MCLE_STATIC("Item::staticCtor",            Item::staticCtor());
+    MCLE_STATIC("FurnaceRecipes::staticCtor",  FurnaceRecipes::staticCtor());
+    MCLE_STATIC("Recipes::staticCtor",         Recipes::staticCtor());
+    MCLE_STATIC("GenericStats::setInstance",   GenericStats::setInstance(new CommonStats()));
+    MCLE_STATIC("Stats::staticCtor",           Stats::staticCtor());
+    MCLE_STATIC("TileEntity::staticCtor",      TileEntity::staticCtor());
+    MCLE_STATIC("EntityIO::staticCtor",        EntityIO::staticCtor());
+    MCLE_STATIC("MobCategory::staticCtor",     MobCategory::staticCtor());
+    MCLE_STATIC("Item::staticInit",            Item::staticInit());
+    MCLE_STATIC("LevelChunk::staticCtor",      LevelChunk::staticCtor());
+    MCLE_STATIC("LevelType::staticCtor",       LevelType::staticCtor());
+    MCLE_STATIC("StructureFeatureIO::staticCtor",       StructureFeatureIO::staticCtor());
+    MCLE_STATIC("MineShaftPieces::staticCtor",          MineShaftPieces::staticCtor());
+    MCLE_STATIC("StrongholdFeature::staticCtor",        StrongholdFeature::staticCtor());
+    MCLE_STATIC("VillagePieces::Smithy::staticCtor",    VillagePieces::Smithy::staticCtor());
+    MCLE_STATIC("VillageFeature::staticCtor",           VillageFeature::staticCtor());
+    MCLE_STATIC("RandomScatteredLargeFeature::staticCtor", RandomScatteredLargeFeature::staticCtor());
+    MCLE_STATIC("EnderMan::staticCtor",        EnderMan::staticCtor());
+    MCLE_STATIC("PotionBrewing::staticCtor",   PotionBrewing::staticCtor());
+    MCLE_STATIC("Enchantment::staticCtor",     Enchantment::staticCtor());
+    MCLE_STATIC("SharedConstants::staticCtor", SharedConstants::staticCtor());
+    MCLE_STATIC("ServerLevel::staticCtor",     ServerLevel::staticCtor());
+    MCLE_STATIC("SparseLightStorage::staticCtor", SparseLightStorage::staticCtor());
 
-    // Item/Recipes static init are deferred until AFTER state=ticking so
-    // a SIGSEGV during diagnosis doesn't kill the blue-sky milestone.
-    // Once they are clean they move up here next to Tile::staticCtor.
+    #undef MCLE_STATIC
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
@@ -567,34 +596,6 @@ void initImpl() {
     // for a single-player iOS shell we shortcut to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
-    // F3 - Item + Recipes static init. Must run BEFORE state=ticking so
-    // the render thread doesn't observe the world half-built (race that
-    // bit us once: render ticked entities=0, then bootstrap added Player,
-    // next tick crashed mid-construction).
-    //
-    // MobEffect::staticCtor must run before Item::staticCtor: the
-    // GoldenAppleItem ctor chain references MobEffect::regeneration->id
-    // (Item.cpp:432) which null-derefs at offset 0x8 if the singleton
-    // isn't built.
-    try { MobEffect::staticCtor();     MCLE_LOG("mcle_game_init: MobEffect::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: MobEffect::staticCtor threw"); }
-    try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
-    try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
-    try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
-
-    // Stats: GenericStats::instance is null without setInstance, and the
-    // first per-tick setGameTime path calls GenericStats::param_time(diff)
-    // which derefs the singleton. Mirrors upstream Minecraft.World.cpp:49-50.
-    try {
-        GenericStats::setInstance(new CommonStats());
-        MCLE_LOG("mcle_game_init: GenericStats::setInstance(new CommonStats) done");
-    } catch (...) { MCLE_LOG("mcle_game_init: GenericStats::setInstance threw"); }
-    try { Stats::staticCtor();         MCLE_LOG("mcle_game_init: Stats::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Stats::staticCtor threw"); }
-
     MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
     try {
         g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
