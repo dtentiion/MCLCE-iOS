@@ -692,9 +692,6 @@ void glClearDepth(double);
 unsigned int glGetError(void);
 void glGenTextures(int, unsigned int*);
 void glDeleteTextures(int, const unsigned int*);
-// Upstream-wrapper variants used by MemoryTracker.cpp.
-unsigned int glGenTextures(void);
-void         glDeleteTextures(unsigned int);
 void glTexImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*);
 void glTexSubImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*);
 void glPixelStorei(unsigned int, int);
@@ -730,8 +727,6 @@ static inline void glGetFloat(unsigned int pname, float *out) { glGetFloatv(pnam
 class FloatBuffer;
 void glGetFloat(int type, FloatBuffer *buff);
 void glColorMaterial(unsigned int face, unsigned int mode);
-class FloatBuffer;
-void glLight(unsigned int light, unsigned int pname, FloatBuffer *params);
 void glLightModelfv(unsigned int pname, const float *params);
 void glMultiTexCoord2f(unsigned int, float, float);
 void glMultiTexCoord2fv(unsigned int, const float*);
@@ -748,12 +743,22 @@ void glLighti(unsigned int, unsigned int, int);
 void glLightf(unsigned int, unsigned int, float);
 // Display lists - upstream uses these for batched draw command capture.
 void glCallLists(int, unsigned int, const void*);
-// IntBuffer overload used by OffsettedRenderList::render.
-class IntBuffer;
-void glCallLists(IntBuffer *lists);
 #  ifdef __cplusplus
 }
 #  endif
+
+// G2b: C++ overloads of GL wrappers upstream code calls. Declared
+// outside the extern "C" block above so the compiler accepts the
+// overload (C linkage doesn't allow function overloads). Definitions
+// live in WorldProbe/probe_stub.cpp.
+#ifdef __cplusplus
+class FloatBuffer;
+class IntBuffer;
+unsigned int glGenTextures(void);                                        // MemoryTracker
+void         glDeleteTextures(unsigned int);                             // MemoryTracker
+void         glLight(unsigned int, unsigned int, FloatBuffer *);         // Lighting
+void         glCallLists(IntBuffer *);                                   // OffsettedRenderList
+#endif
 #endif // GL_CONSTANTS_DEFINED
 
 // Console world-size constants from upstream Minecraft.Client/MinecraftServer.h.
