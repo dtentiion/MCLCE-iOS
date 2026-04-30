@@ -81,6 +81,7 @@
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorageSource.h"
 #include "../../../upstream/Minecraft.World/Pos.h"
+#include "../../../upstream/Minecraft.World/Vec3.h"
 #include "../../../upstream/Minecraft.Client/ServerChunkCache.h"
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
@@ -723,18 +724,11 @@ extern "C" void mcle_game_tick(void) {
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
-    // Logging every step every tick for now to pin the post-tick-10 crash.
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
-            MCLE_LOG("tick %llu: levels[%d]->tick() about to run",
-                     (unsigned long long)g_tickCount, i);
             g_levels[i]->tick();
-            MCLE_LOG("tick %llu: levels[%d]->tick() returned",
-                     (unsigned long long)g_tickCount, i);
             g_levels[i]->tickEntities();
-            MCLE_LOG("tick %llu: levels[%d]->tickEntities() returned",
-                     (unsigned long long)g_tickCount, i);
         }
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
@@ -746,7 +740,7 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
-    {
+    if ((g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
         MCLE_LOG("tick %llu - overworld=%p entities=%zu",
@@ -763,11 +757,25 @@ extern "C" int mcle_world_is_ticking(void) {
     return (g_initState == kStateTicking && g_levels[0] != nullptr) ? 1 : 0;
 }
 
-// Phase G phase 1A: hardcoded overworld day-sky for the Metal-bridge
-// proof. Phase 1B will route this through Level::getSkyColor(player, a)
-// once F3 lands a real Player entity (sky color needs an Entity for the
-// biome lookup). Until then this stays static.
+// G1B: real biome-driven sky. Routes through upstream Level::getSkyColor
+// (Level.cpp:2047) which mixes biome temperature + time-of-day + rain +
+// thunder + lightning flash. Vec3 stores r=x, g=y, b=z (Vec3::newTemp).
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
+    if (g_initState != kStateTicking || !g_levels[0] || !g_player) {
+        if (r) *r = 0.07f;
+        if (g) *g = 0.07f;
+        if (b) *b = 0.09f;
+        return;
+    }
+    try {
+        Vec3 *sky = g_levels[0]->getSkyColor(g_player, 1.0f);
+        if (sky) {
+            if (r) *r = static_cast<float>(sky->x);
+            if (g) *g = static_cast<float>(sky->y);
+            if (b) *b = static_cast<float>(sky->z);
+            return;
+        }
+    } catch (...) {}
     if (r) *r = 0.45f;
     if (g) *g = 0.65f;
     if (b) *b = 1.0f;
