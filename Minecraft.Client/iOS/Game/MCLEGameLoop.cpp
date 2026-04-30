@@ -35,6 +35,10 @@
 #include <signal.h>
 #include <unistd.h>
 
+// G2a: declared in Render lib (MetalContext.mm). Forward decl here so
+// the tick log can read the cumulative DrawVertices count.
+extern "C" unsigned long long mcle_metal_draw_count(void);
+
 #include "../../../upstream/Minecraft.World/Minecraft.World.h"
 #include "../../../upstream/Minecraft.World/Compression.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
@@ -743,10 +747,13 @@ extern "C" void mcle_game_tick(void) {
     if ((g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
-        MCLE_LOG("tick %llu - overworld=%p entities=%zu",
+        // G2a: include cumulative DrawVertices count so we can see the
+        // moment upstream renderer code starts driving the Metal hook.
+        MCLE_LOG("tick %llu - overworld=%p entities=%zu draws=%llu",
                  static_cast<unsigned long long>(g_tickCount),
                  (void*)g_levels[0],
-                 entityCount);
+                 entityCount,
+                 mcle_metal_draw_count());
     }
 }
 
