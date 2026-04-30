@@ -1154,10 +1154,7 @@ print(f"patch-upstream-stdafx: rewrote FileEntrySaveData read for iOS in {path}"
 PY
 fi
 
-PREPLVL_PY="$REPO_ROOT/scripts/patch-prepare-level-checkpoints.py"
-if [ -f "$PREPLVL_PY" ]; then
-    python3 "$PREPLVL_PY"
-fi
+# patch-prepare-level-checkpoints.py retired (was diagnostic-only).
 
 # IUIController.h declares PlayUISFX(ESoundEffect) but only includes
 # UIEnums.h. ESoundEffect lives in Minecraft.World/SoundTypes.h. Add a
@@ -1273,20 +1270,7 @@ if needle in src:
 PY
 fi
 
-TAGCK_PY="$REPO_ROOT/scripts/patch-tag-readnamed-checkpoints.py"
-if [ -f "$TAGCK_PY" ]; then
-    python3 "$TAGCK_PY"
-fi
-
-NBTIO_PY="$REPO_ROOT/scripts/patch-nbtio-close-checkpoints.py"
-if [ -f "$NBTIO_PY" ]; then
-    python3 "$NBTIO_PY"
-fi
-
-CSFO_PY="$REPO_ROOT/scripts/patch-csfo-close-checkpoints.py"
-if [ -f "$CSFO_PY" ]; then
-    python3 "$CSFO_PY"
-fi
+# TAG_CKPT / NBTIO_CKPT / CSFO_CKPT diagnostic patches retired.
 
 FHWRITE_PY="$REPO_ROOT/scripts/patch-fileheader-write.py"
 if [ -f "$FHWRITE_PY" ]; then
@@ -1316,47 +1300,6 @@ if needle in src:
 PY
 fi
 
-LDCK_PY="$REPO_ROOT/scripts/patch-leveldata-checkpoints.py"
-if [ -f "$LDCK_PY" ]; then
-    python3 "$LDCK_PY"
-fi
-
-LVLINIT_PY="$REPO_ROOT/scripts/patch-level-init-checkpoints.py"
-if [ -f "$LVLINIT_PY" ]; then
-    python3 "$LVLINIT_PY"
-fi
-
-SLVL_PY="$REPO_ROOT/scripts/patch-serverlevel-checkpoints.py"
-if [ -f "$SLVL_PY" ]; then
-    python3 "$SLVL_PY"
-fi
-
-ENT_PY="$REPO_ROOT/scripts/patch-entity-ctor-checkpoints.py"
-if [ -f "$ENT_PY" ]; then
-    python3 "$ENT_PY"
-fi
-
-TILESC_PY="$REPO_ROOT/scripts/patch-tile-staticctor-checkpoints.py"
-if [ -f "$TILESC_PY" ]; then
-    python3 "$TILESC_PY"
-fi
-
-ITEMSC_PY="$REPO_ROOT/scripts/patch-item-staticctor-checkpoints.py"
-if [ -f "$ITEMSC_PY" ]; then
-    python3 "$ITEMSC_PY"
-fi
-
-ADDE_PY="$REPO_ROOT/scripts/patch-addentity-checkpoints.py"
-if [ -f "$ADDE_PY" ]; then
-    python3 "$ADDE_PY"
-fi
-
-STICK_PY="$REPO_ROOT/scripts/patch-serverlevel-tick-checkpoints.py"
-if [ -f "$STICK_PY" ]; then
-    python3 "$STICK_PY"
-fi
-
-TT_PY="$REPO_ROOT/scripts/patch-ticktiles-checkpoints.py"
-if [ -f "$TT_PY" ]; then
-    python3 "$TT_PY"
-fi
+# F2/F3 diagnostic checkpoint patches retired now that the simulation
+# half (Phase F3) is landed and ticks run cleanly. The scripts still
+# live in scripts/ for archive reference but no longer mutate upstream.
