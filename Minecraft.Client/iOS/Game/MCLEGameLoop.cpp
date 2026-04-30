@@ -757,25 +757,11 @@ extern "C" int mcle_world_is_ticking(void) {
     return (g_initState == kStateTicking && g_levels[0] != nullptr) ? 1 : 0;
 }
 
-// G1B: real biome-driven sky. Routes through upstream Level::getSkyColor
-// (Level.cpp:2047) which mixes biome temperature + time-of-day + rain +
-// thunder + lightning flash. Vec3 stores r=x, g=y, b=z (Vec3::newTemp).
+// G1A hardcoded sky. G1B (upstream Level::getSkyColor) crashed at addr
+// 0x130 on first call - reverted until we can pin which deref blows up.
+// Likely candidates: Biome::getSkyColor, dimension->biomeSource->getBiome
+// member access, or a Mth/Vec3 helper not yet initialised.
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
-    if (g_initState != kStateTicking || !g_levels[0] || !g_player) {
-        if (r) *r = 0.07f;
-        if (g) *g = 0.07f;
-        if (b) *b = 0.09f;
-        return;
-    }
-    try {
-        Vec3 *sky = g_levels[0]->getSkyColor(g_player, 1.0f);
-        if (sky) {
-            if (r) *r = static_cast<float>(sky->x);
-            if (g) *g = static_cast<float>(sky->y);
-            if (b) *b = static_cast<float>(sky->z);
-            return;
-        }
-    } catch (...) {}
     if (r) *r = 0.45f;
     if (g) *g = 0.65f;
     if (b) *b = 1.0f;
