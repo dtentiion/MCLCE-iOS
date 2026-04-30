@@ -562,10 +562,15 @@ void initImpl() {
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
-    // F3 prep: probe Tile::staticCtor to find where it crashes. Done
-    // AFTER state=ticking so the blue sky stays visible if it dies.
-    // Once the crash is fixed this call moves up next to Material::
-    // staticCtor where it belongs (before world construction).
+    // F3 prep: Tile::setShape (called from every tile ctor via
+    // updateDefaultShape) writes through a TLS-owned ThreadStorage. Same
+    // pattern as Compression at the top of init - without
+    // CreateNewThreadStorage on this thread, TlsGetValue returns null
+    // and the first tile ctor null-derefs at offset 0x8
+    // (ThreadStorage::yy0).
+    Tile::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: Tile::CreateNewThreadStorage done");
+
     MCLE_LOG("mcle_game_init: F3-probe Tile::staticCtor...");
     try { Tile::staticCtor(); MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
