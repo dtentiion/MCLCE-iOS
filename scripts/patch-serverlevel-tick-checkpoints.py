@@ -45,8 +45,31 @@ edits = [
     ),
     (
         "\tPIXBeginNamedEvent(0,\"Mob spawner tick\");",
-        '\tif (!_tk) { app.DebugPrintf("STICK_CKPT before mob spawner block"); _tk = true; }\n'
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before mob spawner block");\n'
         "\tPIXBeginNamedEvent(0,\"Mob spawner tick\");",
+    ),
+    (
+        "\tif (getGameRules()->getBoolean(GameRules::RULE_DOMOBSPAWNING))\n\t{",
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before getGameRules()");\n'
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT mobspawner=%p chunkSource=%p", mobSpawner, chunkSource);\n'
+        "\tif (getGameRules()->getBoolean(GameRules::RULE_DOMOBSPAWNING))\n\t{",
+    ),
+    (
+        "\t\tmobSpawner->tick(this, finalSpawnEnemies, finalSpawnFriendlies, finalSpawnPersistent);",
+        '\t\tif (!_tk) app.DebugPrintf("STICK_CKPT before mobSpawner->tick");\n'
+        "\t\tmobSpawner->tick(this, finalSpawnEnemies, finalSpawnFriendlies, finalSpawnPersistent);\n"
+        '\t\tif (!_tk) app.DebugPrintf("STICK_CKPT after mobSpawner->tick");',
+    ),
+    (
+        "\tchunkSource->tick();",
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before chunkSource->tick");\n'
+        "\tchunkSource->tick();\n"
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT after chunkSource->tick");',
+    ),
+    (
+        "\tint newDark = getOldSkyDarken(1);",
+        '\tif (!_tk) { app.DebugPrintf("STICK_CKPT before getOldSkyDarken"); _tk = true; }\n'
+        "\tint newDark = getOldSkyDarken(1);",
     ),
 ]
 
