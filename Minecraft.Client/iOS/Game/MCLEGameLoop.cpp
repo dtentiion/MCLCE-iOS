@@ -51,6 +51,7 @@
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
 #include "../../../upstream/Minecraft.World/Entity.h"
+#include "../../../upstream/Minecraft.World/Biome.h"
 #include "../../../upstream/Minecraft.World/GenericStats.h"
 #include "../../../upstream/Minecraft.World/CommonStats.h"
 #include "../../../upstream/Minecraft.World/Stats.h"
@@ -180,6 +181,13 @@ void initImpl() {
 
     try { Tile::staticCtor();          MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
+
+    // Biome::staticCtor builds the global biome table referenced by
+    // shouldFreeze / shouldSnow / handleRain in tickTiles. Without it
+    // getBiome can return a partially-zero singleton causing offset-0x68
+    // null derefs.
+    try { Biome::staticCtor();         MCLE_LOG("mcle_game_init: Biome::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Biome::staticCtor threw"); }
 
     // Item/Recipes static init are deferred until AFTER state=ticking so
     // a SIGSEGV during diagnosis doesn't kill the blue-sky milestone.
