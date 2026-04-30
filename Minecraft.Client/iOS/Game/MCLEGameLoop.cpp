@@ -647,19 +647,16 @@ void initImpl() {
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
-    // G2b: probe LevelRenderer construction AFTER state=ticking so a
-    // crash in the upstream ctor (renderStars / createCloudMesh / sky
-    // list build) doesn't kill the blue-sky milestone. Upstream ctor
-    // takes (Minecraft *, Textures *) - both nullable per the ctor body.
-    MCLE_LOG("mcle_game_init: G2b probe new LevelRenderer(nullptr, nullptr)...");
-    try {
-        g_levelRenderer = new LevelRenderer(nullptr, nullptr);
-        MCLE_LOG("mcle_game_init: LevelRenderer at %p", (void*)g_levelRenderer);
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: LevelRenderer ctor threw: %{public}s", e.what());
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: LevelRenderer ctor threw unknown");
-    }
+    // G2b: LevelRenderer construction parked. The upstream ctor pulls in
+    // ~12 unresolved symbols (Tesselator::vertex/color/normal/vertexUV,
+    // MemoryTracker::genLists, OffsettedRenderList ctor, Lighting::turnOff,
+    // Textures::bindTexture+addMemTexture+removeMemTexture, MobSkinMem-
+    // TextureProcessor vtable, plus a chain of Particle::render via the
+    // listener path). Wiring G2b clean is its own multi-step job - either
+    // add stubs in WorldProbe/link_stubs.cpp for each missing symbol, or
+    // pull the upstream .cpp files into compilation in dependency order.
+    // Picked up next session.
+    (void)g_levelRenderer;
 
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
