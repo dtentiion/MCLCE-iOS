@@ -92,6 +92,43 @@ edits = [
         '\tapp.DebugPrintf("STICK_CKPT before RULE_DAYLIGHT check");\n'
         "\tif (getGameRules()->getBoolean(GameRules::RULE_DAYLIGHT))\n\t{",
     ),
+    (
+        "\tPIXBeginNamedEvent(0,\"Tick pending ticks\");",
+        '\tapp.DebugPrintf("STICK_CKPT before tickPendingTicks");\n'
+        "\tPIXBeginNamedEvent(0,\"Tick pending ticks\");",
+    ),
+    (
+        "\tPIXBeginNamedEvent(0,\"Tick tiles\");",
+        '\tapp.DebugPrintf("STICK_CKPT before tickTiles");\n'
+        "\tPIXBeginNamedEvent(0,\"Tick tiles\");",
+    ),
+    (
+        "\tchunkMap->tick();",
+        '\tapp.DebugPrintf("STICK_CKPT before chunkMap->tick");\n'
+        "\tchunkMap->tick();\n"
+        '\tapp.DebugPrintf("STICK_CKPT after chunkMap->tick");',
+    ),
+    (
+        "\tPIXBeginNamedEvent(0,\"Tick villages\");",
+        '\tapp.DebugPrintf("STICK_CKPT before villages->tick villages=%p siege=%p", villages.get(), villageSiege);\n'
+        "\tPIXBeginNamedEvent(0,\"Tick villages\");",
+    ),
+    (
+        "\tPIXBeginNamedEvent(0,\"Tick portal forcer\");",
+        '\tapp.DebugPrintf("STICK_CKPT before portalForcer->tick");\n'
+        "\tPIXBeginNamedEvent(0,\"Tick portal forcer\");",
+    ),
+    (
+        "\tPIXBeginNamedEvent(0,\"runTileEvents\");",
+        '\tapp.DebugPrintf("STICK_CKPT before runTileEvents");\n'
+        "\tPIXBeginNamedEvent(0,\"runTileEvents\");",
+    ),
+    (
+        "\trunQueuedSendTileUpdates();",
+        '\tapp.DebugPrintf("STICK_CKPT before runQueuedSendTileUpdates");\n'
+        "\trunQueuedSendTileUpdates();\n"
+        '\tapp.DebugPrintf("STICK_CKPT tick body done");',
+    ),
 ]
 
 patched = src
