@@ -159,6 +159,9 @@ void glVertex2i(int, int)                                  {}
 void glNormal3f(float, float, float)                       {}
 void glLightfv(unsigned int, unsigned int, const float*)   {}
 void glLight(unsigned int, unsigned int, float)            {} // upstream Lighting.cpp
+// FloatBuffer overload Lighting::turnOn passes vector data to.
+class FloatBuffer;
+void glLight(unsigned int, unsigned int, FloatBuffer *)    {}
 void glColorMaterial(unsigned int, unsigned int)           {}
 void glLightModelfv(unsigned int, const float*)            {}
 class FloatBuffer;
