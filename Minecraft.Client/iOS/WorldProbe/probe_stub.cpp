@@ -162,6 +162,9 @@ void glLight(unsigned int, unsigned int, float)            {} // upstream Lighti
 // FloatBuffer overload Lighting::turnOn passes vector data to.
 class FloatBuffer;
 void glLight(unsigned int, unsigned int, FloatBuffer *)    {}
+// IntBuffer overload OffsettedRenderList::render uses.
+class IntBuffer;
+void glCallLists(IntBuffer *)                              {}
 void glColorMaterial(unsigned int, unsigned int)           {}
 void glLightModelfv(unsigned int, const float*)            {}
 class FloatBuffer;
