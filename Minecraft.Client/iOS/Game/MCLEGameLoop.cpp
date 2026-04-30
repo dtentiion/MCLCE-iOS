@@ -714,19 +714,18 @@ extern "C" void mcle_game_tick(void) {
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
-    static bool s_loggedFirstTick = false;
+    bool diag = g_tickCount <= 10;
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
-            if (!s_loggedFirstTick) MCLE_LOG("first-tick: levels[%d]->tick() about to run", i);
+            if (diag) MCLE_LOG("tick %llu: levels[%d]->tick() about to run",
+                               (unsigned long long)g_tickCount, i);
             g_levels[i]->tick();
-            if (!s_loggedFirstTick) MCLE_LOG("first-tick: levels[%d]->tick() returned", i);
+            if (diag) MCLE_LOG("tick %llu: levels[%d]->tick() returned",
+                               (unsigned long long)g_tickCount, i);
             g_levels[i]->tickEntities();
-            if (!s_loggedFirstTick) MCLE_LOG("first-tick: levels[%d]->tickEntities() returned", i);
-        }
-        if (!s_loggedFirstTick) {
-            MCLE_LOG("first-tick: all 3 levels ticked cleanly");
-            s_loggedFirstTick = true;
+            if (diag) MCLE_LOG("tick %llu: levels[%d]->tickEntities() returned",
+                               (unsigned long long)g_tickCount, i);
         }
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
@@ -738,7 +737,10 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
-    if ((g_tickCount % kLogEveryN) == 0) {
+    // Log every tick for the first 10 frames so we can see exactly which
+    // tick number crashes mid-loop. After that drop to 1Hz.
+    bool earlyTick = g_tickCount <= 10;
+    if (earlyTick || (g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
         MCLE_LOG("tick %llu - overworld=%p entities=%zu",
