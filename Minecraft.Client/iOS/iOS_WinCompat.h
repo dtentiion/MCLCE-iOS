@@ -754,6 +754,7 @@ class IntBuffer;
 unsigned int glGenTextures(void);                                        // MemoryTracker
 void         glDeleteTextures(unsigned int);                             // MemoryTracker
 void         glLight(unsigned int, unsigned int, FloatBuffer *);         // Lighting
+void         glLightModel(unsigned int, FloatBuffer *);                  // Lighting
 void         glCallLists(IntBuffer *);                                   // OffsettedRenderList
 #endif
 #endif // GL_CONSTANTS_DEFINED
