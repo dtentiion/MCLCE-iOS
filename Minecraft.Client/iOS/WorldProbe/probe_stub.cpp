@@ -24,6 +24,15 @@ C_4JProfile ProfileManager;
 C4JStorage  StorageManager;
 C4JRender   RenderManager;
 C_4JInput   InputManager;
+
+// G2a: probe-lib stub for the Metal hook. The real Metal-backed impl
+// lives in Render/MetalContext.mm and is linked into the iOS app, but
+// the probe library doesn't link Render so it needs a no-op definition
+// here for the inline C4JRenderStub::DrawVertices forward to resolve.
+extern "C" void mcle_metal_draw_vertices(int /*prim*/, int /*count*/,
+                                          const void* /*data*/,
+                                          int /*fmt*/, int /*shader*/) {}
+extern "C" unsigned long long mcle_metal_draw_count(void) { return 0; }
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 

@@ -3,9 +3,13 @@
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#include <atomic>
+
 #include "MetalContext.h"
 
 namespace {
+
+std::atomic<unsigned long long> g_draw_count{0};
 
 struct Ctx {
     id<MTLDevice> device = nil;
@@ -104,6 +108,18 @@ extern "C" void mcle_metal_frame_end(void) {
     g.cmd = nil;
     g.drawable = nil;
     g.inFrame = false;
+}
+
+// G2a: Tesselator -> Metal hook counter. Real vertex buffer upload + draw
+// lands in G3 once we wire upstream LevelRenderer to invoke this path.
+extern "C" void mcle_metal_draw_vertices(int /*prim*/, int /*count*/,
+                                          const void* /*data*/,
+                                          int /*fmt*/, int /*shader*/) {
+    g_draw_count.fetch_add(1, std::memory_order_relaxed);
+}
+
+extern "C" unsigned long long mcle_metal_draw_count(void) {
+    return g_draw_count.load(std::memory_order_relaxed);
 }
 
 // Internal helpers for the renderers in this library.

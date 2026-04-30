@@ -272,6 +272,13 @@ struct C4JRenderStub {
     template<class... A> void   MatrixPush(A...)     {}
     template<class... A> void   MatrixPop(A...)      {}
     template<class... A> void   MatrixMult(A...)     {}
+    // G2a: Tesselator -> Metal hook. Upstream Tesselator::end() calls
+    // RenderManager.DrawVertices(prim, count, data, fmt, shader). The
+    // explicit overload forwards into Render-lib's mcle_metal_draw_vertices;
+    // the variadic catch-all stays as a no-op for any other call sites we
+    // haven't discovered yet.
+    inline void DrawVertices(int prim, int count, const void* data,
+                             int fmt, int shader);
     template<class... A> void   DrawVertices(A...)   {}
     template<class... A> void   DrawVertexBuffer(A...) {}
     template<class... A> void   SetViewport(A...)    {}
@@ -370,6 +377,17 @@ struct LevelGenerationOptions {
 // reference nested types via `C4JRender::Texture *` which need the
 // class declared. Map the name to our stub via typedef.
 typedef C4JRenderStub C4JRender;
+
+// G2a: Tesselator -> Metal hook. Real impl in Render lib's MetalContext.mm,
+// stubbed in WorldProbe/probe_stub.cpp so the probe library still links.
+extern "C" void mcle_metal_draw_vertices(int prim, int count,
+                                          const void* data,
+                                          int fmt, int shader);
+
+inline void C4JRenderStub::DrawVertices(int prim, int count, const void* data,
+                                        int fmt, int shader) {
+    mcle_metal_draw_vertices(prim, count, data, fmt, shader);
+}
 // Now that C4JRender is a known type (alias to C4JRenderStub), pull
 // in the iOS 4J_Render.h header which declares
 // `extern C4JRender RenderManager;` so callers see the global.
