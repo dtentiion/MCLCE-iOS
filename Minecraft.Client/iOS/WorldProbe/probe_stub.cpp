@@ -87,7 +87,9 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 // route through the Metal-backed C4JRender_iOS in Phase D2. For now
 // these are no-ops so any TU that calls them links cleanly without
 // pulling actual GL into the .ipa.
-extern "C" {
+//
+// G2b: defined with C++ linkage (no extern "C") so the header decls
+// in iOS_WinCompat.h can declare upstream-wrapper overloads.
 void glEnable(unsigned int)                                {}
 void glDisable(unsigned int)                               {}
 void glClear(unsigned int)                                 {}
@@ -183,4 +185,3 @@ void glMultiTexCoord2f(unsigned int, float, float)         {}
 void glMultiTexCoord2fv(unsigned int, const float*)        {}
 void glActiveTexture(unsigned int)                         {}
 void glClientActiveTexture(unsigned int)                   {}
-} // extern "C"
