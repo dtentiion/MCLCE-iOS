@@ -775,6 +775,13 @@ extern "C" void mcle_game_tick(void) {
                  entityCount,
                  mcle_metal_draw_count());
     }
+
+    // G1B-probe runs once per second from the simulation tick (not the
+    // render thread, where the upstream getSkyColor crash actually fires).
+    // Different thread but same upstream code path - if the probe lands
+    // cleanly here, the crash is render-thread-specific (TLS / state).
+    extern "C" void mcle_world_g1b_probe_tick(void);
+    mcle_world_g1b_probe_tick();
 }
 
 // Render-side bridge: lets the iOS frame driver know whether the world
@@ -812,6 +819,36 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
     if (r) *r = baseR * br;
     if (g) *g = baseG * br;
     if (b) *b = baseB * br;
+}
+
+// G1B-probe: layered call into upstream Level::getSkyColor pieces so
+// the next sideload's log pins which step crashed at addr 0x130. Logs
+// once per second to avoid spamming. Try/catch only catches C++
+// throws; SIGSEGV bypasses but the per-step log still tells us which
+// step was last reached before the kill.
+extern "C" void mcle_world_g1b_probe_tick(void) {
+    if (g_initState != kStateTicking || !g_levels[0] || !g_player) return;
+    if ((g_tickCount % kLogEveryN) != 0) return;
+    try {
+        float td = g_levels[0]->getTimeOfDay(1.0f);
+        MCLE_LOG("G1B-probe: getTimeOfDay=%f", (double)td);
+    } catch (...) { MCLE_LOG("G1B-probe: getTimeOfDay threw"); return; }
+    try {
+        float rain = g_levels[0]->getRainLevel(1.0f);
+        MCLE_LOG("G1B-probe: getRainLevel=%f", (double)rain);
+    } catch (...) { MCLE_LOG("G1B-probe: getRainLevel threw"); return; }
+    try {
+        int xx = (int)g_player->x;
+        int zz = (int)g_player->z;
+        MCLE_LOG("G1B-probe: player xx=%d zz=%d", xx, zz);
+        Biome *biome = g_levels[0]->getBiome(xx, zz);
+        MCLE_LOG("G1B-probe: biome=%p", (void*)biome);
+        if (!biome) return;
+        float temp = biome->getTemperature();
+        MCLE_LOG("G1B-probe: biome->getTemperature=%f", (double)temp);
+        int skyColor = biome->getSkyColor(temp);
+        MCLE_LOG("G1B-probe: biome->getSkyColor=0x%x", skyColor);
+    } catch (...) { MCLE_LOG("G1B-probe: biome chain threw"); return; }
 }
 
 extern "C" void mcle_game_shutdown(void) {
