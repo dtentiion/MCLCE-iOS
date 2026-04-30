@@ -68,8 +68,30 @@ edits = [
     ),
     (
         "\tint newDark = getOldSkyDarken(1);",
-        '\tif (!_tk) { app.DebugPrintf("STICK_CKPT before getOldSkyDarken"); _tk = true; }\n'
-        "\tint newDark = getOldSkyDarken(1);",
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before getOldSkyDarken");\n'
+        "\tint newDark = getOldSkyDarken(1);\n"
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT skyDarken=%d skyChanged=%d", newDark, (int)(newDark != skyDarken));',
+    ),
+    (
+        "\tif (newDark != skyDarken)\n\t{",
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before sky listeners");\n'
+        "\tif (newDark != skyDarken)\n\t{",
+    ),
+    (
+        "\tint64_t time = levelData->getGameTime() + 1;",
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before save block");\n'
+        "\tint64_t time = levelData->getGameTime() + 1;",
+    ),
+    (
+        "\tsetGameTime(levelData->getGameTime() + 1);",
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT before setGameTime");\n'
+        "\tsetGameTime(levelData->getGameTime() + 1);\n"
+        '\tif (!_tk) app.DebugPrintf("STICK_CKPT after setGameTime");',
+    ),
+    (
+        "\tif (getGameRules()->getBoolean(GameRules::RULE_DAYLIGHT))\n\t{",
+        '\tif (!_tk) { app.DebugPrintf("STICK_CKPT before RULE_DAYLIGHT check"); _tk = true; }\n'
+        "\tif (getGameRules()->getBoolean(GameRules::RULE_DAYLIGHT))\n\t{",
     ),
 ]
 
