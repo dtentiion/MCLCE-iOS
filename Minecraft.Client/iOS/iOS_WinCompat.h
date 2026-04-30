@@ -730,6 +730,8 @@ static inline void glGetFloat(unsigned int pname, float *out) { glGetFloatv(pnam
 class FloatBuffer;
 void glGetFloat(int type, FloatBuffer *buff);
 void glColorMaterial(unsigned int face, unsigned int mode);
+class FloatBuffer;
+void glLight(unsigned int light, unsigned int pname, FloatBuffer *params);
 void glLightModelfv(unsigned int pname, const float *params);
 void glMultiTexCoord2f(unsigned int, float, float);
 void glMultiTexCoord2fv(unsigned int, const float*);

@@ -322,8 +322,8 @@ void GameRenderer::FinishedReassigning() {}
 #include "OffsettedRenderList.h"
 OffsettedRenderList::OffsettedRenderList() {}
 
-#include "Lighting.h"
-void Lighting::turnOff() {}
+// Lighting: real upstream Lighting.cpp now compiles via the
+// glLight(int,int,FloatBuffer*) variant added in iOS_WinCompat.h.
 
 #include "Textures.h"
 class ResourceLocation;
