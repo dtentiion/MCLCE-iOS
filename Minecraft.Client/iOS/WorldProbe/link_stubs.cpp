@@ -347,5 +347,8 @@ void Gui::setNowPlaying(const std::wstring & /*s*/) {}
 #include "Common/UI/UIScene_SettingsGraphicsMenu.h"
 int UIScene_SettingsGraphicsMenu::LevelToDistance(int /*dist*/) { return 16; }
 
-// MobSkinMemTextureProcessor: real upstream MobSkinMemTextureProcessor.cpp
-// now compiles. Stub removed.
+// MobSkinMemTextureProcessor: real .cpp doesn't compile (uses
+// BufferedImage::Graphics which needs the full BufferedImage class
+// we haven't pulled in). Stub the vtable anchor.
+#include "MobSkinMemTextureProcessor.h"
+BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return in; }
