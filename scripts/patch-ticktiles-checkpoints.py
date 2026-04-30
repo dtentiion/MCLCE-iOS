@@ -59,6 +59,22 @@ edits = [
         "\t\ttickClientSideTiles(xo, zo, lc);\n"
         '\t\tapp.DebugPrintf("TT_CKPT after tickClientSideTiles");',
     ),
+    (
+        "\t\tif (random->nextInt(prob) == 0 && isRaining() && isThundering())",
+        '\t\tapp.DebugPrintf("TT_CKPT before lightning block");\n'
+        "\t\tif (random->nextInt(prob) == 0 && isRaining() && isThundering())",
+    ),
+    (
+        "\t\tif (random->nextInt(16) == 0)",
+        '\t\tapp.DebugPrintf("TT_CKPT before rain/freeze block");\n'
+        "\t\tif (random->nextInt(16) == 0)",
+    ),
+    (
+        "\t\tcheckLight(xo + random->nextInt(16), random->nextInt(128), zo + random->nextInt(16));",
+        '\t\tapp.DebugPrintf("TT_CKPT before checkLight");\n'
+        "\t\tcheckLight(xo + random->nextInt(16), random->nextInt(128), zo + random->nextInt(16));\n"
+        '\t\tapp.DebugPrintf("TT_CKPT after checkLight");',
+    ),
 ]
 
 patched = src
