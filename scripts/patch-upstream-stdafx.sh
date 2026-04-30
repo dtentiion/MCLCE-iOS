@@ -1340,3 +1340,8 @@ TILESC_PY="$REPO_ROOT/scripts/patch-tile-staticctor-checkpoints.py"
 if [ -f "$TILESC_PY" ]; then
     python3 "$TILESC_PY"
 fi
+
+ITEMSC_PY="$REPO_ROOT/scripts/patch-item-staticctor-checkpoints.py"
+if [ -f "$ITEMSC_PY" ]; then
+    python3 "$ITEMSC_PY"
+fi

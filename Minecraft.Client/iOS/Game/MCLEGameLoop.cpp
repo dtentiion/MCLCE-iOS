@@ -170,13 +170,9 @@ void initImpl() {
     try { Tile::staticCtor();          MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
 
-    try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
-    try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
-
-    try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
+    // Item/Recipes static init are deferred until AFTER state=ticking so
+    // a SIGSEGV during diagnosis doesn't kill the blue-sky milestone.
+    // Once they are clean they move up here next to Tile::staticCtor.
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
@@ -560,9 +556,15 @@ void initImpl() {
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
-    // F3 - Player. With Tile / Item / Recipes statics now alive, the
-    // Player parent ctor and InventoryMenu::slotsChanged should both
-    // complete cleanly.
+    // F3 prep - Item + Recipes static init. Run AFTER state=ticking so a
+    // SIGSEGV during diagnosis preserves the blue-sky milestone.
+    try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
+    try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
+    try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
+
     MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
     try {
         g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
