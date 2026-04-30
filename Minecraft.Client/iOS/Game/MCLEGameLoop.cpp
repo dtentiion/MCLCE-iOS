@@ -34,6 +34,7 @@
 #include <exception>
 #include <signal.h>
 #include <unistd.h>
+#include <cmath>
 
 // G2a: declared in Render lib (MetalContext.mm). Forward decl here so
 // the tick log can read the cumulative DrawVertices count.
@@ -783,14 +784,34 @@ extern "C" int mcle_world_is_ticking(void) {
     return (g_initState == kStateTicking && g_levels[0] != nullptr) ? 1 : 0;
 }
 
-// G1A hardcoded sky. G1B (upstream Level::getSkyColor) crashed at addr
-// 0x130 on first call - reverted until we can pin which deref blows up.
-// Likely candidates: Biome::getSkyColor, dimension->biomeSource->getBiome
-// member access, or a Mth/Vec3 helper not yet initialised.
+// G1B (interim): day-night sky driven by upstream Level::getTimeOfDay.
+// Mirrors the brightness formula at Level.cpp:2049-2053 + the standard
+// plains biome sky color (0x78A7FF) without going through getBiome,
+// which crashes at offset 0x130 (separate investigation). Once that
+// is fixed this routes through Level::getSkyColor for full parity.
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
-    if (r) *r = 0.45f;
-    if (g) *g = 0.65f;
-    if (b) *b = 1.0f;
+    // Plains biome sky as the static base (RGB 120, 167, 255).
+    float baseR = 120.0f / 255.0f;
+    float baseG = 167.0f / 255.0f;
+    float baseB = 255.0f / 255.0f;
+    float br = 1.0f;
+
+    if (g_initState == kStateTicking && g_levels[0]) {
+        try {
+            // Mirrors Level::getSkyColor brightness term.
+            float td = g_levels[0]->getTimeOfDay(1.0f);
+            const float kPi = 3.14159265358979323846f;
+            br = std::cos(td * kPi * 2.0f) * 2.0f + 0.5f;
+            if (br < 0.0f) br = 0.0f;
+            if (br > 1.0f) br = 1.0f;
+        } catch (...) {
+            br = 1.0f;
+        }
+    }
+
+    if (r) *r = baseR * br;
+    if (g) *g = baseG * br;
+    if (b) *b = baseB * br;
 }
 
 extern "C" void mcle_game_shutdown(void) {
