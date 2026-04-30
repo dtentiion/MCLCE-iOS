@@ -160,23 +160,23 @@ void initImpl() {
     catch (...) { MCLE_LOG("mcle_game_init: MaterialColor::staticCtor threw"); }
     try { Material::staticCtor();      MCLE_LOG("mcle_game_init: Material::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Material::staticCtor threw"); }
-    // Item::staticCtor crashes on iOS (separate investigation, same family
-    // as the Tile::staticCtor crash). DispenserBootstrap registers
-    // behaviors keyed off Item::* statics, but registering a nullptr key
-    // is just a map insert with no deref - should be safe.
-    // try { Item::staticCtor();       MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
-    // catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
-    // try { Item::staticInit();       MCLE_LOG("mcle_game_init: Item::staticInit done"); }
-    // catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
 
-    // Recipes::staticCtor cannot run without Tile::staticCtor first
-    // (Recipes::Recipes does `new ItemInstance(Tile::wood, ...)` which
-    // derefs the null Tile::wood -> SIGSEGV). Tile::staticCtor itself
-    // crashes on iOS (separate investigation, in the same family as the
-    // Item::staticCtor crash) so this whole branch waits for that fix.
-    // F3 is deferred until the Tile/Item static cascade is sorted.
-    // try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
-    // catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
+    // Tile::setShape (called from every tile ctor via updateDefaultShape)
+    // writes through a TLS-owned ThreadStorage. Without this on the
+    // bootstrap thread the very first tile ctor null-derefs at offset 0x8.
+    Tile::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: Tile::CreateNewThreadStorage done");
+
+    try { Tile::staticCtor();          MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
+
+    try { Item::staticCtor();          MCLE_LOG("mcle_game_init: Item::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Item::staticCtor threw"); }
+    try { Item::staticInit();          MCLE_LOG("mcle_game_init: Item::staticInit done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
+
+    try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
@@ -552,28 +552,54 @@ void initImpl() {
     // for a single-player iOS shell we shortcut to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
-    // F3 (Player) needs InventoryMenu, which needs the Recipes singleton,
-    // which needs Tile::wood / Item::stick statics. Tile::staticCtor and
-    // Item::staticCtor both crash on iOS in the same family - that's the
-    // next focused investigation. Until then the world ticks at
-    // entities=0 with the blue sky from G1A.
-    MCLE_LOG("mcle_game_init: skipping ServerPlayer (deferred pending Tile/Item static-init fix)");
-
+    // Flip to ticking state BEFORE attempting player construction. If
+    // the Player ctor SIGSEGVs the app dies, but the render thread will
+    // already have switched to the sky-color clear path so the F2/G1A
+    // milestone stays visible (and the user knows we got that far) while
+    // the F3 checkpoints in the log show where the ctor chain died.
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
-    // F3 prep: Tile::setShape (called from every tile ctor via
-    // updateDefaultShape) writes through a TLS-owned ThreadStorage. Same
-    // pattern as Compression at the top of init - without
-    // CreateNewThreadStorage on this thread, TlsGetValue returns null
-    // and the first tile ctor null-derefs at offset 0x8
-    // (ThreadStorage::yy0).
-    Tile::CreateNewThreadStorage();
-    MCLE_LOG("mcle_game_init: Tile::CreateNewThreadStorage done");
+    // F3 - Player. With Tile / Item / Recipes statics now alive, the
+    // Player parent ctor and InventoryMenu::slotsChanged should both
+    // complete cleanly.
+    MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
+    try {
+        g_playerGameMode = new ServerPlayerGameMode(g_levels[0]);
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode at %p", (void*)g_playerGameMode);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: ServerPlayerGameMode ctor threw unknown");
+    }
 
-    MCLE_LOG("mcle_game_init: F3-probe Tile::staticCtor...");
-    try { Tile::staticCtor(); MCLE_LOG("mcle_game_init: Tile::staticCtor done"); }
-    catch (...) { MCLE_LOG("mcle_game_init: Tile::staticCtor threw"); }
+    if (g_playerGameMode) {
+        MCLE_LOG("mcle_game_init: building ServerPlayer...");
+        try {
+            g_player = std::make_shared<ServerPlayer>(
+                g_server,
+                static_cast<Level *>(g_levels[0]),
+                std::wstring(L"iOSPlayer"),
+                g_playerGameMode);
+            MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: ServerPlayer ctor threw unknown");
+        }
+    }
+
+    if (g_player) {
+        MCLE_LOG("mcle_game_init: addEntity to overworld");
+        try {
+            g_levels[0]->addEntity(g_player);
+            MCLE_LOG("mcle_game_init: addEntity returned");
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: addEntity threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: addEntity threw unknown");
+        }
+    }
 }
 
 } // anonymous namespace
