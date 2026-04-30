@@ -1350,3 +1350,8 @@ ADDE_PY="$REPO_ROOT/scripts/patch-addentity-checkpoints.py"
 if [ -f "$ADDE_PY" ]; then
     python3 "$ADDE_PY"
 fi
+
+STICK_PY="$REPO_ROOT/scripts/patch-serverlevel-tick-checkpoints.py"
+if [ -f "$STICK_PY" ]; then
+    python3 "$STICK_PY"
+fi
