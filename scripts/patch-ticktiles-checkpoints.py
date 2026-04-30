@@ -70,6 +70,32 @@ edits = [
         "\t\tif (random->nextInt(16) == 0)",
     ),
     (
+        "\t\t\tint yy = getTopRainBlock(x + xo, z + zo);",
+        '\t\t\tapp.DebugPrintf("TT_CKPT rain: before getTopRainBlock x=%d z=%d", x+xo, z+zo);\n'
+        "\t\t\tint yy = getTopRainBlock(x + xo, z + zo);\n"
+        '\t\t\tapp.DebugPrintf("TT_CKPT rain: yy=%d", yy);',
+    ),
+    (
+        "\t\t\tif (shouldFreeze(x + xo, yy - 1, z + zo))",
+        '\t\t\tapp.DebugPrintf("TT_CKPT rain: before shouldFreeze");\n'
+        "\t\t\tif (shouldFreeze(x + xo, yy - 1, z + zo))",
+    ),
+    (
+        "\t\t\tif (isRaining() && shouldSnow(x + xo, yy, z + zo))",
+        '\t\t\tapp.DebugPrintf("TT_CKPT rain: before shouldSnow");\n'
+        "\t\t\tif (isRaining() && shouldSnow(x + xo, yy, z + zo))",
+    ),
+    (
+        "\t\t\tif (isRaining())\n"
+        "\t\t\t{\n"
+        "\t\t\t\tBiome *b = getBiome(x + xo, z + zo);",
+        '\t\t\tapp.DebugPrintf("TT_CKPT rain: before isRaining/getBiome");\n'
+        "\t\t\tif (isRaining())\n"
+        "\t\t\t{\n"
+        "\t\t\t\tBiome *b = getBiome(x + xo, z + zo);\n"
+        '\t\t\t\tapp.DebugPrintf("TT_CKPT rain: biome=%p", b);',
+    ),
+    (
         "\t\tcheckLight(xo + random->nextInt(16), random->nextInt(128), zo + random->nextInt(16));",
         '\t\tapp.DebugPrintf("TT_CKPT before checkLight");\n'
         "\t\tcheckLight(xo + random->nextInt(16), random->nextInt(128), zo + random->nextInt(16));\n"
