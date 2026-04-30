@@ -617,6 +617,8 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: addEntity threw unknown");
         }
     }
+
+    MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
 } // anonymous namespace
@@ -700,11 +702,19 @@ extern "C" void mcle_game_tick(void) {
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
+    static bool s_loggedFirstTick = false;
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
+            if (!s_loggedFirstTick) MCLE_LOG("first-tick: levels[%d]->tick() about to run", i);
             g_levels[i]->tick();
+            if (!s_loggedFirstTick) MCLE_LOG("first-tick: levels[%d]->tick() returned", i);
             g_levels[i]->tickEntities();
+            if (!s_loggedFirstTick) MCLE_LOG("first-tick: levels[%d]->tickEntities() returned", i);
+        }
+        if (!s_loggedFirstTick) {
+            MCLE_LOG("first-tick: all 3 levels ticked cleanly");
+            s_loggedFirstTick = true;
         }
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
