@@ -677,6 +677,17 @@ extern "C" void mcle_game_tick(void) {
         pthread_detach(t);
     }
 
+    // Render thread TLS init - mirrors the bootstrap thread setup.
+    // Tile::setShape is called from per-tick entity update paths
+    // (bbox / collision recalc) and writes through TLS-owned
+    // ThreadStorage. Without this the first tick null-derefs.
+    static bool s_tickThreadTlsReady = false;
+    if (!s_tickThreadTlsReady) {
+        Tile::CreateNewThreadStorage();
+        s_tickThreadTlsReady = true;
+        MCLE_LOG("mcle_game_tick: render-thread Tile TLS initialized");
+    }
+
     g_tickCount++;
 
     if (g_initState != kStateTicking || !g_levels[0]) {
