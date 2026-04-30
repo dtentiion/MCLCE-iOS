@@ -51,6 +51,9 @@
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
 #include "../../../upstream/Minecraft.World/Entity.h"
+#include "../../../upstream/Minecraft.World/GenericStats.h"
+#include "../../../upstream/Minecraft.World/CommonStats.h"
+#include "../../../upstream/Minecraft.World/Stats.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -573,6 +576,16 @@ void initImpl() {
     catch (...) { MCLE_LOG("mcle_game_init: Item::staticInit threw"); }
     try { Recipes::staticCtor();       MCLE_LOG("mcle_game_init: Recipes::staticCtor done"); }
     catch (...) { MCLE_LOG("mcle_game_init: Recipes::staticCtor threw"); }
+
+    // Stats: GenericStats::instance is null without setInstance, and the
+    // first per-tick setGameTime path calls GenericStats::param_time(diff)
+    // which derefs the singleton. Mirrors upstream Minecraft.World.cpp:49-50.
+    try {
+        GenericStats::setInstance(new CommonStats());
+        MCLE_LOG("mcle_game_init: GenericStats::setInstance(new CommonStats) done");
+    } catch (...) { MCLE_LOG("mcle_game_init: GenericStats::setInstance threw"); }
+    try { Stats::staticCtor();         MCLE_LOG("mcle_game_init: Stats::staticCtor done"); }
+    catch (...) { MCLE_LOG("mcle_game_init: Stats::staticCtor threw"); }
 
     MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
     try {
