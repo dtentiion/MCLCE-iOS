@@ -50,6 +50,7 @@
 #include "../../../upstream/Minecraft.World/Tile.h"
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
+#include "../../../upstream/Minecraft.World/Entity.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -137,6 +138,12 @@ void initImpl() {
     // decompressed body empty and prepareLevel falls into the no-level.dat
     // branch.
     Compression::CreateNewThreadStorage();
+
+    // Mark this thread as the server thread so Entity ctor allocates
+    // small (network-trackable, < 16384) IDs for entities. Without this
+    // every Entity gets an id >= 16384 and EntityTracker::addEntity
+    // hits __debugbreak().
+    Entity::useSmallIds();
 
     // MinecraftWorld_RunStaticCtors() is the parity-correct upstream init
     // pass but Tile::staticCtor SIGSEGVs on iOS (separate investigation).
