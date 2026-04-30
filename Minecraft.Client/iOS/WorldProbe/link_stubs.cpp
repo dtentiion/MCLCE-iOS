@@ -347,6 +347,5 @@ void Gui::setNowPlaying(const std::wstring & /*s*/) {}
 #include "Common/UI/UIScene_SettingsGraphicsMenu.h"
 int UIScene_SettingsGraphicsMenu::LevelToDistance(int /*dist*/) { return 16; }
 
-// MobSkinMemTextureProcessor: define one virtual to anchor the vtable.
-#include "MobSkinMemTextureProcessor.h"
-BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return in; }
+// MobSkinMemTextureProcessor: real upstream MobSkinMemTextureProcessor.cpp
+// now compiles. Stub removed.
