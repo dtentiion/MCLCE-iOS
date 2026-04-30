@@ -642,9 +642,10 @@ typedef struct D3D11_VIEWPORT {
 // Legacy GL function prototypes. Bodies live in
 // WorldProbe/probe_stub.cpp as no-ops; real Metal backend lands in
 // Phase D2 and replaces these via the C4JRender_iOS adapter layer.
-#  ifdef __cplusplus
-extern "C" {
-#  endif
+//
+// Declared with C++ linkage (NOT extern "C") so upstream-wrapper
+// overloads like glGenTextures() / glLight(...,FloatBuffer*) /
+// glCallLists(IntBuffer*) can coexist with the standard signatures.
 void glEnable(unsigned int);
 void glDisable(unsigned int);
 void glClear(unsigned int);
@@ -743,14 +744,10 @@ void glLighti(unsigned int, unsigned int, int);
 void glLightf(unsigned int, unsigned int, float);
 // Display lists - upstream uses these for batched draw command capture.
 void glCallLists(int, unsigned int, const void*);
-#  ifdef __cplusplus
-}
-#  endif
 
-// G2b: C++ overloads of GL wrappers upstream code calls. Declared
-// outside the extern "C" block above so the compiler accepts the
-// overload (C linkage doesn't allow function overloads). Definitions
-// live in WorldProbe/probe_stub.cpp.
+// G2b: C++ overloads of GL wrappers upstream renderer code calls. Now
+// that the gl* prototypes above are declared with C++ linkage, plain
+// overloads work. Definitions live in WorldProbe/probe_stub.cpp.
 #ifdef __cplusplus
 class FloatBuffer;
 class IntBuffer;
