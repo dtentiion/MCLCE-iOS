@@ -748,6 +748,9 @@ void glLighti(unsigned int, unsigned int, int);
 void glLightf(unsigned int, unsigned int, float);
 // Display lists - upstream uses these for batched draw command capture.
 void glCallLists(int, unsigned int, const void*);
+// IntBuffer overload used by OffsettedRenderList::render.
+class IntBuffer;
+void glCallLists(IntBuffer *lists);
 #  ifdef __cplusplus
 }
 #  endif

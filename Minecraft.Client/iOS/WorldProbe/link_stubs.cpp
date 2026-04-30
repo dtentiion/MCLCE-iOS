@@ -319,8 +319,8 @@ void GameRenderer::FinishedReassigning() {}
 // upstream-wrapper glGenTextures()/glDeleteTextures(int) variants we
 // added. Stubs removed.
 
-#include "OffsettedRenderList.h"
-OffsettedRenderList::OffsettedRenderList() {}
+// OffsettedRenderList: real upstream OffsettedRenderList.cpp now compiles
+// via the glCallLists(IntBuffer*) overload added in iOS_WinCompat.h.
 
 // Lighting: real upstream Lighting.cpp now compiles via the
 // glLight(int,int,FloatBuffer*) variant added in iOS_WinCompat.h.

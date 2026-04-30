@@ -998,6 +998,9 @@ set(WORLD_PROBE_SOURCES
   # G2b: real Lighting (turnOn / turnOff). Needs glLight(int,int,FloatBuffer*)
   # variant added to iOS_WinCompat.h + probe_stub.cpp.
   ${UPSTREAM_DIR}/Minecraft.Client/Lighting.cpp
+  # G2b: real OffsettedRenderList. Needs glCallLists(IntBuffer*) overload
+  # added to iOS_WinCompat.h + probe_stub.cpp.
+  ${UPSTREAM_DIR}/Minecraft.Client/OffsettedRenderList.cpp
   # Phase E: pulled in to satisfy ServerLevel/MinecraftServer link refs.
   # Both are auto-probe greens; just weren't in the lib source list yet.
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerChunkMap.cpp
