@@ -1345,3 +1345,8 @@ ITEMSC_PY="$REPO_ROOT/scripts/patch-item-staticctor-checkpoints.py"
 if [ -f "$ITEMSC_PY" ]; then
     python3 "$ITEMSC_PY"
 fi
+
+ADDE_PY="$REPO_ROOT/scripts/patch-addentity-checkpoints.py"
+if [ -f "$ADDE_PY" ]; then
+    python3 "$ADDE_PY"
+fi
