@@ -987,6 +987,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerLevel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MinecraftServer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/LevelRenderer.cpp
+  # G2b: real upstream Tesselator. Replaces the no-op stubs in
+  # link_stubs.cpp; routes vertex pushes into our Metal DrawVertices hook
+  # via Tesselator::end() -> RenderManager.DrawVertices(...).
+  ${UPSTREAM_DIR}/Minecraft.Client/Tesselator.cpp
   # Phase E: pulled in to satisfy ServerLevel/MinecraftServer link refs.
   # Both are auto-probe greens; just weren't in the lib source list yet.
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerChunkMap.cpp

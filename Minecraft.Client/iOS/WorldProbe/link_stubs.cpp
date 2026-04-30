@@ -319,12 +319,7 @@ FloatBuffer *MemoryTracker::createFloatBuffer(int size) {
 // real C4JRender_iOS impls replace them with working bodies.
 // ---------------------------------------------------------------------------
 
-#include "Tesselator.h"
-void Tesselator::vertex(float /*x*/, float /*y*/, float /*z*/) {}
-void Tesselator::vertexUV(float /*x*/, float /*y*/, float /*z*/,
-                          float /*u*/, float /*v*/) {}
-void Tesselator::normal(float /*x*/, float /*y*/, float /*z*/) {}
-void Tesselator::color(int /*c*/) {}
+// Tesselator: real upstream Tesselator.cpp now compiles. Stubs removed.
 
 int MemoryTracker::genLists(int /*range*/) { return 0; }
 
