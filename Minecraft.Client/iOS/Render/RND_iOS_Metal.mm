@@ -26,6 +26,10 @@ extern "C" int  mcle_swf_has_movie(void);
 extern "C" int  mcle_world_is_ticking(void);
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
 
+// G2a: Tesselator -> Metal counter so we can verify upstream DrawVertices
+// calls are arriving once LevelRenderer is wired up in G2b/G3.
+extern "C" unsigned long long mcle_metal_draw_count(void);
+
 #include <atomic>
 
 extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);

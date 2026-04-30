@@ -42,6 +42,22 @@ void  mcle_metal_current_size(int* out_width, int* out_height);
 // Commit + present + teardown the current frame.
 void mcle_metal_frame_end(void);
 
+// G2a: Tesselator -> Metal hook. Upstream Tesselator::end() calls
+// RenderManager.DrawVertices(prim, count, data, fmt, shader). The
+// C4JRenderStub forwards into here. For now this counter-logs only;
+// real Metal vertex buffer upload + draw lands in G3.
+//
+//   prim:   C4JRenderStub::ePrimitiveType  (4 = triangles, 5 = strip)
+//   count:  number of vertices
+//   data:   pointer to interleaved vertex data
+//   fmt:    C4JRenderStub::eVertexType (1 = PF3_TF2_CB4_NB4_XW1, etc)
+//   shader: C4JRenderStub::ePixelShaderType
+void mcle_metal_draw_vertices(int prim, int count, const void* data,
+                              int fmt, int shader);
+
+// Returns the number of DrawVertices calls received since process start.
+unsigned long long mcle_metal_draw_count(void);
+
 #ifdef __cplusplus
 }
 #endif
