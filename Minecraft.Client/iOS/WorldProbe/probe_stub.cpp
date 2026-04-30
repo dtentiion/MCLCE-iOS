@@ -167,6 +167,8 @@ void glLight(unsigned int, unsigned int, FloatBuffer *)    {}
 // IntBuffer overload OffsettedRenderList::render uses.
 class IntBuffer;
 void glCallLists(IntBuffer *)                              {}
+// Lighting::turnOn calls this with the ambient color buffer.
+void glLightModel(unsigned int, FloatBuffer *)             {}
 void glColorMaterial(unsigned int, unsigned int)           {}
 void glLightModelfv(unsigned int, const float*)            {}
 class FloatBuffer;
