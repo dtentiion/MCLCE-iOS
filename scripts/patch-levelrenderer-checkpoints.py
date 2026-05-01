@@ -20,16 +20,22 @@ if "LR_CKPT" in src:
     print(f"already patched: {TARGET}")
     sys.exit(0)
 
+# Pre-pass: null-guard every `int playerIndex = mc->player->GetXboxPad();`
+# call site. The iOS shim's mc->player is nullptr until a real
+# MultiplayerLocalPlayer is wired up; without this, render() and
+# renderChunks() (and 15 other functions) all crash on entry.
+playerIndex_old = "int playerIndex = mc->player->GetXboxPad();"
+playerIndex_new = "int playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);"
+src = src.replace(playerIndex_old, playerIndex_new)
+
 edits = [
     # render() entry + every named-statement boundary upstream sets
     (
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
-        "\tint playerIndex = mc->player->GetXboxPad();",
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);",
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
         '\tapp.DebugPrintf("LR_CKPT render enter mc=%p", mc);\n'
         "\tif (!mc) { return 0; }\n"
-        # iOS: shim mc has player==nullptr until we have a real
-        # MultiplayerLocalPlayer. Default to pad 0.
         "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);\n"
         '\tapp.DebugPrintf("LR_CKPT playerIndex=%d", playerIndex);',
     ),
@@ -80,12 +86,6 @@ edits = [
         "int LevelRenderer::renderChunks(int from, int to, int layer, double alpha)\n{\n"
         '\tapp.DebugPrintf("LR_CKPT renderChunks enter mc=%p", mc);\n'
         "\tif (mc == nullptr)",
-    ),
-    # iOS: shim mc->player still nullptr inside renderChunks. Default
-    # playerIndex to 0 just like the outer render() path.
-    (
-        "\tint playerIndex = mc->player->GetXboxPad();\t// 4J added",
-        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);\t// 4J added",
     ),
     (
         "\tmc->gameRenderer->turnOnLightLayer(alpha);",
