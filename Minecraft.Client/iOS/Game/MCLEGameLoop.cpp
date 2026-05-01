@@ -796,6 +796,20 @@ extern "C" void mcle_game_tick(void) {
     mcle_world_g1b_probe_tick();
 }
 
+// G2c: drive upstream LevelRenderer::render() per frame from the iOS
+// render thread. Increments DrawVertices counter when the renderer
+// dispatches Tesselator batches (chunk geometry, entities, clouds,
+// terrain). Wrapped in try/catch but SIGSEGV bypasses - the Minecraft::
+// m_instance null chain (Biome::getSkyColor etc) may bite here. If so
+// the signal handler logs the address, we patch the next null deref.
+extern "C" void mcle_world_drive_renderer(void) {
+    if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
+    try {
+        g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
+                                /*updateChunks*/false);
+    } catch (...) {}
+}
+
 // Render-side bridge: lets the iOS frame driver know whether the world
 // simulation is alive so it can switch the clear color and stop drawing
 // the SWF menu over the world.

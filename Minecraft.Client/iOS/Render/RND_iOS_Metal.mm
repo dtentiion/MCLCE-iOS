@@ -30,6 +30,9 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
 // calls are arriving once LevelRenderer is wired up in G2b/G3.
 extern "C" unsigned long long mcle_metal_draw_count(void);
 
+// G2c: per-frame upstream renderer drive. No-op if g_levelRenderer is null.
+extern "C" void mcle_world_drive_renderer(void);
+
 #include <atomic>
 
 extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);
@@ -138,6 +141,13 @@ extern "C" void mcle_render_frame(void) {
         if (mcle_swf_is_ready() && !mcle_swf_has_movie()) {
             mcle_swf_draw_test_rect(vw, vh);
         }
+    } else {
+        // G2c: drive upstream LevelRenderer::render() so chunk geometry +
+        // entity renderers + clouds dispatch through Tesselator -> our
+        // DrawVertices Metal hook every frame. No actual Metal draw calls
+        // happen yet (the hook still counts only); G3 is real vertex
+        // upload + MTLBuffer dispatch.
+        mcle_world_drive_renderer();
     }
 
     mcle_metal_frame_end();
