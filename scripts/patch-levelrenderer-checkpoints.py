@@ -71,18 +71,20 @@ edits = [
         "\tint count = renderChunks(0, static_cast<int>(chunks[playerIndex].length), layer, alpha);\n"
         '\tapp.DebugPrintf("LR_CKPT renderChunks count=%d", count);',
     ),
-    # renderChunks body
+    # renderChunks body. iOS shim has mc->player == nullptr (no real
+    # MultiplayerLocalPlayer constructed); drop that condition so the
+    # render path can proceed to dispatch chunk geometry.
     (
         "int LevelRenderer::renderChunks(int from, int to, int layer, double alpha)\n{\n"
         "\tif (mc == nullptr || mc->player == nullptr)",
         "int LevelRenderer::renderChunks(int from, int to, int layer, double alpha)\n{\n"
         '\tapp.DebugPrintf("LR_CKPT renderChunks enter mc=%p", mc);\n'
-        "\tif (mc == nullptr || mc->player == nullptr)",
+        "\tif (mc == nullptr)",
     ),
     (
         "\tmc->gameRenderer->turnOnLightLayer(alpha);",
         '\tapp.DebugPrintf("LR_CKPT before gameRenderer->turnOnLightLayer gameRenderer=%p", mc->gameRenderer);\n'
-        "\tmc->gameRenderer->turnOnLightLayer(alpha);\n"
+        "\tif (mc->gameRenderer) mc->gameRenderer->turnOnLightLayer(alpha);\n"
         '\tapp.DebugPrintf("LR_CKPT after turnOnLightLayer");',
     ),
     (
