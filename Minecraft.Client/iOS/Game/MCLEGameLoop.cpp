@@ -100,6 +100,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/ServerPlayerGameMode.h"
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 #include "../../../upstream/Minecraft.Client/LevelRenderer.h"
+#include "../../../upstream/Minecraft.Client/Tesselator.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -187,6 +188,14 @@ void initImpl() {
     // first tick (see mcle_game_tick).
     Tile::CreateNewThreadStorage();
     MCLE_LOG("mcle_game_init: Tile::CreateNewThreadStorage done");
+
+    // Tesselator is also TLS-singleton (see Tesselator.cpp:27, :34).
+    // LevelRenderer ctor + every renderer path uses Tesselator::getInstance()
+    // which derefs the TLS slot. Without this it's null and all upstream
+    // renderer code silently null-derefs (or no-ops if behind null guards).
+    // 16 KB matches the size upstream platform mains pass.
+    Tesselator::CreateNewThreadStorage(16 * 1024);
+    MCLE_LOG("mcle_game_init: Tesselator::CreateNewThreadStorage done");
 
     // Parity-correct upstream static init order, mirroring
     // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
@@ -730,14 +739,14 @@ extern "C" void mcle_game_tick(void) {
     }
 
     // Render thread TLS init - mirrors the bootstrap thread setup.
-    // Tile::setShape is called from per-tick entity update paths
-    // (bbox / collision recalc) and writes through TLS-owned
-    // ThreadStorage. Without this the first tick null-derefs.
+    // Tile::setShape and Tesselator are both TLS-singletons; without
+    // these on this thread the first tick null-derefs.
     static bool s_tickThreadTlsReady = false;
     if (!s_tickThreadTlsReady) {
         Tile::CreateNewThreadStorage();
+        Tesselator::CreateNewThreadStorage(16 * 1024);
         s_tickThreadTlsReady = true;
-        MCLE_LOG("mcle_game_tick: render-thread Tile TLS initialized");
+        MCLE_LOG("mcle_game_tick: render-thread Tile + Tesselator TLS initialized");
     }
 
     g_tickCount++;
