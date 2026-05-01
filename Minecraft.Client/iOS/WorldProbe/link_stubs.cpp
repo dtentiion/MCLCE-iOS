@@ -337,6 +337,9 @@ void Textures::removeMemTexture(const std::wstring & /*url*/) {}
 #include "GameRenderer.h"
 void GameRenderer::EnableUpdateThread() {}
 void GameRenderer::DisableUpdateThread() {}
+// G2c: LevelRenderer::renderChunks calls these.
+void GameRenderer::turnOnLightLayer(double /*alpha*/) {}
+void GameRenderer::turnOffLightLayer(double /*alpha*/) {}
 
 #include "LocalPlayer.h"
 void LocalPlayer::updateRichPresence() {}
