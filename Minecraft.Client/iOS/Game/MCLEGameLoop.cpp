@@ -103,6 +103,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/LevelRenderer.h"
 #include "../../../upstream/Minecraft.Client/Tesselator.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
+#include "../../../upstream/Minecraft.Client/Options.h"
+#include "../../../upstream/Minecraft.Client/GameRenderer.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -678,6 +680,36 @@ void initImpl() {
     // shared_ptr conversion is implicit. Done with placement-new on the
     // already-zeroed buffer so the shared_ptr's default ctor runs.
     new (&g_minecraftShim->cameraTargetPlayer) std::shared_ptr<LivingEntity>(g_player);
+
+    // G2d: heap-allocate Options and GameRenderer for the shim. Options
+    // ctor calls init() which sets the defaults LevelRenderer reads
+    // (viewDistance, fancyGraphics, renderClouds). GameRenderer is a
+    // zero buffer - it has no virtual methods and the four methods our
+    // render path calls (DisableUpdateThread, EnableUpdateThread,
+    // turnOnLightLayer, turnOffLightLayer) are stubbed in link_stubs.cpp
+    // and don't deref this.
+    try {
+        g_minecraftShim->options = new Options();
+        MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
+                 (void*)g_minecraftShim->options,
+                 g_minecraftShim->options->viewDistance,
+                 (int)g_minecraftShim->options->fancyGraphics);
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: Options ctor threw");
+    }
+
+    static char s_gameRendererShimBuf[sizeof(GameRenderer)] = {0};
+    g_minecraftShim->gameRenderer =
+        reinterpret_cast<GameRenderer *>(s_gameRendererShimBuf);
+    MCLE_LOG("mcle_game_init: GameRenderer shim at %p (sizeof=%zu)",
+             (void*)g_minecraftShim->gameRenderer, sizeof(GameRenderer));
+
+    // Singleton: Minecraft::GetInstance() must return our shim before
+    // LevelRenderer::allChanged runs (it calls GetInstance()->gameRenderer
+    // -> DisableUpdateThread).
+    Minecraft::m_instance = g_minecraftShim;
+    MCLE_LOG("mcle_game_init: Minecraft::m_instance set to %p",
+             (void*)Minecraft::m_instance);
 
     // G2b: LevelRenderer construction. Leaf-symbol stubs added in
     // WorldProbe/link_stubs.cpp let the link resolve. The ctor body still
