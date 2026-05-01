@@ -1303,3 +1303,12 @@ fi
 # F2/F3 diagnostic checkpoint patches retired now that the simulation
 # half (Phase F3) is landed and ticks run cleanly. The scripts still
 # live in scripts/ for archive reference but no longer mutate upstream.
+
+# G2c: bracket LevelRenderer::render path so each sideload pins the
+# upstream-renderer null deref. Includes an early `if (!mc) return 0;`
+# guard so the most common crash path (mc=nullptr we passed to ctor)
+# is sidestepped while we work on a real Minecraft instance.
+LRCK_PY="$REPO_ROOT/scripts/patch-levelrenderer-checkpoints.py"
+if [ -f "$LRCK_PY" ]; then
+    python3 "$LRCK_PY"
+fi
