@@ -272,14 +272,13 @@ struct C4JRenderStub {
     template<class... A> void   MatrixPush(A...)     {}
     template<class... A> void   MatrixPop(A...)      {}
     template<class... A> void   MatrixMult(A...)     {}
-    // G2a: Tesselator -> Metal hook. Upstream Tesselator::end() calls
-    // RenderManager.DrawVertices(C4JRender::ePrimitiveType, int, void*,
-    // C4JRender::eVertexType, C4JRender::ePixelShaderType). Using the
-    // actual enum types (not plain int) so the explicit overload
-    // outranks the variadic catch-all in overload resolution. With int
-    // params the variadic could be a "better" template match without
-    // the enum-to-int conversions and silently no-op every call.
-    inline void DrawVertices(ePrimitiveType prim, int count, const void* data,
+    // G2a: Tesselator -> Metal hook. Upstream Tesselator::end() passes
+    // (C4JRender::ePrimitiveType, int, int*, C4JRender::eVertexType,
+    //  C4JRender::ePixelShaderType). We match the exact types so that
+    // the non-template overload outranks the variadic catch-all. With
+    // any conversion needed (eg int* -> const void*), the variadic
+    // template wins as an "exact" match and silently no-ops.
+    inline void DrawVertices(ePrimitiveType prim, int count, int *data,
                              eVertexType fmt, ePixelShaderType shader);
     template<class... A> void   DrawVertices(A...)   {}
     template<class... A> void   DrawVertexBuffer(A...) {}
@@ -387,10 +386,11 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
                                           int fmt, int shader);
 
 inline void C4JRenderStub::DrawVertices(C4JRenderStub::ePrimitiveType prim,
-                                        int count, const void* data,
+                                        int count, int *data,
                                         C4JRenderStub::eVertexType fmt,
                                         C4JRenderStub::ePixelShaderType shader) {
-    mcle_metal_draw_vertices((int)prim, count, data, (int)fmt, (int)shader);
+    mcle_metal_draw_vertices((int)prim, count, (const void *)data,
+                             (int)fmt, (int)shader);
 }
 // Now that C4JRender is a known type (alias to C4JRenderStub), pull
 // in the iOS 4J_Render.h header which declares
