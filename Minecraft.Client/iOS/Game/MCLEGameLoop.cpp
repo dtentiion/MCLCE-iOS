@@ -35,6 +35,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <cmath>
+#include <new>
 
 // G2a: declared in Render lib (MetalContext.mm). Forward decl here so
 // the tick log can read the cumulative DrawVertices count.
@@ -671,6 +672,12 @@ void initImpl() {
     Minecraft *g_minecraftShim = reinterpret_cast<Minecraft *>(s_minecraftShimBuf);
     MCLE_LOG("mcle_game_init: Minecraft shim at %p (sizeof=%zu)",
              (void*)g_minecraftShim, sizeof(Minecraft));
+
+    // Wire the player into the shim so renderChunks's cameraTargetPlayer
+    // null check doesn't bail. ServerPlayer extends LivingEntity so the
+    // shared_ptr conversion is implicit. Done with placement-new on the
+    // already-zeroed buffer so the shared_ptr's default ctor runs.
+    new (&g_minecraftShim->cameraTargetPlayer) std::shared_ptr<LivingEntity>(g_player);
 
     // G2b: LevelRenderer construction. Leaf-symbol stubs added in
     // WorldProbe/link_stubs.cpp let the link resolve. The ctor body still
