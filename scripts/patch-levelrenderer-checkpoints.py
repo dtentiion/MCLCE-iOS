@@ -81,6 +81,12 @@ edits = [
         '\tapp.DebugPrintf("LR_CKPT renderChunks enter mc=%p", mc);\n'
         "\tif (mc == nullptr)",
     ),
+    # iOS: shim mc->player still nullptr inside renderChunks. Default
+    # playerIndex to 0 just like the outer render() path.
+    (
+        "\tint playerIndex = mc->player->GetXboxPad();\t// 4J added",
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);\t// 4J added",
+    ),
     (
         "\tmc->gameRenderer->turnOnLightLayer(alpha);",
         '\tapp.DebugPrintf("LR_CKPT before gameRenderer->turnOnLightLayer gameRenderer=%p", mc->gameRenderer);\n'
