@@ -101,6 +101,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 #include "../../../upstream/Minecraft.Client/LevelRenderer.h"
 #include "../../../upstream/Minecraft.Client/Tesselator.h"
+#include "../../../upstream/Minecraft.Client/Minecraft.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -661,15 +662,25 @@ void initImpl() {
     g_initState = kStateTicking;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
-    // G2b: probe LevelRenderer construction. Leaf-symbol stubs added in
+    // G2c-shim: allocate a zero-filled Minecraft-sized buffer and cast to
+    // Minecraft*. Class has no virtual methods (verified) so no vtable
+    // pointer needed. Fields left zero; LevelRenderer::render derefs them
+    // one by one - the auto-probe pins each so we can fill them in
+    // incrementally. Eventual goal: full upstream Minecraft instance.
+    static char s_minecraftShimBuf[sizeof(Minecraft)] = {0};
+    Minecraft *g_minecraftShim = reinterpret_cast<Minecraft *>(s_minecraftShimBuf);
+    MCLE_LOG("mcle_game_init: Minecraft shim at %p (sizeof=%zu)",
+             (void*)g_minecraftShim, sizeof(Minecraft));
+
+    // G2b: LevelRenderer construction. Leaf-symbol stubs added in
     // WorldProbe/link_stubs.cpp let the link resolve. The ctor body still
     // executes upstream code - renderStars, createCloudMesh, the sky list
     // build via Tesselator - so this can SIGSEGV at runtime. Behind the
     // state=ticking flip so a crash here doesn't kill the blue-sky
     // milestone.
-    MCLE_LOG("mcle_game_init: G2b probe new LevelRenderer(nullptr, nullptr)...");
+    MCLE_LOG("mcle_game_init: G2c construct LevelRenderer(shim, nullptr)...");
     try {
-        g_levelRenderer = new LevelRenderer(nullptr, nullptr);
+        g_levelRenderer = new LevelRenderer(g_minecraftShim, nullptr);
         MCLE_LOG("mcle_game_init: LevelRenderer at %p", (void*)g_levelRenderer);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: LevelRenderer ctor threw: %{public}s", e.what());
