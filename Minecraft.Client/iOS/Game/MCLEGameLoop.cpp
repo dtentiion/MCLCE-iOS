@@ -690,6 +690,12 @@ void initImpl() {
     // and don't deref this.
     try {
         g_minecraftShim->options = new Options();
+        // Match LevelRenderer::lastViewDistance ctor default (-1) so the
+        // render() else-if branch doesn't fire allChanged() before we
+        // have a level wired. allChanged crashes inside Tile::leaves
+        // setFancy + Minecraft::GetInstance()->gameRenderer-> chain
+        // until those are real upstream classes.
+        g_minecraftShim->options->viewDistance = -1;
         MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
                  (void*)g_minecraftShim->options,
                  g_minecraftShim->options->viewDistance,
