@@ -70,8 +70,10 @@ DLCManager::~DLCManager() {}
 // is also defined in MinecraftServer.cpp's TU. Nothing to stub here
 // for MinecraftServer anymore.
 
-// Minecraft - the platform client app singleton accessor.
-Minecraft *Minecraft::GetInstance()                         { return nullptr; }
+// Minecraft - the platform client app singleton accessor. Returns the
+// static m_instance pointer that MCLEGameLoop sets to its shim. Real
+// upstream Minecraft.cpp does the same: `return m_instance;`.
+Minecraft *Minecraft::GetInstance()                         { return Minecraft::m_instance; }
 
 // PlayerConnection
 INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
