@@ -240,6 +240,7 @@ const int AddEntityPacket::FISH_HOOK;
 // Minecraft (singleton client app). Real app uses these to gate UI; the
 // iOS shell never reaches into Minecraft, so safe defaults are fine.
 // ---------------------------------------------------------------------------
+Minecraft *Minecraft::m_instance = nullptr;
 ColourTable *Minecraft::getColourTable() { return nullptr; }
 bool         Minecraft::isTutorial()      { return false; }
 MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
