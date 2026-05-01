@@ -28,8 +28,9 @@ edits = [
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
         '\tapp.DebugPrintf("LR_CKPT render enter mc=%p", mc);\n'
         "\tif (!mc) { return 0; }\n"
-        '\tapp.DebugPrintf("LR_CKPT before mc->player->GetXboxPad");\n'
-        "\tint playerIndex = mc->player->GetXboxPad();\n"
+        // iOS: shim mc has player==nullptr until we have a real
+        // MultiplayerLocalPlayer. Default to pad 0.
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);\n"
         '\tapp.DebugPrintf("LR_CKPT playerIndex=%d", playerIndex);',
     ),
     (
