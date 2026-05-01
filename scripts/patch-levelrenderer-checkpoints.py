@@ -35,10 +35,24 @@ edits = [
     ),
     (
         "\t// 4J - added - if the number of players has changed, we need to rebuild things for the new draw distance this will require\n"
-        "\tif( lastPlayerCount[playerIndex] != activePlayers() )",
+        "\tif( lastPlayerCount[playerIndex] != activePlayers() )\n"
+        "\t{\n"
+        "\t\tallChanged();\n"
+        "\t}\n"
+        "\telse if (mc->options->viewDistance != lastViewDistance)\n"
+        "\t{\n"
+        "\t\tallChanged();\n"
+        "\t}",
         '\tapp.DebugPrintf("LR_CKPT before player-count / view-distance checks");\n'
         "\t// 4J - added - if the number of players has changed, we need to rebuild things for the new draw distance this will require\n"
-        "\tif( lastPlayerCount[playerIndex] != activePlayers() )",
+        "\tif( lastPlayerCount[playerIndex] != activePlayers() )\n"
+        "\t{\n"
+        "\t\tallChanged();\n"
+        "\t}\n"
+        "\telse if (mc->options && mc->options->viewDistance != lastViewDistance)\n"
+        "\t{\n"
+        "\t\tallChanged();\n"
+        "\t}",
     ),
     (
         "\tdouble xOff = player->xOld + (player->x - player->xOld) * alpha;",
