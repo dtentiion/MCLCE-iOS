@@ -1312,3 +1312,11 @@ LRCK_PY="$REPO_ROOT/scripts/patch-levelrenderer-checkpoints.py"
 if [ -f "$LRCK_PY" ]; then
     python3 "$LRCK_PY"
 fi
+
+# G2d: expose Minecraft::m_instance so the MCLEGameLoop shim can set it
+# directly. Without the singleton wired, allChanged() returns through
+# Minecraft::GetInstance()->gameRenderer->DisableUpdateThread().
+MCI_PY="$REPO_ROOT/scripts/patch-minecraft-instance-public.py"
+if [ -f "$MCI_PY" ]; then
+    python3 "$MCI_PY"
+fi
