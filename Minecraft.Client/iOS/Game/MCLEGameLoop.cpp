@@ -858,8 +858,12 @@ extern "C" void mcle_world_g1b_probe_tick(void) {
         if (!biome) return;
         float temp = biome->getTemperature();
         MCLE_LOG("G1B-probe: biome->getTemperature=%f", (double)temp);
-        int skyColor = biome->getSkyColor(temp);
-        MCLE_LOG("G1B-probe: biome->getSkyColor=0x%x", skyColor);
+        // biome->getSkyColor(temp) chains into Minecraft::GetInstance()->
+        // getColourTable()->getColor(m_skyColor). Minecraft::m_instance is
+        // null in our setup (we bypass Minecraft::init()), so getColourTable
+        // reads `this->skins` at offset 0x140 of a null Minecraft -> SIGSEGV
+        // at 0x140 (confirmed: probe crashed there). Skip until we have a
+        // real Minecraft instance or patch Biome::getSkyColor for iOS.
     } catch (...) { MCLE_LOG("G1B-probe: biome chain threw"); return; }
 }
 
