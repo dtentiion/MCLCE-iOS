@@ -69,6 +69,7 @@ __attribute__((weak)) extern "C" void mcle_glbridge_bind_texture(unsigned int)  
 __attribute__((weak)) extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int, int, int,
                                                                         const void*)    {}
 __attribute__((weak)) extern "C" unsigned int mcle_glbridge_get_bound_texture(void)      { return 0; }
+__attribute__((weak)) extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char*) { return 0; }
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 
