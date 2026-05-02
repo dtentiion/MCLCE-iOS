@@ -219,6 +219,19 @@ extern "C" unsigned long long mcle_glbridge_list_count(void) {
     return static_cast<unsigned long long>(g_lists.size());
 }
 
+// G3b TEMP: replay every recorded list back through the immediate
+// dispatch path. Used before the upstream renderSky/renderClouds calls
+// drive glCallList naturally - parity comes once setLevel + level state
+// is wired (G3e). Remove this helper at that point.
+extern "C" void mcle_glbridge_replay_all_lists(void) {
+    for (const auto& kv : g_lists) {
+        for (const auto& cmd : kv.second.draws) {
+            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                               cmd.fmt, cmd.shader);
+        }
+    }
+}
+
 // Internal helpers for the renderers in this library.
 #ifdef __cplusplus
 extern "C" {
