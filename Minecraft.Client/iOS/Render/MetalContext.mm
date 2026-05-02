@@ -342,27 +342,27 @@ extern "C" void mcle_glbridge_gen_textures_n(int n, unsigned int* out) {
         out[i] = g_next_tex_id.fetch_add(1, std::memory_order_relaxed);
     }
 }
-extern "C" void mcle_glbridge_delete_texture(unsigned int id) {
-    auto it = g_gl_textures.find(id);
+extern "C" void mcle_glbridge_delete_texture(unsigned int tex_id) {
+    auto it = g_gl_textures.find(tex_id);
     if (it != g_gl_textures.end()) g_gl_textures.erase(it);
-    if (g_bound_tex_id == id) {
-        g_bound_tex_id   = 0;
+    if (g_bound_tex_id == tex_id) {
+        g_bound_tex_id    = 0;
         g_current_texture = nil;
     }
 }
-extern "C" void mcle_glbridge_bind_texture(unsigned int id) {
-    g_bound_tex_id = id;
-    if (id == 0) {
+extern "C" void mcle_glbridge_bind_texture(unsigned int tex_id) {
+    g_bound_tex_id = tex_id;
+    if (tex_id == 0) {
         g_current_texture = nil;
         return;
     }
-    auto it = g_gl_textures.find(id);
+    auto it = g_gl_textures.find(tex_id);
     g_current_texture = (it != g_gl_textures.end()) ? it->second : nil;
 }
 extern "C" unsigned int mcle_glbridge_get_bound_texture(void) {
     return g_bound_tex_id;
 }
-extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int id, int width, int height,
+extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, int height,
                                                   const void* rgba_pixels) {
     if (!g.device || width <= 0 || height <= 0) return;
     MTLTextureDescriptor* td =
@@ -380,8 +380,8 @@ extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int id, int width, int 
                   withBytes:rgba_pixels
                 bytesPerRow:(NSUInteger)(width * 4)];
     }
-    g_gl_textures[id] = tex;
-    if (id == g_bound_tex_id) g_current_texture = tex;
+    g_gl_textures[tex_id] = tex;
+    if (tex_id == g_bound_tex_id) g_current_texture = tex;
 }
 
 // G3f: GL_CURRENT_COLOR setters. Each draw reads the live values into a
