@@ -1321,9 +1321,17 @@ if [ -f "$MCI_PY" ]; then
     python3 "$MCI_PY"
 fi
 
-# G3e: expose LevelRenderer::level[4] so we can attach a real Level to
-# the renderer without setLevel's heavy allChanged path.
+# G3e: expose LevelRenderer::level[4] + textures so we can attach
+# real Level + Textures shim to the renderer without setLevel's heavy
+# allChanged path.
 LRL_PY="$REPO_ROOT/scripts/patch-levelrenderer-level-public.py"
 if [ -f "$LRL_PY" ]; then
     python3 "$LRL_PY"
+fi
+
+# G3e-step2: bracket renderSky / renderClouds / renderAdvancedClouds
+# with checkpoints so the next sideload pins which deref crashes.
+LRSKY_PY="$REPO_ROOT/scripts/patch-rendersky-checkpoints.py"
+if [ -f "$LRSKY_PY" ]; then
+    python3 "$LRSKY_PY"
 fi
