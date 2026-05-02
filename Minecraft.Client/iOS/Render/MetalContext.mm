@@ -95,15 +95,24 @@ NSString* const kWorldShaderSrc = @R"(
         float4 pos [[position]];
         float4 color;
     };
-    struct Uniforms {
+    struct MVPUniforms {
         float4x4 mvp;
     };
+    struct ColorUniforms {
+        float4 currentColor;
+    };
 
+    // G3f: per-vertex color is modulated with the current GL color
+    // (set via glColor3f / glColor4f). Matches D3D9 fixed-function
+    // modulate so glCallList replays pick up the live sky/sunset/sun
+    // tint that renderSky sets before the dispatch.
     vertex V_out world_vert(V_in v [[stage_in]],
-                             constant Uniforms& u [[buffer(1)]]) {
+                             constant MVPUniforms&   m [[buffer(1)]],
+                             constant ColorUniforms& c [[buffer(2)]]) {
         V_out o;
-        o.pos   = u.mvp * float4(v.pos, 1.0);
-        o.color = float4(v.color) / 255.0;
+        o.pos   = m.mvp * float4(v.pos, 1.0);
+        float4 vc = float4(v.color) / 255.0;
+        o.color = vc * c.currentColor;
         return o;
     }
     fragment float4 world_frag(V_out i [[stage_in]]) {
@@ -220,6 +229,12 @@ int                g_matrix_mode = kMatrixModeModelview;
 std::vector<Mat4>  g_modelview_stack { mat_identity() };
 std::vector<Mat4>  g_projection_stack{ mat_identity() };
 
+// G3f: GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
+// multiplied with this in the world vertex shader so glColor3f /
+// glColor4f take effect across replayed display lists. Matches D3D9
+// fixed-function modulate semantics (Xbox 360 / PS3) for parity.
+float g_current_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
 inline std::vector<Mat4>& current_stack() {
     return (g_matrix_mode == kMatrixModeProjection)
                ? g_projection_stack
@@ -261,6 +276,29 @@ extern "C" void mcle_glbridge_rotate(float angle, float x, float y, float z) {
 }
 extern "C" void mcle_glbridge_scale(float x, float y, float z) {
     mat_scale(current_matrix_data(), x, y, z);
+}
+
+// G3f: GL_CURRENT_COLOR setters. Each draw reads the live values into a
+// vertex-shader uniform and modulates per-vertex color by it. Matches
+// fixed-function D3D9 modulate.
+extern "C" void mcle_glbridge_color4f(float r, float g, float b, float a) {
+    g_current_color[0] = r;
+    g_current_color[1] = g;
+    g_current_color[2] = b;
+    g_current_color[3] = a;
+}
+extern "C" void mcle_glbridge_color3f(float r, float g, float b) {
+    g_current_color[0] = r;
+    g_current_color[1] = g;
+    g_current_color[2] = b;
+    g_current_color[3] = 1.0f;
+}
+extern "C" void mcle_glbridge_color4ub(unsigned char r, unsigned char g,
+                                        unsigned char b, unsigned char a) {
+    g_current_color[0] = (float)r / 255.0f;
+    g_current_color[1] = (float)g / 255.0f;
+    g_current_color[2] = (float)b / 255.0f;
+    g_current_color[3] = (float)a / 255.0f;
 }
 
 // Replaces the active matrix with a Metal-style perspective projection
@@ -319,6 +357,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (g.depthState) [g.enc setDepthStencilState:g.depthState];
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
+    [g.enc setVertexBytes:g_current_color length:sizeof(g_current_color) atIndex:2];
 
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
     // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
