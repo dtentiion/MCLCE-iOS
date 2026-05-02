@@ -1320,3 +1320,10 @@ MCI_PY="$REPO_ROOT/scripts/patch-minecraft-instance-public.py"
 if [ -f "$MCI_PY" ]; then
     python3 "$MCI_PY"
 fi
+
+# G3e: expose LevelRenderer::level[4] so we can attach a real Level to
+# the renderer without setLevel's heavy allChanged path.
+LRL_PY="$REPO_ROOT/scripts/patch-levelrenderer-level-public.py"
+if [ -f "$LRL_PY" ]; then
+    python3 "$LRL_PY"
+fi
