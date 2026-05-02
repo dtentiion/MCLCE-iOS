@@ -439,7 +439,15 @@ MemTexture *Textures::addMemTexture(const std::wstring & /*url*/,
                                      MemTextureProcessor * /*p*/) { return nullptr; }
 void Textures::removeMemTexture(const std::wstring & /*url*/) {}
 
+// G5: TileRenderer pulls these in once Chunk::rebuild runs. getMissingIcon
+// returns a default texture for unknown tiles; we hand back 0 so the
+// renderer falls back to the default 1x1 white we bind by default.
+int Textures::getMissingIcon(int /*type*/) { return 0; }
+
 #include "GameRenderer.h"
+// G5: TileRenderer reads this for anaglyph color filtering; we keep it
+// false so the standard non-stereo path runs.
+bool GameRenderer::anaglyph3d = false;
 void GameRenderer::EnableUpdateThread() {}
 void GameRenderer::DisableUpdateThread() {}
 // G2c: LevelRenderer::renderChunks calls these.
