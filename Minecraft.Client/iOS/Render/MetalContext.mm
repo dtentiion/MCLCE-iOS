@@ -5,7 +5,9 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -328,6 +330,61 @@ extern "C" void mcle_glbridge_rotate(float angle, float x, float y, float z) {
 }
 extern "C" void mcle_glbridge_scale(float x, float y, float z) {
     mat_scale(current_matrix_data(), x, y, z);
+}
+
+// G4-step3: PNG decoder bridge (png_decode.mm) and texture-from-path
+// loader. Mirrors upstream's per-platform pattern - on Xbox/PS3 the
+// platform's render API decodes the PNG; here we plug in CGImageSource.
+extern "C" int  mcle_png_decode_rgba8(const void* data, unsigned long length,
+                                       unsigned char** out_rgba,
+                                       int* out_w, int* out_h);
+extern "C" void mcle_png_decode_free(unsigned char* pixels);
+
+namespace { std::unordered_map<std::string, unsigned int> g_path_to_tex; }
+
+// Loads `<path>` as a PNG file, decodes it, uploads the RGBA bytes to a
+// new MTLTexture, registers it in the GL texture map, and returns the
+// allocated id. Cached by path - subsequent calls hit the cache. Returns
+// 0 if the file is missing or decode fails (caller falls back to default).
+extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path) {
+    if (!path) return 0;
+    auto it = g_path_to_tex.find(path);
+    if (it != g_path_to_tex.end()) return it->second;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        NSLog(@"[mcle_glbridge G4] PNG missing: %s", path);
+        g_path_to_tex[path] = 0;
+        return 0;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0) { fclose(f); g_path_to_tex[path] = 0; return 0; }
+    std::vector<uint8_t> bytes((size_t)sz);
+    size_t read = fread(bytes.data(), 1, (size_t)sz, f);
+    fclose(f);
+    if (read != (size_t)sz) {
+        NSLog(@"[mcle_glbridge G4] short read for %s", path);
+        g_path_to_tex[path] = 0;
+        return 0;
+    }
+
+    unsigned char* rgba = nullptr;
+    int            w = 0, h = 0;
+    if (!mcle_png_decode_rgba8(bytes.data(), (unsigned long)bytes.size(),
+                                 &rgba, &w, &h)) {
+        NSLog(@"[mcle_glbridge G4] PNG decode failed: %s", path);
+        g_path_to_tex[path] = 0;
+        return 0;
+    }
+
+    const unsigned int id = g_next_tex_id.fetch_add(1, std::memory_order_relaxed);
+    mcle_glbridge_tex_image_2d_rgba(id, w, h, rgba);
+    mcle_png_decode_free(rgba);
+    g_path_to_tex[path] = id;
+    NSLog(@"[mcle_glbridge G4] loaded %s -> id=%u (%dx%d)", path, id, w, h);
+    return id;
 }
 
 // G4-step2: GL texture object registry. All allocations / binds /
