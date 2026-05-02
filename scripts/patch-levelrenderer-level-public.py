@@ -16,8 +16,11 @@ if not TARGET.exists():
 
 src = TARGET.read_text(encoding="utf-8", errors="replace")
 
-old = "\tMultiPlayerLevel *level[4];"
-new = "public:\t// 4J iOS - shim wires this directly\n\tMultiPlayerLevel *level[4];\nprivate:"
+old = "\tMultiPlayerLevel *level[4];					// 4J - now one per player\n\tTextures *textures;"
+new = ("public:\t// 4J iOS - shim wires both directly\n"
+       "\tMultiPlayerLevel *level[4];\n"
+       "\tTextures *textures;\n"
+       "private:")
 
 if new in src:
     print(f"already patched: {TARGET}")
