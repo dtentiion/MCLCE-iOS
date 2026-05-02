@@ -241,7 +241,16 @@ const int AddEntityPacket::FISH_HOOK;
 // iOS shell never reaches into Minecraft, so safe defaults are fine.
 // ---------------------------------------------------------------------------
 Minecraft *Minecraft::m_instance = nullptr;
-ColourTable *Minecraft::getColourTable() { return nullptr; }
+// G3e-step3: zero-filled ColourTable shim. ColourTable has no virtuals,
+// just an unsigned int array indexed by enum. Returning nullptr was
+// crashing Biome::getSkyColor at addr 0x140 (=eMinecraftColour 80 * 4).
+// Real DLC-loaded colours land when the texture-pack pipeline is wired
+// (G4); for now black sky is a parity-safe placeholder.
+#include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
+static char s_colourTableShim[sizeof(ColourTable)] = {0};
+ColourTable *Minecraft::getColourTable() {
+    return reinterpret_cast<ColourTable *>(s_colourTableShim);
+}
 bool         Minecraft::isTutorial()      { return false; }
 MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 
