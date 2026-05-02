@@ -89,6 +89,14 @@ id<MTLTexture>      g_default_texture = nil;
 id<MTLSamplerState> g_default_sampler = nil;
 id<MTLTexture>      g_current_texture = nil;
 
+// G4-step2: GL texture object registry. glGenTextures hands out IDs;
+// glBindTexture(target, id) sets the active texture; glTexImage2D
+// uploads data to the bound texture. IDs are dense small integers
+// matching legacy GL semantics.
+std::unordered_map<unsigned int, id<MTLTexture>> g_gl_textures;
+std::atomic<unsigned int>                         g_next_tex_id{1};
+unsigned int                                      g_bound_tex_id = 0;
+
 NSString* const kWorldShaderSrc = @R"(
     #include <metal_stdlib>
     using namespace metal;
@@ -320,6 +328,60 @@ extern "C" void mcle_glbridge_rotate(float angle, float x, float y, float z) {
 }
 extern "C" void mcle_glbridge_scale(float x, float y, float z) {
     mat_scale(current_matrix_data(), x, y, z);
+}
+
+// G4-step2: GL texture object registry. All allocations / binds /
+// uploads route through these so the fragment shader's bound texture
+// matches whatever upstream glBindTexture last set.
+extern "C" unsigned int mcle_glbridge_gen_texture(void) {
+    return g_next_tex_id.fetch_add(1, std::memory_order_relaxed);
+}
+extern "C" void mcle_glbridge_gen_textures_n(int n, unsigned int* out) {
+    if (!out || n <= 0) return;
+    for (int i = 0; i < n; i++) {
+        out[i] = g_next_tex_id.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+extern "C" void mcle_glbridge_delete_texture(unsigned int id) {
+    auto it = g_gl_textures.find(id);
+    if (it != g_gl_textures.end()) g_gl_textures.erase(it);
+    if (g_bound_tex_id == id) {
+        g_bound_tex_id   = 0;
+        g_current_texture = nil;
+    }
+}
+extern "C" void mcle_glbridge_bind_texture(unsigned int id) {
+    g_bound_tex_id = id;
+    if (id == 0) {
+        g_current_texture = nil;
+        return;
+    }
+    auto it = g_gl_textures.find(id);
+    g_current_texture = (it != g_gl_textures.end()) ? it->second : nil;
+}
+extern "C" unsigned int mcle_glbridge_get_bound_texture(void) {
+    return g_bound_tex_id;
+}
+extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int id, int width, int height,
+                                                  const void* rgba_pixels) {
+    if (!g.device || width <= 0 || height <= 0) return;
+    MTLTextureDescriptor* td =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                            width:(NSUInteger)width
+                                                           height:(NSUInteger)height
+                                                        mipmapped:NO];
+    td.usage       = MTLTextureUsageShaderRead;
+    td.storageMode = MTLStorageModeShared;
+    id<MTLTexture> tex = [g.device newTextureWithDescriptor:td];
+    if (!tex) return;
+    if (rgba_pixels) {
+        [tex replaceRegion:MTLRegionMake2D(0, 0, (NSUInteger)width, (NSUInteger)height)
+                mipmapLevel:0
+                  withBytes:rgba_pixels
+                bytesPerRow:(NSUInteger)(width * 4)];
+    }
+    g_gl_textures[id] = tex;
+    if (id == g_bound_tex_id) g_current_texture = tex;
 }
 
 // G3f: GL_CURRENT_COLOR setters. Each draw reads the live values into a
