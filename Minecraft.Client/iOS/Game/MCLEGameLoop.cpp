@@ -113,6 +113,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/GameRenderer.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
+#include "../../../upstream/Minecraft.Client/MultiPlayerLocalPlayer.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
 
 #include "4JLibs/inc/4J_Storage.h"
@@ -697,6 +698,21 @@ void initImpl() {
     // shared_ptr conversion is implicit. Done with placement-new on the
     // already-zeroed buffer so the shared_ptr's default ctor runs.
     new (&g_minecraftShim->cameraTargetPlayer) std::shared_ptr<LivingEntity>(g_player);
+
+    // G5: localplayers[0] is what LevelRenderer::updateDirtyChunks reads
+    // to find the nearest dirty chunk for rebuild (uses player x/y/z).
+    // ServerPlayer != MultiplayerLocalPlayer but they share Entity base
+    // and only the position fields are touched in this loop, so a
+    // reinterpret-cast placement-new is safe for the read-only path.
+    {
+        std::shared_ptr<MultiplayerLocalPlayer> *slot =
+            reinterpret_cast<std::shared_ptr<MultiplayerLocalPlayer> *>(
+                &g_minecraftShim->localplayers[0]);
+        new (slot) std::shared_ptr<MultiplayerLocalPlayer>(
+            std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player));
+        MCLE_LOG("mcle_game_init: G5 wired localplayers[0] = %p (alias of g_player)",
+                 (void*)slot->get());
+    }
 
     // G2d: heap-allocate Options and GameRenderer for the shim. Options
     // ctor calls init() which sets the defaults LevelRenderer reads
