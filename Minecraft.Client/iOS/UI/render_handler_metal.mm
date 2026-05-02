@@ -150,6 +150,9 @@ struct metal_render_handler : public gameswf::render_handler {
         desc.vertexFunction = [lib newFunctionWithName:@"swf_solid_vert"];
         desc.fragmentFunction = [lib newFunctionWithName:@"swf_solid_frag"];
         desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        // G3d-step2: render pass has a depth attachment now; pipelines
+        // must declare its format even if they don't write depth.
+        desc.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
         desc.colorAttachments[0].blendingEnabled = YES;
         desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
         desc.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;

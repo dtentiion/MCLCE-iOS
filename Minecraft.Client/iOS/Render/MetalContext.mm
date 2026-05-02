@@ -26,6 +26,12 @@ struct Ctx {
     id<CAMetalDrawable> drawable = nil;
     id<MTLCommandBuffer> cmd = nil;
     id<MTLRenderCommandEncoder> enc = nil;
+    // G3d-step2: depth attachment + depth-test pipeline state. Re-created
+    // when the layer resizes; reused across frames otherwise.
+    id<MTLTexture>             depthTex = nil;
+    int                        depthTexW = 0;
+    int                        depthTexH = 0;
+    id<MTLDepthStencilState>   depthState = nil;
 
     bool inFrame = false;
 };
@@ -137,8 +143,9 @@ bool ensure_world_pipeline() {
     MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc] init];
     desc.vertexFunction                 = [lib newFunctionWithName:@"world_vert"];
     desc.fragmentFunction               = [lib newFunctionWithName:@"world_frag"];
-    desc.vertexDescriptor               = vd;
-    desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    desc.vertexDescriptor                 = vd;
+    desc.colorAttachments[0].pixelFormat  = MTLPixelFormatBGRA8Unorm;
+    desc.depthAttachmentPixelFormat       = MTLPixelFormatDepth32Float;
 
     g_world_pso = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_world_pso) {
@@ -168,11 +175,12 @@ void compute_mvp(float* mvp16) {
     const float t       = tanf(fov_rad / 2.0f) * n;
     const float r       = t * aspect;
 
-    // Direct perspective matrix (column-major); no view translation.
-    mvp16[0]  = n / r;  mvp16[1]  = 0;      mvp16[2]  = 0;                       mvp16[3]  = 0;
-    mvp16[4]  = 0;      mvp16[5]  = n / t;  mvp16[6]  = 0;                       mvp16[7]  = 0;
-    mvp16[8]  = 0;      mvp16[9]  = 0;      mvp16[10] = -(f + n) / (f - n);      mvp16[11] = -1;
-    mvp16[12] = 0;      mvp16[13] = 0;      mvp16[14] = -(2 * f * n) / (f - n);  mvp16[15] = 0;
+    // Metal-style perspective: depth maps to [0..1] (vs OpenGL's [-1..1]).
+    // Camera looks down -Z. Column-major.
+    mvp16[0]  = n / r;  mvp16[1]  = 0;      mvp16[2]  = 0;                   mvp16[3]  = 0;
+    mvp16[4]  = 0;      mvp16[5]  = n / t;  mvp16[6]  = 0;                   mvp16[7]  = 0;
+    mvp16[8]  = 0;      mvp16[9]  = 0;      mvp16[10] = -f / (f - n);        mvp16[11] = -1;
+    mvp16[12] = 0;      mvp16[13] = 0;      mvp16[14] = -(n * f) / (f - n);  mvp16[15] = 0;
 }
 
 // Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.
@@ -200,6 +208,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     compute_mvp(mvp);
 
     [g.enc setRenderPipelineState:g_world_pso];
+    if (g.depthState) [g.enc setDepthStencilState:g.depthState];
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
 
@@ -289,11 +298,35 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g.drawable = [g.layer nextDrawable];
     if (!g.drawable) return 2;
 
+    // G3d-step2: ensure a depth texture sized to the current drawable.
+    if (!g.depthTex || g.depthTexW != g.width || g.depthTexH != g.height) {
+        MTLTextureDescriptor* dd = [MTLTextureDescriptor
+            texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
+                                          width:(NSUInteger)g.width
+                                         height:(NSUInteger)g.height
+                                      mipmapped:NO];
+        dd.storageMode = MTLStorageModePrivate;
+        dd.usage       = MTLTextureUsageRenderTarget;
+        g.depthTex     = [g.device newTextureWithDescriptor:dd];
+        g.depthTexW    = g.width;
+        g.depthTexH    = g.height;
+    }
+    if (!g.depthState) {
+        MTLDepthStencilDescriptor* dsd = [[MTLDepthStencilDescriptor alloc] init];
+        dsd.depthCompareFunction = MTLCompareFunctionLess;
+        dsd.depthWriteEnabled    = YES;
+        g.depthState = [g.device newDepthStencilStateWithDescriptor:dsd];
+    }
+
     MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-    rpd.colorAttachments[0].texture = g.drawable.texture;
-    rpd.colorAttachments[0].loadAction = MTLLoadActionClear;
+    rpd.colorAttachments[0].texture     = g.drawable.texture;
+    rpd.colorAttachments[0].loadAction  = MTLLoadActionClear;
     rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-    rpd.colorAttachments[0].clearColor = MTLClearColorMake(r, gn, b, a);
+    rpd.colorAttachments[0].clearColor  = MTLClearColorMake(r, gn, b, a);
+    rpd.depthAttachment.texture         = g.depthTex;
+    rpd.depthAttachment.loadAction      = MTLLoadActionClear;
+    rpd.depthAttachment.storeAction     = MTLStoreActionDontCare;
+    rpd.depthAttachment.clearDepth      = 1.0;
 
     g.cmd = [g.queue commandBuffer];
     g.enc = [g.cmd renderCommandEncoderWithDescriptor:rpd];
