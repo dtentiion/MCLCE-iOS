@@ -87,6 +87,9 @@ bool build_pipeline() {
     desc.vertexFunction = [lib newFunctionWithName:@"triangle_vert"];
     desc.fragmentFunction = [lib newFunctionWithName:@"triangle_frag"];
     desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    // G3d-step2: render pass has a depth attachment now; pipelines must
+    // match the format even if they don't write depth themselves.
+    desc.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
 
     g_pipeline = [device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_pipeline) { NSLog(@"[triangle] pipeline build failed: %@", err); return false; }
