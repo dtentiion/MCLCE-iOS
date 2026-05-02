@@ -241,16 +241,25 @@ const int AddEntityPacket::FISH_HOOK;
 // iOS shell never reaches into Minecraft, so safe defaults are fine.
 // ---------------------------------------------------------------------------
 Minecraft *Minecraft::m_instance = nullptr;
-// G3e-step3: zero-filled ColourTable shim. ColourTable has no virtuals,
-// just an unsigned int array indexed by enum. Returning nullptr was
-// crashing Biome::getSkyColor at addr 0x140 (=eMinecraftColour 80 * 4).
-// Real DLC-loaded colours land when the texture-pack pipeline is wired
-// (G4); for now black sky is a parity-safe placeholder.
+// G3e-step3 / G3f: flood-filled ColourTable shim. ColourTable has no
+// virtuals, just an unsigned int array indexed by eMinecraftColour.
+// All entries are the plains sky tint (0x78A7FF) so any biome's
+// getSkyColor lookup returns a sane blue. Real DLC-loaded values land
+// when the texture-pack pipeline is wired (G4); this is a parity-safe
+// placeholder until then.
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
-static char s_colourTableShim[sizeof(ColourTable)] = {0};
-ColourTable *Minecraft::getColourTable() {
-    return reinterpret_cast<ColourTable *>(s_colourTableShim);
+static ColourTable *get_colour_table_shim() {
+    static char           s_buf[sizeof(ColourTable)];
+    static bool           s_init = false;
+    if (!s_init) {
+        unsigned int *vals = reinterpret_cast<unsigned int *>(s_buf);
+        const size_t  n    = sizeof(ColourTable) / sizeof(unsigned int);
+        for (size_t i = 0; i < n; i++) vals[i] = 0x78A7FF;
+        s_init = true;
+    }
+    return reinterpret_cast<ColourTable *>(s_buf);
 }
+ColourTable *Minecraft::getColourTable() { return get_colour_table_shim(); }
 bool         Minecraft::isTutorial()      { return false; }
 MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 
