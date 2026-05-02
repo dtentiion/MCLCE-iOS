@@ -210,6 +210,14 @@ void initImpl() {
     Tesselator::CreateNewThreadStorage(16 * 1024);
     MCLE_LOG("mcle_game_init: Tesselator::CreateNewThreadStorage done");
 
+    // Vec3 is also TLS-singleton (see Vec3.cpp:19). Vec3::newTemp() is
+    // used liberally throughout the renderer (Level::getSkyColor,
+    // getCloudColor, getSunriseColor, ...) and reads tls->pool[idx]. If
+    // unset on this thread, deref produces a corrupt-pointer-shaped
+    // SIGSEGV (which was the G3e crash inside Level::getSkyColor).
+    Vec3::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: Vec3::CreateNewThreadStorage done");
+
     // Parity-correct upstream static init order, mirroring
     // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
     // Each call wrapped in try/catch so a single C++ throw doesn't kill
@@ -835,8 +843,9 @@ extern "C" void mcle_game_tick(void) {
     if (!s_tickThreadTlsReady) {
         Tile::CreateNewThreadStorage();
         Tesselator::CreateNewThreadStorage(16 * 1024);
+        Vec3::CreateNewThreadStorage();
         s_tickThreadTlsReady = true;
-        MCLE_LOG("mcle_game_tick: render-thread Tile + Tesselator TLS initialized");
+        MCLE_LOG("mcle_game_tick: render-thread Tile + Tesselator + Vec3 TLS initialized");
     }
 
     g_tickCount++;
@@ -903,6 +912,20 @@ extern "C" void mcle_metal_current_size(int*, int*);
 
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
+
+    // Render-thread TLS init - mirrors the bootstrap + tick threads.
+    // Tile / Tesselator / Vec3 are TLS-singletons; without these on this
+    // thread the first frame null-derefs inside Tesselator getInstance,
+    // Vec3::newTemp (Level::getSkyColor), or Tile::setShape.
+    static bool s_renderThreadTlsReady = false;
+    if (!s_renderThreadTlsReady) {
+        Tile::CreateNewThreadStorage();
+        Tesselator::CreateNewThreadStorage(16 * 1024);
+        Vec3::CreateNewThreadStorage();
+        s_renderThreadTlsReady = true;
+        MCLE_LOG("mcle_world_drive_renderer: render-thread Tile + Tesselator + Vec3 TLS initialized");
+    }
+
     try {
         // G3d-step3: set up projection + view via the GL matrix stack
         // each frame. Once upstream renderSky/renderClouds drive replays
@@ -925,14 +948,13 @@ extern "C" void mcle_world_drive_renderer(void) {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
-        // G3e (deferred again): renderSky still SIGSEGVs inside Level::
-        // getSkyColor at addr 0x5dd98175e9b10ba1 (corrupt-pointer-shaped
-        // jump, not a null-deref offset). Need finer-grained checkpoints
-        // inside the Level::getSkyColor body to pin the exact line - the
-        // ColourTable shim cleared the 0x140 path but a different deref
-        // (likely a virtual call on biome / Vec3::newTemp / shared_ptr)
-        // is still bad. Stay on the blanket replay so the build is
-        // crash-free overnight.
+        // G3e-step4: with Vec3::CreateNewThreadStorage now run on this
+        // thread, Level::getSkyColor's Vec3::newTemp deref should land
+        // safely. Drive renderSky/renderClouds for parity.
+        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
+        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
+
+        // Blanket replay still active until parity path proves crash-free.
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
