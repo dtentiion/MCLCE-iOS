@@ -4,6 +4,10 @@
 #import <QuartzCore/CAMetalLayer.h>
 
 #include <atomic>
+#include <cstdint>
+#include <cstring>
+#include <unordered_map>
+#include <vector>
 
 #include "MetalContext.h"
 
@@ -27,6 +31,51 @@ struct Ctx {
 };
 
 Ctx g;
+
+// G3a: legacy GL display-list bridge. Upstream LevelRenderer::LevelRenderer
+// builds geometry once via glNewList(id, GL_COMPILE) + Tesselator -> end()
+// recording, then per-frame replays it via glCallList(id). On real consoles
+// the GPU driver records & replays. On iOS we record DrawVertices payloads
+// in CPU memory and replay them through our Metal hook.
+//
+// Until G3-step3 lands real Metal upload + draw, replay just bumps the
+// draw counter so we can verify per-frame dispatch in the tick log.
+struct DrawCmd {
+    int                  prim;
+    int                  count;
+    int                  fmt;
+    int                  shader;
+    std::vector<uint8_t> data;
+};
+
+struct DisplayList {
+    std::vector<DrawCmd> draws;
+};
+
+std::unordered_map<int, DisplayList> g_lists;
+int                                   g_recording_list = 0;
+std::atomic<int>                      g_next_list_id{1};
+
+// Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
+// per vertex for the PF3_TF2_CB4_NB4_XW1 layout (see Tesselator::end's
+// pColData += 8 stride). Other formats are guesses until we exercise them.
+inline int vertex_stride(int fmt) {
+    switch (fmt) {
+        case 1: /* VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1        */ return 32;
+        case 2: /* VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN */ return 32;
+        case 3: /* VERTEX_TYPE_PS3_TS2_CS1                */ return 12;
+        case 4: /* VERTEX_TYPE_COMPRESSED                 */ return 16;
+        default:                                              return 32;
+    }
+}
+
+// Immediate dispatch path. G3-step1 just bumps the counter so tick log
+// reflects per-frame replay volume; G3-step3 lands the real MTLBuffer
+// upload + drawPrimitives here.
+inline void immediate_dispatch(int /*prim*/, int /*count*/,
+                                const void* /*data*/, int /*fmt*/, int /*shader*/) {
+    g_draw_count.fetch_add(1, std::memory_order_relaxed);
+}
 
 } // namespace
 
@@ -110,16 +159,64 @@ extern "C" void mcle_metal_frame_end(void) {
     g.inFrame = false;
 }
 
-// G2a: Tesselator -> Metal hook counter. Real vertex buffer upload + draw
-// lands in G3 once we wire upstream LevelRenderer to invoke this path.
-extern "C" void mcle_metal_draw_vertices(int /*prim*/, int /*count*/,
-                                          const void* /*data*/,
-                                          int /*fmt*/, int /*shader*/) {
-    g_draw_count.fetch_add(1, std::memory_order_relaxed);
+// G2a: Tesselator -> Metal hook. G3a: routes into the display-list
+// recorder when glNewList is active; otherwise dispatches immediately.
+// Counter bumps only on the immediate path so per-frame tick logs reflect
+// actual draws, not the one-shot ctor recording.
+extern "C" void mcle_metal_draw_vertices(int prim, int count,
+                                          const void* data,
+                                          int fmt, int shader) {
+    if (g_recording_list != 0) {
+        DrawCmd cmd;
+        cmd.prim   = prim;
+        cmd.count  = count;
+        cmd.fmt    = fmt;
+        cmd.shader = shader;
+        const int sz = count * vertex_stride(fmt);
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        cmd.data.assign(p, p + sz);
+        g_lists[g_recording_list].draws.push_back(std::move(cmd));
+        return;
+    }
+    immediate_dispatch(prim, count, data, fmt, shader);
 }
 
 extern "C" unsigned long long mcle_metal_draw_count(void) {
     return g_draw_count.load(std::memory_order_relaxed);
+}
+
+// G3a: display-list bridge entry points called by probe_stub.cpp's
+// glGenLists / glNewList / glEndList / glCallList / glDeleteLists.
+extern "C" int mcle_glbridge_gen_lists(int range) {
+    return g_next_list_id.fetch_add(range, std::memory_order_relaxed);
+}
+
+extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
+    g_recording_list = id;
+    g_lists[id] = DisplayList();
+}
+
+extern "C" void mcle_glbridge_end_list(void) {
+    g_recording_list = 0;
+}
+
+extern "C" void mcle_glbridge_call_list(int id) {
+    auto it = g_lists.find(id);
+    if (it == g_lists.end()) return;
+    for (const auto& cmd : it->second.draws) {
+        immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                           cmd.fmt, cmd.shader);
+    }
+}
+
+extern "C" void mcle_glbridge_release_lists(int id, int range) {
+    for (int i = 0; i < range; i++) g_lists.erase(id + i);
+}
+
+// Diagnostics: number of recorded display lists (so we can correlate with
+// the 191 ctor draws we saw before recording was wired).
+extern "C" unsigned long long mcle_glbridge_list_count(void) {
+    return static_cast<unsigned long long>(g_lists.size());
 }
 
 // Internal helpers for the renderers in this library.
