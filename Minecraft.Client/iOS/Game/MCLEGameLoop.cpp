@@ -925,16 +925,14 @@ extern "C" void mcle_world_drive_renderer(void) {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
-        // G3e-step2: drive upstream renderSky / renderClouds. Now with
-        // Textures shim attached + LR_SKY_CKPT logs at every deref so
-        // any new crash pins the exact line. SIGSEGV bypasses try/catch
-        // but the patches added explicit early-bails on null pointers
-        // so most expected nulls return cleanly.
-        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
-        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
-
-        // Blanket replay still active until the parity path is fully
-        // confirmed end-to-end.
+        // G3e (deferred again): renderSky still SIGSEGVs inside Level::
+        // getSkyColor at addr 0x5dd98175e9b10ba1 (corrupt-pointer-shaped
+        // jump, not a null-deref offset). Need finer-grained checkpoints
+        // inside the Level::getSkyColor body to pin the exact line - the
+        // ColourTable shim cleared the 0x140 path but a different deref
+        // (likely a virtual call on biome / Vec3::newTemp / shared_ptr)
+        // is still bad. Stay on the blanket replay so the build is
+        // crash-free overnight.
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
