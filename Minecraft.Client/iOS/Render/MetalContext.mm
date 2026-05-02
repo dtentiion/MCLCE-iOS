@@ -340,6 +340,10 @@ extern "C" int  mcle_png_decode_rgba8(const void* data, unsigned long length,
                                        int* out_w, int* out_h);
 extern "C" void mcle_png_decode_free(unsigned char* pixels);
 
+// Forward decl - defined further down in this file.
+extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, int height,
+                                                  const void* rgba_pixels);
+
 namespace { std::unordered_map<std::string, unsigned int> g_path_to_tex; }
 
 // Loads `<path>` as a PNG file, decodes it, uploads the RGBA bytes to a
