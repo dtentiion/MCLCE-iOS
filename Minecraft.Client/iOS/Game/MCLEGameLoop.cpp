@@ -948,13 +948,11 @@ extern "C" void mcle_world_drive_renderer(void) {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
-        // G3e-step4: with Vec3::CreateNewThreadStorage now run on this
-        // thread, Level::getSkyColor's Vec3::newTemp deref should land
-        // safely. Drive renderSky/renderClouds for parity.
-        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
-        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
-
-        // Blanket replay still active until parity path proves crash-free.
+        // G3e-step4 (deferred again): isolating whether the recent crash
+        // was renderSky/renderClouds re-enable vs the Vec3 TLS init. With
+        // these direct calls reverted, if the build still crashes early
+        // the Vec3 init is the trigger; if it boots cleanly, renderSky
+        // is. Blanket replay alone is the proven-stable path.
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
