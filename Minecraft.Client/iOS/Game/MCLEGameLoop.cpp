@@ -866,11 +866,18 @@ extern "C" void mcle_game_tick(void) {
 // terrain). Wrapped in try/catch but SIGSEGV bypasses - the Minecraft::
 // m_instance null chain (Biome::getSkyColor etc) may bite here. If so
 // the signal handler logs the address, we patch the next null deref.
+extern "C" void mcle_glbridge_replay_all_lists(void);
+
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
     try {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
+        // G3b TEMP: replay every recorded list per frame so the immediate
+        // dispatch path is exercised. Remove once setLevel + dimension
+        // wiring lets upstream renderSky/renderClouds drive glCallList
+        // naturally (G3e).
+        mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
 
