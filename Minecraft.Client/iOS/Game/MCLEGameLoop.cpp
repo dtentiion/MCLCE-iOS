@@ -113,6 +113,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/GameRenderer.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
+#include "../../../upstream/Minecraft.Client/Textures.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -753,6 +754,19 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: wired mc->level + LR->level[0] = %p", (void*)lvl);
     }
 
+    // G3e-step2: Textures shim for LevelRenderer. Zero buffer, no
+    // virtuals - the bindTexture / addMemTexture / removeMemTexture
+    // stubs in link_stubs.cpp don't deref this. Lets renderClouds /
+    // renderAdvancedClouds proceed past textures->bindTexture without
+    // calling on a null pointer.
+    static char s_texturesShimBuf[sizeof(Textures)] = {0};
+    if (g_levelRenderer) {
+        g_levelRenderer->textures =
+            reinterpret_cast<Textures *>(s_texturesShimBuf);
+        MCLE_LOG("mcle_game_init: Textures shim at %p (sizeof=%zu)",
+                 (void*)g_levelRenderer->textures, sizeof(Textures));
+    }
+
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
@@ -911,12 +925,16 @@ extern "C" void mcle_world_drive_renderer(void) {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
-        // G3e (deferred): direct renderSky/renderClouds calls needed
-        // mc->textures + a few other Minecraft fields beyond what the
-        // shim has. SIGSEGV at addr 0x140 in the upstream-renderer null
-        // chain. Re-enable in a later push that adds checkpoints inside
-        // renderSky to pin the offending field, plus a Textures shim.
-        // For now stay on the blanket replay - that path is crash-free.
+        // G3e-step2: drive upstream renderSky / renderClouds. Now with
+        // Textures shim attached + LR_SKY_CKPT logs at every deref so
+        // any new crash pins the exact line. SIGSEGV bypasses try/catch
+        // but the patches added explicit early-bails on null pointers
+        // so most expected nulls return cleanly.
+        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
+        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
+
+        // Blanket replay still active until the parity path is fully
+        // confirmed end-to-end.
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
