@@ -289,7 +289,12 @@ struct C4JRenderStub {
     template<class... A> int    CreateTexture(A...)  { return 0; }
     template<class... A> void   FreeTexture(A...)    {}
     // Command buffer interface upstream LevelRenderer.cpp uses to
-    // record draws into a reusable buffer.
+    // record draws into a reusable buffer. On real consoles each call
+    // queues a glCallList-equivalent against the platform's command
+    // buffer; on iOS we just forward to the display-list bridge so the
+    // recorded chunk geometry replays through Tesselator -> Metal.
+    inline bool CBuffCall(int list, bool /*first*/);
+    inline bool CBuffCallCutOut(int list, bool /*first*/);
     template<class... A> bool   CBuffCall(A...)               { return false; }
     template<class... A> bool   CBuffCallCutOut(A...)         { return false; }
     template<class... A> bool   CBuffCallMultiple(A...)       { return false; }
@@ -391,6 +396,19 @@ inline void C4JRenderStub::DrawVertices(C4JRenderStub::ePrimitiveType prim,
                                         C4JRenderStub::ePixelShaderType shader) {
     mcle_metal_draw_vertices((int)prim, count, (const void *)data,
                              (int)fmt, (int)shader);
+}
+
+// G5: chunk-list dispatch from LevelRenderer::renderChunks. On real
+// consoles this queues a draw against the command buffer; here we just
+// replay the recorded display list through the GL bridge.
+extern "C" void mcle_glbridge_call_list(int id);
+inline bool C4JRenderStub::CBuffCall(int list, bool /*first*/) {
+    mcle_glbridge_call_list(list);
+    return true;
+}
+inline bool C4JRenderStub::CBuffCallCutOut(int list, bool /*first*/) {
+    mcle_glbridge_call_list(list);
+    return true;
 }
 // Now that C4JRender is a known type (alias to C4JRenderStub), pull
 // in the iOS 4J_Render.h header which declares
