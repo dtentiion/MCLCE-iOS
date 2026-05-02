@@ -890,12 +890,15 @@ extern "C" void mcle_game_tick(void) {
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
         // G2a: include cumulative DrawVertices count so we can see the
         // moment upstream renderer code starts driving the Metal hook.
-        MCLE_LOG("tick %llu - overworld=%p entities=%zu draws=%llu lists=%llu",
+        unsigned int chunksLen = 0;
+        try { if (g_levelRenderer) chunksLen = (unsigned int)g_levelRenderer->chunks[0].length; } catch (...) {}
+        MCLE_LOG("tick %llu - overworld=%p entities=%zu draws=%llu lists=%llu chunks0=%u",
                  static_cast<unsigned long long>(g_tickCount),
                  (void*)g_levels[0],
                  entityCount,
                  mcle_metal_draw_count(),
-                 mcle_glbridge_list_count());
+                 mcle_glbridge_list_count(),
+                 chunksLen);
     }
 
     // G1B-probe runs once per second from the simulation tick (not the
