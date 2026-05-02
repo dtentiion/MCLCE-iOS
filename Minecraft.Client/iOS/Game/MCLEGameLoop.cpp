@@ -707,12 +707,9 @@ void initImpl() {
     // and don't deref this.
     try {
         g_minecraftShim->options = new Options();
-        // Match LevelRenderer::lastViewDistance ctor default (-1) so the
-        // render() else-if branch doesn't fire allChanged() before we
-        // have a level wired. allChanged crashes inside Tile::leaves
-        // setFancy + Minecraft::GetInstance()->gameRenderer-> chain
-        // until those are real upstream classes.
-        g_minecraftShim->options->viewDistance = -1;
+        // G5: viewDistance left at Options::init default (0). allChanged
+        // is now wired to fire properly via setLevel below.
+        g_minecraftShim->options->viewDistance = 0;
         MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
                  (void*)g_minecraftShim->options,
                  g_minecraftShim->options->viewDistance,
@@ -750,16 +747,28 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: LevelRenderer ctor threw unknown");
     }
 
-    // G3e: wire the live ServerLevel as both mc->level and LevelRenderer's
-    // level[0] so upstream renderSky/renderClouds can read getSkyColor,
-    // getTimeOfDay, dimension->id, etc. ServerLevel and MultiPlayerLevel
-    // are siblings under Level - the cast keeps virtual dispatch routed
-    // through the actual ServerLevel vtable for any methods called.
+    // G3e: wire the live ServerLevel as mc->level so upstream renderSky
+    // can read getSkyColor / dimension / time-of-day. ServerLevel and
+    // MultiPlayerLevel are siblings under Level - the cast keeps virtual
+    // dispatch routed through the actual ServerLevel vtable.
+    //
+    // G5: also call LevelRenderer::setLevel(0, lvl) which sets level[0]
+    // and calls allChanged(0) to allocate the chunk mesh array. Without
+    // this, chunks[0].length stays at 0 and renderChunks dispatches no
+    // geometry. Wrapped: SIGSEGV bypasses but a C++ throw is caught.
     if (g_levelRenderer && g_levels[0]) {
         MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(g_levels[0]);
-        g_minecraftShim->level     = lvl;
-        g_levelRenderer->level[0]  = lvl;
-        MCLE_LOG("mcle_game_init: wired mc->level + LR->level[0] = %p", (void*)lvl);
+        g_minecraftShim->level = lvl;
+        MCLE_LOG("mcle_game_init: G5 calling LR->setLevel(0, %p)", (void*)lvl);
+        try {
+            g_levelRenderer->setLevel(0, lvl);
+            MCLE_LOG("mcle_game_init: G5 setLevel returned, chunks[0].length=%u",
+                     (unsigned)g_levelRenderer->chunks[0].length);
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: G5 setLevel threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: G5 setLevel threw unknown");
+        }
     }
 
     // G3e-step2: Textures shim for LevelRenderer. Zero buffer, no
