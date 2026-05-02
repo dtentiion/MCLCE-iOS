@@ -881,6 +881,16 @@ extern "C" void mcle_world_drive_renderer(void) {
     } catch (...) {}
 }
 
+// G3d: expose player position so the Metal pipeline can place the
+// view matrix correctly. Returns 0 if the player is not yet constructed.
+extern "C" int mcle_world_get_player_pos(float *out_x, float *out_y, float *out_z) {
+    if (!g_player) return 0;
+    if (out_x) *out_x = (float)g_player->x;
+    if (out_y) *out_y = (float)g_player->y;
+    if (out_z) *out_z = (float)g_player->z;
+    return 1;
+}
+
 // Render-side bridge: lets the iOS frame driver know whether the world
 // simulation is alive so it can switch the clear color and stop drawing
 // the SWF menu over the world.
