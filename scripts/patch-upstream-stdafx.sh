@@ -1335,3 +1335,10 @@ LRSKY_PY="$REPO_ROOT/scripts/patch-rendersky-checkpoints.py"
 if [ -f "$LRSKY_PY" ]; then
     python3 "$LRSKY_PY"
 fi
+
+# G3e-step5: line-by-line checkpoints inside Level::getSkyColor body so
+# we can pin which deref crashes when called from renderSky context.
+GSC_PY="$REPO_ROOT/scripts/patch-getskycolor-checkpoints.py"
+if [ -f "$GSC_PY" ]; then
+    python3 "$GSC_PY"
+fi
