@@ -957,6 +957,14 @@ extern "C" void mcle_world_drive_renderer(void) {
                                 -(float)g_player->y,
                                 -(float)g_player->z);
 
+        // G5-step3: process the dirty-chunk rebuild queue. allChanged()
+        // marks every chunk dirty via nonStackDirtyChunksAdded; until
+        // updateDirtyChunks runs, each chunk's display list stays empty
+        // and renderChunks dispatches glCallList(emptyList). Upstream
+        // calls this from GameRenderer per frame; on iOS the render
+        // thread does it directly.
+        try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
+
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
