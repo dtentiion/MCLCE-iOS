@@ -54,6 +54,12 @@ __attribute__((weak)) extern "C" void mcle_glbridge_translate(float, float, floa
 __attribute__((weak)) extern "C" void mcle_glbridge_rotate(float, float, float, float)   {}
 __attribute__((weak)) extern "C" void mcle_glbridge_scale(float, float, float)           {}
 __attribute__((weak)) extern "C" void mcle_glbridge_metal_perspective(float, float, float, float) {}
+
+// G3f: weak fallbacks for the GL_CURRENT_COLOR bridge.
+__attribute__((weak)) extern "C" void mcle_glbridge_color4f(float, float, float, float)  {}
+__attribute__((weak)) extern "C" void mcle_glbridge_color3f(float, float, float)         {}
+__attribute__((weak)) extern "C" void mcle_glbridge_color4ub(unsigned char, unsigned char,
+                                                              unsigned char, unsigned char) {}
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 
@@ -125,7 +131,7 @@ void glMatrixMode(unsigned int mode)                       { mcle_glbridge_matri
 void glTranslatef(float x, float y, float z)               { mcle_glbridge_translate(x, y, z); }
 void glRotatef(float angle, float x, float y, float z)     { mcle_glbridge_rotate(angle, x, y, z); }
 void glScalef(float x, float y, float z)                   { mcle_glbridge_scale(x, y, z); }
-void glColor4f(float, float, float, float)                 {}
+void glColor4f(float r, float g, float b, float a)         { mcle_glbridge_color4f(r, g, b, a); }
 void glBegin(unsigned int)                                 {}
 void glEnd(void)                                           {}
 void glVertex3f(float, float, float)                       {}
@@ -175,10 +181,16 @@ void glTexCoordPointer(int, unsigned int, int, const void*) {}
 void glNormalPointer(unsigned int, int, const void*)       {}
 void glDrawArrays(unsigned int, int, int)                  {}
 void glDrawElements(unsigned int, int, unsigned int, const void*) {}
-void glColor3f(float, float, float)                        {}
-void glColor3ub(unsigned char, unsigned char, unsigned char) {}
-void glColor4ub(unsigned char, unsigned char, unsigned char, unsigned char) {}
-void glColor4ubv(const unsigned char*)                     {}
+void glColor3f(float r, float g, float b)                  { mcle_glbridge_color3f(r, g, b); }
+void glColor3ub(unsigned char r, unsigned char g, unsigned char b) {
+    mcle_glbridge_color4ub(r, g, b, 255);
+}
+void glColor4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+    mcle_glbridge_color4ub(r, g, b, a);
+}
+void glColor4ubv(const unsigned char* v) {
+    if (v) mcle_glbridge_color4ub(v[0], v[1], v[2], v[3]);
+}
 void glVertex2f(float, float)                              {}
 void glVertex2i(int, int)                                  {}
 void glNormal3f(float, float, float)                       {}
