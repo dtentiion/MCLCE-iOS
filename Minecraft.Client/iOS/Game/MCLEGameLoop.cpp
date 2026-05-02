@@ -911,17 +911,12 @@ extern "C" void mcle_world_drive_renderer(void) {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
-        // G3e: drive upstream renderSky / renderClouds. They issue the
-        // proper sequence of glColor3f, glPushMatrix, glRotatef,
-        // glCallList(skyList/starList/darkList) so the recorded lists
-        // replay at the correct camera-relative position with the
-        // right state.
-        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
-        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
-
-        // G3b SAFETY: keep blanket replay until renderSky/renderClouds
-        // are confirmed crash-free. Once the parity path is solid this
-        // call goes away.
+        // G3e (deferred): direct renderSky/renderClouds calls needed
+        // mc->textures + a few other Minecraft fields beyond what the
+        // shim has. SIGSEGV at addr 0x140 in the upstream-renderer null
+        // chain. Re-enable in a later push that adds checkpoints inside
+        // renderSky to pin the offending field, plus a Textures shim.
+        // For now stay on the blanket replay - that path is crash-free.
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
