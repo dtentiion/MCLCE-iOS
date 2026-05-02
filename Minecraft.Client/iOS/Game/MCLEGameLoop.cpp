@@ -948,11 +948,12 @@ extern "C" void mcle_world_drive_renderer(void) {
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
 
-        // G3e-step4 (deferred again): isolating whether the recent crash
-        // was renderSky/renderClouds re-enable vs the Vec3 TLS init. With
-        // these direct calls reverted, if the build still crashes early
-        // the Vec3 init is the trigger; if it boots cleanly, renderSky
-        // is. Blanket replay alone is the proven-stable path.
+        // G3e-step5: re-enable renderSky/renderClouds with line-by-line
+        // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
+        // line printed before crash pins the offending deref.
+        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
+        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
+
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
