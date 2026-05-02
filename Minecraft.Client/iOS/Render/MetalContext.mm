@@ -149,9 +149,35 @@ bool ensure_world_pipeline() {
     return true;
 }
 
+// G3d: player position bridge from MCLEGameLoop.
+} // namespace
+extern "C" int mcle_world_get_player_pos(float *out_x, float *out_y, float *out_z);
+namespace {
+
+// Compute a perspective MVP. View matrix is identity for G3d-step1 since
+// the recorded sky/dark/cloud lists are in model space centered at world
+// origin - upstream translates them to the player via glTranslatef
+// before glCallList. Until matrix-stack record + replay lands (G3d-step2),
+// looking from origin lets us see the lists at all.
+void compute_mvp(float* mvp16) {
+    // Perspective projection (column-major).
+    const float fov_rad = 70.0f * (float)M_PI / 180.0f;
+    const float aspect  = (g.height > 0) ? ((float)g.width / (float)g.height) : 1.0f;
+    const float n       = 0.05f;
+    const float f       = 1024.0f;
+    const float t       = tanf(fov_rad / 2.0f) * n;
+    const float r       = t * aspect;
+
+    // Direct perspective matrix (column-major); no view translation.
+    mvp16[0]  = n / r;  mvp16[1]  = 0;      mvp16[2]  = 0;                       mvp16[3]  = 0;
+    mvp16[4]  = 0;      mvp16[5]  = n / t;  mvp16[6]  = 0;                       mvp16[7]  = 0;
+    mvp16[8]  = 0;      mvp16[9]  = 0;      mvp16[10] = -(f + n) / (f - n);      mvp16[11] = -1;
+    mvp16[12] = 0;      mvp16[13] = 0;      mvp16[14] = -(2 * f * n) / (f - n);  mvp16[15] = 0;
+}
+
 // Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.
-// MVP matrix is a placeholder ortho until the real matrix stack lands in
-// G3d - so geometry shows up at world coords mapped into [-1, 1] NDC.
+// G3d builds an MVP from the player's live position so we look out into
+// the world from where the simulation thinks the player stands.
 inline void immediate_dispatch(int prim, int count, const void* data,
                                 int fmt, int /*shader*/) {
     g_draw_count.fetch_add(1, std::memory_order_relaxed);
@@ -169,16 +195,9 @@ inline void immediate_dispatch(int prim, int count, const void* data,
                                                options:MTLResourceStorageModeShared];
     if (!vbuf) return;
 
-    // Placeholder ortho projection: maps world coords roughly [-512, 512]
-    // into NDC. Sky list quads at y=+-16, x/z in +-256 land near the
-    // origin so they fall inside the visible frame. Real perspective +
-    // camera matrix lands in G3d.
-    static const float mvp[16] = {
-        1.0f / 512.0f,  0.0f,           0.0f,           0.0f,
-        0.0f,           1.0f / 512.0f,  0.0f,           0.0f,
-        0.0f,           0.0f,           1.0f / 512.0f,  0.0f,
-        0.0f,           0.0f,           0.0f,           1.0f,
-    };
+    // G3d: real perspective MVP centered on the live player position.
+    float mvp[16];
+    compute_mvp(mvp);
 
     [g.enc setRenderPipelineState:g_world_pso];
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
