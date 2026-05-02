@@ -69,12 +69,155 @@ inline int vertex_stride(int fmt) {
     }
 }
 
-// Immediate dispatch path. G3-step1 just bumps the counter so tick log
-// reflects per-frame replay volume; G3-step3 lands the real MTLBuffer
-// upload + drawPrimitives here.
-inline void immediate_dispatch(int /*prim*/, int /*count*/,
-                                const void* /*data*/, int /*fmt*/, int /*shader*/) {
+// G3c: Metal pipeline state for the upstream PF3_TF2_CB4_NB4_XW1 vertex
+// format (32 bytes/vertex: pos float3 @ 0, uv float2 @ 12, color uchar4
+// @ 20, normal uchar4 @ 24, extra word @ 28). Lazily built on first
+// replay so process startup doesn't pay shader compile cost.
+id<MTLRenderPipelineState> g_world_pso = nil;
+
+NSString* const kWorldShaderSrc = @R"(
+    #include <metal_stdlib>
+    using namespace metal;
+
+    struct V_in {
+        float3 pos    [[attribute(0)]];
+        float2 uv     [[attribute(1)]];
+        uchar4 color  [[attribute(2)]];
+        uchar4 normal [[attribute(3)]];
+    };
+    struct V_out {
+        float4 pos [[position]];
+        float4 color;
+    };
+    struct Uniforms {
+        float4x4 mvp;
+    };
+
+    vertex V_out world_vert(V_in v [[stage_in]],
+                             constant Uniforms& u [[buffer(1)]]) {
+        V_out o;
+        o.pos   = u.mvp * float4(v.pos, 1.0);
+        o.color = float4(v.color) / 255.0;
+        return o;
+    }
+    fragment float4 world_frag(V_out i [[stage_in]]) {
+        return i.color;
+    }
+)";
+
+bool ensure_world_pipeline() {
+    if (g_world_pso) return true;
+    if (!g.device)   return false;
+
+    NSError* err = nil;
+    id<MTLLibrary> lib = [g.device newLibraryWithSource:kWorldShaderSrc
+                                                options:nil
+                                                  error:&err];
+    if (!lib) {
+        NSLog(@"[mcle_metal G3c] shader compile failed: %@", err);
+        return false;
+    }
+
+    MTLVertexDescriptor* vd = [[MTLVertexDescriptor alloc] init];
+    vd.attributes[0].format      = MTLVertexFormatFloat3;
+    vd.attributes[0].offset      = 0;
+    vd.attributes[0].bufferIndex = 0;
+    vd.attributes[1].format      = MTLVertexFormatFloat2;
+    vd.attributes[1].offset      = 12;
+    vd.attributes[1].bufferIndex = 0;
+    vd.attributes[2].format      = MTLVertexFormatUChar4;
+    vd.attributes[2].offset      = 20;
+    vd.attributes[2].bufferIndex = 0;
+    vd.attributes[3].format      = MTLVertexFormatUChar4;
+    vd.attributes[3].offset      = 24;
+    vd.attributes[3].bufferIndex = 0;
+    vd.layouts[0].stride         = 32;
+    vd.layouts[0].stepFunction   = MTLVertexStepFunctionPerVertex;
+
+    MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc] init];
+    desc.vertexFunction                 = [lib newFunctionWithName:@"world_vert"];
+    desc.fragmentFunction               = [lib newFunctionWithName:@"world_frag"];
+    desc.vertexDescriptor               = vd;
+    desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+
+    g_world_pso = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso) {
+        NSLog(@"[mcle_metal G3c] pso build failed: %@", err);
+        return false;
+    }
+    NSLog(@"[mcle_metal G3c] world pipeline built");
+    return true;
+}
+
+// Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.
+// MVP matrix is a placeholder ortho until the real matrix stack lands in
+// G3d - so geometry shows up at world coords mapped into [-1, 1] NDC.
+inline void immediate_dispatch(int prim, int count, const void* data,
+                                int fmt, int /*shader*/) {
     g_draw_count.fetch_add(1, std::memory_order_relaxed);
+
+    if (!g.inFrame || !g.enc)        return;
+    if (count <= 0 || !data)         return;
+    if (fmt != 1 && fmt != 2)        return;  // only PF3_TF2_CB4_NB4_XW1 for now
+    if (!ensure_world_pipeline())    return;
+
+    const int stride = 32;
+    const NSUInteger byteLen = (NSUInteger)count * (NSUInteger)stride;
+
+    id<MTLBuffer> vbuf = [g.device newBufferWithBytes:data
+                                                length:byteLen
+                                               options:MTLResourceStorageModeShared];
+    if (!vbuf) return;
+
+    // Placeholder ortho projection: maps world coords roughly [-512, 512]
+    // into NDC. Sky list quads at y=+-16, x/z in +-256 land near the
+    // origin so they fall inside the visible frame. Real perspective +
+    // camera matrix lands in G3d.
+    static const float mvp[16] = {
+        1.0f / 512.0f,  0.0f,           0.0f,           0.0f,
+        0.0f,           1.0f / 512.0f,  0.0f,           0.0f,
+        0.0f,           0.0f,           1.0f / 512.0f,  0.0f,
+        0.0f,           0.0f,           0.0f,           1.0f,
+    };
+
+    [g.enc setRenderPipelineState:g_world_pso];
+    [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
+    [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
+
+    // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
+    // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
+    // GL_QUADS so most ctor draws come through this path.
+    if (prim == 7 /* GL_QUADS */) {
+        const int quadCount = count / 4;
+        if (quadCount <= 0) return;
+        const int idxCount  = quadCount * 6;
+        std::vector<uint16_t> idxs((size_t)idxCount);
+        for (int q = 0; q < quadCount; q++) {
+            const uint16_t base = (uint16_t)(q * 4);
+            idxs[q * 6 + 0] = base + 0;
+            idxs[q * 6 + 1] = base + 1;
+            idxs[q * 6 + 2] = base + 2;
+            idxs[q * 6 + 3] = base + 0;
+            idxs[q * 6 + 4] = base + 2;
+            idxs[q * 6 + 5] = base + 3;
+        }
+        id<MTLBuffer> ibuf =
+            [g.device newBufferWithBytes:idxs.data()
+                                  length:idxs.size() * sizeof(uint16_t)
+                                 options:MTLResourceStorageModeShared];
+        if (!ibuf) return;
+        [g.enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                          indexCount:(NSUInteger)idxCount
+                           indexType:MTLIndexTypeUInt16
+                         indexBuffer:ibuf
+                   indexBufferOffset:0];
+        return;
+    }
+
+    MTLPrimitiveType mtlPrim = MTLPrimitiveTypeTriangle;
+    if (prim == 5) mtlPrim = MTLPrimitiveTypeTriangleStrip;
+
+    [g.enc drawPrimitives:mtlPrim vertexStart:0 vertexCount:(NSUInteger)count];
 }
 
 } // namespace
