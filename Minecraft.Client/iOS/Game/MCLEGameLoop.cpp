@@ -595,9 +595,12 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // Narrow first: load only the spawn chunk to isolate the SIGSEGV.
-        // r=0 means just (cx,cz). If this single chunk loads we'll widen.
-        static constexpr int kPreloadRadiusChunks = 0;
+        // G5: bump radius to cover the chunk render area. xChunks=12 (Tiny
+        // preset) so a 7-chunk radius -> 15x15 = 225 chunks, comfortably
+        // covering the 12x12 render grid plus margin. updateDirtyChunks
+        // skips chunks where level->getChunkAt returns empty, so anything
+        // in the render area without backing data stays unrebuilt.
+        static constexpr int kPreloadRadiusChunks = 7;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
