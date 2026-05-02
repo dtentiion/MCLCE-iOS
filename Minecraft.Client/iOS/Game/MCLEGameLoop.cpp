@@ -595,12 +595,14 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // G5: bump radius to cover the chunk render area while staying
-        // within saveData.ms's loaded region range. r=5 -> 11x11 = 121
-        // chunks. r=7 hit a null deref at (13,23) - likely the edge of
-        // the save's r.0.0.mcr coverage. Per-chunk try/catch below
-        // already swallows individual fails.
-        static constexpr int kPreloadRadiusChunks = 5;
+        // G5: this save was a New World the player only walked around in
+        // briefly, so most chunks beyond ~3 from spawn were never visited
+        // and aren't actually present in r.0.0.mcr. r=3 (7x7 = 49) keeps
+        // the preload inside known-loaded chunks. Render grid wraps around
+        // the player anyway via resortChunks; the unloaded edges just
+        // stay as 'empty' chunks and don't get rebuilt - which is fine
+        // (the user wouldn't see beyond what was saved anyway).
+        static constexpr int kPreloadRadiusChunks = 3;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
