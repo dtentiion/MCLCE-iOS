@@ -112,6 +112,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/GameRenderer.h"
+#include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -740,6 +741,18 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: LevelRenderer ctor threw unknown");
     }
 
+    // G3e: wire the live ServerLevel as both mc->level and LevelRenderer's
+    // level[0] so upstream renderSky/renderClouds can read getSkyColor,
+    // getTimeOfDay, dimension->id, etc. ServerLevel and MultiPlayerLevel
+    // are siblings under Level - the cast keeps virtual dispatch routed
+    // through the actual ServerLevel vtable for any methods called.
+    if (g_levelRenderer && g_levels[0]) {
+        MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(g_levels[0]);
+        g_minecraftShim->level     = lvl;
+        g_levelRenderer->level[0]  = lvl;
+        MCLE_LOG("mcle_game_init: wired mc->level + LR->level[0] = %p", (void*)lvl);
+    }
+
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
@@ -897,10 +910,18 @@ extern "C" void mcle_world_drive_renderer(void) {
 
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
-        // G3b TEMP: replay every recorded list per frame so the immediate
-        // dispatch path is exercised. Remove once setLevel + dimension
-        // wiring lets upstream renderSky/renderClouds drive glCallList
-        // naturally (G3e).
+
+        // G3e: drive upstream renderSky / renderClouds. They issue the
+        // proper sequence of glColor3f, glPushMatrix, glRotatef,
+        // glCallList(skyList/starList/darkList) so the recorded lists
+        // replay at the correct camera-relative position with the
+        // right state.
+        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
+        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
+
+        // G3b SAFETY: keep blanket replay until renderSky/renderClouds
+        // are confirmed crash-free. Once the parity path is solid this
+        // call goes away.
         mcle_glbridge_replay_all_lists();
     } catch (...) {}
 }
