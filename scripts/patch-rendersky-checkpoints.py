@@ -64,6 +64,16 @@ edits = [
         "\tglCallList(skyList);\n"
         '\tapp.DebugPrintf("LR_SKY_CKPT after glCallList(skyList)");',
     ),
+    # mc->player is null in our shim (only mc->cameraTargetPlayer is set).
+    # Use cameraTargetPlayer's pos as a stand-in. ServerPlayer extends
+    # Entity so getPos works through the Entity base.
+    (
+        "\tdouble yy = mc->player->getPos(alpha)->y - level[playerIndex]->getHorizonHeight();",
+        '\tapp.DebugPrintf("LR_SKY_CKPT before getPos chain mc->player=%p", (void*)mc->player.get());\n'
+        "\tshared_ptr<LivingEntity> _camPlayer = mc->cameraTargetPlayer;\n"
+        "\tif (!_camPlayer) { app.DebugPrintf(\"LR_SKY_CKPT bail: cameraTargetPlayer null\"); return; }\n"
+        "\tdouble yy = _camPlayer->getPos(alpha)->y - level[playerIndex]->getHorizonHeight();",
+    ),
     # renderClouds entry. fancyGraphics=true in our shim so this calls
     # renderAdvancedClouds which derefs textures-> bindTexture etc.
     (
