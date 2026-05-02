@@ -595,12 +595,12 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // G5: bump radius to cover the chunk render area. xChunks=12 (Tiny
-        // preset) so a 7-chunk radius -> 15x15 = 225 chunks, comfortably
-        // covering the 12x12 render grid plus margin. updateDirtyChunks
-        // skips chunks where level->getChunkAt returns empty, so anything
-        // in the render area without backing data stays unrebuilt.
-        static constexpr int kPreloadRadiusChunks = 7;
+        // G5: bump radius to cover the chunk render area while staying
+        // within saveData.ms's loaded region range. r=5 -> 11x11 = 121
+        // chunks. r=7 hit a null deref at (13,23) - likely the edge of
+        // the save's r.0.0.mcr coverage. Per-chunk try/catch below
+        // already swallows individual fails.
+        static constexpr int kPreloadRadiusChunks = 5;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
