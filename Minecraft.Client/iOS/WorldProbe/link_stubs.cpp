@@ -423,8 +423,15 @@ void Textures::bindTexture(ResourceLocation *resource) {
     const char *root = StorageManager.GetSaveRootPath();
     if (!root || !*root) return;
 
-    std::string full = std::string(root) + "/Common/res/TitleUpdate/res/" + rel;
-    unsigned int id = mcle_glbridge_load_or_get_png_path(full.c_str());
+    // Upstream Win64 / Xbox 360 search order: TitleUpdate (post-patch
+    // overrides) first, then base game. Match that here so however the
+    // user lays out their Documents tree they get found.
+    const std::string base = std::string(root) + "/Common/res/";
+    unsigned int id = mcle_glbridge_load_or_get_png_path(
+        (base + "TitleUpdate/res/" + rel).c_str());
+    if (id == 0) {
+        id = mcle_glbridge_load_or_get_png_path((base + rel).c_str());
+    }
     if (id != 0) mcle_glbridge_bind_texture(id);
 }
 
