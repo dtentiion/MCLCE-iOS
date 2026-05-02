@@ -1009,13 +1009,22 @@ extern "C" void mcle_world_g1b_probe_tick(void) {
         if (!biome) return;
         float temp = biome->getTemperature();
         MCLE_LOG("G1B-probe: biome->getTemperature=%f", (double)temp);
-        // biome->getSkyColor(temp) chains into Minecraft::GetInstance()->
-        // getColourTable()->getColor(m_skyColor). Minecraft::m_instance is
-        // null in our setup (we bypass Minecraft::init()), so getColourTable
-        // reads `this->skins` at offset 0x140 of a null Minecraft -> SIGSEGV
-        // at 0x140 (confirmed: probe crashed there). Skip until we have a
-        // real Minecraft instance or patch Biome::getSkyColor for iOS.
+        // G3e-step3: now that the Minecraft singleton + ColourTable shim
+        // are wired, retry the path that crashed renderSky. If
+        // biome->getSkyColor logs cleanly, the bad pointer is downstream
+        // (Vec3::newTemp / shared_ptr dtor / virtual on level). If this
+        // SIGSEGVs, the ColourTable shim isn't enough.
+        int sc = biome->getSkyColor(temp);
+        MCLE_LOG("G1B-probe: biome->getSkyColor=0x%08x", (unsigned)sc);
     } catch (...) { MCLE_LOG("G1B-probe: biome chain threw"); return; }
+    try {
+        Vec3 *sky = g_levels[0]->getSkyColor(g_player, 1.0f);
+        MCLE_LOG("G1B-probe: level->getSkyColor=%p", (void*)sky);
+        if (sky) {
+            MCLE_LOG("G1B-probe: skyColor RGB=(%f, %f, %f)",
+                     (double)sky->x, (double)sky->y, (double)sky->z);
+        }
+    } catch (...) { MCLE_LOG("G1B-probe: level->getSkyColor threw"); return; }
 }
 
 extern "C" void mcle_game_shutdown(void) {
