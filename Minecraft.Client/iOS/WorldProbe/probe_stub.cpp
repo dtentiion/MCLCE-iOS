@@ -25,14 +25,23 @@ C4JStorage  StorageManager;
 C4JRender   RenderManager;
 C_4JInput   InputManager;
 
-// G2a: probe-lib stub for the Metal hook. The real Metal-backed impl
-// lives in Render/MetalContext.mm and is linked into the iOS app, but
-// the probe library doesn't link Render so it needs a no-op definition
-// here for the inline C4JRenderStub::DrawVertices forward to resolve.
-extern "C" void mcle_metal_draw_vertices(int /*prim*/, int /*count*/,
-                                          const void* /*data*/,
-                                          int /*fmt*/, int /*shader*/) {}
-extern "C" unsigned long long mcle_metal_draw_count(void) { return 0; }
+// G2a/G3a: probe-lib weak fallbacks. The real Metal-backed impls live
+// in Render/MetalContext.mm and override these in the iOS app link.
+// Marked weak so the probe link-test (which doesn't link Render) still
+// resolves while the iOS-app build picks up the strong definitions.
+__attribute__((weak)) extern "C" void mcle_metal_draw_vertices(int /*prim*/, int /*count*/,
+                                                                const void* /*data*/,
+                                                                int /*fmt*/, int /*shader*/) {}
+__attribute__((weak)) extern "C" unsigned long long mcle_metal_draw_count(void) { return 0; }
+
+// G3a: weak fallbacks for the display-list bridge so the probe link
+// resolves without depending on mcle_ios_render. Real impls in
+// Render/MetalContext.mm record + replay DrawVertices payloads.
+__attribute__((weak)) extern "C" int  mcle_glbridge_gen_lists(int /*range*/)            { return 1; }
+__attribute__((weak)) extern "C" void mcle_glbridge_begin_list(int /*id*/, int /*mode*/) {}
+__attribute__((weak)) extern "C" void mcle_glbridge_end_list(void)                       {}
+__attribute__((weak)) extern "C" void mcle_glbridge_call_list(int /*id*/)                {}
+__attribute__((weak)) extern "C" void mcle_glbridge_release_lists(int /*id*/, int /*range*/) {}
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 
@@ -109,11 +118,11 @@ void glBegin(unsigned int)                                 {}
 void glEnd(void)                                           {}
 void glVertex3f(float, float, float)                       {}
 void glTexCoord2f(float, float)                            {}
-void glNewList(int, int)                                   {}
-void glEndList(void)                                       {}
-void glCallList(int)                                       {}
-void glDeleteLists(int, int)                               {}
-int  glGenLists(int)                                       { return 0; }
+void glNewList(int id, int mode)                           { mcle_glbridge_begin_list(id, mode); }
+void glEndList(void)                                       { mcle_glbridge_end_list(); }
+void glCallList(int id)                                    { mcle_glbridge_call_list(id); }
+void glDeleteLists(int id, int range)                      { mcle_glbridge_release_lists(id, range); }
+int  glGenLists(int range)                                 { return mcle_glbridge_gen_lists(range); }
 void glBindTexture(unsigned int, unsigned int)             {}
 void glTexParameteri(unsigned int, unsigned int, int)      {}
 void glDepthFunc(unsigned int)                             {}

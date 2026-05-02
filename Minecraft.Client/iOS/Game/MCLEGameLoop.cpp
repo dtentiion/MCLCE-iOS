@@ -41,6 +41,13 @@
 // the tick log can read the cumulative DrawVertices count.
 extern "C" unsigned long long mcle_metal_draw_count(void);
 
+// G3a: number of recorded display lists. Bumps once per glNewList during
+// LevelRenderer ctor (skyList, starList, darkList, cloudList, chunkLists)
+// and stays flat after init - so this is a static signal that recording
+// is wired correctly. Counter version of draws climbs per frame once
+// glCallList replays start firing.
+extern "C" unsigned long long mcle_glbridge_list_count(void);
+
 // G1B-probe: defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
 extern "C" void mcle_world_g1b_probe_tick(void);
@@ -838,11 +845,12 @@ extern "C" void mcle_game_tick(void) {
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
         // G2a: include cumulative DrawVertices count so we can see the
         // moment upstream renderer code starts driving the Metal hook.
-        MCLE_LOG("tick %llu - overworld=%p entities=%zu draws=%llu",
+        MCLE_LOG("tick %llu - overworld=%p entities=%zu draws=%llu lists=%llu",
                  static_cast<unsigned long long>(g_tickCount),
                  (void*)g_levels[0],
                  entityCount,
-                 mcle_metal_draw_count());
+                 mcle_metal_draw_count(),
+                 mcle_glbridge_list_count());
     }
 
     // G1B-probe runs once per second from the simulation tick (not the
