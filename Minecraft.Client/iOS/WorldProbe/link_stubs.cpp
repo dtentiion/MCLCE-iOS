@@ -345,10 +345,89 @@ void GameRenderer::FinishedReassigning() {}
 // glLight(int,int,FloatBuffer*) variant added in iOS_WinCompat.h.
 
 #include "Textures.h"
-class ResourceLocation;
+#include "ResourceLocation.h"
 class MemTextureProcessor;
 class MemTexture;
-void Textures::bindTexture(ResourceLocation * /*resource*/) {}
+
+// G4-step3: PNG decoder + Metal texture upload bridge.
+extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path);
+extern "C" void         mcle_glbridge_bind_texture(unsigned int id);
+
+namespace {
+
+// Mirrors upstream's Textures::preLoaded[] for the texture-name enum
+// values our shipped renderer actually requests. Each entry is the
+// relative path under Common/res/TitleUpdate/res (no leading slash, no
+// .png extension - matches upstream exactly).
+const char *texture_name_relpath(_TEXTURE_NAME tn) {
+    switch (tn) {
+        case TN_TERRAIN_SUN:         return "terrain/sun";
+        case TN_TERRAIN_MOON_PHASES: return "terrain/moon_phases";
+        case TN_TERRAIN_MOON:        return "terrain/moon";
+        case TN_ENVIRONMENT_CLOUDS:  return "environment/clouds";
+        case TN_ENVIRONMENT_RAIN:    return "environment/rain";
+        case TN_ENVIRONMENT_SNOW:    return "environment/snow";
+        case TN_MISC_TUNNEL:         return "misc/tunnel";
+        case TN_MISC_WATER:          return "misc/water";
+        case TN_PARTICLES:           return "particles";
+        case TN_GUI_GUI:             return "gui/gui";
+        case TN_GUI_ICONS:           return "gui/icons";
+        default:                      return nullptr;
+    }
+}
+
+std::string wstr_to_utf8(const std::wstring &w) {
+    std::string out;
+    out.reserve(w.size());
+    for (wchar_t wc : w) {
+        unsigned int c = (unsigned int)wc;
+        if (c < 0x80) {
+            out.push_back((char)c);
+        } else if (c < 0x800) {
+            out.push_back((char)(0xC0 | (c >> 6)));
+            out.push_back((char)(0x80 | (c & 0x3F)));
+        } else if (c < 0x10000) {
+            out.push_back((char)(0xE0 | (c >> 12)));
+            out.push_back((char)(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (c & 0x3F)));
+        } else {
+            out.push_back((char)(0xF0 | (c >> 18)));
+            out.push_back((char)(0x80 | ((c >> 12) & 0x3F)));
+            out.push_back((char)(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (c & 0x3F)));
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+// G4-step3: bindTexture resolves the ResourceLocation to a Common/res/
+// TitleUpdate/res/<name>.png path under the iOS Documents sandbox,
+// loads via CGImageSource (PNG decoder per upstream's per-platform
+// pattern), and binds the resulting MTLTexture. Cached by full path.
+void Textures::bindTexture(ResourceLocation *resource) {
+    if (!resource) return;
+
+    std::string rel;
+    if (resource->isPreloaded()) {
+        const char *p = texture_name_relpath(resource->getTexture());
+        if (!p) return;  // unhandled enum - leave default texture bound
+        rel = std::string(p) + ".png";
+    } else {
+        std::wstring path = resource->getPath();
+        if (path.empty()) return;
+        rel = wstr_to_utf8(path);
+    }
+
+    const char *root = StorageManager.GetSaveRootPath();
+    if (!root || !*root) return;
+
+    std::string full = std::string(root) + "/Common/res/TitleUpdate/res/" + rel;
+    unsigned int id = mcle_glbridge_load_or_get_png_path(full.c_str());
+    if (id != 0) mcle_glbridge_bind_texture(id);
+}
+
 MemTexture *Textures::addMemTexture(const std::wstring & /*url*/,
                                      MemTextureProcessor * /*p*/) { return nullptr; }
 void Textures::removeMemTexture(const std::wstring & /*url*/) {}

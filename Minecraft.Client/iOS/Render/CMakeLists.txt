@@ -5,6 +5,7 @@
 add_library(mcle_ios_render STATIC
   MetalContext.mm
   RND_iOS_Metal.mm
+  png_decode.mm
 )
 
 target_include_directories(mcle_ios_render PUBLIC
@@ -17,6 +18,8 @@ target_link_libraries(mcle_ios_render PUBLIC
   "-framework Metal"
   "-framework MetalKit"
   "-framework QuartzCore"
+  "-framework CoreGraphics"
+  "-framework ImageIO"
 )
 
 set_target_properties(mcle_ios_render PROPERTIES
