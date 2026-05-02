@@ -60,6 +60,15 @@ __attribute__((weak)) extern "C" void mcle_glbridge_color4f(float, float, float,
 __attribute__((weak)) extern "C" void mcle_glbridge_color3f(float, float, float)         {}
 __attribute__((weak)) extern "C" void mcle_glbridge_color4ub(unsigned char, unsigned char,
                                                               unsigned char, unsigned char) {}
+
+// G4-step2: weak fallbacks for the texture bridge.
+__attribute__((weak)) extern "C" unsigned int mcle_glbridge_gen_texture(void) { return 1; }
+__attribute__((weak)) extern "C" void mcle_glbridge_gen_textures_n(int, unsigned int*)   {}
+__attribute__((weak)) extern "C" void mcle_glbridge_delete_texture(unsigned int)         {}
+__attribute__((weak)) extern "C" void mcle_glbridge_bind_texture(unsigned int)           {}
+__attribute__((weak)) extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int, int, int,
+                                                                        const void*)    {}
+__attribute__((weak)) extern "C" unsigned int mcle_glbridge_get_bound_texture(void)      { return 0; }
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 
@@ -141,7 +150,7 @@ void glEndList(void)                                       { mcle_glbridge_end_l
 void glCallList(int id)                                    { mcle_glbridge_call_list(id); }
 void glDeleteLists(int id, int range)                      { mcle_glbridge_release_lists(id, range); }
 int  glGenLists(int range)                                 { return mcle_glbridge_gen_lists(range); }
-void glBindTexture(unsigned int, unsigned int)             {}
+void glBindTexture(unsigned int /*target*/, unsigned int id)  { mcle_glbridge_bind_texture(id); }
 void glTexParameteri(unsigned int, unsigned int, int)      {}
 void glDepthFunc(unsigned int)                             {}
 void glAlphaFunc(unsigned int, float)                      {}
@@ -164,12 +173,26 @@ void glStencilMask(unsigned int)                           {}
 void glClearStencil(int)                                   {}
 void glClearDepth(double)                                  {}
 unsigned int glGetError(void)                              { return 0; }
-void glGenTextures(int, unsigned int*)                     {}
-void glDeleteTextures(int, const unsigned int*)            {}
+void glGenTextures(int n, unsigned int* out)               { mcle_glbridge_gen_textures_n(n, out); }
+void glDeleteTextures(int n, const unsigned int* ids) {
+    if (!ids) return;
+    for (int i = 0; i < n; i++) mcle_glbridge_delete_texture(ids[i]);
+}
 // Upstream-wrapper variants used by MemoryTracker.cpp.
-unsigned int glGenTextures(void)                           { return 0; }
-void         glDeleteTextures(unsigned int)                {}
-void glTexImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*) {}
+unsigned int glGenTextures(void)                           { return mcle_glbridge_gen_texture(); }
+void         glDeleteTextures(unsigned int id)             { mcle_glbridge_delete_texture(id); }
+// glTexImage2D(target, level, internalFormat, width, height, border, format, type, pixels)
+// Uploads to the currently bound texture. Only level 0 + RGBA 8-bit is
+// supported for now; mipmap levels and other formats are no-op.
+void glTexImage2D(unsigned int /*target*/, int level, int /*internalFormat*/,
+                  int width, int height, int /*border*/,
+                  unsigned int /*format*/, unsigned int /*type*/,
+                  const void* pixels) {
+    if (level != 0) return;
+    unsigned int id = mcle_glbridge_get_bound_texture();
+    if (id == 0) return;
+    mcle_glbridge_tex_image_2d_rgba(id, width, height, pixels);
+}
 void glTexSubImage2D(unsigned int, int, int, int, int, int, unsigned int, unsigned int, const void*) {}
 void glPixelStorei(unsigned int, int)                      {}
 void glReadPixels(int, int, int, int, unsigned int, unsigned int, void*) {}
