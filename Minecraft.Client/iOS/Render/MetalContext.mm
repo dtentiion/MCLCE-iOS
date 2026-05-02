@@ -79,7 +79,15 @@ inline int vertex_stride(int fmt) {
 // format (32 bytes/vertex: pos float3 @ 0, uv float2 @ 12, color uchar4
 // @ 20, normal uchar4 @ 24, extra word @ 28). Lazily built on first
 // replay so process startup doesn't pay shader compile cost.
-id<MTLRenderPipelineState> g_world_pso = nil;
+id<MTLRenderPipelineState> g_world_pso        = nil;
+
+// G4: 1x1 white default texture + linear sampler. Bound on every world
+// draw so the fragment shader's texture sample stays well-defined even
+// for currently-untextured paths (sky / dark / star / sunset gradient).
+// Real textures from glBindTexture override this in G4-step2.
+id<MTLTexture>      g_default_texture = nil;
+id<MTLSamplerState> g_default_sampler = nil;
+id<MTLTexture>      g_current_texture = nil;
 
 NSString* const kWorldShaderSrc = @R"(
     #include <metal_stdlib>
@@ -94,6 +102,7 @@ NSString* const kWorldShaderSrc = @R"(
     struct V_out {
         float4 pos [[position]];
         float4 color;
+        float2 uv;
     };
     struct MVPUniforms {
         float4x4 mvp;
@@ -106,6 +115,7 @@ NSString* const kWorldShaderSrc = @R"(
     // (set via glColor3f / glColor4f). Matches D3D9 fixed-function
     // modulate so glCallList replays pick up the live sky/sunset/sun
     // tint that renderSky sets before the dispatch.
+    // G4: UV passed through to fragment shader for texture sampling.
     vertex V_out world_vert(V_in v [[stage_in]],
                              constant MVPUniforms&   m [[buffer(1)]],
                              constant ColorUniforms& c [[buffer(2)]]) {
@@ -113,10 +123,19 @@ NSString* const kWorldShaderSrc = @R"(
         o.pos   = m.mvp * float4(v.pos, 1.0);
         float4 vc = float4(v.color) / 255.0;
         o.color = vc * c.currentColor;
+        o.uv    = v.uv;
         return o;
     }
-    fragment float4 world_frag(V_out i [[stage_in]]) {
-        return i.color;
+
+    // G4: sample current bound texture and modulate with the per-vertex
+    // colour (which is already vertex_color * currentColor from above).
+    // Untextured paths bind a 1x1 white texture so sample returns 1.0
+    // and the output reduces to just the colour.
+    fragment float4 world_frag(V_out i           [[stage_in]],
+                                texture2d<float> tex     [[texture(0)]],
+                                sampler          texSamp [[sampler(0)]]) {
+        float4 t = tex.sample(texSamp, i.uv);
+        return i.color * t;
     }
 )";
 
@@ -161,7 +180,32 @@ bool ensure_world_pipeline() {
         NSLog(@"[mcle_metal G3c] pso build failed: %@", err);
         return false;
     }
-    NSLog(@"[mcle_metal G3c] world pipeline built");
+
+    // G4: build the 1x1 white default texture + linear sampler.
+    if (!g_default_texture) {
+        MTLTextureDescriptor* td =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                width:1
+                                                               height:1
+                                                            mipmapped:NO];
+        td.usage       = MTLTextureUsageShaderRead;
+        td.storageMode = MTLStorageModeShared;
+        g_default_texture = [g.device newTextureWithDescriptor:td];
+        const uint8_t white[4] = { 255, 255, 255, 255 };
+        [g_default_texture replaceRegion:MTLRegionMake2D(0, 0, 1, 1)
+                              mipmapLevel:0
+                                withBytes:white
+                              bytesPerRow:4];
+    }
+    if (!g_default_sampler) {
+        MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
+        sd.minFilter    = MTLSamplerMinMagFilterLinear;
+        sd.magFilter    = MTLSamplerMinMagFilterLinear;
+        sd.sAddressMode = MTLSamplerAddressModeRepeat;
+        sd.tAddressMode = MTLSamplerAddressModeRepeat;
+        g_default_sampler = [g.device newSamplerStateWithDescriptor:sd];
+    }
+    NSLog(@"[mcle_metal G3c/G4] world pipeline + default texture built");
     return true;
 }
 
@@ -358,6 +402,11 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
     [g.enc setVertexBytes:g_current_color length:sizeof(g_current_color) atIndex:2];
+
+    // G4: bind whatever's current (defaults to 1x1 white) + sampler.
+    id<MTLTexture> tex = g_current_texture ? g_current_texture : g_default_texture;
+    if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
+    if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
 
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
     // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
