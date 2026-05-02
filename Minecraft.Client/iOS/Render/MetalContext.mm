@@ -156,31 +156,139 @@ bool ensure_world_pipeline() {
     return true;
 }
 
-// G3d: player position bridge from MCLEGameLoop.
+// G3d-step3: legacy GL matrix stack. Two stacks (modelview + projection),
+// glMatrixMode picks active one. immediate_dispatch sends projection *
+// modelview as the MVP uniform.
+
+struct Mat4 { float m[16]; };
+
+inline Mat4 mat_identity() {
+    return Mat4{{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}};
+}
+
+inline void mat_mul(float* out, const float* a, const float* b) {
+    for (int j = 0; j < 4; j++) {
+        for (int i = 0; i < 4; i++) {
+            float s = 0;
+            for (int k = 0; k < 4; k++) {
+                s += a[i + k * 4] * b[k + j * 4];
+            }
+            out[i + j * 4] = s;
+        }
+    }
+}
+
+inline void mat_translate(float* m, float x, float y, float z) {
+    const float t[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1};
+    float r[16];
+    mat_mul(r, m, t);
+    memcpy(m, r, sizeof(r));
+}
+
+inline void mat_rotate(float* m, float angle_deg, float ax, float ay, float az) {
+    const float a   = angle_deg * (float)M_PI / 180.0f;
+    const float c   = cosf(a);
+    const float s   = sinf(a);
+    const float n   = sqrtf(ax * ax + ay * ay + az * az);
+    if (n > 0.0f) { ax /= n; ay /= n; az /= n; }
+    const float omc = 1.0f - c;
+    const float r[16] = {
+        ax*ax*omc +    c,  ay*ax*omc + az*s,  az*ax*omc - ay*s,  0,
+        ax*ay*omc - az*s,  ay*ay*omc +    c,  az*ay*omc + ax*s,  0,
+        ax*az*omc + ay*s,  ay*az*omc - ax*s,  az*az*omc +    c,  0,
+        0,                 0,                 0,                 1,
+    };
+    float result[16];
+    mat_mul(result, m, r);
+    memcpy(m, result, sizeof(result));
+}
+
+inline void mat_scale(float* m, float sx, float sy, float sz) {
+    for (int i = 0; i < 4; i++) {
+        m[i + 0]  *= sx;
+        m[i + 4]  *= sy;
+        m[i + 8]  *= sz;
+    }
+}
+
+constexpr int kMatrixModeModelview  = 0;
+constexpr int kMatrixModeProjection = 1;
+constexpr int kGL_MODELVIEW         = 0x1700;
+constexpr int kGL_PROJECTION        = 0x1701;
+
+int                g_matrix_mode = kMatrixModeModelview;
+std::vector<Mat4>  g_modelview_stack { mat_identity() };
+std::vector<Mat4>  g_projection_stack{ mat_identity() };
+
+inline std::vector<Mat4>& current_stack() {
+    return (g_matrix_mode == kMatrixModeProjection)
+               ? g_projection_stack
+               : g_modelview_stack;
+}
+inline float* current_matrix_data() { return current_stack().back().m; }
+
 } // namespace
-extern "C" int mcle_world_get_player_pos(float *out_x, float *out_y, float *out_z);
+
+// Public matrix bridge - probe_stub.cpp's gl* matrix stubs forward here.
+extern "C" void mcle_glbridge_matrix_mode(int mode) {
+    g_matrix_mode = (mode == kGL_PROJECTION) ? kMatrixModeProjection
+                                              : kMatrixModeModelview;
+}
+extern "C" void mcle_glbridge_load_identity(void) {
+    current_stack().back() = mat_identity();
+}
+extern "C" void mcle_glbridge_load_matrix(const float* m16) {
+    if (!m16) return;
+    memcpy(current_matrix_data(), m16, 16 * sizeof(float));
+}
+extern "C" void mcle_glbridge_mult_matrix(const float* m16) {
+    if (!m16) return;
+    float r[16];
+    mat_mul(r, current_matrix_data(), m16);
+    memcpy(current_matrix_data(), r, sizeof(r));
+}
+extern "C" void mcle_glbridge_push_matrix(void) {
+    current_stack().push_back(current_stack().back());
+}
+extern "C" void mcle_glbridge_pop_matrix(void) {
+    if (current_stack().size() > 1) current_stack().pop_back();
+}
+extern "C" void mcle_glbridge_translate(float x, float y, float z) {
+    mat_translate(current_matrix_data(), x, y, z);
+}
+extern "C" void mcle_glbridge_rotate(float angle, float x, float y, float z) {
+    mat_rotate(current_matrix_data(), angle, x, y, z);
+}
+extern "C" void mcle_glbridge_scale(float x, float y, float z) {
+    mat_scale(current_matrix_data(), x, y, z);
+}
+
+// Replaces the active matrix with a Metal-style perspective projection
+// (depth maps to [0..1], not OpenGL's [-1..1]). Convenience wrapper so
+// MCLEGameLoop doesn't have to build the matrix by hand.
+extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg,
+                                                 float aspect,
+                                                 float near_z,
+                                                 float far_z) {
+    const float fov_rad = fov_y_deg * (float)M_PI / 180.0f;
+    const float t       = tanf(fov_rad / 2.0f) * near_z;
+    const float r       = t * aspect;
+    Mat4 P;
+    P.m[0]  = near_z / r;  P.m[1]  = 0;            P.m[2]  = 0;                              P.m[3]  = 0;
+    P.m[4]  = 0;           P.m[5]  = near_z / t;   P.m[6]  = 0;                              P.m[7]  = 0;
+    P.m[8]  = 0;           P.m[9]  = 0;            P.m[10] = -far_z / (far_z - near_z);      P.m[11] = -1;
+    P.m[12] = 0;           P.m[13] = 0;            P.m[14] = -(near_z * far_z) / (far_z - near_z); P.m[15] = 0;
+    current_stack().back() = P;
+}
+
+
 namespace {
 
-// Compute a perspective MVP. View matrix is identity for G3d-step1 since
-// the recorded sky/dark/cloud lists are in model space centered at world
-// origin - upstream translates them to the player via glTranslatef
-// before glCallList. Until matrix-stack record + replay lands (G3d-step2),
-// looking from origin lets us see the lists at all.
+// Compute MVP = projection * modelview using the current matrix stacks.
 void compute_mvp(float* mvp16) {
-    // Perspective projection (column-major).
-    const float fov_rad = 70.0f * (float)M_PI / 180.0f;
-    const float aspect  = (g.height > 0) ? ((float)g.width / (float)g.height) : 1.0f;
-    const float n       = 0.05f;
-    const float f       = 1024.0f;
-    const float t       = tanf(fov_rad / 2.0f) * n;
-    const float r       = t * aspect;
-
-    // Metal-style perspective: depth maps to [0..1] (vs OpenGL's [-1..1]).
-    // Camera looks down -Z. Column-major.
-    mvp16[0]  = n / r;  mvp16[1]  = 0;      mvp16[2]  = 0;                   mvp16[3]  = 0;
-    mvp16[4]  = 0;      mvp16[5]  = n / t;  mvp16[6]  = 0;                   mvp16[7]  = 0;
-    mvp16[8]  = 0;      mvp16[9]  = 0;      mvp16[10] = -f / (f - n);        mvp16[11] = -1;
-    mvp16[12] = 0;      mvp16[13] = 0;      mvp16[14] = -(n * f) / (f - n);  mvp16[15] = 0;
+    mat_mul(mvp16,
+            g_projection_stack.back().m,
+            g_modelview_stack.back().m);
 }
 
 // Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.

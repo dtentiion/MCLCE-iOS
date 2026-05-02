@@ -867,10 +867,34 @@ extern "C" void mcle_game_tick(void) {
 // m_instance null chain (Biome::getSkyColor etc) may bite here. If so
 // the signal handler logs the address, we patch the next null deref.
 extern "C" void mcle_glbridge_replay_all_lists(void);
+extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg, float aspect,
+                                                 float near_z, float far_z);
+extern "C" void mcle_glbridge_matrix_mode(int mode);
+extern "C" void mcle_glbridge_load_identity(void);
+extern "C" void mcle_glbridge_translate(float, float, float);
+extern "C" void mcle_metal_current_size(int*, int*);
 
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
     try {
+        // G3d-step3: set up projection + view via the GL matrix stack
+        // each frame. Once upstream renderSky/renderClouds drive replays
+        // naturally (G3e), they'll layer their per-pass glPush/Translate
+        // /Rotate calls on top of this base camera.
+        int vw = 0, vh = 0;
+        mcle_metal_current_size(&vw, &vh);
+        const float aspect = (vh > 0) ? ((float)vw / (float)vh) : 1.0f;
+
+        mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
+        mcle_glbridge_load_identity();
+        mcle_glbridge_metal_perspective(70.0f, aspect, 0.05f, 1024.0f);
+
+        mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
+        mcle_glbridge_load_identity();
+        mcle_glbridge_translate(-(float)g_player->x,
+                                -(float)g_player->y,
+                                -(float)g_player->z);
+
         g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
                                 /*updateChunks*/false);
         // G3b TEMP: replay every recorded list per frame so the immediate

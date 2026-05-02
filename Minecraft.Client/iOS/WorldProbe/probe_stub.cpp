@@ -42,6 +42,18 @@ __attribute__((weak)) extern "C" void mcle_glbridge_begin_list(int /*id*/, int /
 __attribute__((weak)) extern "C" void mcle_glbridge_end_list(void)                       {}
 __attribute__((weak)) extern "C" void mcle_glbridge_call_list(int /*id*/)                {}
 __attribute__((weak)) extern "C" void mcle_glbridge_release_lists(int /*id*/, int /*range*/) {}
+
+// G3d-step3: weak fallbacks for the matrix bridge.
+__attribute__((weak)) extern "C" void mcle_glbridge_matrix_mode(int /*mode*/)            {}
+__attribute__((weak)) extern "C" void mcle_glbridge_load_identity(void)                  {}
+__attribute__((weak)) extern "C" void mcle_glbridge_load_matrix(const float* /*m*/)      {}
+__attribute__((weak)) extern "C" void mcle_glbridge_mult_matrix(const float* /*m*/)      {}
+__attribute__((weak)) extern "C" void mcle_glbridge_push_matrix(void)                    {}
+__attribute__((weak)) extern "C" void mcle_glbridge_pop_matrix(void)                     {}
+__attribute__((weak)) extern "C" void mcle_glbridge_translate(float, float, float)       {}
+__attribute__((weak)) extern "C" void mcle_glbridge_rotate(float, float, float, float)   {}
+__attribute__((weak)) extern "C" void mcle_glbridge_scale(float, float, float)           {}
+__attribute__((weak)) extern "C" void mcle_glbridge_metal_perspective(float, float, float, float) {}
 class CTelemetryManager;
 CTelemetryManager *TelemetryManager = nullptr;
 
@@ -106,13 +118,13 @@ void glDisable(unsigned int)                               {}
 void glClear(unsigned int)                                 {}
 void glClearColor(float, float, float, float)              {}
 void glViewport(int, int, int, int)                        {}
-void glPushMatrix(void)                                    {}
-void glPopMatrix(void)                                     {}
-void glLoadIdentity(void)                                  {}
-void glMatrixMode(unsigned int)                            {}
-void glTranslatef(float, float, float)                     {}
-void glRotatef(float, float, float, float)                 {}
-void glScalef(float, float, float)                         {}
+void glPushMatrix(void)                                    { mcle_glbridge_push_matrix(); }
+void glPopMatrix(void)                                     { mcle_glbridge_pop_matrix(); }
+void glLoadIdentity(void)                                  { mcle_glbridge_load_identity(); }
+void glMatrixMode(unsigned int mode)                       { mcle_glbridge_matrix_mode((int)mode); }
+void glTranslatef(float x, float y, float z)               { mcle_glbridge_translate(x, y, z); }
+void glRotatef(float angle, float x, float y, float z)     { mcle_glbridge_rotate(angle, x, y, z); }
+void glScalef(float x, float y, float z)                   { mcle_glbridge_scale(x, y, z); }
 void glColor4f(float, float, float, float)                 {}
 void glBegin(unsigned int)                                 {}
 void glEnd(void)                                           {}
