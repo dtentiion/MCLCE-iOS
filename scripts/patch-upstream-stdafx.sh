@@ -1383,9 +1383,5 @@ if [ -f "$CTSGD_PY" ]; then
     python3 "$CTSGD_PY"
 fi
 
-# G5-step20: null-guard Tile::tiles[tileId] in mesh loop. Some procgen
-# block ids don't have a Tile entry; virtual call crashes at addr 0.
-TNG_PY="$REPO_ROOT/scripts/patch-chunk-rebuild-tile-nullguard.py"
-if [ -f "$TNG_PY" ]; then
-    python3 "$TNG_PY"
-fi
+# G5-step20: null-guard merged into patch-chunk-rebuild-checkpoints.py
+# above - both edits target the same lines so anchors collided.
