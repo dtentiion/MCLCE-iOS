@@ -32,20 +32,22 @@ old = (
 new = (
     "void LevelChunk::getBlockData(byteArray data)\n"
     "{\n"
-    '\tapp.DebugPrintf("LCGBD_CKPT enter this=%p xz=%d,%d lowerBlocks=%p upperBlocks=%p", this, x, z, lowerBlocks, upperBlocks);\n'
+    '\tstatic int s_lcgbdCount = 0;\n'
+    '\tbool s_lcgbdLog = (s_lcgbdCount++ < 3);\n'
+    '\tif (s_lcgbdLog) app.DebugPrintf("LCGBD_CKPT enter this=%p xz=%d,%d lowerBlocks=%p upperBlocks=%p", this, x, z, lowerBlocks, upperBlocks);\n'
     "\tif (!lowerBlocks) {\n"
-    '\t\tapp.DebugPrintf("LCGBD_CKPT bail: lowerBlocks null");\n'
+    '\t\tif (s_lcgbdLog) app.DebugPrintf("LCGBD_CKPT bail: lowerBlocks null");\n'
     "\t\treturn;\n"
     "\t}\n"
     "\tlowerBlocks->getData(data,0);\n"
-    '\tapp.DebugPrintf("LCGBD_CKPT after lowerBlocks->getData");\n'
+    '\tif (s_lcgbdLog) app.DebugPrintf("LCGBD_CKPT after lowerBlocks->getData");\n'
     "\tif(data.length > Level::COMPRESSED_CHUNK_SECTION_TILES) {\n"
     "\t\tif (!upperBlocks) {\n"
-    '\t\t\tapp.DebugPrintf("LCGBD_CKPT bail: upperBlocks null");\n'
+    '\t\t\tif (s_lcgbdLog) app.DebugPrintf("LCGBD_CKPT bail: upperBlocks null");\n'
     "\t\t\treturn;\n"
     "\t\t}\n"
     "\t\tupperBlocks->getData(data,Level::COMPRESSED_CHUNK_SECTION_TILES);\n"
-    '\t\tapp.DebugPrintf("LCGBD_CKPT after upperBlocks->getData");\n'
+    '\t\tif (s_lcgbdLog) app.DebugPrintf("LCGBD_CKPT after upperBlocks->getData");\n'
     "\t}\n"
     "}"
 )
