@@ -1342,3 +1342,10 @@ GSC_PY="$REPO_ROOT/scripts/patch-getskycolor-checkpoints.py"
 if [ -f "$GSC_PY" ]; then
     python3 "$GSC_PY"
 fi
+
+# G5-step5: bracket LevelRenderer::updateDirtyChunks with checkpoints so
+# we know which check is bailing - chunks alloc but never rebuild.
+UDC_PY="$REPO_ROOT/scripts/patch-update-dirty-checkpoints.py"
+if [ -f "$UDC_PY" ]; then
+    python3 "$UDC_PY"
+fi
