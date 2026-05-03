@@ -983,15 +983,34 @@ extern "C" void mcle_world_drive_renderer(void) {
         // keeps dirtyChunkPresent stuck at false and the search never
         // re-enters. 250ms gives the cooldown room to expire so the
         // search loop runs each pass.
+        //
+        // G5-step7: bracket each call with os_log so signal-killed runs
+        // still pin which upstream call took the SIGSEGV. NSLog buffers
+        // can lose lines if process dies fast; os_log via MCLE_LOG is
+        // retained by the system.
         {
             static int s_frameCounter = 0;
+            static int s_dirtyCalls = 0;
             if ((s_frameCounter++ % 15) == 0) {
+                if (s_dirtyCalls < 5) {
+                    MCLE_LOG("WD_CKPT before updateDirtyChunks call=%d", s_dirtyCalls);
+                }
                 try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
+                if (s_dirtyCalls < 5) {
+                    MCLE_LOG("WD_CKPT after updateDirtyChunks call=%d", s_dirtyCalls);
+                }
+                s_dirtyCalls++;
             }
         }
 
-        g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
-                                /*updateChunks*/false);
+        {
+            static int s_renderCalls = 0;
+            if (s_renderCalls < 3) MCLE_LOG("WD_CKPT before render call=%d", s_renderCalls);
+            g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
+                                    /*updateChunks*/false);
+            if (s_renderCalls < 3) MCLE_LOG("WD_CKPT after render call=%d", s_renderCalls);
+            s_renderCalls++;
+        }
 
         // G3e-step5: re-enable renderSky/renderClouds with line-by-line
         // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
