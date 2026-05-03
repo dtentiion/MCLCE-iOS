@@ -30,7 +30,7 @@ edits = [
         "\tIntCache::releaseAll();",
         "void BiomeSource::getRawBiomeBlock(BiomeArray &biomes, int x, int z, int w, int h) const\n"
         "{\n"
-        '\tapp.DebugPrintf("BS_CKPT enter xz=%d,%d w=%d h=%d this=%p layer=%p", x, z, w, h, this, layer);\n'
+        '\tapp.DebugPrintf("BS_CKPT enter xz=%d,%d w=%d h=%d this=%p layer=%p", x, z, w, h, this, layer.get());\n'
         '\tapp.DebugPrintf("BS_CKPT before IntCache::releaseAll");\n'
         "\tIntCache::releaseAll();\n"
         '\tapp.DebugPrintf("BS_CKPT after IntCache::releaseAll");',
@@ -43,7 +43,7 @@ edits = [
         "\t\tbiomes[i] = Biome::biomes[result[i]];\n"
         "#ifndef _CONTENT_PACKAGE\n"
         "\t\tif(biomes[i] == nullptr)",
-        '\tapp.DebugPrintf("BS_CKPT before layer->getArea layer=%p", layer);\n'
+        '\tapp.DebugPrintf("BS_CKPT before layer->getArea layer=%p", layer.get());\n'
         "\tif (!layer) {\n"
         '\t\tapp.DebugPrintf("BS_CKPT bail: layer null");\n'
         "\t\treturn;\n"
