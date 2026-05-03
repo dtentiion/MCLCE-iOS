@@ -127,8 +127,14 @@ edits = [
     ),
     (
         "\t\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);",
-        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before tesselateInWorld tileRenderer=%p tile=%p", tileRenderer, tile);\n'
-        "\t\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before tesselateInWorld tileRenderer=%p tile=%p tileId=%d", tileRenderer, tile, (int)tileId);\n'
+        "\t\t\t\t\t\t\t// G5-step21 TEMP: gate tesselateInWorld to verified-safe tile ids only.\n"
+        "\t\t\t\t\t\t\t// Stone (1), dirt (3), unbreakable/bedrock (7) confirmed safe; grass (2)\n"
+        "\t\t\t\t\t\t\t// and others crash deep in tesselateBlockInWorld. Lets stone+dirt\n"
+        "\t\t\t\t\t\t\t// terrain render visible while we work the other tile types.\n"
+        "\t\t\t\t\t\t\tif (tileId == Tile::stone_Id || tileId == Tile::dirt_Id || tileId == Tile::unbreakable_Id) {\n"
+        "\t\t\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+        "\t\t\t\t\t\t\t}\n"
         '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT after tesselateInWorld");',
     ),
 ]
