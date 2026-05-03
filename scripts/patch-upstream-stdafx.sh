@@ -1350,32 +1350,5 @@ if [ -f "$UDC_PY" ]; then
     python3 "$UDC_PY"
 fi
 
-# G5-step9: bracket ServerChunkCache::create with checkpoints so we
-# can pin which deref crashes during preload at chunk (16,15).
-SCC_PY="$REPO_ROOT/scripts/patch-serverchunkcache-create-checkpoints.py"
-if [ -f "$SCC_PY" ]; then
-    python3 "$SCC_PY"
-fi
-
-# G5-step10: SCC_CKPT showed crash inside source->getChunk (procgen).
-# Bracket each step in RandomLevelSource::getChunk so we narrow which
-# Feature->apply or noise call crashes for chunks not on disk.
-RLS_PY="$REPO_ROOT/scripts/patch-randomlevelsource-getchunk-checkpoints.py"
-if [ -f "$RLS_PY" ]; then
-    python3 "$RLS_PY"
-fi
-
-# G5-step11: RLS_CKPT showed crash inside prepareHeights. Narrow further:
-# log around level->seaLevel, getBiomeSource->getRawBiomeBlock, and
-# getHeights to see which line takes the signal.
-PH_PY="$REPO_ROOT/scripts/patch-randomlevelsource-prepareheights-checkpoints.py"
-if [ -f "$PH_PY" ]; then
-    python3 "$PH_PY"
-fi
-
-# G5-step12: PH_CKPT pinned crash inside getRawBiomeBlock. Bracket
-# IntCache::releaseAll and layer->getArea to pin which one.
-BS_PY="$REPO_ROOT/scripts/patch-biomesource-getrawbiomeblock-checkpoints.py"
-if [ -f "$BS_PY" ]; then
-    python3 "$BS_PY"
-fi
+# G5-step9..12 CKPTs removed - they pinned the procgen crash to
+# missing IntCache TLS init, fix landed in MCLEGameLoop.cpp.
