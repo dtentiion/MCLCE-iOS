@@ -107,13 +107,15 @@ edits = [
         "\t\t\t\t\t\t\tt->offset(static_cast<float>(-this->x), static_cast<float>(-this->y), static_cast<float>(-this->z));\n"
         '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT after t->offset");',
     ),
-    # Around tile virtual calls.
+    # Around tile virtual calls + null-guard (merged from former
+    # patch-chunk-rebuild-tile-nullguard.py - kept here to avoid
+    # anchor conflicts between two scripts patching the same lines).
     (
         "\t\t\t\t\t\tTile *tile = Tile::tiles[tileId];\n"
         "\t\t\t\t\t\tif (currentLayer == 0 && tile->isEntityTile())",
         "\t\t\t\t\t\tTile *tile = Tile::tiles[tileId];\n"
-        '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: tile=%p tileId=%d", tile, (int)tileId);\n'
-        '\t\t\t\t\t\tif (tile && s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: tile vptr=%p", *(void**)tile);\n'
+        "\t\t\t\t\t\tif (!tile) continue;  // null-guard: not every block id has a registered Tile\n"
+        '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: tile=%p tileId=%d vptr=%p", tile, (int)tileId, *(void**)tile);\n'
         '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before tile->isEntityTile");\n'
         "\t\t\t\t\t\tif (currentLayer == 0 && tile->isEntityTile())",
     ),
