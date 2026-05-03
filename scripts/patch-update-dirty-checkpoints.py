@@ -29,7 +29,7 @@ edits = [
         "bool LevelRenderer::updateDirtyChunks()\n{\n"
         '\tstatic int s_udcLogCount = 0;\n'
         '\ts_udcLogCount++;\n'
-        '\tbool s_log = ((s_udcLogCount % 4) == 0);\n'
+        '\tbool s_log = true;\n'
         '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
     ),
     # After queue drain: log dirtyChunkPresent.
