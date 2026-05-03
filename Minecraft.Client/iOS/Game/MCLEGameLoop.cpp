@@ -54,6 +54,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 
 #include "../../../upstream/Minecraft.World/Minecraft.World.h"
 #include "../../../upstream/Minecraft.World/Compression.h"
+#include "../../../upstream/Minecraft.World/IntCache.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
 #include "../../../upstream/Minecraft.World/FileInputStream.h"
@@ -218,6 +219,13 @@ void initImpl() {
     // SIGSEGV (which was the G3e crash inside Level::getSkyColor).
     Vec3::CreateNewThreadStorage();
     MCLE_LOG("mcle_game_init: Vec3::CreateNewThreadStorage done");
+
+    // IntCache is per-thread TLS too. BiomeSource::getRawBiomeBlock and
+    // every Layer::getArea path reads tls->toosmall at offset 0x68; if
+    // CreateNewThreadStorage hasn't been called the deref crashes at
+    // 0x68 (the chunk preload (16,15) crash for procgen).
+    IntCache::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: IntCache::CreateNewThreadStorage done");
 
     // Parity-correct upstream static init order, mirroring
     // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
@@ -874,8 +882,9 @@ extern "C" void mcle_game_tick(void) {
         Tile::CreateNewThreadStorage();
         Tesselator::CreateNewThreadStorage(16 * 1024);
         Vec3::CreateNewThreadStorage();
+        IntCache::CreateNewThreadStorage();
         s_tickThreadTlsReady = true;
-        MCLE_LOG("mcle_game_tick: render-thread Tile + Tesselator + Vec3 TLS initialized");
+        MCLE_LOG("mcle_game_tick: render-thread Tile + Tesselator + Vec3 + IntCache TLS initialized");
     }
 
     g_tickCount++;
@@ -960,8 +969,9 @@ extern "C" void mcle_world_drive_renderer(void) {
         Tile::CreateNewThreadStorage();
         Tesselator::CreateNewThreadStorage(16 * 1024);
         Vec3::CreateNewThreadStorage();
+        IntCache::CreateNewThreadStorage();
         s_renderThreadTlsReady = true;
-        MCLE_LOG("mcle_world_drive_renderer: render-thread Tile + Tesselator + Vec3 TLS initialized");
+        MCLE_LOG("mcle_world_drive_renderer: render-thread Tile + Tesselator + Vec3 + IntCache TLS initialized");
     }
 
     try {
