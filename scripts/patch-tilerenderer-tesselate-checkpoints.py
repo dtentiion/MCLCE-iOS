@@ -94,9 +94,14 @@ new3 = (
     "\t\t\t// now we need to set the shape\n"
     '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before setShape (BLOCK)");\n'
     "\t\t\tsetShape(tt);\n"
-    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
-    "\t\t\tretVal = tesselateBlockInWorld( tt, x, y, z, faceFlags );\n"
-    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT after tesselateBlockInWorld retVal=%d", (int)retVal);'
+    "\t\t\t// G5-step23 TEMP: bypass tesselateBlockInWorld - it crashes\n"
+    "\t\t\t// inside its hundreds of lines of mesh generation. Return\n"
+    "\t\t\t// false so chunk rebuild completes (empty geometry) and the\n"
+    "\t\t\t// build stays stable. Surgical fix lands later as separate\n"
+    "\t\t\t// G5-step24+. Until then chunks rebuild cleanly with no\n"
+    "\t\t\t// visible geometry instead of crashing.\n"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT TEMP-skip tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
+    "\t\t\tretVal = false;"
 )
 if old3 not in src:
     sys.exit(f"anchor 3 not found in {TARGET}")
