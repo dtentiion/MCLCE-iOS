@@ -817,16 +817,27 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: G5 setLevel threw unknown");
         }
 
-        // G5-step16: signal the rebuild thread that chunks are present.
-        // Pushes (int*)1 onto dirtyChunksLockFreeStack so the next
-        // updateDirtyChunks queue-drain flips dirtyChunkPresent=true,
-        // which gates the per-chunk rebuild search. Without this the
-        // search never runs and lists stays stuck at 11.
+        // G5-step16: signal the rebuild thread that chunks are present
+        // AND force-set CHUNK_FLAG_DIRTY on every render chunk in the
+        // grid. Upstream's Chunk::setPos auto-dirties via refCount==1
+        // but our refCount accounting starts non-zero for some reason,
+        // so the search loop finds nothing. Walking chunks[0] and
+        // calling setGlobalChunkFlag for each is the explicit form.
         try {
+            int dirtied = 0;
+            for (size_t i = 0; i < g_levelRenderer->chunks[0].length; i++) {
+                Chunk *c = g_levelRenderer->chunks[0][i].chunk;
+                if (!c) continue;
+                g_levelRenderer->setGlobalChunkFlag(
+                    c->x, c->y, c->z, lvl,
+                    LevelRenderer::CHUNK_FLAG_DIRTY);
+                dirtied++;
+            }
+            MCLE_LOG("mcle_game_init: G5 force-dirty %d chunks", dirtied);
             g_levelRenderer->nonStackDirtyChunksAdded();
             MCLE_LOG("mcle_game_init: G5 nonStackDirtyChunksAdded done");
         } catch (...) {
-            MCLE_LOG("mcle_game_init: G5 nonStackDirtyChunksAdded threw");
+            MCLE_LOG("mcle_game_init: G5 force-dirty / nonStackDirtyChunksAdded threw");
         }
     }
 
