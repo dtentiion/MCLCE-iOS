@@ -1329,6 +1329,13 @@ if [ -f "$LRL_PY" ]; then
     python3 "$LRL_PY"
 fi
 
+# G5-step16: expose resortChunks so we can re-center the render grid
+# around the player after setLevel.
+LRR_PY="$REPO_ROOT/scripts/patch-levelrenderer-resortchunks-public.py"
+if [ -f "$LRR_PY" ]; then
+    python3 "$LRR_PY"
+fi
+
 # G3e-step2: bracket renderSky / renderClouds / renderAdvancedClouds
 # with checkpoints so the next sideload pins which deref crashes.
 LRSKY_PY="$REPO_ROOT/scripts/patch-rendersky-checkpoints.py"
