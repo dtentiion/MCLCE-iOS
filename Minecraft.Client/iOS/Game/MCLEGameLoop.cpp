@@ -940,6 +940,7 @@ extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg, float aspect,
 extern "C" void mcle_glbridge_matrix_mode(int mode);
 extern "C" void mcle_glbridge_load_identity(void);
 extern "C" void mcle_glbridge_translate(float, float, float);
+extern "C" void mcle_glbridge_rotate(float angle_deg, float x, float y, float z);
 extern "C" void mcle_metal_current_size(int*, int*);
 
 extern "C" void mcle_world_drive_renderer(void) {
@@ -973,6 +974,13 @@ extern "C" void mcle_world_drive_renderer(void) {
 
         mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
         mcle_glbridge_load_identity();
+        // G5-step7: apply player rotation (xRot=pitch, yRot=yaw) so the
+        // camera looks where the player is facing. Once controller input
+        // is wired (F3-real-input), the stick rotates these and the view
+        // updates naturally. Until then they're 0 and we look south.
+        // Order matches upstream GameRenderer: pitch first, then yaw.
+        mcle_glbridge_rotate((float)g_player->xRot, 1.0f, 0.0f, 0.0f);
+        mcle_glbridge_rotate((float)g_player->yRot + 180.0f, 0.0f, 1.0f, 0.0f);
         mcle_glbridge_translate(-(float)g_player->x,
                                 -(float)g_player->y,
                                 -(float)g_player->z);
