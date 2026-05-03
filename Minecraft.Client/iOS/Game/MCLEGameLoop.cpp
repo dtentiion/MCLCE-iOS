@@ -595,14 +595,13 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // G5: this save was a New World the player only walked around in
-        // briefly, so most chunks beyond ~3 from spawn were never visited
-        // and aren't actually present in r.0.0.mcr. r=3 (7x7 = 49) keeps
-        // the preload inside known-loaded chunks. Render grid wraps around
-        // the player anyway via resortChunks; the unloaded edges just
-        // stay as 'empty' chunks and don't get rebuilt - which is fine
-        // (the user wouldn't see beyond what was saved anyway).
-        static constexpr int kPreloadRadiusChunks = 3;
+        // G5: this save's chunk pattern is irregular - even r=3 hit a
+        // null deref at (16,13). Bulk preloading any unvisited chunk
+        // crashes inside the level source's procedural generator. Drop
+        // to r=0 (just the spawn chunk) and rely on updateDirtyChunks's
+        // per-chunk lazy load for the render area. Per-chunk loads go
+        // through level->getChunkAt which has its own null guard.
+        static constexpr int kPreloadRadiusChunks = 0;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
