@@ -818,12 +818,23 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: G5 setLevel threw unknown");
         }
 
-        // G5-step16: signal the rebuild thread that chunks are present
-        // AND force-set CHUNK_FLAG_DIRTY on every render chunk in the
-        // grid. Upstream's Chunk::setPos auto-dirties via refCount==1
-        // but our refCount accounting starts non-zero for some reason,
-        // so the search loop finds nothing. Walking chunks[0] and
-        // calling setGlobalChunkFlag for each is the explicit form.
+        // G5-step16: re-center the render grid around the player.
+        // setLevel -> allChanged calls resortChunks but only if mc->
+        // cameraTargetPlayer was wired BEFORE setLevel ran. Calling
+        // it explicitly here with current player coords guarantees
+        // the grid covers our loaded chunks.
+        try {
+            int px = (int)floorf(g_player->x);
+            int py = (int)floorf(g_player->y);
+            int pz = (int)floorf(g_player->z);
+            g_levelRenderer->resortChunks(px, py, pz);
+            MCLE_LOG("mcle_game_init: G5 resortChunks(%d,%d,%d) done", px, py, pz);
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: G5 resortChunks threw");
+        }
+
+        // Force-dirty every render chunk in the now-recentered grid +
+        // signal the rebuild thread.
         try {
             int dirtied = 0;
             for (size_t i = 0; i < g_levelRenderer->chunks[0].length; i++) {
