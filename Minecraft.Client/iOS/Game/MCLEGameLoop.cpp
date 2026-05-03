@@ -595,13 +595,14 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // G5: this save's chunk pattern is irregular - even r=3 hit a
-        // null deref at (16,13). Bulk preloading any unvisited chunk
-        // crashes inside the level source's procedural generator. Drop
-        // to r=0 (just the spawn chunk) and rely on updateDirtyChunks's
-        // per-chunk lazy load for the render area. Per-chunk loads go
-        // through level->getChunkAt which has its own null guard.
-        static constexpr int kPreloadRadiusChunks = 0;
+        // G5-step9: bump radius from 0 to 1. r=0 worked but only loaded
+        // the spawn chunk - left-stick walk crashed at the chunk boundary
+        // when getBiome derefed an unloaded LevelChunk. r=1 covers the
+        // 3x3 ring; if any neighbor crashes during create(), the existing
+        // MCLE_LOG "preload (X,Y) start" without a matching "ok" pinpoints
+        // which chunk hit the deref. Also logs how far we got inside
+        // ServerChunkCache::create.
+        static constexpr int kPreloadRadiusChunks = 1;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
