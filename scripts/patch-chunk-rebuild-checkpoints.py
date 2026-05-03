@@ -107,6 +107,28 @@ edits = [
         "\t\t\t\t\t\t\tt->offset(static_cast<float>(-this->x), static_cast<float>(-this->y), static_cast<float>(-this->z));\n"
         '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT after t->offset");',
     ),
+    # Around tile virtual calls.
+    (
+        "\t\t\t\t\t\tTile *tile = Tile::tiles[tileId];\n"
+        "\t\t\t\t\t\tif (currentLayer == 0 && tile->isEntityTile())",
+        "\t\t\t\t\t\tTile *tile = Tile::tiles[tileId];\n"
+        '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: tile=%p tileId=%d", tile, (int)tileId);\n'
+        '\t\t\t\t\t\tif (tile && s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: tile vptr=%p", *(void**)tile);\n'
+        '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before tile->isEntityTile");\n'
+        "\t\t\t\t\t\tif (currentLayer == 0 && tile->isEntityTile())",
+    ),
+    (
+        "\t\t\t\t\t\tint renderLayer = tile->getRenderLayer();",
+        '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before tile->getRenderLayer");\n'
+        "\t\t\t\t\t\tint renderLayer = tile->getRenderLayer();\n"
+        '\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT after tile->getRenderLayer = %d", renderLayer);',
+    ),
+    (
+        "\t\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);",
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before tesselateInWorld tileRenderer=%p tile=%p", tileRenderer, tile);\n'
+        "\t\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT after tesselateInWorld");',
+    ),
 ]
 
 new_src = src
