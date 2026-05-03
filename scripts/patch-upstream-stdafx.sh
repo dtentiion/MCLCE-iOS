@@ -1385,3 +1385,10 @@ fi
 
 # G5-step20: null-guard merged into patch-chunk-rebuild-checkpoints.py
 # above - both edits target the same lines so anchors collided.
+
+# G5-step22: even stone (id=1) crashes inside tesselateInWorld. Bracket
+# the entry to pin which deref crashes (updateShape / mipmapEnable / ...).
+TR_PY="$REPO_ROOT/scripts/patch-tilerenderer-tesselate-checkpoints.py"
+if [ -f "$TR_PY" ]; then
+    python3 "$TR_PY"
+fi
