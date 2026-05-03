@@ -54,11 +54,53 @@ new = (
     "\t}\n"
     '\tif (s_trLog) app.DebugPrintf("TR_CKPT before setMipmapEnable Tile::mipmapEnable=%p id=%d", (void*)Tile::mipmapEnable, (int)tt->id);\n'
     "\tt->setMipmapEnable( Tile::mipmapEnable[tt->id] );\t// 4J added\n"
-    '\tif (s_trLog) app.DebugPrintf("TR_CKPT after setMipmapEnable");'
+    '\tif (s_trLog) app.DebugPrintf("TR_CKPT after setMipmapEnable");\n'
+    '\tif (s_trLog) app.DebugPrintf("TR_CKPT pre-switch noCulling=%d shape=%d", (int)noCulling, shape);'
 )
 
 if old not in src:
     sys.exit(f"anchor not found in {TARGET}")
 src = src.replace(old, new, 1)
+
+# Now bracket getFaceFlags / setShape / tesselateBlockInWorld in the
+# SHAPE_BLOCK branch (uses the same s_trLog set above).
+old2 = (
+    "\t\t\t\tif( ( tt->id <= Tile::unbreakable_Id  ) ||\n"
+    "\t\t\t\t\t( ( tt->id >= Tile::sand_Id ) && ( tt->id <= Tile::treeTrunk_Id ) ) )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tfaceFlags = tt->getFaceFlags( level, x, y, z );\n"
+    "\t\t\t\t}"
+)
+new2 = (
+    "\t\t\t\tif( ( tt->id <= Tile::unbreakable_Id  ) ||\n"
+    "\t\t\t\t\t( ( tt->id >= Tile::sand_Id ) && ( tt->id <= Tile::treeTrunk_Id ) ) )\n"
+    "\t\t\t\t{\n"
+    '\t\t\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before getFaceFlags");\n'
+    "\t\t\t\t\tfaceFlags = tt->getFaceFlags( level, x, y, z );\n"
+    '\t\t\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT after getFaceFlags=%d", faceFlags);\n'
+    "\t\t\t\t}"
+)
+if old2 not in src:
+    sys.exit(f"anchor 2 not found in {TARGET}")
+src = src.replace(old2, new2, 1)
+
+old3 = (
+    "\t\t\t// now we need to set the shape\n"
+    "\t\t\tsetShape(tt);\n"
+    "\n"
+    "\t\t\tretVal = tesselateBlockInWorld( tt, x, y, z, faceFlags );"
+)
+new3 = (
+    "\t\t\t// now we need to set the shape\n"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before setShape (BLOCK)");\n'
+    "\t\t\tsetShape(tt);\n"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
+    "\t\t\tretVal = tesselateBlockInWorld( tt, x, y, z, faceFlags );\n"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT after tesselateBlockInWorld retVal=%d", (int)retVal);'
+)
+if old3 not in src:
+    sys.exit(f"anchor 3 not found in {TARGET}")
+src = src.replace(old3, new3, 1)
+
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched: {TARGET}")
