@@ -816,6 +816,18 @@ void initImpl() {
         } catch (...) {
             MCLE_LOG("mcle_game_init: G5 setLevel threw unknown");
         }
+
+        // G5-step16: signal the rebuild thread that chunks are present.
+        // Pushes (int*)1 onto dirtyChunksLockFreeStack so the next
+        // updateDirtyChunks queue-drain flips dirtyChunkPresent=true,
+        // which gates the per-chunk rebuild search. Without this the
+        // search never runs and lists stays stuck at 11.
+        try {
+            g_levelRenderer->nonStackDirtyChunksAdded();
+            MCLE_LOG("mcle_game_init: G5 nonStackDirtyChunksAdded done");
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: G5 nonStackDirtyChunksAdded threw");
+        }
     }
 
     // G3e-step2: Textures shim for LevelRenderer. Zero buffer, no
