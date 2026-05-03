@@ -826,6 +826,10 @@ static void mcle_crash_handler(int sig, siginfo_t *info, void *) {
              sig,
              info ? info->si_addr : (void *)0,
              info ? info->si_code : 0);
+    // os_log buffers asynchronously, so any CKPT lines in flight at
+    // the moment of the SIGSEGV can be lost when the process dies.
+    // Sleep briefly to give the kernel log subsystem time to drain.
+    usleep(200000);  // 200ms
     struct sigaction dfl{};
     dfl.sa_handler = SIG_DFL;
     sigemptyset(&dfl.sa_mask);
