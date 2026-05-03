@@ -942,6 +942,8 @@ extern "C" void mcle_glbridge_load_identity(void);
 extern "C" void mcle_glbridge_translate(float, float, float);
 extern "C" void mcle_glbridge_rotate(float angle_deg, float x, float y, float z);
 extern "C" void mcle_metal_current_size(int*, int*);
+extern "C" int  mcle_ios_input_poll_rx(int pad);
+extern "C" int  mcle_ios_input_poll_ry(int pad);
 
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
@@ -974,11 +976,30 @@ extern "C" void mcle_world_drive_renderer(void) {
 
         mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
         mcle_glbridge_load_identity();
-        // G5-step7: apply player rotation (xRot=pitch, yRot=yaw) so the
-        // camera looks where the player is facing. Once controller input
-        // is wired (F3-real-input), the stick rotates these and the view
-        // updates naturally. Until then they're 0 and we look south.
-        // Order matches upstream GameRenderer: pitch first, then yaw.
+
+        // G5-step8 TEMP non-parity: drive g_player->xRot / yRot directly
+        // from the right stick each frame so look-around works without
+        // a real LocalPlayer + Input::tick path. Upstream's parity flow
+        // is LocalPlayer::tickInput -> Input::tick -> InputManager.
+        // GetJoypadStick_RX/RY -> player->xRot/yRot. We can't run that
+        // chain because LocalPlayer.cpp doesn't compile yet (UI/render
+        // deps), and Input::tick crashes on Minecraft::localgameModes
+        // which our shim doesn't have. Until LocalPlayer is wired,
+        // this short-circuit makes the controller drive the camera.
+        {
+            const float kSensitivity = 4.0f / 1000.0f;  // ~4 degrees/frame at full deflection
+            const float rx = (float)mcle_ios_input_poll_rx(0) * kSensitivity;
+            const float ry = (float)mcle_ios_input_poll_ry(0) * kSensitivity;
+            g_player->yRot += rx;
+            g_player->xRot += ry;
+            if (g_player->xRot > 90.0f)  g_player->xRot = 90.0f;
+            if (g_player->xRot < -90.0f) g_player->xRot = -90.0f;
+        }
+
+        // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
+        // looks where the player is facing. Order matches upstream
+        // GameRenderer: pitch first, then yaw. yaw + 180 because Minecraft
+        // yaw=0 looks south but our default camera looks down -Z (north).
         mcle_glbridge_rotate((float)g_player->xRot, 1.0f, 0.0f, 0.0f);
         mcle_glbridge_rotate((float)g_player->yRot + 180.0f, 0.0f, 1.0f, 0.0f);
         mcle_glbridge_translate(-(float)g_player->x,
