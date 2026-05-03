@@ -1368,3 +1368,10 @@ CR_PY="$REPO_ROOT/scripts/patch-chunk-rebuild-checkpoints.py"
 if [ -f "$CR_PY" ]; then
     python3 "$CR_PY"
 fi
+
+# G5-step17: Chunk::rebuild reaches lc->getBlockData and crashes at 0x0.
+# Bracket the body to log lowerBlocks/upperBlocks pointers and null-guard.
+LCGBD_PY="$REPO_ROOT/scripts/patch-levelchunk-getblockdata-checkpoints.py"
+if [ -f "$LCGBD_PY" ]; then
+    python3 "$LCGBD_PY"
+fi
