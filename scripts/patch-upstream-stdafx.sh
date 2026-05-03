@@ -1350,14 +1350,14 @@ if [ -f "$UDC_PY" ]; then
     python3 "$UDC_PY"
 fi
 
-# G5-step14: a new crash at addr 0x128 in chunk (16,19)'s create().
-# 33 chunks preload OK at r=3, then (16,19) trips. Restore the SCC +
-# RLS CKPTs to pin which deref crashes for that specific chunk.
-SCC_PY="$REPO_ROOT/scripts/patch-serverchunkcache-create-checkpoints.py"
-if [ -f "$SCC_PY" ]; then
-    python3 "$SCC_PY"
-fi
-RLS_PY="$REPO_ROOT/scripts/patch-randomlevelsource-getchunk-checkpoints.py"
-if [ -f "$RLS_PY" ]; then
-    python3 "$RLS_PY"
+# G5-step14/15 CKPTs done - they pinned the 0x128 crash to
+# MinecraftServer::addPostProcessRequest's uninit critical section.
+# Fix landed via asyncPostProcess=false in MCLEGameLoop.cpp.
+
+# G5-step16: chunks load clean but never rebuild (lists stays 11).
+# Bracket Chunk::rebuild's candidate derefs to see whether it's
+# being called and where it bails.
+CR_PY="$REPO_ROOT/scripts/patch-chunk-rebuild-checkpoints.py"
+if [ -f "$CR_PY" ]; then
+    python3 "$CR_PY"
 fi
