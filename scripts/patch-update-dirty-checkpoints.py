@@ -20,16 +20,18 @@ if "UDC2_CKPT" in src:
     sys.exit(0)
 
 edits = [
-    # Function entry: log mc / dirtyChunkPresent on entry. Logs every
-    # call where dirtyChunkPresent=true (the rare cases where the
-    # search actually runs). Plus a heartbeat every 600 calls.
+    # Function entry: log + FORCE dirtyChunkPresent=true so the search
+    # always runs. Without this, the cooldown logic resets it after the
+    # first no-find and we never enter the search again. Diagnostic
+    # only - real upstream relies on dirty events from setDirty/etc.
     (
         "bool LevelRenderer::updateDirtyChunks()\n{\n",
         "bool LevelRenderer::updateDirtyChunks()\n{\n"
         '\tstatic int s_udcLogCount = 0;\n'
         '\ts_udcLogCount++;\n'
-        '\tbool s_log = dirtyChunkPresent || ((s_udcLogCount % 600) == 0);\n'
-        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
+        '\tbool s_log = ((s_udcLogCount % 4) == 0);\n'
+        '\tdirtyChunkPresent = true;\n'
+        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p (forced dirtyChunkPresent=true)", s_udcLogCount, mc);\n',
     ),
     # After queue drain: log dirtyChunkPresent.
     (
