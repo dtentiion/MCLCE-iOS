@@ -1364,3 +1364,11 @@ RLS_PY="$REPO_ROOT/scripts/patch-randomlevelsource-getchunk-checkpoints.py"
 if [ -f "$RLS_PY" ]; then
     python3 "$RLS_PY"
 fi
+
+# G5-step11: RLS_CKPT showed crash inside prepareHeights. Narrow further:
+# log around level->seaLevel, getBiomeSource->getRawBiomeBlock, and
+# getHeights to see which line takes the signal.
+PH_PY="$REPO_ROOT/scripts/patch-randomlevelsource-prepareheights-checkpoints.py"
+if [ -f "$PH_PY" ]; then
+    python3 "$PH_PY"
+fi
