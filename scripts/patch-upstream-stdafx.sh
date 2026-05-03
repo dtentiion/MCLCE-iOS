@@ -1375,3 +1375,10 @@ LCGBD_PY="$REPO_ROOT/scripts/patch-levelchunk-getblockdata-checkpoints.py"
 if [ -f "$LCGBD_PY" ]; then
     python3 "$LCGBD_PY"
 fi
+
+# G5-step18: lowerBlocks->getData itself crashes. Log indicesAndData
+# and retArray.data status at entry to pin which is bad.
+CTSGD_PY="$REPO_ROOT/scripts/patch-compressedtilestorage-getdata-checkpoints.py"
+if [ -f "$CTSGD_PY" ]; then
+    python3 "$CTSGD_PY"
+fi
