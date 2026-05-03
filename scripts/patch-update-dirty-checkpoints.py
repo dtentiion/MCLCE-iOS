@@ -20,17 +20,17 @@ if "UDC2_CKPT" in src:
     sys.exit(0)
 
 edits = [
-    # Function entry: log + FORCE dirtyChunkPresent=true ONLY for first
-    # 5 calls so we capture diagnostics during boot without flooding /
-    # crashing on every call. After 5 calls revert to upstream behavior.
+    # Function entry: log only on every-60 cadence. Force-dirty was
+    # tried earlier but the search hit a 0x0 crash deeper than the lc
+    # null guard reaches - reverted to safe diagnostic mode for now.
+    # G5 work continues via static analysis of upstream code paths.
     (
         "bool LevelRenderer::updateDirtyChunks()\n{\n",
         "bool LevelRenderer::updateDirtyChunks()\n{\n"
         '\tstatic int s_udcLogCount = 0;\n'
         '\ts_udcLogCount++;\n'
-        '\tbool s_log = (s_udcLogCount <= 5);\n'
-        '\tif (s_log) dirtyChunkPresent = true;\n'
-        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p (forced dirty=true for first 5)", s_udcLogCount, mc);\n',
+        '\tbool s_log = ((s_udcLogCount % 60) == 0);\n'
+        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
     ),
     # After queue drain: log dirtyChunkPresent.
     (
