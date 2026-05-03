@@ -1011,6 +1011,26 @@ extern "C" void mcle_world_drive_renderer(void) {
             const float strafeZ =  fwdX;
             g_player->x += fwdX  * (-ly) + strafeX * lx;
             g_player->z += fwdZ  * (-ly) + strafeZ * lx;
+
+            // TEMP: preload radius is currently 0, so only the spawn chunk
+            // is loaded server-side. Walking out of it makes Level::getBiome
+            // deref into an unloaded chunk and crash at 0x68. Clamp x/z to
+            // the spawn chunk's 16x16 footprint until preload covers more.
+            static bool s_spawnChunkInit = false;
+            static float s_minX, s_maxX, s_minZ, s_maxZ;
+            if (!s_spawnChunkInit) {
+                int cx = ((int)floorf(g_player->x)) >> 4;
+                int cz = ((int)floorf(g_player->z)) >> 4;
+                s_minX = (float)(cx * 16);
+                s_maxX = (float)(cx * 16 + 15) + 0.999f;
+                s_minZ = (float)(cz * 16);
+                s_maxZ = (float)(cz * 16 + 15) + 0.999f;
+                s_spawnChunkInit = true;
+            }
+            if (g_player->x < s_minX) g_player->x = s_minX;
+            if (g_player->x > s_maxX) g_player->x = s_maxX;
+            if (g_player->z < s_minZ) g_player->z = s_minZ;
+            if (g_player->z > s_maxZ) g_player->z = s_maxZ;
         }
 
         // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
