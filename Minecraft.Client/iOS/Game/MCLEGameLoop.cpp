@@ -57,6 +57,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/IntCache.h"
 #include "../../../upstream/Minecraft.World/AABB.h"
 #include "../../../upstream/Minecraft.World/OldChunkStorage.h"
+#include "../../../upstream/Minecraft.Client/Chunk.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
 #include "../../../upstream/Minecraft.World/FileInputStream.h"
