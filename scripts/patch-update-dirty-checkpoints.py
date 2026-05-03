@@ -89,6 +89,20 @@ edits = [
         "\t\t\t\t\t\t\tdirtyCount++;\n"
         "\t\t\t\t\t\t\tif (s_log && dirtyCount == 1) app.DebugPrintf(\"UDC2_CKPT first dirty chunk found at idx=%d\", pClipChunk->globalIdx);",
     ),
+    # Null-guard the lc->isRenderChunkEmpty deref. forcing dirtyChunkPresent
+    # makes the search run every call which exposes a crash where
+    # level->getChunkAt returns null for unloaded chunks - upstream's
+    # code assumes it always returns at least emptyChunk, but that's not
+    # true through our ServerLevel cast. Treat null as "empty" (skip).
+    (
+        "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
+        "\t\t\t\t\t\t\t\t\tLevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
+        "\t\t\t\t\t\t\t\t\tif( !lc->isRenderChunkEmpty(y * 16) )",
+        "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
+        "\t\t\t\t\t\t\t\t\tLevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
+        "\t\t\t\t\t\t\t\t\tif (s_log && !lc) app.DebugPrintf(\"UDC2_CKPT getChunkAt returned null at chunk=(%d,%d)\", chunk->x, chunk->z);\n"
+        "\t\t\t\t\t\t\t\t\tif( lc && !lc->isRenderChunkEmpty(y * 16) )",
+    ),
 ]
 
 patched = src
