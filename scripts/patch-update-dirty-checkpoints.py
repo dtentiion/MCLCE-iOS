@@ -21,13 +21,14 @@ if "UDC2_CKPT" in src:
 
 edits = [
     # Function entry: log mc / dirtyChunkPresent on entry. Logs every
-    # 60 calls so the user's live capture catches the state regardless
-    # of when they start it (boot-time logs would otherwise be missed).
+    # call where dirtyChunkPresent=true (the rare cases where the
+    # search actually runs). Plus a heartbeat every 600 calls.
     (
         "bool LevelRenderer::updateDirtyChunks()\n{\n",
         "bool LevelRenderer::updateDirtyChunks()\n{\n"
         '\tstatic int s_udcLogCount = 0;\n'
-        '\tbool s_log = ((s_udcLogCount++ % 60) == 0);\n'
+        '\ts_udcLogCount++;\n'
+        '\tbool s_log = dirtyChunkPresent || ((s_udcLogCount % 600) == 0);\n'
         '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
     ),
     # After queue drain: log dirtyChunkPresent.
