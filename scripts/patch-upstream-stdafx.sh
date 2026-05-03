@@ -1372,3 +1372,10 @@ PH_PY="$REPO_ROOT/scripts/patch-randomlevelsource-prepareheights-checkpoints.py"
 if [ -f "$PH_PY" ]; then
     python3 "$PH_PY"
 fi
+
+# G5-step12: PH_CKPT pinned crash inside getRawBiomeBlock. Bracket
+# IntCache::releaseAll and layer->getArea to pin which one.
+BS_PY="$REPO_ROOT/scripts/patch-biomesource-getrawbiomeblock-checkpoints.py"
+if [ -f "$BS_PY" ]; then
+    python3 "$BS_PY"
+fi
