@@ -944,6 +944,8 @@ extern "C" void mcle_glbridge_rotate(float angle_deg, float x, float y, float z)
 extern "C" void mcle_metal_current_size(int*, int*);
 extern "C" int  mcle_ios_input_poll_rx(int pad);
 extern "C" int  mcle_ios_input_poll_ry(int pad);
+extern "C" int  mcle_ios_input_poll_lx(int pad);
+extern "C" int  mcle_ios_input_poll_ly(int pad);
 
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
@@ -977,23 +979,38 @@ extern "C" void mcle_world_drive_renderer(void) {
         mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
         mcle_glbridge_load_identity();
 
-        // G5-step8 TEMP non-parity: drive g_player->xRot / yRot directly
-        // from the right stick each frame so look-around works without
-        // a real LocalPlayer + Input::tick path. Upstream's parity flow
-        // is LocalPlayer::tickInput -> Input::tick -> InputManager.
-        // GetJoypadStick_RX/RY -> player->xRot/yRot. We can't run that
+        // G5-step8 TEMP non-parity: drive g_player->xRot/yRot/x/y/z
+        // directly from the controller sticks so look-around + walk work
+        // without a real LocalPlayer + Input::tick path. Upstream's
+        // parity flow is LocalPlayer::tickInput -> Input::tick ->
+        // InputManager.GetJoypadStick_* -> player. We can't run that
         // chain because LocalPlayer.cpp doesn't compile yet (UI/render
         // deps), and Input::tick crashes on Minecraft::localgameModes
         // which our shim doesn't have. Until LocalPlayer is wired,
-        // this short-circuit makes the controller drive the camera.
+        // this short-circuit makes the controller drive the camera +
+        // position. No collision, no gravity - we float through the
+        // world freely.
         {
-            const float kSensitivity = 4.0f / 1000.0f;  // ~4 degrees/frame at full deflection
-            const float rx = (float)mcle_ios_input_poll_rx(0) * kSensitivity;
-            const float ry = (float)mcle_ios_input_poll_ry(0) * kSensitivity;
+            const float kLook = 4.0f / 1000.0f;     // ~4 degrees/frame at full deflection
+            const float rx = (float)mcle_ios_input_poll_rx(0) * kLook;
+            const float ry = (float)mcle_ios_input_poll_ry(0) * kLook;
             g_player->yRot += rx;
             g_player->xRot += ry;
             if (g_player->xRot > 90.0f)  g_player->xRot = 90.0f;
             if (g_player->xRot < -90.0f) g_player->xRot = -90.0f;
+
+            // Left stick: y = forward/back along the player's facing
+            // direction, x = strafe right/left. Free-fly (ignores y / pitch).
+            const float kWalk = 0.4f / 1000.0f;       // blocks/frame at full deflection
+            const float lx = (float)mcle_ios_input_poll_lx(0) * kWalk;
+            const float ly = (float)mcle_ios_input_poll_ly(0) * kWalk;
+            const float yawRad = g_player->yRot * (float)M_PI / 180.0f;
+            const float fwdX   = -sinf(yawRad);  // upstream yaw convention: 0 = south (-Z)
+            const float fwdZ   =  cosf(yawRad);
+            const float strafeX = -fwdZ;         // 90deg right of forward
+            const float strafeZ =  fwdX;
+            g_player->x += fwdX  * (-ly) + strafeX * lx;
+            g_player->z += fwdZ  * (-ly) + strafeZ * lx;
         }
 
         // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
