@@ -15,7 +15,7 @@ if not TARGET.exists():
     sys.exit(f"missing: {TARGET}")
 
 src = TARGET.read_text(encoding="utf-8", errors="replace")
-if "UDC_CKPT" in src:
+if "UDC2_CKPT" in src:
     print(f"already patched: {TARGET}")
     sys.exit(0)
 
@@ -28,14 +28,14 @@ edits = [
         "bool LevelRenderer::updateDirtyChunks()\n{\n"
         '\tstatic int s_udcLogCount = 0;\n'
         '\tbool s_log = ((s_udcLogCount++ % 60) == 0);\n'
-        '\tif (s_log) app.DebugPrintf("UDC_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
+        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
     ),
     # After queue drain: log dirtyChunkPresent.
     (
         "\t// Only bother searching round all the chunks if we have some dirty chunk(s)\n"
         "\tif( dirtyChunkPresent )\n"
         "\t{\n",
-        "\tif (s_log) app.DebugPrintf(\"UDC_CKPT after queue drain dirtyChunkPresent=%d\", (int)dirtyChunkPresent);\n"
+        "\tif (s_log) app.DebugPrintf(\"UDC2_CKPT after queue drain dirtyChunkPresent=%d\", (int)dirtyChunkPresent);\n"
         "\t// Only bother searching round all the chunks if we have some dirty chunk(s)\n"
         "\tif( dirtyChunkPresent )\n"
         "\t{\n",
@@ -54,13 +54,13 @@ edits = [
         "\t\tfor( int p = 0; p < XUSER_MAX_COUNT; p++ )\n"
         "\t\t{\n"
         "\t\t\tshared_ptr<LocalPlayer> player = mc->localplayers[p];\n"
-        "\t\t\tif (s_log) app.DebugPrintf(\"UDC_CKPT p=%d player=%p chunks.data=%p chunks.length=%u level=%p xChunks*zChunks*Yc=%d\","
+        "\t\t\tif (s_log) app.DebugPrintf(\"UDC2_CKPT p=%d player=%p chunks.data=%p chunks.length=%u level=%p xChunks*zChunks*Yc=%d\","
         " p, (void*)player.get(), (void*)chunks[p].data, (unsigned)chunks[p].length, (void*)level[p],"
         " xChunks * zChunks * CHUNK_Y_COUNT);\n"
-        "\t\t\tif( player == nullptr ) { if (s_log) app.DebugPrintf(\"UDC_CKPT p=%d skip: player null\", p); continue; }\n"
-        "\t\t\tif( chunks[p].data == nullptr ) { if (s_log) app.DebugPrintf(\"UDC_CKPT p=%d skip: chunks.data null\", p); continue; }\n"
-        "\t\t\tif( level[p] == nullptr ) { if (s_log) app.DebugPrintf(\"UDC_CKPT p=%d skip: level null\", p); continue; }\n"
-        "\t\t\tif( chunks[p].length != xChunks * zChunks * CHUNK_Y_COUNT ) { if (s_log) app.DebugPrintf(\"UDC_CKPT p=%d skip: length mismatch\", p); continue; }",
+        "\t\t\tif( player == nullptr ) { if (s_log) app.DebugPrintf(\"UDC2_CKPT p=%d skip: player null\", p); continue; }\n"
+        "\t\t\tif( chunks[p].data == nullptr ) { if (s_log) app.DebugPrintf(\"UDC2_CKPT p=%d skip: chunks.data null\", p); continue; }\n"
+        "\t\t\tif( level[p] == nullptr ) { if (s_log) app.DebugPrintf(\"UDC2_CKPT p=%d skip: level null\", p); continue; }\n"
+        "\t\t\tif( chunks[p].length != xChunks * zChunks * CHUNK_Y_COUNT ) { if (s_log) app.DebugPrintf(\"UDC2_CKPT p=%d skip: length mismatch\", p); continue; }",
     ),
     # Log dirty count and considered count at end of player loop.
     (
@@ -84,7 +84,7 @@ edits = [
     (
         "\t\t\t\t\t\t\tdirtyCount++;",
         "\t\t\t\t\t\t\tdirtyCount++;\n"
-        "\t\t\t\t\t\t\tif (s_log && dirtyCount == 1) app.DebugPrintf(\"UDC_CKPT first dirty chunk found at idx=%d\", pClipChunk->globalIdx);",
+        "\t\t\t\t\t\t\tif (s_log && dirtyCount == 1) app.DebugPrintf(\"UDC2_CKPT first dirty chunk found at idx=%d\", pClipChunk->globalIdx);",
     ),
 ]
 
