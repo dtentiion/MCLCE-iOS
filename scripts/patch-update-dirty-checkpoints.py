@@ -30,7 +30,8 @@ edits = [
         '\tstatic int s_udcLogCount = 0;\n'
         '\ts_udcLogCount++;\n'
         '\tbool s_log = true;\n'
-        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n',
+        '\tif (s_log) app.DebugPrintf("UDC2_CKPT enter call=%d mc=%p dirtyChunkPresent=%d", s_udcLogCount, mc, (int)dirtyChunkPresent);\n'
+        '\tdirtyChunkPresent = true;  // diagnostic: force search loop to run every call so we can see per-player check\n',
     ),
     # After queue drain: log dirtyChunkPresent.
     (
