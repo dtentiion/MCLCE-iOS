@@ -241,6 +241,8 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: OldChunkStorage::CreateNewThreadStorage done");
     Level::enableLightingCache();
     MCLE_LOG("mcle_game_init: Level::enableLightingCache done");
+    Chunk::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: Chunk::CreateNewThreadStorage done");
 
     // Parity-correct upstream static init order, mirroring
     // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
@@ -943,6 +945,7 @@ extern "C" void mcle_game_tick(void) {
         AABB::CreateNewThreadStorage();
         OldChunkStorage::CreateNewThreadStorage();
         Level::enableLightingCache();
+        Chunk::CreateNewThreadStorage();
         s_tickThreadTlsReady = true;
         MCLE_LOG("mcle_game_tick: tick-thread full TLS init done");
     }
@@ -1033,6 +1036,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         AABB::CreateNewThreadStorage();
         OldChunkStorage::CreateNewThreadStorage();
         Level::enableLightingCache();
+        Chunk::CreateNewThreadStorage();
         s_renderThreadTlsReady = true;
         MCLE_LOG("mcle_world_drive_renderer: render-thread full TLS init done");
     }
