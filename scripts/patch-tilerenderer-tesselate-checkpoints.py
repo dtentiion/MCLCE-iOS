@@ -94,15 +94,60 @@ new3 = (
     "\t\t\t// now we need to set the shape\n"
     '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before setShape (BLOCK)");\n'
     "\t\t\tsetShape(tt);\n"
-    "\t\t\t// G5-step23 TEMP: bypass tesselateBlockInWorld - it crashes\n"
-    "\t\t\t// inside its hundreds of lines of mesh generation. Return\n"
-    "\t\t\t// false so chunk rebuild completes (empty geometry) and the\n"
-    "\t\t\t// build stays stable. Surgical fix lands later as separate\n"
-    "\t\t\t// G5-step24+. Until then chunks rebuild cleanly with no\n"
-    "\t\t\t// visible geometry instead of crashing.\n"
-    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT TEMP-skip tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
-    "\t\t\tretVal = false;"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
+    "\t\t\tretVal = tesselateBlockInWorld( tt, x, y, z, faceFlags );\n"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT after tesselateBlockInWorld retVal=%d", (int)retVal);'
 )
+
+# G5-step24: narrow inside tesselateBlockInWorld(Tile*, int, int, int, int)
+# at line 4910. Bracket getColor / lightEmission / sub-call.
+old4 = (
+    "bool TileRenderer::tesselateBlockInWorld( Tile* tt, int x, int y, int z, int faceFlags )\n"
+    "{\n"
+    "\tint\t\tcol = tt->getColor( level, x, y, z );\n"
+    "\tfloat\tr = ( ( col >> 16 ) & 0xff ) / 255.0f;"
+)
+new4 = (
+    "bool TileRenderer::tesselateBlockInWorld( Tile* tt, int x, int y, int z, int faceFlags )\n"
+    "{\n"
+    '\tstatic int s_tbiwCount = 0;\n'
+    '\tbool s_tbiwLog = (s_tbiwCount++ < 3);\n'
+    '\tif (s_tbiwLog) app.DebugPrintf("TBIW_CKPT enter tt=%p id=%d xyz=%d,%d,%d ff=%d level=%p", tt, (int)tt->id, x, y, z, faceFlags, level);\n'
+    '\tif (s_tbiwLog) app.DebugPrintf("TBIW_CKPT before tt->getColor");\n'
+    "\tint\t\tcol = tt->getColor( level, x, y, z );\n"
+    '\tif (s_tbiwLog) app.DebugPrintf("TBIW_CKPT after tt->getColor=0x%x", col);\n'
+    "\tfloat\tr = ( ( col >> 16 ) & 0xff ) / 255.0f;"
+)
+if old4 not in src:
+    sys.exit(f"anchor 4 not found in {TARGET}")
+src = src.replace(old4, new4, 1)
+
+old5 = (
+    "\tif ( Tile::lightEmission[tt->id] == 0 )//4J - TODO/remove (Minecraft::useAmbientOcclusion())\n"
+    "\t{\n"
+    "\t\treturn tesselateBlockInWorldWithAmbienceOcclusionTexLighting( tt, x, y, z, r, g, b, faceFlags, smoothShapeLighting );\n"
+    "\t}\n"
+    "\telse\n"
+    "\t{\n"
+    "\t\treturn tesselateBlockInWorld( tt, x, y, z, r, g, b );\n"
+    "\t}"
+)
+new5 = (
+    '\tif (s_tbiwLog) app.DebugPrintf("TBIW_CKPT lightEmission ptr=%p tt->id=%d val=%d", (void*)Tile::lightEmission, (int)tt->id, (int)Tile::lightEmission[tt->id]);\n'
+    "\tif ( Tile::lightEmission[tt->id] == 0 )//4J - TODO/remove (Minecraft::useAmbientOcclusion())\n"
+    "\t{\n"
+    '\t\tif (s_tbiwLog) app.DebugPrintf("TBIW_CKPT before AO branch (lightEmission==0)");\n'
+    "\t\treturn tesselateBlockInWorldWithAmbienceOcclusionTexLighting( tt, x, y, z, r, g, b, faceFlags, smoothShapeLighting );\n"
+    "\t}\n"
+    "\telse\n"
+    "\t{\n"
+    '\t\tif (s_tbiwLog) app.DebugPrintf("TBIW_CKPT before non-AO branch (lightEmission!=0)");\n'
+    "\t\treturn tesselateBlockInWorld( tt, x, y, z, r, g, b );\n"
+    "\t}"
+)
+if old5 not in src:
+    sys.exit(f"anchor 5 not found in {TARGET}")
+src = src.replace(old5, new5, 1)
 if old3 not in src:
     sys.exit(f"anchor 3 not found in {TARGET}")
 src = src.replace(old3, new3, 1)
