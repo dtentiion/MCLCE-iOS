@@ -95,7 +95,7 @@ edits = [
         "\t\t\t\t\t\t\tstarted = true;\n",
         "\t\t\t\t\t\tif (!started)\n"
         "\t\t\t\t\t\t{\n"
-        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: !started, t=%p tileId=%d", Chunk::t, (int)tileId);\n'
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: !started, t=%p tileId=%d", t, (int)tileId);\n'
         "\t\t\t\t\t\t\tstarted = true;\n",
     ),
     (
