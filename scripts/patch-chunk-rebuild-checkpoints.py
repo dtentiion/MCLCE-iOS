@@ -88,6 +88,25 @@ edits = [
         "\tdelete region;\n"
         '\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh loop done, into post-process");',
     ),
+    # Inside the !started block, log around each first-frame setup call.
+    (
+        "\t\t\t\t\t\tif (!started)\n"
+        "\t\t\t\t\t\t{\n"
+        "\t\t\t\t\t\t\tstarted = true;\n",
+        "\t\t\t\t\t\tif (!started)\n"
+        "\t\t\t\t\t\t{\n"
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT mesh: !started, t=%p tileId=%d", Chunk::t, (int)tileId);\n'
+        "\t\t\t\t\t\t\tstarted = true;\n",
+    ),
+    (
+        "\t\t\t\t\t\t\tt->begin();\n"
+        "\t\t\t\t\t\t\tt->offset(static_cast<float>(-this->x), static_cast<float>(-this->y), static_cast<float>(-this->z));",
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before t->begin");\n'
+        "\t\t\t\t\t\t\tt->begin();\n"
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT before t->offset");\n'
+        "\t\t\t\t\t\t\tt->offset(static_cast<float>(-this->x), static_cast<float>(-this->y), static_cast<float>(-this->z));\n"
+        '\t\t\t\t\t\t\tif (s_logRebuild) app.DebugPrintf("CHUNK_REBUILD_CKPT after t->offset");',
+    ),
 ]
 
 new_src = src
