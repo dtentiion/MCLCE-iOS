@@ -1349,3 +1349,10 @@ UDC_PY="$REPO_ROOT/scripts/patch-update-dirty-checkpoints.py"
 if [ -f "$UDC_PY" ]; then
     python3 "$UDC_PY"
 fi
+
+# G5-step9: bracket ServerChunkCache::create with checkpoints so we
+# can pin which deref crashes during preload at chunk (16,15).
+SCC_PY="$REPO_ROOT/scripts/patch-serverchunkcache-create-checkpoints.py"
+if [ -f "$SCC_PY" ]; then
+    python3 "$SCC_PY"
+fi
