@@ -603,14 +603,13 @@ void initImpl() {
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // G5-step9: bump radius from 0 to 1. r=0 worked but only loaded
-        // the spawn chunk - left-stick walk crashed at the chunk boundary
-        // when getBiome derefed an unloaded LevelChunk. r=1 covers the
-        // 3x3 ring; if any neighbor crashes during create(), the existing
-        // MCLE_LOG "preload (X,Y) start" without a matching "ok" pinpoints
-        // which chunk hit the deref. Also logs how far we got inside
-        // ServerChunkCache::create.
-        static constexpr int kPreloadRadiusChunks = 1;
+        // G5-step13: bump radius to 3 now that IntCache TLS is init'd.
+        // Original target was 7 (mirroring upstream MinecraftServer::run
+        // which preloads 13x13 = ~208-block radius). r=3 = 7x7 = 49
+        // chunks, enough to walk a meaningful distance without leaving
+        // the loaded area. Stepping further is still capped via the
+        // walk clamp below until preload covers the full target.
+        static constexpr int kPreloadRadiusChunks = 3;
         Pos *spawnPos = nullptr;
         try { spawnPos = g_levels[0]->getSharedSpawnPos(); } catch (...) {}
         int spawnCx = spawnPos ? (spawnPos->x >> 4) : 0;
@@ -1023,19 +1022,21 @@ extern "C" void mcle_world_drive_renderer(void) {
             g_player->x += fwdX  * (-ly) + strafeX * lx;
             g_player->z += fwdZ  * (-ly) + strafeZ * lx;
 
-            // TEMP: preload radius is currently 0, so only the spawn chunk
-            // is loaded server-side. Walking out of it makes Level::getBiome
-            // deref into an unloaded chunk and crash at 0x68. Clamp x/z to
-            // the spawn chunk's 16x16 footprint until preload covers more.
+            // TEMP: clamp the walk to the preloaded chunk area. Preload
+            // radius is r=3 -> 7x7 chunk ring centered on spawn -> 112x112
+            // block area. Stepping outside hits an unloaded chunk and
+            // Level::getBiome derefs at 0x68. Bounds snapshot once on
+            // first frame from the spawn position.
             static bool s_spawnChunkInit = false;
             static float s_minX, s_maxX, s_minZ, s_maxZ;
             if (!s_spawnChunkInit) {
+                static constexpr int kClampRadiusChunks = 3;
                 int cx = ((int)floorf(g_player->x)) >> 4;
                 int cz = ((int)floorf(g_player->z)) >> 4;
-                s_minX = (float)(cx * 16);
-                s_maxX = (float)(cx * 16 + 15) + 0.999f;
-                s_minZ = (float)(cz * 16);
-                s_maxZ = (float)(cz * 16 + 15) + 0.999f;
+                s_minX = (float)((cx - kClampRadiusChunks) * 16);
+                s_maxX = (float)((cx + kClampRadiusChunks) * 16 + 15) + 0.999f;
+                s_minZ = (float)((cz - kClampRadiusChunks) * 16);
+                s_maxZ = (float)((cz + kClampRadiusChunks) * 16 + 15) + 0.999f;
                 s_spawnChunkInit = true;
             }
             if (g_player->x < s_minX) g_player->x = s_minX;
