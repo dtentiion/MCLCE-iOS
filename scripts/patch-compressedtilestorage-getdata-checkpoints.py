@@ -32,15 +32,17 @@ old = (
 new = (
     "void CompressedTileStorage::getData(byteArray retArray, unsigned int retOffset)\n"
     "{\n"
-    '\tapp.DebugPrintf("CTSGD_CKPT enter this=%p indicesAndData=%p retArray.data=%p retArray.length=%u retOffset=%u", this, indicesAndData, retArray.data, (unsigned)retArray.length, retOffset);\n'
+    '\tstatic int s_ctsgdCount = 0;\n'
+    '\tbool s_ctsgdLog = (s_ctsgdCount++ < 6);\n'
+    '\tif (s_ctsgdLog) app.DebugPrintf("CTSGD_CKPT enter this=%p indicesAndData=%p retArray.data=%p retArray.length=%u retOffset=%u", this, indicesAndData, retArray.data, (unsigned)retArray.length, retOffset);\n'
     "\t// Snapshot pointer to avoid race with compress() swapping indicesAndData\n"
     "\tunsigned char *localIndicesAndData = indicesAndData;\n"
     "\tif(!localIndicesAndData) {\n"
-    '\t\tapp.DebugPrintf("CTSGD_CKPT bail: indicesAndData null");\n'
+    '\t\tif (s_ctsgdLog) app.DebugPrintf("CTSGD_CKPT bail: indicesAndData null");\n'
     "\t\treturn;\n"
     "\t}\n"
     "\tif (!retArray.data) {\n"
-    '\t\tapp.DebugPrintf("CTSGD_CKPT bail: retArray.data null");\n'
+    '\t\tif (s_ctsgdLog) app.DebugPrintf("CTSGD_CKPT bail: retArray.data null");\n'
     "\t\treturn;\n"
     "\t}"
 )
