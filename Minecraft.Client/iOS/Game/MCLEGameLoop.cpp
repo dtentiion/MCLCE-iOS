@@ -55,6 +55,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Minecraft.World.h"
 #include "../../../upstream/Minecraft.World/Compression.h"
 #include "../../../upstream/Minecraft.World/IntCache.h"
+#include "../../../upstream/Minecraft.World/AABB.h"
+#include "../../../upstream/Minecraft.World/OldChunkStorage.h"
 #include "../../../upstream/Minecraft.World/ConsoleSaveFileOriginal.h"
 #include "../../../upstream/Minecraft.World/File.h"
 #include "../../../upstream/Minecraft.World/FileInputStream.h"
@@ -226,6 +228,18 @@ void initImpl() {
     // 0x68 (the chunk preload (16,15) crash for procgen).
     IntCache::CreateNewThreadStorage();
     MCLE_LOG("mcle_game_init: IntCache::CreateNewThreadStorage done");
+
+    // The remaining TLS singletons Win64_Minecraft.cpp:1288-1295 sets up.
+    // AABB used by entity collision; OldChunkStorage used by saveData.ms
+    // legacy load path; Level lighting cache used by chunk lighting +
+    // post-process. Missing these can cause 0x128 / similar offsets in
+    // procgen for chunks that exercise structure features or lighting.
+    AABB::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: AABB::CreateNewThreadStorage done");
+    OldChunkStorage::CreateNewThreadStorage();
+    MCLE_LOG("mcle_game_init: OldChunkStorage::CreateNewThreadStorage done");
+    Level::enableLightingCache();
+    MCLE_LOG("mcle_game_init: Level::enableLightingCache done");
 
     // Parity-correct upstream static init order, mirroring
     // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
@@ -886,8 +900,11 @@ extern "C" void mcle_game_tick(void) {
         Tesselator::CreateNewThreadStorage(16 * 1024);
         Vec3::CreateNewThreadStorage();
         IntCache::CreateNewThreadStorage();
+        AABB::CreateNewThreadStorage();
+        OldChunkStorage::CreateNewThreadStorage();
+        Level::enableLightingCache();
         s_tickThreadTlsReady = true;
-        MCLE_LOG("mcle_game_tick: render-thread Tile + Tesselator + Vec3 + IntCache TLS initialized");
+        MCLE_LOG("mcle_game_tick: tick-thread full TLS init done");
     }
 
     g_tickCount++;
@@ -973,8 +990,11 @@ extern "C" void mcle_world_drive_renderer(void) {
         Tesselator::CreateNewThreadStorage(16 * 1024);
         Vec3::CreateNewThreadStorage();
         IntCache::CreateNewThreadStorage();
+        AABB::CreateNewThreadStorage();
+        OldChunkStorage::CreateNewThreadStorage();
+        Level::enableLightingCache();
         s_renderThreadTlsReady = true;
-        MCLE_LOG("mcle_world_drive_renderer: render-thread Tile + Tesselator + Vec3 + IntCache TLS initialized");
+        MCLE_LOG("mcle_world_drive_renderer: render-thread full TLS init done");
     }
 
     try {
