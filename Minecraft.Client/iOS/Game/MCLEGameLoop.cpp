@@ -1123,10 +1123,9 @@ extern "C" void mcle_world_drive_renderer(void) {
             static int s_frameCounter = 0;
             static int s_dirtyCalls = 0;
             if ((s_frameCounter++ % 15) == 0) {
-                // Log every 4th throttled call (~once per second) so live
-                // log capture started after app launch still sees current
-                // state. Previous "first 5 only" cap missed everything.
-                bool logThis = (s_dirtyCalls % 4) == 0;
+                // Log every throttled call (every 250ms) so even a short
+                // log capture sees the current state.
+                bool logThis = true;
                 if (logThis) MCLE_LOG("WD_CKPT before updateDirtyChunks call=%d", s_dirtyCalls);
                 try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
                 if (logThis) MCLE_LOG("WD_CKPT after updateDirtyChunks call=%d", s_dirtyCalls);
