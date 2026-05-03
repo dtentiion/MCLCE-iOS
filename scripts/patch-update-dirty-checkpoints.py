@@ -77,16 +77,12 @@ edits = [
         "\t\t\t\t\t\t{\n"
         "\t\t\t\t\t\t\tdirtyCount++;",
     ),
-    # After all loops, log summary
+    # Log dirtyCount inside the chunk loop (after dirtyCount++) so we see
+    # at least how many dirty chunks the loop saw on the first call.
     (
-        "#endif // __PS3__\n"
-        "\t\tPIXEndNamedEvent();\n"
-        "\t}",
-        "#endif // __PS3__\n"
-        "\t\tif (s_log) app.DebugPrintf(\"UDC_CKPT p=%d considered=%d dirty=%d wouldBeEmpty=%d nearChunk=%p\","
-        " p, considered, dirtyCount, wouldBeNearButEmpty, (void*)nearChunk);\n"
-        "\t\tPIXEndNamedEvent();\n"
-        "\t}",
+        "\t\t\t\t\t\t\tdirtyCount++;",
+        "\t\t\t\t\t\t\tdirtyCount++;\n"
+        "\t\t\t\t\t\t\tif (s_log && dirtyCount == 1) app.DebugPrintf(\"UDC_CKPT first dirty chunk found at idx=%d\", pClipChunk->globalIdx);",
     ),
 ]
 
