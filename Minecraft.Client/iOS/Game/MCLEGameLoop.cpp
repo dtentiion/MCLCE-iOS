@@ -640,7 +640,12 @@ void initImpl() {
                 int cz = spawnCz + dz;
                 MCLE_LOG("mcle_game_init: chunk preload (%d,%d) start", cx, cz);
                 try {
-                    if (g_levels[0]->cache && g_levels[0]->cache->create(cx, cz, true)) {
+                    // asyncPostProcess=false: hit the synchronous branch
+                    // (chunk->checkPostProcess) instead of routing through
+                    // MinecraftServer::addPostProcessRequest, which derefs
+                    // m_postProcessCS - that's only InitializeCriticalSection'd
+                    // late inside MinecraftServer::run() which we don't call.
+                    if (g_levels[0]->cache && g_levels[0]->cache->create(cx, cz, false)) {
                         loaded++;
                         MCLE_LOG("mcle_game_init: chunk preload (%d,%d) ok", cx, cz);
                     } else {
