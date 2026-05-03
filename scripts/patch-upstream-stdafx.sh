@@ -1356,3 +1356,11 @@ SCC_PY="$REPO_ROOT/scripts/patch-serverchunkcache-create-checkpoints.py"
 if [ -f "$SCC_PY" ]; then
     python3 "$SCC_PY"
 fi
+
+# G5-step10: SCC_CKPT showed crash inside source->getChunk (procgen).
+# Bracket each step in RandomLevelSource::getChunk so we narrow which
+# Feature->apply or noise call crashes for chunks not on disk.
+RLS_PY="$REPO_ROOT/scripts/patch-randomlevelsource-getchunk-checkpoints.py"
+if [ -f "$RLS_PY" ]; then
+    python3 "$RLS_PY"
+fi
