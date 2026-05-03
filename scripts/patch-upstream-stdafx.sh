@@ -1350,5 +1350,14 @@ if [ -f "$UDC_PY" ]; then
     python3 "$UDC_PY"
 fi
 
-# G5-step9..12 CKPTs removed - they pinned the procgen crash to
-# missing IntCache TLS init, fix landed in MCLEGameLoop.cpp.
+# G5-step14: a new crash at addr 0x128 in chunk (16,19)'s create().
+# 33 chunks preload OK at r=3, then (16,19) trips. Restore the SCC +
+# RLS CKPTs to pin which deref crashes for that specific chunk.
+SCC_PY="$REPO_ROOT/scripts/patch-serverchunkcache-create-checkpoints.py"
+if [ -f "$SCC_PY" ]; then
+    python3 "$SCC_PY"
+fi
+RLS_PY="$REPO_ROOT/scripts/patch-randomlevelsource-getchunk-checkpoints.py"
+if [ -f "$RLS_PY" ]; then
+    python3 "$RLS_PY"
+fi
