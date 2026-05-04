@@ -894,6 +894,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/TeleportCommand.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TexOffs.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureAtlas.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TextureManager.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TileEntityRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Timer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/User.cpp
