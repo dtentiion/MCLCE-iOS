@@ -61,6 +61,10 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
                                                  unsigned int *out_width,
                                                  unsigned int *out_height,
                                                  int **out_data) {
+    {
+        std::string m = std::string("BIL_CKPT entry path=") + (path ? path : "(null)");
+        mcle_log_msg(m.c_str());
+    }
     if (!path || !out_width || !out_height || !out_data) return -1;
     *out_data = nullptr;
     *out_width = 0;
