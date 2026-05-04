@@ -122,6 +122,44 @@ if old4 not in src:
     sys.exit(f"anchor 4 not found in {TARGET}")
 src = src.replace(old4, new4, 1)
 
+# G5-step25: bracket tesselateBlockInWorldWithAmbienceOcclusionTexLighting entry.
+old6 = (
+    "bool TileRenderer::tesselateBlockInWorldWithAmbienceOcclusionTexLighting( Tile* tt, int pX, int pY, int pZ,\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
+    "{"
+)
+new6 = (
+    "bool TileRenderer::tesselateBlockInWorldWithAmbienceOcclusionTexLighting( Tile* tt, int pX, int pY, int pZ,\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
+    "{\n"
+    '\tstatic int s_aoCount = 0;\n'
+    '\tbool s_aoLog = (s_aoCount++ < 3);\n'
+    '\tif (s_aoLog) app.DebugPrintf("AO_CKPT enter tt=%p id=%d xyz=%d,%d,%d ff=%d", tt, (int)tt->id, pX, pY, pZ, faceFlags);'
+)
+if old6 in src:
+    src = src.replace(old6, new6, 1)
+
+# Bracket getLightColor + t->tex2 calls.
+old7 = (
+    "\tint\t\t\tcenterColor = getLightColor(tt,  level, pX, pY, pZ );\n"
+    "\n"
+    "\tTesselator* t = Tesselator::getInstance();\n"
+    "\tt->tex2( 0xf000f );"
+)
+new7 = (
+    '\tif (s_aoLog) app.DebugPrintf("AO_CKPT before getLightColor");\n'
+    "\tint\t\t\tcenterColor = getLightColor(tt,  level, pX, pY, pZ );\n"
+    '\tif (s_aoLog) app.DebugPrintf("AO_CKPT after getLightColor=0x%x", centerColor);\n'
+    "\tTesselator* t = Tesselator::getInstance();\n"
+    '\tif (s_aoLog) app.DebugPrintf("AO_CKPT before t->tex2 t=%p", t);\n'
+    "\tt->tex2( 0xf000f );\n"
+    '\tif (s_aoLog) app.DebugPrintf("AO_CKPT after t->tex2");'
+)
+if old7 in src:
+    src = src.replace(old7, new7, 1)
+
 old5 = (
     "\tif ( Tile::lightEmission[tt->id] == 0 )//4J - TODO/remove (Minecraft::useAmbientOcclusion())\n"
     "\t{\n"
