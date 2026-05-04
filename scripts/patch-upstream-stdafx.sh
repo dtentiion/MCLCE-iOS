@@ -1394,6 +1394,12 @@ if [ -f "$TBT_PY" ]; then
     python3 "$TBT_PY"
 fi
 
+# expose TexturePackRepository::DEFAULT_TEXTURE_PACK
+TPRD_PY="$REPO_ROOT/scripts/patch-tpr-default-public.py"
+if [ -f "$TPRD_PY" ]; then
+    python3 "$TPRD_PY"
+fi
+
 # G5-step22: even stone (id=1) crashes inside tesselateInWorld. Bracket
 # the entry to pin which deref crashes (updateShape / mipmapEnable / ...).
 TR_PY="$REPO_ROOT/scripts/patch-tilerenderer-tesselate-checkpoints.py"
