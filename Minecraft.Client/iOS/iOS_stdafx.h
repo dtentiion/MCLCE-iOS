@@ -317,6 +317,10 @@ struct C4JRenderStub {
     template<class... A> void   TextureBind(A...)             {}
     template<class... A> void   TextureUnbind(A...)           {}
     template<class... A> void   TextureUpdate(A...)           {}
+    template<class... A> void   TextureSetTextureLevels(A...) {}
+    template<class... A> void   TextureData(A...)             {}
+    template<class... A> void   TextureDataUpdate(A...)       {}
+    template<class... A> void * TextureGetTexture(A...)       { return nullptr; }
     template<class... A> void   MatrixMode(A...)              {}
     template<class... A> void   MatrixRotate(A...)            {}
     template<class... A> void   MatrixTranslate(A...)         {}
