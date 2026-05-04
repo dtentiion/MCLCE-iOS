@@ -6,6 +6,7 @@ add_library(mcle_ios_render STATIC
   MetalContext.mm
   RND_iOS_Metal.mm
   png_decode.mm
+  buffered_image_load.cpp
 )
 
 target_include_directories(mcle_ios_render PUBLIC
