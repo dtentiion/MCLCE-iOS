@@ -120,6 +120,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/MultiPlayerLocalPlayer.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
+#include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -856,18 +857,37 @@ void initImpl() {
         }
     }
 
-    // G5-step30/31: real Textures instance. Upstream's Minecraft.cpp:411
-    // does `textures->stitch()` after this, which loops Tile::registerIcons
-    // and stitches the atlas. We pass non-null TexturePackRepository +
-    // Options pointers (zero-buffer placement) so Textures::loadTexturePixels
-    // and friends don't deref null. Our TPR stub's getSelected() returns
-    // DEFAULT_TEXTURE_PACK (also null) and that null value isn't actually
-    // used by loadTexturePixels - it just stores the result in a local.
+    // Real Textures + stitch path. PreStitchedTextureMap::stitch reads
+    // Minecraft::GetInstance()->skins->getSelected()->getImageResource(
+    // L"terrain.png", ...) so we need:
+    //   1. a real TexturePack pointing at Documents/Common (FolderTexturePack
+    //      walks res/<filename>)
+    //   2. it assigned to TexturePackRepository::DEFAULT_TEXTURE_PACK so the
+    //      stub getSelected returns it
+    //   3. g_minecraftShim->skins pointing to our zero-buffer TPR so the
+    //      Minecraft::GetInstance()->skins->getSelected() chain reaches it
+    {
+        const char *root = StorageManager.GetSaveRootPath();
+        if (root && *root) {
+            std::string commonDir = std::string(root) + "/Common";
+            std::wstring wCommonDir(commonDir.begin(), commonDir.end());
+            File *commonFile = new File(wCommonDir);
+            FolderTexturePack *pack = new FolderTexturePack(
+                TexturePackRepository::DEFAULT_TEXTURE_PACK_ID,
+                L"default", commonFile, nullptr);
+            TexturePackRepository::DEFAULT_TEXTURE_PACK = pack;
+            MCLE_LOG("mcle_game_init: DEFAULT_TEXTURE_PACK at %p (root=%s)",
+                     (void*)pack, root);
+        }
+    }
+
     static char s_tprBuf[sizeof(TexturePackRepository)] = {0};
     static char s_optsBuf[sizeof(Options)] = {0};
     TexturePackRepository *skins =
         reinterpret_cast<TexturePackRepository *>(s_tprBuf);
     Options *options = reinterpret_cast<Options *>(s_optsBuf);
+    g_minecraftShim->skins = skins;
+
     if (g_levelRenderer) {
         try {
             Textures *textures = new Textures(skins, options);
