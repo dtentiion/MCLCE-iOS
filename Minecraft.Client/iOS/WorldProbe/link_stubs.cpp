@@ -402,47 +402,12 @@ std::string wstr_to_utf8(const std::wstring &w) {
 
 } // namespace
 
-// G4-step3: bindTexture resolves the ResourceLocation to a Common/res/
-// TitleUpdate/res/<name>.png path under the iOS Documents sandbox,
-// loads via CGImageSource (PNG decoder per upstream's per-platform
-// pattern), and binds the resulting MTLTexture. Cached by full path.
-void Textures::bindTexture(ResourceLocation *resource) {
-    if (!resource) return;
-
-    std::string rel;
-    if (resource->isPreloaded()) {
-        const char *p = texture_name_relpath(resource->getTexture());
-        if (!p) return;  // unhandled enum - leave default texture bound
-        rel = std::string(p) + ".png";
-    } else {
-        std::wstring path = resource->getPath();
-        if (path.empty()) return;
-        rel = wstr_to_utf8(path);
-    }
-
-    const char *root = StorageManager.GetSaveRootPath();
-    if (!root || !*root) return;
-
-    // Upstream Win64 / Xbox 360 search order: TitleUpdate (post-patch
-    // overrides) first, then base game. Match that here so however the
-    // user lays out their Documents tree they get found.
-    const std::string base = std::string(root) + "/Common/res/";
-    unsigned int id = mcle_glbridge_load_or_get_png_path(
-        (base + "TitleUpdate/res/" + rel).c_str());
-    if (id == 0) {
-        id = mcle_glbridge_load_or_get_png_path((base + rel).c_str());
-    }
-    if (id != 0) mcle_glbridge_bind_texture(id);
-}
-
-MemTexture *Textures::addMemTexture(const std::wstring & /*url*/,
-                                     MemTextureProcessor * /*p*/) { return nullptr; }
-void Textures::removeMemTexture(const std::wstring & /*url*/) {}
-
-// G5: TileRenderer pulls this in once Chunk::rebuild runs. Returns
-// nullptr so the renderer falls back to the default texture we bind.
-class Icon;
-Icon *Textures::getMissingIcon(int /*type*/) { return nullptr; }
+// G5-step29: Textures methods (bindTexture, addMemTexture,
+// removeMemTexture, getMissingIcon) removed from here. Upstream
+// Textures.cpp is now compiled in WorldProbe and provides those.
+// The G4 iOS CGImageSource PNG path now goes through upstream's
+// loadTexture / TextureManager chain. If iOS-specific behavior
+// is needed for any of those, patch upstream rather than re-stub.
 
 #include "GameRenderer.h"
 // G5: TileRenderer reads this for anaglyph color filtering; we keep it
