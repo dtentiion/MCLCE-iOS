@@ -165,10 +165,13 @@ public:
     std::wstring getWorldName() override { return L""; }
     std::wstring getAnimationString(const std::wstring &, const std::wstring &, bool) override { return L""; }
     std::wstring getAnimationString(const std::wstring &, const std::wstring &) override { return L""; }
-    BufferedImage *getImageResource(const std::wstring &filename, bool, bool, const std::wstring &) override {
-        // Path resolves via our LoadTextureData which prepends sandbox
-        // root automatically. Just hand the relative name through.
-        return new BufferedImage(filename, false, false, L"");
+    BufferedImage *getImageResource(const std::wstring &filename, bool filenameHasExtension, bool bTitleUpdateTexture, const std::wstring &drive) override {
+        // BufferedImage builds path as wDrive + L"res" + filePath... with
+        // no separator. So filePath needs a leading slash for the result
+        // to be "Common/res/<file>.png" not "Common/resterrain.png".
+        std::wstring path = (filename.empty() || filename[0] == L'/')
+            ? filename : (L"/" + filename);
+        return new BufferedImage(path, filenameHasExtension, bTitleUpdateTexture, drive);
     }
     void loadColourTable() override {}
     void loadUI() override {}
