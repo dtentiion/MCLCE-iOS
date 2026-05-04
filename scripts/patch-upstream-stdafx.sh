@@ -1361,34 +1361,14 @@ fi
 # MinecraftServer::addPostProcessRequest's uninit critical section.
 # Fix landed via asyncPostProcess=false in MCLEGameLoop.cpp.
 
-# G5-step16: chunks load clean but never rebuild (lists stays 11).
-# Bracket Chunk::rebuild's candidate derefs to see whether it's
-# being called and where it bails.
-CR_PY="$REPO_ROOT/scripts/patch-chunk-rebuild-checkpoints.py"
-if [ -f "$CR_PY" ]; then
-    python3 "$CR_PY"
-fi
-
-# G5-step17: Chunk::rebuild reaches lc->getBlockData and crashes at 0x0.
-# Bracket the body to log lowerBlocks/upperBlocks pointers and null-guard.
-LCGBD_PY="$REPO_ROOT/scripts/patch-levelchunk-getblockdata-checkpoints.py"
-if [ -f "$LCGBD_PY" ]; then
-    python3 "$LCGBD_PY"
-fi
-
-# G5-step18: lowerBlocks->getData itself crashes. Log indicesAndData
-# and retArray.data status at entry to pin which is bad.
-CTSGD_PY="$REPO_ROOT/scripts/patch-compressedtilestorage-getdata-checkpoints.py"
-if [ -f "$CTSGD_PY" ]; then
-    python3 "$CTSGD_PY"
-fi
-
-# G5-step20: null-guard merged into patch-chunk-rebuild-checkpoints.py
-# above - both edits target the same lines so anchors collided.
+# G5: chunk-rebuild / TileRenderer / LevelChunk-getBlockData /
+# CompressedTileStorage CKPTs all served their purpose narrowing the
+# crash to the tesselate path; removed to free up os_log buffer so
+# any new crash signal isn't dropped by spam.
 
 # G5-step29: redirect Textures::bindTexture to the iOS CGImageSource
-# PNG path that worked in G4. Upstream's body needs a real TexturePack
-# which we don't have wired yet; this restores sun/cloud rendering.
+# PNG path. Upstream's body uses loadTexture which needs the real
+# texture pack pipeline not fully wired yet.
 TBT_PY="$REPO_ROOT/scripts/patch-textures-bindtexture-ios.py"
 if [ -f "$TBT_PY" ]; then
     python3 "$TBT_PY"
@@ -1398,11 +1378,4 @@ fi
 TPRD_PY="$REPO_ROOT/scripts/patch-tpr-default-public.py"
 if [ -f "$TPRD_PY" ]; then
     python3 "$TPRD_PY"
-fi
-
-# G5-step22: even stone (id=1) crashes inside tesselateInWorld. Bracket
-# the entry to pin which deref crashes (updateShape / mipmapEnable / ...).
-TR_PY="$REPO_ROOT/scripts/patch-tilerenderer-tesselate-checkpoints.py"
-if [ -f "$TR_PY" ]; then
-    python3 "$TR_PY"
 fi
