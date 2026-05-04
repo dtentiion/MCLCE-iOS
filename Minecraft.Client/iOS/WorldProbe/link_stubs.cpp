@@ -443,8 +443,10 @@ std::wstring AbstractTexturePack::getDesc2() { return L""; }
 std::wstring AbstractTexturePack::getWorldName() { return L""; }
 std::wstring AbstractTexturePack::getAnimationString(const std::wstring &, const std::wstring &) { return L""; }
 std::wstring AbstractTexturePack::getAnimationString(const std::wstring &, const std::wstring &, bool) { return L""; }
-BufferedImage *AbstractTexturePack::getImageResource(const std::wstring &filename, bool, bool, const std::wstring &) {
-    return new BufferedImage(filename, false, false, L"");
+BufferedImage *AbstractTexturePack::getImageResource(const std::wstring &filename, bool filenameHasExtension, bool bTitleUpdateTexture, const std::wstring &drive) {
+    std::wstring path = (filename.empty() || filename[0] == L'/')
+        ? filename : (L"/" + filename);
+    return new BufferedImage(path, filenameHasExtension, bTitleUpdateTexture, drive);
 }
 void AbstractTexturePack::loadColourTable() {}
 void AbstractTexturePack::loadUI() {}
