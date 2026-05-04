@@ -851,6 +851,7 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: G2c construct LevelRenderer(shim, nullptr)...");
     try {
         g_levelRenderer = new LevelRenderer(g_minecraftShim, nullptr);
+        g_minecraftShim->levelRenderer = g_levelRenderer;
         MCLE_LOG("mcle_game_init: LevelRenderer at %p", (void*)g_levelRenderer);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: LevelRenderer ctor threw: %{public}s", e.what());
