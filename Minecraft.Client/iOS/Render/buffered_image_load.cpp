@@ -55,6 +55,8 @@ bool read_file(const std::string &path, std::string &out) {
 
 } // namespace
 
+extern "C" int mcle_log_msg(const char *msg);  // bridge to os_log
+
 extern "C" long mcle_buffered_image_load_path(const char *path,
                                                  unsigned int *out_width,
                                                  unsigned int *out_height,
@@ -72,6 +74,11 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
         if (root && *root) {
             full = std::string(root) + "/" + rel;
         }
+    }
+    {
+        std::string m = std::string("BIL_CKPT path=") + path + " full=" + full +
+            " exists=" + (file_exists(full) ? "1" : "0");
+        mcle_log_msg(m.c_str());
     }
     if (!file_exists(full)) return -2;
 
