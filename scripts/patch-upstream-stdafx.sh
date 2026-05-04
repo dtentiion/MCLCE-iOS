@@ -1379,3 +1379,9 @@ TPRD_PY="$REPO_ROOT/scripts/patch-tpr-default-public.py"
 if [ -f "$TPRD_PY" ]; then
     python3 "$TPRD_PY"
 fi
+
+# stitch step CKPTs to narrow the 0x2d8 crash
+ST_PY="$REPO_ROOT/scripts/patch-stitch-checkpoints.py"
+if [ -f "$ST_PY" ]; then
+    python3 "$ST_PY"
+fi
