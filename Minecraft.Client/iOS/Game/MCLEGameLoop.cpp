@@ -123,17 +123,61 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 
 namespace {
-// FolderTexturePack has 3 pure virtuals not provided by its parent. Stub
-// them to make the class concrete - matches what FileTexturePack does
-// upstream on platforms with no DLC.
+// AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
+// + Credits which need XC_LANGUAGE/XC_LOCALE enums we don't have).
+// Override every virtual that would normally come from there. Only
+// hasFile/getResourceImplementation/getImageResource matter for the
+// stitch path - the rest can return empty/false.
 class IosFolderTexturePack : public FolderTexturePack {
 public:
     IosFolderTexturePack(DWORD id, const std::wstring &name,
                           File *folder, TexturePack *fallback)
         : FolderTexturePack(id, name, folder, fallback) {}
+
+    // From TexturePack pure virtuals
     bool hasData() override { return true; }
     bool isLoadingData() override { return false; }
     DLCPack *getDLCPack() override { return nullptr; }
+
+    // From AbstractTexturePack virtuals - inlined stubs since the .cpp
+    // doesn't compile for us. Stitch only really needs hasFile + the
+    // image load path; rest are effectively no-ops.
+    void loadIcon() override {}
+    void loadComparison() override {}
+    void loadDescription() override {}
+    void loadName() override {}
+    InputStream *getResource(const std::wstring &, bool) override { return nullptr; }
+    void unload(Textures *) override {}
+    void load(Textures *) override {}
+    bool hasFile(const std::wstring &name, bool) override { return hasFile(name); }
+    bool hasFile(const std::wstring &name) override {
+        // FolderTexturePack uses File-based lookup; we just check the
+        // path under our root folder. Conservative: report yes so stitch
+        // takes the loadable path. Actual file check happens in
+        // BufferedImage::BufferedImage(File) via our LoadTextureData.
+        (void)name;
+        return true;
+    }
+    DWORD getId() override { return 0; }
+    std::wstring getName() override { return L"default"; }
+    std::wstring getDesc1() override { return L""; }
+    std::wstring getDesc2() override { return L""; }
+    std::wstring getWorldName() override { return L""; }
+    std::wstring getAnimationString(const std::wstring &, const std::wstring &, bool) override { return L""; }
+    std::wstring getAnimationString(const std::wstring &, const std::wstring &) override { return L""; }
+    BufferedImage *getImageResource(const std::wstring &filename, bool, bool, const std::wstring &) override {
+        // Path resolves via our LoadTextureData which prepends sandbox
+        // root automatically. Just hand the relative name through.
+        return new BufferedImage(filename, false, false, L"");
+    }
+    void loadColourTable() override {}
+    void loadUI() override {}
+    void unloadUI() override {}
+    std::wstring getXuiRootPath() override { return L""; }
+    PBYTE getPackIcon(DWORD &) override { return nullptr; }
+    PBYTE getPackComparison(DWORD &) override { return nullptr; }
+    unsigned int getDLCParentPackId() override { return 0; }
+    unsigned char getDLCSubPackId() override { return 0; }
 };
 } // namespace
 

@@ -892,7 +892,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/StitchSlot.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/SuspendedTownParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TeleportCommand.cpp
-  ${UPSTREAM_DIR}/Minecraft.Client/AbstractTexturePack.cpp
+  # AbstractTexturePack.cpp transitively pulls UIScene_LanguageSelector
+  # and UIScene_Credits which need XC_LANGUAGE/XC_LOCALE enums we don't
+  # have. Override its virtuals via the IosFolderTexturePack subclass
+  # in MCLEGameLoop.cpp instead.
   ${UPSTREAM_DIR}/Minecraft.Client/BufferedImage.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MemTexture.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TexOffs.cpp
