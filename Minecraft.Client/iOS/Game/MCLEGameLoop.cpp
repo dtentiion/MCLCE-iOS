@@ -874,6 +874,12 @@ void initImpl() {
             g_levelRenderer->textures = textures;
             g_minecraftShim->textures = textures;
             MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
+            try {
+                textures->stitch();
+                MCLE_LOG("mcle_game_init: textures->stitch done");
+            } catch (...) {
+                MCLE_LOG("mcle_game_init: textures->stitch threw");
+            }
         } catch (...) {
             MCLE_LOG("mcle_game_init: Textures ctor threw");
         }
