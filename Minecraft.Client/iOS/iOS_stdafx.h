@@ -327,12 +327,7 @@ struct C4JRenderStub {
     // body lives in Render/buffered_image_load.cpp and uses the same
     // CGImageSource pipeline as mcle_png_decode_rgba8. Returns 0 on
     // success (matches Win64 ERROR_SUCCESS).
-    inline long LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data) {
-        extern long mcle_buffered_image_load_path(
-            const char *, unsigned int *, unsigned int *, int **);
-        if (!info || !data) return -1L;
-        return mcle_buffered_image_load_path(path, &info->Width, &info->Height, data);
-    }
+    inline long LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data);
     // Catch-all for any other call signature (none expected; the above
     // is the one BufferedImage uses).
     template<class... A> long   LoadTextureData(A...)          { return -1L; }
@@ -352,6 +347,16 @@ struct C4JRenderStub {
     template<class... A> void   SetClearColour(A...)          {}
     template<class... A> void   SetClearColor(A...)           {}
 };
+
+// iOS body for LoadTextureData. C-linkage decl + class-method impl
+// kept separate because extern "C" can't appear inside a class body.
+extern "C" long mcle_buffered_image_load_path(
+    const char *, unsigned int *, unsigned int *, int **);
+inline long C4JRenderStub::LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data) {
+    if (!info || !data) return -1L;
+    return mcle_buffered_image_load_path(path, &info->Width, &info->Height, data);
+}
+
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
 
