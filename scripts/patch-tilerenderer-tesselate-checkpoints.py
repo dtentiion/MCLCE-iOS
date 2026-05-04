@@ -125,14 +125,14 @@ src = src.replace(old4, new4, 1)
 # G5-step25: bracket tesselateBlockInWorldWithAmbienceOcclusionTexLighting entry.
 old6 = (
     "bool TileRenderer::tesselateBlockInWorldWithAmbienceOcclusionTexLighting( Tile* tt, int pX, int pY, int pZ,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
     "{"
 )
 new6 = (
     "bool TileRenderer::tesselateBlockInWorldWithAmbienceOcclusionTexLighting( Tile* tt, int pX, int pY, int pZ,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
     "{\n"
     '\tstatic int s_aoCount = 0;\n'
     '\tbool s_aoLog = (s_aoCount++ < 3);\n'
