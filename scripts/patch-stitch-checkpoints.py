@@ -65,7 +65,20 @@ old5 = (
     "\t}\n"
     "\n"
     "\t//BufferedImage *image = new BufferedImage(texturePack->getResource(L\"/\" + filename),false,true,drive); //ImageIO::read(texturePack->getResource(L\"/\" + filename));\n"
-    "\tBufferedImage *image = texturePack->getImageResource(filename, false, true, drive);"
+    "\tBufferedImage *image = texturePack->getImageResource(filename, false, true, drive);\n"
+    "\tMemSect(0);\n"
+    "\tint height = image->getHeight();\n"
+    "\tint width = image->getWidth();\n"
+    "\n"
+    "\tif(stitchResult != nullptr)\n"
+    "\t{\n"
+    "\t\tTextureManager::getInstance()->unregisterTexture(name, stitchResult);\n"
+    "\t\tdelete stitchResult;\n"
+    "\t}\n"
+    "\tstitchResult = TextureManager::getInstance()->createTexture(name, Texture::TM_DYNAMIC, width, height, Texture::TFMT_RGBA, m_mipMap);\n"
+    "\tstitchResult->transferFromImage(image);\n"
+    "\tdelete image;\n"
+    "\tTextureManager::getInstance()->registerName(name, stitchResult);"
 )
 new5 = (
     '\tapp.DebugPrintf("STITCH_CKPT texturePack=%p", texturePack);\n'
@@ -85,9 +98,80 @@ new5 = (
     "\n"
     '\tapp.DebugPrintf("STITCH_CKPT before getImageResource texturePack=%p", texturePack);\n'
     "\tBufferedImage *image = texturePack->getImageResource(filename, false, true, drive);\n"
-    '\tapp.DebugPrintf("STITCH_CKPT after getImageResource image=%p", image);'
+    '\tapp.DebugPrintf("STITCH_CKPT after getImageResource image=%p", image);\n'
+    "\tMemSect(0);\n"
+    "\tif (!image) {\n"
+    '\t\tapp.DebugPrintf("STITCH_CKPT bail: image null");\n'
+    "\t\treturn;\n"
+    "\t}\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before image->getHeight");\n'
+    "\tint height = image->getHeight();\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before image->getWidth");\n'
+    "\tint width = image->getWidth();\n"
+    '\tapp.DebugPrintf("STITCH_CKPT image dims wxh = %dx%d", width, height);\n'
+    "\n"
+    "\tif(stitchResult != nullptr)\n"
+    "\t{\n"
+    '\t\tapp.DebugPrintf("STITCH_CKPT before unregisterTexture");\n'
+    "\t\tTextureManager::getInstance()->unregisterTexture(name, stitchResult);\n"
+    "\t\tdelete stitchResult;\n"
+    "\t}\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before createTexture");\n'
+    "\tstitchResult = TextureManager::getInstance()->createTexture(name, Texture::TM_DYNAMIC, width, height, Texture::TFMT_RGBA, m_mipMap);\n"
+    '\tapp.DebugPrintf("STITCH_CKPT after createTexture stitchResult=%p", stitchResult);\n'
+    '\tapp.DebugPrintf("STITCH_CKPT before transferFromImage");\n'
+    "\tstitchResult->transferFromImage(image);\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before delete image");\n'
+    "\tdelete image;\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before registerName");\n'
+    "\tTextureManager::getInstance()->registerName(name, stitchResult);\n"
+    '\tapp.DebugPrintf("STITCH_CKPT after registerName");'
 )
 src = src.replace(old5, new5, 1)
+
+# CKPTs around the texturesByName loops + writeAsPNG + updateOnGPU
+old6 = (
+    "\tfor(auto & it : texturesByName)\n"
+    "\t{\n"
+    "\t\tauto *preStitched = static_cast<StitchedTexture *>(it.second);\n"
+    "\n"
+    "\t\tint x = preStitched->getU0() * stitchResult->getWidth();\n"
+    "\t\tint y = preStitched->getV0() * stitchResult->getHeight();\n"
+    "\t\tint width = (preStitched->getU1() * stitchResult->getWidth()) - x;\n"
+    "\t\tint height = (preStitched->getV1() * stitchResult->getHeight()) - y;\n"
+    "\n"
+    "\t\tpreStitched->init(stitchResult, nullptr, x, y, width, height, false);\n"
+    "\t}"
+)
+new6 = (
+    '\tapp.DebugPrintf("STITCH_CKPT before texturesByName init loop, count=%zu", texturesByName.size());\n'
+    "\tfor(auto & it : texturesByName)\n"
+    "\t{\n"
+    "\t\tauto *preStitched = static_cast<StitchedTexture *>(it.second);\n"
+    "\n"
+    "\t\tint x = preStitched->getU0() * stitchResult->getWidth();\n"
+    "\t\tint y = preStitched->getV0() * stitchResult->getHeight();\n"
+    "\t\tint width = (preStitched->getU1() * stitchResult->getWidth()) - x;\n"
+    "\t\tint height = (preStitched->getV1() * stitchResult->getHeight()) - y;\n"
+    "\n"
+    "\t\tpreStitched->init(stitchResult, nullptr, x, y, width, height, false);\n"
+    "\t}\n"
+    '\tapp.DebugPrintf("STITCH_CKPT after texturesByName init loop");'
+)
+src = src.replace(old6, new6, 1)
+
+old7 = (
+    "\tstitchResult->writeAsPNG(L\"debug.stitched_\" + name + L\".png\");\n"
+    "\tstitchResult->updateOnGPU();"
+)
+new7 = (
+    '\tapp.DebugPrintf("STITCH_CKPT before writeAsPNG");\n'
+    "\tstitchResult->writeAsPNG(L\"debug.stitched_\" + name + L\".png\");\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before updateOnGPU");\n'
+    "\tstitchResult->updateOnGPU();\n"
+    '\tapp.DebugPrintf("STITCH_CKPT done");'
+)
+src = src.replace(old7, new7, 1)
 
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
