@@ -423,6 +423,43 @@ TexturePack *TexturePackRepository::getSelected() { return DEFAULT_TEXTURE_PACK;
 #include "Minecraft.h"
 int Minecraft::maxSupportedTextureSize() { return 2048; }
 
+// AbstractTexturePack.cpp can't compile (UI/locale deps), but FolderTexturePack
+// inherits from it and its vtable references these. Provide minimal symbol
+// bodies so the linker has something to point at. These match the no-op
+// behavior of the IosFolderTexturePack subclass overrides.
+#include "AbstractTexturePack.h"
+void AbstractTexturePack::loadIcon() {}
+void AbstractTexturePack::loadComparison() {}
+void AbstractTexturePack::loadDescription() {}
+void AbstractTexturePack::loadName() {}
+InputStream *AbstractTexturePack::getResource(const std::wstring &, bool) { return nullptr; }
+void AbstractTexturePack::unload(Textures *) {}
+void AbstractTexturePack::load(Textures *) {}
+bool AbstractTexturePack::hasFile(const std::wstring &, bool) { return true; }
+DWORD AbstractTexturePack::getId() { return 0; }
+std::wstring AbstractTexturePack::getName() { return L""; }
+std::wstring AbstractTexturePack::getDesc1() { return L""; }
+std::wstring AbstractTexturePack::getDesc2() { return L""; }
+std::wstring AbstractTexturePack::getWorldName() { return L""; }
+std::wstring AbstractTexturePack::getAnimationString(const std::wstring &, const std::wstring &) { return L""; }
+std::wstring AbstractTexturePack::getAnimationString(const std::wstring &, const std::wstring &, bool) { return L""; }
+BufferedImage *AbstractTexturePack::getImageResource(const std::wstring &filename, bool, bool, const std::wstring &) {
+    return new BufferedImage(filename, false, false, L"");
+}
+void AbstractTexturePack::loadColourTable() {}
+void AbstractTexturePack::loadUI() {}
+void AbstractTexturePack::unloadUI() {}
+std::wstring AbstractTexturePack::getXuiRootPath() { return L""; }
+PBYTE AbstractTexturePack::getPackIcon(DWORD &) { return nullptr; }
+PBYTE AbstractTexturePack::getPackComparison(DWORD &) { return nullptr; }
+unsigned int AbstractTexturePack::getDLCParentPackId() { return 0; }
+unsigned char AbstractTexturePack::getDLCSubPackId() { return 0; }
+// Ctor body too - normally lives in AbstractTexturePack.cpp.
+AbstractTexturePack::AbstractTexturePack(DWORD id_, File *file_, const std::wstring &name_, TexturePack *fallback_)
+    : id(id_), name(name_), file(file_), m_iconData(nullptr), m_iconSize(0),
+      m_comparisonData(nullptr), m_comparisonSize(0), fallback(fallback_),
+      m_colourTable(nullptr), iconImage(nullptr), textureId(0) {}
+
 #include "GameRenderer.h"
 // G5: TileRenderer reads this for anaglyph color filtering; we keep it
 // false so the standard non-stereo path runs.
