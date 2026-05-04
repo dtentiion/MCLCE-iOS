@@ -892,10 +892,14 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/StitchSlot.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/SuspendedTownParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TeleportCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/BufferedImage.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/MemTexture.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TexOffs.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Texture.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureAtlas.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureManager.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureMap.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TexturePackRepository.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Textures.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PreStitchedTextureMap.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TileEntityRenderer.cpp
