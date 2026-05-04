@@ -353,12 +353,12 @@ class MemTexture;
 extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path);
 extern "C" void         mcle_glbridge_bind_texture(unsigned int id);
 
-namespace {
-
 // Mirrors upstream's Textures::preLoaded[] for the texture-name enum
 // values our shipped renderer actually requests. Each entry is the
 // relative path under Common/res/TitleUpdate/res (no leading slash, no
 // .png extension - matches upstream exactly).
+// External linkage so the patched upstream Textures::bindTexture can
+// call it (G5-step29).
 const char *texture_name_relpath(_TEXTURE_NAME tn) {
     switch (tn) {
         case TN_TERRAIN_SUN:         return "terrain/sun";
@@ -375,6 +375,8 @@ const char *texture_name_relpath(_TEXTURE_NAME tn) {
         default:                      return nullptr;
     }
 }
+
+namespace {
 
 std::string wstr_to_utf8(const std::wstring &w) {
     std::string out;
