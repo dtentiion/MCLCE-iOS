@@ -53,5 +53,41 @@ new4 = (
 )
 src = src.replace(old4, new4, 1)
 
+old5 = (
+    "\tif(texturePack->hasFile(L\"res/\" + filename,false))\n"
+    "\t{\n"
+    "\t\tdrive = texturePack->getPath(true);\n"
+    "\t}\n"
+    "\telse\n"
+    "\t{\n"
+    "\t\tdrive = Minecraft::GetInstance()->skins->getDefault()->getPath(true);\n"
+    "\t\ttexturePack = Minecraft::GetInstance()->skins->getDefault();\n"
+    "\t}\n"
+    "\n"
+    "\t//BufferedImage *image = new BufferedImage(texturePack->getResource(L\"/\" + filename),false,true,drive); //ImageIO::read(texturePack->getResource(L\"/\" + filename));\n"
+    "\tBufferedImage *image = texturePack->getImageResource(filename, false, true, drive);"
+)
+new5 = (
+    '\tapp.DebugPrintf("STITCH_CKPT texturePack=%p", texturePack);\n'
+    '\tapp.DebugPrintf("STITCH_CKPT before hasFile");\n'
+    "\tif(texturePack->hasFile(L\"res/\" + filename,false))\n"
+    "\t{\n"
+    '\t\tapp.DebugPrintf("STITCH_CKPT hasFile=true, before getPath");\n'
+    "\t\tdrive = texturePack->getPath(true);\n"
+    '\t\tapp.DebugPrintf("STITCH_CKPT after getPath");\n'
+    "\t}\n"
+    "\telse\n"
+    "\t{\n"
+    '\t\tapp.DebugPrintf("STITCH_CKPT hasFile=false, fallback path");\n'
+    "\t\tdrive = Minecraft::GetInstance()->skins->getDefault()->getPath(true);\n"
+    "\t\ttexturePack = Minecraft::GetInstance()->skins->getDefault();\n"
+    "\t}\n"
+    "\n"
+    '\tapp.DebugPrintf("STITCH_CKPT before getImageResource texturePack=%p", texturePack);\n'
+    "\tBufferedImage *image = texturePack->getImageResource(filename, false, true, drive);\n"
+    '\tapp.DebugPrintf("STITCH_CKPT after getImageResource image=%p", image);'
+)
+src = src.replace(old5, new5, 1)
+
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
