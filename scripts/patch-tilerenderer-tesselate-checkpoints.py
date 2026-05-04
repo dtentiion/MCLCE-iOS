@@ -142,6 +142,24 @@ if old6 in src:
     src = src.replace(old6, new6, 1)
 
 # Bracket getLightColor + t->tex2 calls.
+old8 = (
+    "\tif( uniformTex == nullptr )\n"
+    "\t{\n"
+    "\t\tif ( getTexture(tt)->getFlags() == Icon::IS_GRASS_TOP ) tintSides = false;\n"
+    "\t}"
+)
+new8 = (
+    "\tif( uniformTex == nullptr )\n"
+    "\t{\n"
+    '\t\tif (s_aoLog) app.DebugPrintf("AO_CKPT before getTexture(tt) tt->id=%d", (int)tt->id);\n'
+    "\t\tIcon *_gtex = getTexture(tt);\n"
+    '\t\tif (s_aoLog) app.DebugPrintf("AO_CKPT after getTexture(tt)=%p", _gtex);\n'
+    "\t\tif (_gtex && _gtex->getFlags() == Icon::IS_GRASS_TOP) tintSides = false;\n"
+    "\t}"
+)
+if old8 in src:
+    src = src.replace(old8, new8, 1)
+
 old7 = (
     "\tint\t\t\tcenterColor = getLightColor(tt,  level, pX, pY, pZ );\n"
     "\n"
