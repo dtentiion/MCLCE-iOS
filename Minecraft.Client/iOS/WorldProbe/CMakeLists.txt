@@ -892,6 +892,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/StitchSlot.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/SuspendedTownParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TeleportCommand.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/AbstractTexturePack.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/BufferedImage.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MemTexture.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TexOffs.cpp
