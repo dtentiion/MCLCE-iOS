@@ -122,6 +122,21 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 #include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 
+namespace {
+// FolderTexturePack has 3 pure virtuals not provided by its parent. Stub
+// them to make the class concrete - matches what FileTexturePack does
+// upstream on platforms with no DLC.
+class IosFolderTexturePack : public FolderTexturePack {
+public:
+    IosFolderTexturePack(DWORD id, const std::wstring &name,
+                          File *folder, TexturePack *fallback)
+        : FolderTexturePack(id, name, folder, fallback) {}
+    bool hasData() override { return true; }
+    bool isLoadingData() override { return false; }
+    DLCPack *getDLCPack() override { return nullptr; }
+};
+} // namespace
+
 #include "4JLibs/inc/4J_Storage.h"
 
 #define MCLE_LOG(fmt, ...) \
@@ -872,7 +887,7 @@ void initImpl() {
             std::string commonDir = std::string(root) + "/Common";
             std::wstring wCommonDir(commonDir.begin(), commonDir.end());
             File *commonFile = new File(wCommonDir);
-            FolderTexturePack *pack = new FolderTexturePack(
+            IosFolderTexturePack *pack = new IosFolderTexturePack(
                 TexturePackRepository::DEFAULT_TEXTURE_PACK_ID,
                 L"default", commonFile, nullptr);
             TexturePackRepository::DEFAULT_TEXTURE_PACK = pack;
