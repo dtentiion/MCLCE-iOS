@@ -39,7 +39,7 @@ new3 = (
     '\t\tapp.DebugPrintf("STITCH_CKPT before levelRenderer->registerTextures");\n'
     "\t\tMinecraft::GetInstance()->levelRenderer->registerTextures(this);\n"
     '\t\tapp.DebugPrintf("STITCH_CKPT before EntityRenderDispatcher::registerTerrainTextures");\n'
-    "\t\tEntityRenderDispatcher::instance->registerTerrainTextures(this);\n"
+    "\t\tif (EntityRenderDispatcher::instance) EntityRenderDispatcher::instance->registerTerrainTextures(this);\n"
     '\t\tapp.DebugPrintf("STITCH_CKPT after EntityRenderDispatcher");\n'
     "\t}"
 )
