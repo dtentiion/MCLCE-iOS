@@ -1386,6 +1386,14 @@ fi
 # G5-step20: null-guard merged into patch-chunk-rebuild-checkpoints.py
 # above - both edits target the same lines so anchors collided.
 
+# G5-step29: redirect Textures::bindTexture to the iOS CGImageSource
+# PNG path that worked in G4. Upstream's body needs a real TexturePack
+# which we don't have wired yet; this restores sun/cloud rendering.
+TBT_PY="$REPO_ROOT/scripts/patch-textures-bindtexture-ios.py"
+if [ -f "$TBT_PY" ]; then
+    python3 "$TBT_PY"
+fi
+
 # G5-step22: even stone (id=1) crashes inside tesselateInWorld. Bracket
 # the entry to pin which deref crashes (updateShape / mipmapEnable / ...).
 TR_PY="$REPO_ROOT/scripts/patch-tilerenderer-tesselate-checkpoints.py"
