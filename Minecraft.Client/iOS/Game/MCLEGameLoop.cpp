@@ -119,6 +119,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLocalPlayer.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
+#include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -855,17 +856,27 @@ void initImpl() {
         }
     }
 
-    // G3e-step2: Textures shim for LevelRenderer. Zero buffer, no
-    // virtuals - the bindTexture / addMemTexture / removeMemTexture
-    // stubs in link_stubs.cpp don't deref this. Lets renderClouds /
-    // renderAdvancedClouds proceed past textures->bindTexture without
-    // calling on a null pointer.
-    static char s_texturesShimBuf[sizeof(Textures)] = {0};
+    // G5-step30/31: real Textures instance. Upstream's Minecraft.cpp:411
+    // does `textures->stitch()` after this, which loops Tile::registerIcons
+    // and stitches the atlas. We pass non-null TexturePackRepository +
+    // Options pointers (zero-buffer placement) so Textures::loadTexturePixels
+    // and friends don't deref null. Our TPR stub's getSelected() returns
+    // DEFAULT_TEXTURE_PACK (also null) and that null value isn't actually
+    // used by loadTexturePixels - it just stores the result in a local.
+    static char s_tprBuf[sizeof(TexturePackRepository)] = {0};
+    static char s_optsBuf[sizeof(Options)] = {0};
+    TexturePackRepository *skins =
+        reinterpret_cast<TexturePackRepository *>(s_tprBuf);
+    Options *options = reinterpret_cast<Options *>(s_optsBuf);
     if (g_levelRenderer) {
-        g_levelRenderer->textures =
-            reinterpret_cast<Textures *>(s_texturesShimBuf);
-        MCLE_LOG("mcle_game_init: Textures shim at %p (sizeof=%zu)",
-                 (void*)g_levelRenderer->textures, sizeof(Textures));
+        try {
+            Textures *textures = new Textures(skins, options);
+            g_levelRenderer->textures = textures;
+            g_minecraftShim->textures = textures;
+            MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: Textures ctor threw");
+        }
     }
 
     MCLE_LOG("mcle_game_init: initImpl returning");
