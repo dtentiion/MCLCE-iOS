@@ -488,10 +488,10 @@ typedef struct _UIVec2D { float x; float y; } UIVec2D;
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
-// BufferedImage full definition - upstream stdafx.h:202 includes it
-// directly. TextureManager.cpp accesses members so forward-decl alone
-// is not enough.
-#include "../../upstream/Minecraft.Client/BufferedImage.h"
+// BufferedImage referenced as pointer in TexturePack.h. Forward-decl
+// is enough here; the full include lives below after ArrayWithLength.h
+// is in scope (BufferedImage.h uses intArray in getRGB).
+class BufferedImage;
 // Note: INetworkPlayer is defined by the real header pre-included
 // further down. No forward-decl here to avoid duplicate-declaration.
 // ListTag is a template `template<class T> class ListTag`, do not
@@ -555,6 +555,9 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "ByteArrayInputStream.h"
 #include "Icon.h"
 #include "TilePos.h"
+// BufferedImage.h uses intArray in getRGB so it has to come after
+// ArrayWithLength.h. TextureManager.cpp accesses BufferedImage members.
+#include "../Minecraft.Client/BufferedImage.h"
 #include "ChunkPos.h"
 #include "Pos.h"
 // Bring in real ItemInstance now that System / ArrayWithLength / NBT
