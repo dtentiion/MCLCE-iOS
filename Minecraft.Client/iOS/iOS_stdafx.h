@@ -322,6 +322,13 @@ struct C4JRenderStub {
     template<class... A> void   TextureData(A...)             {}
     template<class... A> void   TextureDataUpdate(A...)       {}
     template<class... A> void * TextureGetTexture(A...)       { return nullptr; }
+    // BufferedImage::BufferedImage(wstring File, ...) ctor calls this on
+    // Win64 to decode a PNG into an int* RGBA buffer + fill ImageInfo.
+    // On iOS we do the same job in a separate path (mcle_glbridge_*),
+    // so the catch-all stub returns failure - PNGs still get decoded
+    // when bound, just not via this entrypoint. Real iOS-specific impl
+    // lands as a follow-up step once the texture-stitch flow runs.
+    template<class... A> long   LoadTextureData(A...)          { return -1L; }
     template<class... A> void   MatrixMode(A...)              {}
     template<class... A> void   MatrixRotate(A...)            {}
     template<class... A> void   MatrixTranslate(A...)         {}

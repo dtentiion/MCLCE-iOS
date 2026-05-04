@@ -196,6 +196,23 @@ typedef int32_t HRESULT;
 #ifndef ZeroMemory
 #  define ZeroMemory(dest, size)       memset((dest), 0, (size))
 #endif
+
+// D3DX9 image info struct used by upstream BufferedImage.cpp on Win64.
+// On iOS the same struct shape lets the upstream code compile; the
+// actual fields are filled by C4JRenderStub::LoadTextureData (which
+// has its own iOS PNG decode path, not a D3D one).
+#ifndef D3DXIMAGE_INFO_DEFINED
+#define D3DXIMAGE_INFO_DEFINED
+typedef struct _D3DXIMAGE_INFO {
+    unsigned int Width;
+    unsigned int Height;
+    unsigned int Depth;
+    unsigned int MipLevels;
+    unsigned int Format;
+    unsigned int ResourceType;
+    unsigned int ImageFileFormat;
+} D3DXIMAGE_INFO;
+#endif
 // XMemCpy is the Xbox SDK alias for memcpy. Used in upstream IO code
 // (ByteArrayInputStream etc) for what is otherwise a plain memcpy.
 #ifndef XMemCpy
