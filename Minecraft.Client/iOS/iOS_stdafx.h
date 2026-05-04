@@ -488,9 +488,10 @@ typedef struct _UIVec2D { float x; float y; } UIVec2D;
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
 class Textures;
-// BufferedImage lives in Minecraft.Client/BufferedImage.h. Used as
-// pointer in TexturePack.h's getDescTexture() return type.
-class BufferedImage;
+// BufferedImage full definition - upstream stdafx.h:202 includes it
+// directly. TextureManager.cpp accesses members so forward-decl alone
+// is not enough.
+#include "../../upstream/Minecraft.Client/BufferedImage.h"
 // Note: INetworkPlayer is defined by the real header pre-included
 // further down. No forward-decl here to avoid duplicate-declaration.
 // ListTag is a template `template<class T> class ListTag`, do not
