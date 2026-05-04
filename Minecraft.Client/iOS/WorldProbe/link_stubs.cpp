@@ -409,6 +409,13 @@ std::string wstr_to_utf8(const std::wstring &w) {
 // loadTexture / TextureManager chain. If iOS-specific behavior
 // is needed for any of those, patch upstream rather than re-stub.
 
+// G5-step29: TexturePackRepository.cpp can't compile (UIScene_LanguageSelector
+// pulls XC_LANGUAGE/XC_LOCALE enums we don't have, and ConsoleUIController
+// methods we don't stub). Provide just the two symbols Textures.cpp needs.
+#include "TexturePackRepository.h"
+TexturePack *TexturePackRepository::DEFAULT_TEXTURE_PACK = nullptr;
+TexturePack *TexturePackRepository::getSelected() { return DEFAULT_TEXTURE_PACK; }
+
 #include "GameRenderer.h"
 // G5: TileRenderer reads this for anaglyph color filtering; we keep it
 // false so the standard non-stereo path runs.

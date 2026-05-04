@@ -899,7 +899,9 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/TextureAtlas.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureManager.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureMap.cpp
-  ${UPSTREAM_DIR}/Minecraft.Client/TexturePackRepository.cpp
+  # TexturePackRepository.cpp not compiled - drags in UIScene_LanguageSelector
+  # + UIScene_Credits which need XC_LANGUAGE/XC_LOCALE enums we don't have.
+  # Just stub getSelected + DEFAULT_TEXTURE_PACK in link_stubs.cpp instead.
   ${UPSTREAM_DIR}/Minecraft.Client/Textures.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PreStitchedTextureMap.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TileEntityRenderer.cpp
