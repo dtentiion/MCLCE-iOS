@@ -94,14 +94,9 @@ new3 = (
     "\t\t\t// now we need to set the shape\n"
     '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before setShape (BLOCK)");\n'
     "\t\t\tsetShape(tt);\n"
-    "\t\t\t// G5-step27 TEMP: bypass tesselateBlockInWorld - it crashes\n"
-    "\t\t\t// because getTexture(tt) returns null for every tile (texture\n"
-    "\t\t\t// registry never wired up via textures->stitch). Skip the call\n"
-    "\t\t\t// for now so chunk rebuild completes (empty geometry). Proper\n"
-    "\t\t\t// fix is wiring up Textures::stitch in MCLEGameLoop boot path -\n"
-    "\t\t\t// see scripts/_overnight_notes_textures.md for plan.\n"
-    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT TEMP-skip tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
-    "\t\t\tretVal = false;"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT before tesselateBlockInWorld faceFlags=%d", faceFlags);\n'
+    "\t\t\tretVal = tesselateBlockInWorld( tt, x, y, z, faceFlags );\n"
+    '\t\t\tif (s_trLog) app.DebugPrintf("TR_CKPT after tesselateBlockInWorld retVal=%d", (int)retVal);'
 )
 
 # G5-step24: narrow inside tesselateBlockInWorld(Tile*, int, int, int, int)
