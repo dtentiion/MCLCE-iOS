@@ -318,6 +318,7 @@ struct C4JRenderStub {
     template<class... A> void   TextureUnbind(A...)           {}
     template<class... A> void   TextureUpdate(A...)           {}
     template<class... A> void   TextureSetTextureLevels(A...) {}
+    template<class... A> int    TextureGetTextureLevels(A...) { return 1; }
     template<class... A> void   TextureData(A...)             {}
     template<class... A> void   TextureDataUpdate(A...)       {}
     template<class... A> void * TextureGetTexture(A...)       { return nullptr; }
