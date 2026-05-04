@@ -72,3 +72,9 @@ extern "C" int mcle_png_decode_rgba8(const void* data, unsigned long length,
 extern "C" void mcle_png_decode_free(unsigned char* pixels) {
     free(pixels);
 }
+
+extern "C" int mcle_log_msg(const char *msg) {
+    if (!msg) return 0;
+    NSLog(@"[MCLE/up] %s", msg);
+    return 1;
+}
