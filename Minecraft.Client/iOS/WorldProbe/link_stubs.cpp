@@ -418,6 +418,11 @@ std::string wstr_to_utf8(const std::wstring &w) {
 TexturePack *TexturePackRepository::DEFAULT_TEXTURE_PACK = nullptr;
 TexturePack *TexturePackRepository::getSelected() { return DEFAULT_TEXTURE_PACK; }
 
+// G5-step32: TextureManager::createStitcher reads this for the atlas size.
+// 2048 matches Metal's safe minimum on every iOS device.
+#include "Minecraft.h"
+int Minecraft::maxSupportedTextureSize() { return 2048; }
+
 #include "GameRenderer.h"
 // G5: TileRenderer reads this for anaglyph color filtering; we keep it
 // false so the standard non-stereo path runs.
