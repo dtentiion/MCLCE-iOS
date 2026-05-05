@@ -1385,3 +1385,9 @@ ST_PY="$REPO_ROOT/scripts/patch-stitch-checkpoints.py"
 if [ -f "$ST_PY" ]; then
     python3 "$ST_PY"
 fi
+
+# bracket BufferedImage ctor
+BIM_PY="$REPO_ROOT/scripts/patch-bufferedimage-ctor-ckpts.py"
+if [ -f "$BIM_PY" ]; then
+    python3 "$BIM_PY"
+fi
