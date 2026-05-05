@@ -352,7 +352,12 @@ struct C4JRenderStub {
 // kept separate because extern "C" can't appear inside a class body.
 extern "C" long mcle_buffered_image_load_path(
     const char *, unsigned int *, unsigned int *, int **);
+extern "C" int mcle_log_msg(const char *msg);
 inline long C4JRenderStub::LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data) {
+    {
+        std::string m = std::string("LTD_CKPT entry path=") + (path ? path : "(null)");
+        mcle_log_msg(m.c_str());
+    }
     if (!info || !data) return -1L;
     return mcle_buffered_image_load_path(path, &info->Width, &info->Height, data);
 }
