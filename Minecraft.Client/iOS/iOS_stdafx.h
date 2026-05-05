@@ -326,11 +326,9 @@ struct C4JRenderStub {
     // to decode a PNG into an int* ARGB buffer + fill ImageInfo. iOS
     // body lives in Render/buffered_image_load.cpp and uses the same
     // CGImageSource pipeline as mcle_png_decode_rgba8. Returns 0 on
-    // success (matches Win64 ERROR_SUCCESS).
+    // success (matches Win64 ERROR_SUCCESS). Variadic catch-all
+    // removed - it was winning overload resolution and shadowing this.
     inline long LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data);
-    // Catch-all for any other call signature (none expected; the above
-    // is the one BufferedImage uses).
-    template<class... A> long   LoadTextureData(A...)          { return -1L; }
     template<class... A> void   MatrixMode(A...)              {}
     template<class... A> void   MatrixRotate(A...)            {}
     template<class... A> void   MatrixTranslate(A...)         {}
