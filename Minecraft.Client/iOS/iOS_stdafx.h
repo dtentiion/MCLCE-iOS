@@ -329,6 +329,9 @@ struct C4JRenderStub {
     // success (matches Win64 ERROR_SUCCESS). Variadic catch-all
     // removed - it was winning overload resolution and shadowing this.
     inline long LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data);
+    // 4-arg byte-array variant (BufferedImage(BYTE*, DWORD) ctor uses
+    // this). Stub - not used on iOS yet.
+    long LoadTextureData(unsigned char *, unsigned long, D3DXIMAGE_INFO *, int **) { return -1L; }
     template<class... A> void   MatrixMode(A...)              {}
     template<class... A> void   MatrixRotate(A...)            {}
     template<class... A> void   MatrixTranslate(A...)         {}
