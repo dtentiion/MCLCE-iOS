@@ -79,19 +79,21 @@ extern "C" int mcle_log_msg(const char *msg) {
     if (!msg) return 0;
     NSLog(@"[MCLE/up] %s", msg);
 
-    // Also append to Documents/mcle_log.txt - bypass iOS log redaction so
-    // the user can pull the file via 3uTools file browser.
+    // Also append to Documents/crash_log.txt - bypass iOS log redaction.
+    // ruffle_ios already opens crash_log.txt with truncate at startup, so
+    // our additions sit alongside ruffle's lines in the same file the user
+    // already pulls via the Files app.
     static FILE *f = nullptr;
     if (!f) {
         const char *root = ios_documents_dir();
         if (root && *root) {
             char path[1024];
-            snprintf(path, sizeof(path), "%s/mcle_log.txt", root);
-            f = fopen(path, "w");
+            snprintf(path, sizeof(path), "%s/crash_log.txt", root);
+            f = fopen(path, "a");
         }
     }
     if (f) {
-        fprintf(f, "%s\n", msg);
+        fprintf(f, "[mcle] %s\n", msg);
         fflush(f);
     }
     return 1;
