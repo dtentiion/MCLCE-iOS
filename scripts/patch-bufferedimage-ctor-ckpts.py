@@ -15,7 +15,7 @@ old = (
 new = (
     "BufferedImage::BufferedImage(const wstring& File, bool filenameHasExtension /*=false*/, bool bTitleUpdateTexture /*=false*/, const wstring &drive /*=L\"\"*/)\n"
     "{\n"
-    "\tfprintf(stderr, \"[MCLE-BIM] ctor wstring entry, File.size=%zu\\n\", File.size());\n"
+    "\tapp.DebugPrintf(\"BIM_CKPT ctor wstring entry, File.size=%zu\", File.size());\n"
     "\tHRESULT hr;"
 )
 if old not in src:
@@ -27,9 +27,9 @@ old2 = (
     "\t\thr=RenderManager.LoadTextureData(pchTextureName,&ImageInfo,&data[l]);"
 )
 new2 = (
-    "\t\tfprintf(stderr, \"[MCLE-BIM] before LoadTextureData l=%d name=%s\\n\", l, pchTextureName ? pchTextureName : \"(null)\");\n"
+    "\t\tapp.DebugPrintf(\"BIM_CKPT before LoadTextureData l=%d name=%s\", l, pchTextureName ? pchTextureName : \"(null)\");\n"
     "\t\thr=RenderManager.LoadTextureData(pchTextureName,&ImageInfo,&data[l]);\n"
-    "\t\tfprintf(stderr, \"[MCLE-BIM] after LoadTextureData hr=%ld\\n\", (long)hr);"
+    "\t\tapp.DebugPrintf(\"BIM_CKPT after LoadTextureData hr=%ld\", (long)hr);"
 )
 if old2 not in src:
     sys.exit("anchor 2 not found")
