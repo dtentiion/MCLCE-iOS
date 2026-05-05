@@ -27,6 +27,8 @@ struct LevelGenerationOptions;
 class CGameSettingsManager;
 class FileNameMap;
 
+extern "C" int mcle_log_msg(const char *msg);
+
 struct McleAppStub {
     // Heavyweight returning ptr to opaque object; nullptr is fine
     // for most call sites that just check for non-null OR pass it
@@ -69,7 +71,6 @@ struct McleAppStub {
     // redacted as <private> by os_log on sideloaded apps without
     // entitlements - %{public}s is ignored without them.
     int DebugPrintf(const char *fmt, ...) {
-        extern "C" int mcle_log_msg(const char *msg);
         char buf[1024];
         va_list ap; va_start(ap, fmt);
         int n = ::vsnprintf(buf, sizeof(buf), fmt, ap);
