@@ -1391,3 +1391,9 @@ BIM_PY="$REPO_ROOT/scripts/patch-bufferedimage-ctor-ckpts.py"
 if [ -f "$BIM_PY" ]; then
     python3 "$BIM_PY"
 fi
+
+# Texture::_init + TextureManager::createTexture CKPTs
+TEX_PY="$REPO_ROOT/scripts/patch-texture-init-ckpts.py"
+if [ -f "$TEX_PY" ]; then
+    python3 "$TEX_PY"
+fi
