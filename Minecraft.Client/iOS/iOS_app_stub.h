@@ -65,17 +65,18 @@ struct McleAppStub {
     // constructible value or void. Compile-only, not link-only.
     template<class... A> const wchar_t* GetString(A...)         { return L""; }
     // Real CMinecraftApp::DebugPrintf is a printf wrapper. Route it
-    // through os_log so upstream progress prints (`Loading %d mappings`,
-    // `prepareLevel returned ...`, etc.) show up in the iOS live log
-    // alongside our own MCLE_LOG lines.
+    // through mcle_log_msg (NSLog) so the formatted string isn't
+    // redacted as <private> by os_log on sideloaded apps without
+    // entitlements - %{public}s is ignored without them.
     int DebugPrintf(const char *fmt, ...) {
+        extern "C" int mcle_log_msg(const char *msg);
         char buf[1024];
         va_list ap; va_start(ap, fmt);
         int n = ::vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
         if (n < 0) return n;
         if (n > 0 && buf[n-1] == '\n') buf[n-1] = 0;
-        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT, "[MCLE/up] %{public}s", buf);
+        mcle_log_msg(buf);
         return n;
     }
     int DebugPrintf(const wchar_t *, ...) { return 0; }
