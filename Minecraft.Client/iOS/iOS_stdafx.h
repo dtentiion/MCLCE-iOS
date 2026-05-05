@@ -354,8 +354,8 @@ struct C4JRenderStub {
 extern "C" long mcle_buffered_image_load_path(
     const char *, unsigned int *, unsigned int *, int **);
 inline long C4JRenderStub::LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data) {
-    fprintf(stderr, "[MCLE-LTD] entry path=%s info=%p data=%p\n",
-            path ? path : "(null)", (void*)info, (void*)data);
+    extern McleAppStub app;
+    app.DebugPrintf("LTD_CKPT entry path=%s", path ? path : "(null)");
     if (!info || !data) return -1L;
     return mcle_buffered_image_load_path(path, &info->Width, &info->Height, data);
 }
