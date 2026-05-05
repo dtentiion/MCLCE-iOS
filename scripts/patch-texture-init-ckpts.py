@@ -67,7 +67,7 @@ else:
     old = (
         "Texture *TextureManager::createTexture(const wstring &name, int mode, int width, int height, int wrap, int format, int minFilter, int magFilter, bool mipmap, BufferedImage *image)\n"
         "{\n"
-        "\tTexture *newTex = new Texture(name, mode, width, height, wrap, format, minFilter, magFilter, image, mipMap);\n"
+        "\tTexture *newTex = new Texture(name, mode, width, height, wrap, format, minFilter, magFilter, image, mipmap);\n"
         "\tregisterTexture(newTex);\n"
         "\treturn newTex;\n"
         "}"
@@ -76,7 +76,7 @@ else:
         "Texture *TextureManager::createTexture(const wstring &name, int mode, int width, int height, int wrap, int format, int minFilter, int magFilter, bool mipmap, BufferedImage *image)\n"
         "{\n"
         "\tapp.DebugPrintf(\"TM_CKPT createTexture entry w=%d h=%d image=%p\", width, height, image);\n"
-        "\tTexture *newTex = new Texture(name, mode, width, height, wrap, format, minFilter, magFilter, image, mipMap);\n"
+        "\tTexture *newTex = new Texture(name, mode, width, height, wrap, format, minFilter, magFilter, image, mipmap);\n"
         "\tapp.DebugPrintf(\"TM_CKPT createTexture after new Texture %p\", newTex);\n"
         "\tregisterTexture(newTex);\n"
         "\tapp.DebugPrintf(\"TM_CKPT createTexture after registerTexture\");\n"
