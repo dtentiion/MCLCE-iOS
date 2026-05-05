@@ -165,6 +165,14 @@ public:
     std::wstring getWorldName() override { return L""; }
     std::wstring getAnimationString(const std::wstring &, const std::wstring &, bool) override { return L""; }
     std::wstring getAnimationString(const std::wstring &, const std::wstring &) override { return L""; }
+    // FolderTexturePack::getPath returns "Common\\" + file->getPath() + "\\"
+    // which embeds the absolute Documents path on iOS. Drop the file path
+    // chunk so callers get a relative "Common/" prefix - BufferedImage
+    // then builds a clean relative name and our load shim resolves it
+    // against Documents/.
+    std::wstring getPath(bool /*bTitleUpdateTexture*/ = false, const char * /*pchBDPatchFilename*/ = nullptr) override {
+        return L"Common/";
+    }
     BufferedImage *getImageResource(const std::wstring &filename, bool filenameHasExtension, bool bTitleUpdateTexture, const std::wstring &drive) override {
         // BufferedImage builds path as wDrive + L"res" + filePath... with
         // no separator. So filePath needs a leading slash for the result
