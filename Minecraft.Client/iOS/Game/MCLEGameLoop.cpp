@@ -195,8 +195,12 @@ public:
 
 #include "4JLibs/inc/4J_Storage.h"
 
-#define MCLE_LOG(fmt, ...) \
-    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT, "[MCLE] " fmt, ##__VA_ARGS__)
+extern "C" int mcle_log_msg(const char *msg);
+#define MCLE_LOG(fmt, ...) do { \
+    char _mcle_buf[1024]; \
+    snprintf(_mcle_buf, sizeof(_mcle_buf), "[MCLE] " fmt, ##__VA_ARGS__); \
+    mcle_log_msg(_mcle_buf); \
+} while (0)
 
 namespace {
 
