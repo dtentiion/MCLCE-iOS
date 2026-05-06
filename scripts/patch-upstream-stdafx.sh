@@ -1417,3 +1417,9 @@ GTC_PY="$REPO_ROOT/scripts/patch-grass-color-ckpts.py"
 if [ -f "$GTC_PY" ]; then
     python3 "$GTC_PY"
 fi
+
+# ColourTable::getColour ckpts + null guard - addr 0xe0 = id*4 from null
+CT_PY="$REPO_ROOT/scripts/patch-colourtable-ckpts.py"
+if [ -f "$CT_PY" ]; then
+    python3 "$CT_PY"
+fi
