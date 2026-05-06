@@ -7,21 +7,16 @@ src = TARGET.read_text(encoding="utf-8", errors="replace")
 if "TBIW_CKPT" in src:
     print("already patched"); sys.exit(0)
 
-# Entry of tesselateBlockInWorldWithAmbienceOcclusionTexLighting
-old = (
-    "bool TileRenderer::tesselateBlockInWorldWithAmbienceOcclusionTexLighting( Tile* tt, int pX, int pY, int pZ,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
-    "{\n"
-)
+# Entry: replace the very first line of the function body (the Icon *uniformTex... line)
+# by injecting a CKPT before it. That line is unique inside this function.
+old = "\tIcon *uniformTex = nullptr;\n\tint id = tt->id;"
 new = (
-    "bool TileRenderer::tesselateBlockInWorldWithAmbienceOcclusionTexLighting( Tile* tt, int pX, int pY, int pZ,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseRed, float pBaseGreen,\n"
-    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t float pBaseBlue, int faceFlags, bool smoothShapeLighting )\n"
-    "{\n"
-    "\tapp.DebugPrintf(\"TBIW_CKPT enter this=%p tt=%p id=%d xyz=%d,%d,%d level=%p\", this, tt, tt?tt->id:-1, pX, pY, pZ, level);\n"
+    "\tapp.DebugPrintf(\"TBIW_CKPT enter this=%p tt=%p xyz=%d,%d,%d level=%p\", this, tt, pX, pY, pZ, level);\n"
+    "\tIcon *uniformTex = nullptr;\n"
+    "\tint id = tt->id;\n"
+    "\tapp.DebugPrintf(\"TBIW_CKPT after id=%d\", id);"
 )
-if old not in src: sys.exit("entry anchor not found")
+if src.count(old) != 1: sys.exit(f"entry anchor count={src.count(old)}")
 src = src.replace(old, new, 1)
 
 # bracket the getTexture(tt)->getFlags() call
