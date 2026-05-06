@@ -116,9 +116,13 @@ src = src.replace(old11, new11, 1)
 
 old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
 new12 = (
-    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT before tesselateInWorld tileId=%d x=%d y=%d z=%d\", (int)tileId, x, y, z);\n"
-    "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
-    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT after tesselateInWorld rendered=%d\", (int)rendered);"
+    "\t\t\t\t\t// TEMP: skip tile id=2 (dirt) - crashes at addr 0xe0 in tesselateInWorld.\n"
+    "\t\t\t\t\t// Other tiles tessellate fine, so the pipeline works. Dirt has a\n"
+    "\t\t\t\t\t// tile-specific issue - probably its Icon* isn't registered yet.\n"
+    "\t\t\t\t\t// Skipping it lets us see what the rest of the chunk renders as.\n"
+    "\t\t\t\t\tif (tileId != 2) {\n"
+    "\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+    "\t\t\t\t\t}"
 )
 if old12 not in src: sys.exit("tesselateInWorld anchor not found")
 src = src.replace(old12, new12, 1)
