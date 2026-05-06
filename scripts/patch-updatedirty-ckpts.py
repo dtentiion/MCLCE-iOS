@@ -38,26 +38,27 @@ if old2 not in src:
     sys.exit("dirtyChunkPresent anchor not found")
 src = src.replace(old2, new2, 1)
 
-# Bracket the inner crash zone
-old3 = (
-    "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
-    "\t\t\t\t\t\t\t\t\tLevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
-    "\t\t\t\t\t\t\t\t\tif( !lc->isRenderChunkEmpty(y * 16) )"
-)
+# Bracket the inner crash zone - use one-line anchor (single occurrence)
+old3 = "Chunk *chunk = pClipChunk->chunk;"
 new3 = (
-    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT before pClipChunk->chunk pcc=%p\", pClipChunk);\n"
+    "app.DebugPrintf(\"WDI_CKPT before pClipChunk->chunk pcc=%p\", pClipChunk);\n"
     "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
     "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT chunk=%p\", chunk);\n"
-    "\t\t\t\t\t\t\t\t\tif (chunk == nullptr) continue;\n"
-    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT before getChunkAt level[p]=%p chunk->x=%d chunk->z=%d\", level[p], chunk->x, chunk->z);\n"
-    "\t\t\t\t\t\t\t\t\tLevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
-    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT lc=%p\", lc);\n"
-    "\t\t\t\t\t\t\t\t\tif (lc == nullptr) continue;\n"
-    "\t\t\t\t\t\t\t\t\tif( !lc->isRenderChunkEmpty(y * 16) )"
+    "\t\t\t\t\t\t\t\t\tif (chunk == nullptr) { continue; }"
 )
-if old3 not in src:
-    sys.exit("inner crash zone anchor not found")
+if src.count(old3) != 1:
+    sys.exit(f"inner crash zone anchor count={src.count(old3)} (need 1)")
 src = src.replace(old3, new3, 1)
+
+old4 = "LevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);"
+new4 = (
+    "LevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
+    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT lc=%p chunk->x=%d chunk->z=%d\", lc, chunk->x, chunk->z);\n"
+    "\t\t\t\t\t\t\t\t\tif (lc == nullptr) { continue; }"
+)
+if src.count(old4) != 1:
+    sys.exit(f"getChunkAt anchor count={src.count(old4)} (need 1)")
+src = src.replace(old4, new4, 1)
 
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
