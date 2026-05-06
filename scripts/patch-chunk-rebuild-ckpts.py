@@ -116,9 +116,10 @@ src = src.replace(old11, new11, 1)
 
 old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
 new12 = (
-    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT before tesselateInWorld tileId=%d xyz=%d,%d,%d\", (int)tileId, x, y, z);\n"
-    "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
-    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT after tesselateInWorld rendered=%d\", (int)rendered);"
+    "\t\t\t\t\t// TEMP bypass tesselateInWorld - vtable ODR issue makes\n"
+    "\t\t\t\t\t// virtual getTexture call crash at addr 0xe0. Skip for now\n"
+    "\t\t\t\t\t// so chunk display lists complete and rest of render runs.\n"
+    "\t\t\t\t\t(void)tile; (void)tileRenderer;"
 )
 if old12 not in src: sys.exit("tesselateInWorld anchor not found")
 src = src.replace(old12, new12, 1)
