@@ -116,10 +116,16 @@ src = src.replace(old11, new11, 1)
 
 old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
 new12 = (
-    "\t\t\t\t\t// TEMP bypass tesselateInWorld - vtable ODR issue makes\n"
-    "\t\t\t\t\t// virtual getTexture call crash at addr 0xe0. Skip for now\n"
-    "\t\t\t\t\t// so chunk display lists complete and rest of render runs.\n"
-    "\t\t\t\t\t(void)tile; (void)tileRenderer;"
+    "\t\t\t\t\t// Inspect tile's vtable pointer. If it's null/garbage, skip.\n"
+    "\t\t\t\t\t// Logs the address so we can compare across tile types.\n"
+    "\t\t\t\t\tvoid *_tileVtbl = tile ? *(void**)tile : (void*)0;\n"
+    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT pre-tess tileId=%d tile=%p vptr=%p\", (int)tileId, tile, _tileVtbl);\n"
+    "\t\t\t\t\tif (_tileVtbl == nullptr) {\n"
+    "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT skip: null vtable for tileId=%d\", (int)tileId);\n"
+    "\t\t\t\t\t} else {\n"
+    "\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+    "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT post-tess tileId=%d rendered=%d\", (int)tileId, (int)rendered);\n"
+    "\t\t\t\t\t}"
 )
 if old12 not in src: sys.exit("tesselateInWorld anchor not found")
 src = src.replace(old12, new12, 1)
