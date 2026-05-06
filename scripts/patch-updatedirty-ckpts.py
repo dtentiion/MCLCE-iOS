@@ -59,6 +59,45 @@ else:
     if src.count(old4) != 1: sys.exit(f"lc anchor count={src.count(old4)}")
     src = src.replace(old4, new4, 1)
 
+    # CKPTs around the rebuild path - the actual chunk tessellation
+    old_rb = (
+        "\t\t\tchunk = it.first->chunk;\n"
+    )
+    new_rb = (
+        "\t\t\tchunk = it.first->chunk;\n"
+        "\t\t\tapp.DebugPrintf(\"WDI_CKPT rebuild iter chunk=%p index=%d\", chunk, index);\n"
+        "\t\t\tif (chunk == nullptr) { ++index; continue; }\n"
+    )
+    if old_rb not in src: sys.exit("rebuild iter anchor not found")
+    src = src.replace(old_rb, new_rb, 1)
+
+    old_cd = "\t\t\tchunk->clearDirty();\n"
+    new_cd = (
+        "\t\t\tapp.DebugPrintf(\"WDI_CKPT before chunk->clearDirty\");\n"
+        "\t\t\tchunk->clearDirty();\n"
+        "\t\t\tapp.DebugPrintf(\"WDI_CKPT after chunk->clearDirty\");\n"
+    )
+    if old_cd not in src: sys.exit("clearDirty anchor not found")
+    src = src.replace(old_cd, new_cd, 1)
+
+    old_mc = "\t\t\tpermaChunk[index].makeCopyForRebuild(chunk);\n"
+    new_mc = (
+        "\t\t\tapp.DebugPrintf(\"WDI_CKPT before makeCopyForRebuild\");\n"
+        "\t\t\tpermaChunk[index].makeCopyForRebuild(chunk);\n"
+        "\t\t\tapp.DebugPrintf(\"WDI_CKPT after makeCopyForRebuild\");\n"
+    )
+    if old_mc not in src: sys.exit("makeCopyForRebuild anchor not found")
+    src = src.replace(old_mc, new_mc, 1)
+
+    old_rbd = "\t\t\t\tpermaChunk[index].rebuild();\n"
+    new_rbd = (
+        "\t\t\t\tapp.DebugPrintf(\"WDI_CKPT before permaChunk.rebuild idx=%d\", index);\n"
+        "\t\t\t\tpermaChunk[index].rebuild();\n"
+        "\t\t\t\tapp.DebugPrintf(\"WDI_CKPT after permaChunk.rebuild idx=%d\", index);\n"
+    )
+    if old_rbd not in src: sys.exit("rebuild anchor not found")
+    src = src.replace(old_rbd, new_rbd, 1)
+
     old5 = "if( !lc->isRenderChunkEmpty(y * 16) )"
     new5 = (
         "app.DebugPrintf(\"WDI_CKPT before isRenderChunkEmpty y=%d\", y);\n"
