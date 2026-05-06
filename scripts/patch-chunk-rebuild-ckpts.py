@@ -116,13 +116,11 @@ src = src.replace(old11, new11, 1)
 
 old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
 new12 = (
-    "\t\t\t\t\t// TEMP: skip tile id=2 (dirt) - crashes at addr 0xe0 in tesselateInWorld.\n"
-    "\t\t\t\t\t// Other tiles tessellate fine, so the pipeline works. Dirt has a\n"
-    "\t\t\t\t\t// tile-specific issue - probably its Icon* isn't registered yet.\n"
-    "\t\t\t\t\t// Skipping it lets us see what the rest of the chunk renders as.\n"
-    "\t\t\t\t\tif (tileId != 2) {\n"
-    "\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
-    "\t\t\t\t\t}"
+    "\t\t\t\t\t// TEMP: bypass tesselateInWorld until we fix per-tile Icon registration.\n"
+    "\t\t\t\t\t// Lets the chunk display list build (empty but valid) so we can verify\n"
+    "\t\t\t\t\t// the rest of the render path executes without crashing.\n"
+    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT skipping tesselateInWorld tileId=%d\", (int)tileId);\n"
+    "\t\t\t\t\t(void)tile; (void)tileRenderer;"
 )
 if old12 not in src: sys.exit("tesselateInWorld anchor not found")
 src = src.replace(old12, new12, 1)
