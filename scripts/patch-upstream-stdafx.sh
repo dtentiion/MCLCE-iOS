@@ -1397,3 +1397,9 @@ TEX_PY="$REPO_ROOT/scripts/patch-texture-init-ckpts.py"
 if [ -f "$TEX_PY" ]; then
     python3 "$TEX_PY"
 fi
+
+# updateDirtyChunks line-by-line CKPTs + null guards on chunk derefs
+WDI_PY="$REPO_ROOT/scripts/patch-updatedirty-ckpts.py"
+if [ -f "$WDI_PY" ]; then
+    python3 "$WDI_PY"
+fi
