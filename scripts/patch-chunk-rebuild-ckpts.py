@@ -116,12 +116,12 @@ src = src.replace(old11, new11, 1)
 
 old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
 new12 = (
-    "\t\t\t\t\t// Inspect tile's vtable pointer. If it's null/garbage, skip.\n"
-    "\t\t\t\t\t// Logs the address so we can compare across tile types.\n"
     "\t\t\t\t\tvoid *_tileVtbl = tile ? *(void**)tile : (void*)0;\n"
     "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT pre-tess tileId=%d tile=%p vptr=%p\", (int)tileId, tile, _tileVtbl);\n"
-    "\t\t\t\t\tif (_tileVtbl == nullptr) {\n"
-    "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT skip: null vtable for tileId=%d\", (int)tileId);\n"
+    "\t\t\t\t\t// Skip TallGrass(31) - crashes at addr 0x8. We've already proved\n"
+    "\t\t\t\t\t// stone/grass/dirt/leaves render without crashing this round.\n"
+    "\t\t\t\t\tif (tileId == 31) {\n"
+    "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT skip: TallGrass id=31\");\n"
     "\t\t\t\t\t} else {\n"
     "\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
     "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT post-tess tileId=%d rendered=%d\", (int)tileId, (int)rendered);\n"
