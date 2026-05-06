@@ -714,33 +714,35 @@ extern "C" void mcle_glbridge_end_list(void) {
     g_recording_list = 0;
 }
 
-extern "C" int mcle_log_msg(const char *msg);
+// Stats we update without I/O in the hot path.
+static unsigned long g_call_list_hits = 0;
+static unsigned long g_call_list_misses = 0;
+static int g_call_list_first_miss_id = -1;
+static int g_call_list_first_hit_id  = -1;
+
 extern "C" void mcle_glbridge_call_list(int id) {
     auto it = g_lists.find(id);
-    static int s_logCount = 0;
-    static int s_missCount = 0;
-    static int s_hitCount = 0;
     if (it == g_lists.end()) {
-        s_missCount++;
-        if (s_logCount < 5) {
-            char buf[256];
-            snprintf(buf, sizeof(buf), "CL_CKPT call_list MISS id=%d (total miss=%d hit=%d, lists size=%zu)", id, s_missCount, s_hitCount, g_lists.size());
-            mcle_log_msg(buf);
-            s_logCount++;
-        }
+        if (g_call_list_first_miss_id == -1) g_call_list_first_miss_id = id;
+        g_call_list_misses++;
         return;
     }
-    s_hitCount++;
-    if (s_logCount < 5 || (s_hitCount % 100 == 0)) {
-        char buf[256];
-        snprintf(buf, sizeof(buf), "CL_CKPT call_list HIT id=%d draws=%zu (total miss=%d hit=%d)", id, it->second.draws.size(), s_missCount, s_hitCount);
-        mcle_log_msg(buf);
-        s_logCount++;
-    }
+    if (g_call_list_first_hit_id == -1) g_call_list_first_hit_id = id;
+    g_call_list_hits++;
     for (const auto& cmd : it->second.draws) {
         immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
                            cmd.fmt, cmd.shader);
     }
+}
+
+// Sampled getter so the consumer logs once per second instead of per call.
+extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long *misses,
+                                                int *first_miss, int *first_hit, unsigned long *list_count) {
+    if (hits)        *hits        = g_call_list_hits;
+    if (misses)      *misses      = g_call_list_misses;
+    if (first_miss)  *first_miss  = g_call_list_first_miss_id;
+    if (first_hit)   *first_hit   = g_call_list_first_hit_id;
+    if (list_count)  *list_count  = (unsigned long)g_lists.size();
 }
 
 extern "C" void mcle_glbridge_release_lists(int id, int range) {
