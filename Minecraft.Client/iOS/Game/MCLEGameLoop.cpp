@@ -121,6 +121,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Textures.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 #include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
+#include "../../../upstream/Minecraft.Client/TextureManager.h"
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
