@@ -1423,3 +1423,9 @@ CT_PY="$REPO_ROOT/scripts/patch-colourtable-ckpts.py"
 if [ -f "$CT_PY" ]; then
     python3 "$CT_PY"
 fi
+
+# TileRenderer::getTexture(Tile*) + Tile::getTexture chain CKPTs
+GTX_PY="$REPO_ROOT/scripts/patch-gettexture-ckpts.py"
+if [ -f "$GTX_PY" ]; then
+    python3 "$GTX_PY"
+fi
