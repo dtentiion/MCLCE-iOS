@@ -84,5 +84,44 @@ new8 = (
 if old8 not in src: sys.exit("layer loop anchor not found")
 src = src.replace(old8, new8, 1)
 
+# bracket the started-block setup
+old9 = "\t\t\t\t\t\t\tglNewList(lists + currentLayer, GL_COMPILE);"
+new9 = (
+    "\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT before glNewList lists=%d layer=%d\", lists, currentLayer);\n"
+    "\t\t\t\t\t\t\tglNewList(lists + currentLayer, GL_COMPILE);\n"
+    "\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT after glNewList\");"
+)
+if old9 not in src: sys.exit("glNewList anchor not found")
+src = src.replace(old9, new9, 1)
+
+old10 = "\t\t\t\t\t\t\tt->begin();"
+new10 = (
+    "\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT before t->begin t=%p\", t);\n"
+    "\t\t\t\t\t\t\tt->begin();\n"
+    "\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT after t->begin\");"
+)
+if old10 not in src: sys.exit("t->begin anchor not found")
+src = src.replace(old10, new10, 1)
+
+# bracket Tile::tiles[tileId] access + tesselateInWorld
+old11 = "\t\tTile *tile = Tile::tiles[tileId];"
+new11 = (
+    "\t\tapp.DebugPrintf(\"CRB_CKPT before Tile::tiles[%d]\", (int)tileId);\n"
+    "\t\tTile *tile = Tile::tiles[tileId];\n"
+    "\t\tapp.DebugPrintf(\"CRB_CKPT tile=%p\", tile);\n"
+    "\t\tif (tile == nullptr) continue;"
+)
+if old11 not in src: sys.exit("Tile::tiles anchor not found")
+src = src.replace(old11, new11, 1)
+
+old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
+new12 = (
+    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT before tesselateInWorld tileId=%d x=%d y=%d z=%d\", (int)tileId, x, y, z);\n"
+    "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT after tesselateInWorld rendered=%d\", (int)rendered);"
+)
+if old12 not in src: sys.exit("tesselateInWorld anchor not found")
+src = src.replace(old12, new12, 1)
+
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
