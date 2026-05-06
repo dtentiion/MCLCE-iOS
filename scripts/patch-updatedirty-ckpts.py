@@ -60,5 +60,17 @@ if src.count(old4) != 1:
     sys.exit(f"getChunkAt anchor count={src.count(old4)} (need 1)")
 src = src.replace(old4, new4, 1)
 
+# bracket the isRenderChunkEmpty call, the actual crash site
+old5 = "if( !lc->isRenderChunkEmpty(y * 16) )"
+new5 = (
+    "app.DebugPrintf(\"WDI_CKPT before isRenderChunkEmpty y=%d\", y);\n"
+    "\t\t\t\t\t\t\t\t\tbool lcEmpty = lc->isRenderChunkEmpty(y * 16);\n"
+    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT after isRenderChunkEmpty empty=%d\", (int)lcEmpty);\n"
+    "\t\t\t\t\t\t\t\t\tif( !lcEmpty )"
+)
+if src.count(old5) != 1:
+    sys.exit(f"isRenderChunkEmpty anchor count={src.count(old5)} (need 1)")
+src = src.replace(old5, new5, 1)
+
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
