@@ -16,7 +16,13 @@ if "WDI_CKPT" in src:
     print(f"already patched: {LR_CPP}")
 else:
     old = "bool LevelRenderer::updateDirtyChunks()\n{\n"
-    new = "bool LevelRenderer::updateDirtyChunks()\n{\n\tapp.DebugPrintf(\"WDI_CKPT enter dcp=%d\", (int)dirtyChunkPresent);\n"
+    new = (
+        "bool LevelRenderer::updateDirtyChunks()\n{\n"
+        "\tapp.DebugPrintf(\"WDI_CKPT enter dcp=%d (forcing true)\", (int)dirtyChunkPresent);\n"
+        "\t// iOS: nonStackDirtyChunksAdded push isn't sticking through whatever\n"
+        "\t// initial state our shim has - force dcp every call so chunks rebuild.\n"
+        "\tdirtyChunkPresent = true;\n"
+    )
     if old not in src: sys.exit("entry anchor not found")
     src = src.replace(old, new, 1)
 
