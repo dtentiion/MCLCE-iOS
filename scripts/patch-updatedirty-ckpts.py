@@ -1,76 +1,120 @@
 #!/usr/bin/env python3
-"""line-by-line CKPTs inside LevelRenderer::updateDirtyChunks to pin crash at addr 0x8"""
+"""line-by-line CKPTs inside LevelRenderer::updateDirtyChunks AND every
+function it calls (LevelChunk::isRenderChunkEmpty, CompressedTileStorage::
+isRenderChunkEmpty) - one round pins the crash regardless of which depth
+it dies at."""
 import sys
 from pathlib import Path
-TARGET = Path(__file__).resolve().parent.parent / "upstream" / "Minecraft.Client" / "LevelRenderer.cpp"
-src = TARGET.read_text(encoding="utf-8", errors="replace")
+ROOT = Path(__file__).resolve().parent.parent / "upstream"
+LR_CPP = ROOT / "Minecraft.Client" / "LevelRenderer.cpp"
+LC_CPP = ROOT / "Minecraft.World" / "LevelChunk.cpp"
+CTS_CPP = ROOT / "Minecraft.World" / "CompressedTileStorage.cpp"
+
+# --- LevelRenderer.cpp ---
+src = LR_CPP.read_text(encoding="utf-8", errors="replace")
 if "WDI_CKPT" in src:
-    print("already patched"); sys.exit(0)
+    print(f"already patched: {LR_CPP}")
+else:
+    old = "bool LevelRenderer::updateDirtyChunks()\n{\n"
+    new = "bool LevelRenderer::updateDirtyChunks()\n{\n\tapp.DebugPrintf(\"WDI_CKPT enter\");\n"
+    if old not in src: sys.exit("entry anchor not found")
+    src = src.replace(old, new, 1)
 
-# Bracket entry of updateDirtyChunks
-old = (
-    "bool LevelRenderer::updateDirtyChunks()\n"
-    "{\n"
-)
-new = (
-    "bool LevelRenderer::updateDirtyChunks()\n"
-    "{\n"
-    "\tapp.DebugPrintf(\"WDI_CKPT enter\");\n"
-)
-if old not in src:
-    sys.exit("entry anchor not found")
-src = src.replace(old, new, 1)
+    # bracket pre-isRenderChunkEmpty derefs (chunk + lc accesses) with
+    # null guards so we get past benign nulls
+    old3 = "Chunk *chunk = pClipChunk->chunk;"
+    new3 = (
+        "app.DebugPrintf(\"WDI_CKPT before pClipChunk->chunk pcc=%p\", pClipChunk);\n"
+        "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
+        "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT chunk=%p\", chunk);\n"
+        "\t\t\t\t\t\t\t\t\tif (chunk == nullptr) { continue; }"
+    )
+    if src.count(old3) != 1: sys.exit(f"chunk anchor count={src.count(old3)}")
+    src = src.replace(old3, new3, 1)
 
-# Bracket the dirtyChunkPresent block entry
-old2 = (
-    "\tif( dirtyChunkPresent )\n"
-    "\t{\n"
-    "\t\tlastDirtyChunkFound = System::currentTimeMillis();"
-)
-new2 = (
-    "\tapp.DebugPrintf(\"WDI_CKPT before dirtyChunkPresent block, dcp=%d\", (int)dirtyChunkPresent);\n"
-    "\tif( dirtyChunkPresent )\n"
-    "\t{\n"
-    "\t\tapp.DebugPrintf(\"WDI_CKPT inside dirtyChunkPresent block\");\n"
-    "\t\tlastDirtyChunkFound = System::currentTimeMillis();"
-)
-if old2 not in src:
-    sys.exit("dirtyChunkPresent anchor not found")
-src = src.replace(old2, new2, 1)
+    old4 = "LevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);"
+    new4 = (
+        "LevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
+        "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT lc=%p chunk->x=%d chunk->z=%d\", lc, chunk->x, chunk->z);\n"
+        "\t\t\t\t\t\t\t\t\tif (lc == nullptr) { continue; }"
+    )
+    if src.count(old4) != 1: sys.exit(f"lc anchor count={src.count(old4)}")
+    src = src.replace(old4, new4, 1)
 
-# Bracket the inner crash zone - use one-line anchor (single occurrence)
-old3 = "Chunk *chunk = pClipChunk->chunk;"
-new3 = (
-    "app.DebugPrintf(\"WDI_CKPT before pClipChunk->chunk pcc=%p\", pClipChunk);\n"
-    "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
-    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT chunk=%p\", chunk);\n"
-    "\t\t\t\t\t\t\t\t\tif (chunk == nullptr) { continue; }"
-)
-if src.count(old3) != 1:
-    sys.exit(f"inner crash zone anchor count={src.count(old3)} (need 1)")
-src = src.replace(old3, new3, 1)
+    old5 = "if( !lc->isRenderChunkEmpty(y * 16) )"
+    new5 = (
+        "app.DebugPrintf(\"WDI_CKPT before isRenderChunkEmpty y=%d\", y);\n"
+        "\t\t\t\t\t\t\t\t\tbool lcEmpty = lc->isRenderChunkEmpty(y * 16);\n"
+        "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT after isRenderChunkEmpty empty=%d\", (int)lcEmpty);\n"
+        "\t\t\t\t\t\t\t\t\tif( !lcEmpty )"
+    )
+    if src.count(old5) != 1: sys.exit(f"isRenderChunkEmpty anchor count={src.count(old5)}")
+    src = src.replace(old5, new5, 1)
 
-old4 = "LevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);"
-new4 = (
-    "LevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"
-    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT lc=%p chunk->x=%d chunk->z=%d\", lc, chunk->x, chunk->z);\n"
-    "\t\t\t\t\t\t\t\t\tif (lc == nullptr) { continue; }"
-)
-if src.count(old4) != 1:
-    sys.exit(f"getChunkAt anchor count={src.count(old4)} (need 1)")
-src = src.replace(old4, new4, 1)
+    LR_CPP.write_text(src, encoding="utf-8")
+    print(f"patched {LR_CPP}")
 
-# bracket the isRenderChunkEmpty call, the actual crash site
-old5 = "if( !lc->isRenderChunkEmpty(y * 16) )"
-new5 = (
-    "app.DebugPrintf(\"WDI_CKPT before isRenderChunkEmpty y=%d\", y);\n"
-    "\t\t\t\t\t\t\t\t\tbool lcEmpty = lc->isRenderChunkEmpty(y * 16);\n"
-    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"WDI_CKPT after isRenderChunkEmpty empty=%d\", (int)lcEmpty);\n"
-    "\t\t\t\t\t\t\t\t\tif( !lcEmpty )"
-)
-if src.count(old5) != 1:
-    sys.exit(f"isRenderChunkEmpty anchor count={src.count(old5)} (need 1)")
-src = src.replace(old5, new5, 1)
+# --- LevelChunk.cpp - bracket isRenderChunkEmpty body ---
+src = LC_CPP.read_text(encoding="utf-8", errors="replace")
+if "LCI_CKPT" in src:
+    print(f"already patched: {LC_CPP}")
+else:
+    old = (
+        "bool LevelChunk::isRenderChunkEmpty(int y)\n"
+        "{\n"
+        "\tif( isEmpty() )"
+    )
+    new = (
+        "bool LevelChunk::isRenderChunkEmpty(int y)\n"
+        "{\n"
+        "\tapp.DebugPrintf(\"LCI_CKPT enter y=%d this=%p upper=%p lower=%p\", y, this, upperBlocks, lowerBlocks);\n"
+        "\tif (!upperBlocks && !lowerBlocks) { app.DebugPrintf(\"LCI_CKPT both null - return true\"); return true; }\n"
+        "\tif( isEmpty() )"
+    )
+    if old not in src: sys.exit("LCI anchor not found")
+    src = src.replace(old, new, 1)
 
-TARGET.write_text(src, encoding="utf-8")
-print(f"patched {TARGET}")
+    old2 = "return upperBlocks->isRenderChunkEmpty( y -  Level::COMPRESSED_CHUNK_SECTION_HEIGHT );"
+    new2 = (
+        "if (!upperBlocks) { app.DebugPrintf(\"LCI_CKPT upperBlocks null at y=%d\", y); return true; }\n"
+        "\t\tapp.DebugPrintf(\"LCI_CKPT calling upper isRenderChunkEmpty\");\n"
+        "\t\treturn upperBlocks->isRenderChunkEmpty( y -  Level::COMPRESSED_CHUNK_SECTION_HEIGHT );"
+    )
+    if old2 not in src: sys.exit("LCI upper anchor not found")
+    src = src.replace(old2, new2, 1)
+
+    old3 = "return lowerBlocks->isRenderChunkEmpty( y );"
+    new3 = (
+        "if (!lowerBlocks) { app.DebugPrintf(\"LCI_CKPT lowerBlocks null at y=%d\", y); return true; }\n"
+        "\t\tapp.DebugPrintf(\"LCI_CKPT calling lower isRenderChunkEmpty\");\n"
+        "\t\treturn lowerBlocks->isRenderChunkEmpty( y );"
+    )
+    if old3 not in src: sys.exit("LCI lower anchor not found")
+    src = src.replace(old3, new3, 1)
+
+    LC_CPP.write_text(src, encoding="utf-8")
+    print(f"patched {LC_CPP}")
+
+# --- CompressedTileStorage.cpp - bracket isRenderChunkEmpty body ---
+src = CTS_CPP.read_text(encoding="utf-8", errors="replace")
+if "CTSI_CKPT" in src:
+    print(f"already patched: {CTS_CPP}")
+else:
+    old = (
+        "bool CompressedTileStorage::isRenderChunkEmpty(int y)\t// y == 0, 16, 32... 112 (representing a 16 byte range)\n"
+        "{\n"
+        "\tint block;\n"
+        "\tunsigned char *localIndicesAndData = indicesAndData;"
+    )
+    new = (
+        "bool CompressedTileStorage::isRenderChunkEmpty(int y)\t// y == 0, 16, 32... 112 (representing a 16 byte range)\n"
+        "{\n"
+        "\tapp.DebugPrintf(\"CTSI_CKPT enter y=%d this=%p\", y, this);\n"
+        "\tif (this == nullptr) { app.DebugPrintf(\"CTSI_CKPT this is null - return true\"); return true; }\n"
+        "\tint block;\n"
+        "\tunsigned char *localIndicesAndData = indicesAndData;"
+    )
+    if old not in src: sys.exit("CTSI anchor not found")
+    src = src.replace(old, new, 1)
+    CTS_CPP.write_text(src, encoding="utf-8")
+    print(f"patched {CTS_CPP}")
