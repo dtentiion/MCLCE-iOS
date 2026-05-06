@@ -16,9 +16,21 @@ if "WDI_CKPT" in src:
     print(f"already patched: {LR_CPP}")
 else:
     old = "bool LevelRenderer::updateDirtyChunks()\n{\n"
-    new = "bool LevelRenderer::updateDirtyChunks()\n{\n\tapp.DebugPrintf(\"WDI_CKPT enter\");\n"
+    new = "bool LevelRenderer::updateDirtyChunks()\n{\n\tapp.DebugPrintf(\"WDI_CKPT enter dcp=%d\", (int)dirtyChunkPresent);\n"
     if old not in src: sys.exit("entry anchor not found")
     src = src.replace(old, new, 1)
+
+    # CKPT after queue drain showing dcp value
+    old_dcp = "\t// Only bother searching round all the chunks if we have some dirty chunk(s)\n\tif( dirtyChunkPresent )"
+    new_dcp = "\tapp.DebugPrintf(\"WDI_CKPT post-drain dcp=%d\", (int)dirtyChunkPresent);\n\t// Only bother searching round all the chunks if we have some dirty chunk(s)\n\tif( dirtyChunkPresent )"
+    if old_dcp not in src: sys.exit("post-drain anchor not found")
+    src = src.replace(old_dcp, new_dcp, 1)
+
+    # CKPT per-player loop entry
+    old_pp = "\t\tfor( int p = 0; p < XUSER_MAX_COUNT; p++ )\n\t\t{"
+    new_pp = "\t\tapp.DebugPrintf(\"WDI_CKPT entering for(p) loop\");\n\t\tfor( int p = 0; p < XUSER_MAX_COUNT; p++ )\n\t\t{\n\t\t\tapp.DebugPrintf(\"WDI_CKPT p=%d player=%p chunks.data=%p level=%p len=%u expected=%d\", p, mc->localplayers[p].get(), chunks[p].data, level[p], (unsigned)chunks[p].length, xChunks*zChunks*CHUNK_Y_COUNT);"
+    if old_pp not in src: sys.exit("p-loop anchor not found")
+    src = src.replace(old_pp, new_pp, 1)
 
     # bracket pre-isRenderChunkEmpty derefs (chunk + lc accesses) with
     # null guards so we get past benign nulls
