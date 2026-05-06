@@ -714,9 +714,29 @@ extern "C" void mcle_glbridge_end_list(void) {
     g_recording_list = 0;
 }
 
+extern "C" int mcle_log_msg(const char *msg);
 extern "C" void mcle_glbridge_call_list(int id) {
     auto it = g_lists.find(id);
-    if (it == g_lists.end()) return;
+    static int s_logCount = 0;
+    static int s_missCount = 0;
+    static int s_hitCount = 0;
+    if (it == g_lists.end()) {
+        s_missCount++;
+        if (s_logCount < 5) {
+            char buf[256];
+            snprintf(buf, sizeof(buf), "CL_CKPT call_list MISS id=%d (total miss=%d hit=%d, lists size=%zu)", id, s_missCount, s_hitCount, g_lists.size());
+            mcle_log_msg(buf);
+            s_logCount++;
+        }
+        return;
+    }
+    s_hitCount++;
+    if (s_logCount < 5 || (s_hitCount % 100 == 0)) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "CL_CKPT call_list HIT id=%d draws=%zu (total miss=%d hit=%d)", id, it->second.draws.size(), s_missCount, s_hitCount);
+        mcle_log_msg(buf);
+        s_logCount++;
+    }
     for (const auto& cmd : it->second.draws) {
         immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
                            cmd.fmt, cmd.shader);
