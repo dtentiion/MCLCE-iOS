@@ -1429,3 +1429,9 @@ GTX_PY="$REPO_ROOT/scripts/patch-gettexture-ckpts.py"
 if [ -f "$GTX_PY" ]; then
     python3 "$GTX_PY"
 fi
+
+# renderChunks loop CKPTs - count visible/empty/drawn chunks per layer
+RC_PY="$REPO_ROOT/scripts/patch-renderchunks-ckpts.py"
+if [ -f "$RC_PY" ]; then
+    python3 "$RC_PY"
+fi
