@@ -47,6 +47,8 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 // is wired correctly. Counter version of draws climbs per frame once
 // glCallList replays start firing.
 extern "C" unsigned long long mcle_glbridge_list_count(void);
+extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long *misses,
+                                                int *first_miss, int *first_hit, unsigned long *list_count);
 
 // G1B-probe: defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
@@ -1286,6 +1288,17 @@ extern "C" void mcle_world_drive_renderer(void) {
         try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
 
         mcle_glbridge_replay_all_lists();
+
+        // G5: every ~120 frames, log the call_list stats so we know whether
+        // the chunk display lists are actually being replayed.
+        static int s_statsFrame = 0;
+        if ((s_statsFrame++ % 120) == 0) {
+            unsigned long hits = 0, misses = 0, count = 0;
+            int firstMiss = -1, firstHit = -1;
+            mcle_glbridge_call_list_stats(&hits, &misses, &firstMiss, &firstHit, &count);
+            MCLE_LOG("CL_CKPT call_list: hits=%lu misses=%lu firstHit=%d firstMiss=%d totalLists=%lu",
+                     hits, misses, firstHit, firstMiss, count);
+        }
     } catch (...) {}
 }
 
