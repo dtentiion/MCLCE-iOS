@@ -259,7 +259,18 @@ static ColourTable *get_colour_table_shim() {
     }
     return reinterpret_cast<ColourTable *>(s_buf);
 }
-ColourTable *Minecraft::getColourTable() { return get_colour_table_shim(); }
+extern "C" int mcle_log_msg(const char *msg);
+ColourTable *Minecraft::getColourTable() {
+    ColourTable *ct = get_colour_table_shim();
+    static int s_logged = 0;
+    if (s_logged < 3) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "MC_CT_CKPT getColourTable called this=%p ct=%p", (void*)this, (void*)ct);
+        mcle_log_msg(buf);
+        s_logged++;
+    }
+    return ct;
+}
 bool         Minecraft::isTutorial()      { return false; }
 MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 
