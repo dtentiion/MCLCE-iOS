@@ -1405,3 +1405,9 @@ CRB_PY="$REPO_ROOT/scripts/patch-chunk-rebuild-ckpts.py"
 if [ -f "$CRB_PY" ]; then
     python3 "$CRB_PY"
 fi
+
+# tesselateBlockInWorldWithAmbienceOcclusionTexLighting ckpts
+TBIW_PY="$REPO_ROOT/scripts/patch-tbiw-aot-ckpts.py"
+if [ -f "$TBIW_PY" ]; then
+    python3 "$TBIW_PY"
+fi
