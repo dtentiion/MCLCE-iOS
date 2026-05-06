@@ -1411,3 +1411,9 @@ TBIW_PY="$REPO_ROOT/scripts/patch-tbiw-aot-ckpts.py"
 if [ -f "$TBIW_PY" ]; then
     python3 "$TBIW_PY"
 fi
+
+# GrassTile::getColor ckpts to find where grass-tile addr 0xe0 crashes
+GTC_PY="$REPO_ROOT/scripts/patch-grass-color-ckpts.py"
+if [ -f "$GTC_PY" ]; then
+    python3 "$GTC_PY"
+fi
