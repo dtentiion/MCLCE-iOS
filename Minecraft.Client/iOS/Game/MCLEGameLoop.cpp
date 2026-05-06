@@ -959,6 +959,15 @@ void initImpl() {
     Options *options = reinterpret_cast<Options *>(s_optsBuf);
     g_minecraftShim->skins = skins;
 
+    // TextureManager is a singleton - createTextureID() and createTexture()
+    // both go through getInstance() which returns nullptr until we allocate
+    // one. Upstream's per-platform main does this at boot.
+    if (TextureManager::getInstance() == nullptr) {
+        TextureManager::createInstance();
+        MCLE_LOG("mcle_game_init: TextureManager::createInstance done at %p",
+                 (void*)TextureManager::getInstance());
+    }
+
     if (g_levelRenderer) {
         try {
             Textures *textures = new Textures(skins, options);
