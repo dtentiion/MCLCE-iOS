@@ -67,5 +67,22 @@ new6 = (
 if old6 not in src: sys.exit("TileRenderer anchor not found")
 src = src.replace(old6, new6, 1)
 
+# bracket the empty check + early return path
+old7 = "\tif( empty )\n\t{"
+new7 = "\tapp.DebugPrintf(\"CRB_CKPT after optimization loop, empty=%d\", (int)empty);\n\tif( empty )\n\t{\n\t\tapp.DebugPrintf(\"CRB_CKPT empty path - calling setGlobalChunkFlag\");"
+if old7 not in src: sys.exit("empty check anchor not found")
+src = src.replace(old7, new7, 1)
+
+# bracket the layer loop
+old8 = "\tfor (int currentLayer = 0; currentLayer < 2; currentLayer++)\n\t{\n\t\tbool renderNextLayer = false;"
+new8 = (
+    "\tapp.DebugPrintf(\"CRB_CKPT entering currentLayer loop\");\n"
+    "\tfor (int currentLayer = 0; currentLayer < 2; currentLayer++)\n\t{\n"
+    "\t\tapp.DebugPrintf(\"CRB_CKPT layer=%d entry\", currentLayer);\n"
+    "\t\tbool renderNextLayer = false;"
+)
+if old8 not in src: sys.exit("layer loop anchor not found")
+src = src.replace(old8, new8, 1)
+
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
