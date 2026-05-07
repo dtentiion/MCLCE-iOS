@@ -65,6 +65,13 @@ old4 = (
 )
 new4 = (
     "\t\trcDrawn++;\n"
+    "\t\t{\n"
+    "\t\t\tstatic int s_rcDrawnLogged = 0;\n"
+    "\t\t\tif (s_rcDrawnLogged < 8 && layer == 0) {\n"
+    "\t\t\t\tapp.DebugPrintf(\"RC_CKPT renderChunks id=%d (globalIdx=%d * 2 + layer=%d + chunkLists=%d) xyz=%d,%d,%d\", list, pClipChunk->globalIdx, layer, chunkLists, pClipChunk->xm, pClipChunk->ym, pClipChunk->zm);\n"
+    "\t\t\t\ts_rcDrawnLogged++;\n"
+    "\t\t\t}\n"
+    "\t\t}\n"
     "\t\tif(RenderManager.CBuffCall(list, first))\n"
     "\t\t{\n"
     "\t\t\tfirst = false;\n"
