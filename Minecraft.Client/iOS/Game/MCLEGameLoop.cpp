@@ -49,6 +49,9 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 extern "C" unsigned long long mcle_glbridge_list_count(void);
 extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long *misses,
                                                 int *first_miss, int *first_hit, unsigned long *list_count);
+extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
+                                                    unsigned long *hits_high,
+                                                    int *last_hit);
 extern "C" void mcle_glbridge_fmt_stats(unsigned long *out, int max_count);
 
 // G1B-probe: defined later in this same TU; forward-declared here so
@@ -1297,8 +1300,11 @@ extern "C" void mcle_world_drive_renderer(void) {
             unsigned long hits = 0, misses = 0, count = 0;
             int firstMiss = -1, firstHit = -1;
             mcle_glbridge_call_list_stats(&hits, &misses, &firstMiss, &firstHit, &count);
-            MCLE_LOG("CL_CKPT call_list: hits=%lu misses=%lu firstHit=%d firstMiss=%d totalLists=%lu",
-                     hits, misses, firstHit, firstMiss, count);
+            unsigned long hitsLow = 0, hitsHigh = 0;
+            int lastHit = -1;
+            mcle_glbridge_call_list_stats_ext(&hitsLow, &hitsHigh, &lastHit);
+            MCLE_LOG("CL_CKPT call_list: hits=%lu (low=%lu high=%lu) misses=%lu firstHit=%d lastHit=%d firstMiss=%d totalLists=%lu",
+                     hits, hitsLow, hitsHigh, misses, firstHit, lastHit, firstMiss, count);
 
             unsigned long fmts[16] = {0};
             mcle_glbridge_fmt_stats(fmts, 16);

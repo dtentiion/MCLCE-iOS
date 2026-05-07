@@ -833,6 +833,11 @@ static unsigned long g_call_list_hits = 0;
 static unsigned long g_call_list_misses = 0;
 static int g_call_list_first_miss_id = -1;
 static int g_call_list_first_hit_id  = -1;
+static int g_call_list_last_hit_id   = -1;
+// Hits by ID range. Chunks get IDs in the lower (chunkLists, chunkLists+chunkCount*2)
+// range. Sky/clouds/sun get higher IDs after that range.
+static unsigned long g_call_list_hits_low  = 0;  // id < 4000000 (chunk range typically)
+static unsigned long g_call_list_hits_high = 0;  // id >= 4000000
 
 extern "C" void mcle_glbridge_call_list(int id) {
     auto it = g_lists.find(id);
@@ -842,7 +847,9 @@ extern "C" void mcle_glbridge_call_list(int id) {
         return;
     }
     if (g_call_list_first_hit_id == -1) g_call_list_first_hit_id = id;
+    g_call_list_last_hit_id = id;
     g_call_list_hits++;
+    if (id < 4000000) g_call_list_hits_low++; else g_call_list_hits_high++;
     for (const auto& cmd : it->second.draws) {
         immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
                            cmd.fmt, cmd.shader);
@@ -857,6 +864,14 @@ extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long
     if (first_miss)  *first_miss  = g_call_list_first_miss_id;
     if (first_hit)   *first_hit   = g_call_list_first_hit_id;
     if (list_count)  *list_count  = (unsigned long)g_lists.size();
+}
+
+extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
+                                                    unsigned long *hits_high,
+                                                    int *last_hit) {
+    if (hits_low)  *hits_low  = g_call_list_hits_low;
+    if (hits_high) *hits_high = g_call_list_hits_high;
+    if (last_hit)  *last_hit  = g_call_list_last_hit_id;
 }
 
 extern "C" void mcle_glbridge_release_lists(int id, int range) {
