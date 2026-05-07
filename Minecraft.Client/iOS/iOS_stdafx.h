@@ -295,8 +295,10 @@ struct C4JRenderStub {
     // recorded chunk geometry replays through Tesselator -> Metal.
     inline bool CBuffCall(int list, bool /*first*/);
     inline bool CBuffCallCutOut(int list, bool /*first*/);
-    template<class... A> bool   CBuffCall(A...)               { return false; }
-    template<class... A> bool   CBuffCallCutOut(A...)         { return false; }
+    // Variadic CBuffCall/CBuffCallCutOut catch-alls were shadowing the
+    // non-template overloads above (same C++ overload-resolution issue
+    // we hit for LoadTextureData). Dropped so chunk display lists actually
+    // route through mcle_glbridge_call_list.
     template<class... A> bool   CBuffCallMultiple(A...)       { return false; }
     template<class... A> void   CBuffDeferredModeStart(A...)  {}
     template<class... A> void   CBuffLockStaticCreations(A...) {}
