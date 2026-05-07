@@ -54,6 +54,11 @@ struct DrawCmd {
     int                  fmt;
     int                  shader;
     std::vector<uint8_t> data;
+    // G5: capture current modelview at record time so chunk display lists
+    // remember their world translation (set by translateToPos before t->end()).
+    // 16 floats = 4x4 column-major matrix.
+    float                modelview[16];
+    bool                 hasModelview = false;
 };
 
 struct DisplayList {
@@ -798,6 +803,10 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         const int sz = count * vertex_stride(fmt);
         const uint8_t* p = static_cast<const uint8_t*>(data);
         cmd.data.assign(p, p + sz);
+        // G5: capture current modelview - chunks call translateToPos before
+        // t->end() which puts the chunk's world position into top of stack.
+        for (int i = 0; i < 16; i++) cmd.modelview[i] = g_modelview_stack.back().m[i];
+        cmd.hasModelview = true;
         g_lists[g_recording_list].draws.push_back(std::move(cmd));
         return;
     }
@@ -851,8 +860,19 @@ extern "C" void mcle_glbridge_call_list(int id) {
     g_call_list_hits++;
     if (id < 4000000) g_call_list_hits_low++; else g_call_list_hits_high++;
     for (const auto& cmd : it->second.draws) {
-        immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
-                           cmd.fmt, cmd.shader);
+        // G5: if cmd has a recorded modelview (chunk lists do), temporarily
+        // swap it onto the stack so compute_mvp inside immediate_dispatch
+        // applies the correct chunk world translation. Restore after.
+        if (cmd.hasModelview) {
+            Mat4 saved = g_modelview_stack.back();
+            for (int i = 0; i < 16; i++) g_modelview_stack.back().m[i] = cmd.modelview[i];
+            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                               cmd.fmt, cmd.shader);
+            g_modelview_stack.back() = saved;
+        } else {
+            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                               cmd.fmt, cmd.shader);
+        }
     }
 }
 
