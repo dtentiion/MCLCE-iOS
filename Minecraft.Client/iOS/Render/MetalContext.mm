@@ -54,11 +54,11 @@ struct DrawCmd {
     int                  fmt;
     int                  shader;
     std::vector<uint8_t> data;
-    // G5: capture current modelview at record time so chunk display lists
-    // remember their world translation (set by translateToPos before t->end()).
-    // 16 floats = 4x4 column-major matrix.
-    float                modelview[16];
-    bool                 hasModelview = false;
+    // G5: chunk's world translation (xRenderOffs/yRenderOffs/zRenderOffs)
+    // captured at record time. Applied as a translate on top of current
+    // modelview at replay so geometry tracks the camera correctly.
+    float                translate[3] = {0, 0, 0};
+    bool                 hasTranslate = false;
     // G5: also capture bound texture so chunks sample terrain.png instead of
     // whatever happens to be bound at replay time.
     unsigned int         texId = 0;
@@ -434,8 +434,19 @@ extern "C" void mcle_glbridge_push_matrix(void) {
 extern "C" void mcle_glbridge_pop_matrix(void) {
     if (current_stack().size() > 1) current_stack().pop_back();
 }
+// G5: remember last translate applied while a list is being recorded, so
+// chunk display lists can carry their world position to replay.
+static float g_recording_last_translate[3] = {0, 0, 0};
+static bool  g_recording_has_translate = false;
+
 extern "C" void mcle_glbridge_translate(float x, float y, float z) {
     mat_translate(current_matrix_data(), x, y, z);
+    if (g_recording_list != 0) {
+        g_recording_last_translate[0] = x;
+        g_recording_last_translate[1] = y;
+        g_recording_last_translate[2] = z;
+        g_recording_has_translate = true;
+    }
 }
 extern "C" void mcle_glbridge_rotate(float angle, float x, float y, float z) {
     mat_rotate(current_matrix_data(), angle, x, y, z);
@@ -619,14 +630,11 @@ void call_list_replay(const DisplayList& dl) {
         Mat4 savedMv = g_modelview_stack.back();
         unsigned int savedTexId = g_bound_tex_id;
         id<MTLTexture> savedTex = g_current_texture;
-        if (cmd.hasModelview) {
-            // Recorded modelview captured the chunk's world translation
-            // (translateToPos at record time, view was ~identity then).
-            // Compose with CURRENT view so chunks follow the camera:
-            //   new_top = current_view * recorded_chunk_translation
-            Mat4 composed;
-            mat_mul(composed.m, savedMv.m, cmd.modelview);
-            g_modelview_stack.back() = composed;
+        if (cmd.hasTranslate) {
+            // Apply chunk's world translation on top of current view:
+            //   new_top = current_view * translate(chunk_xyz)
+            mat_translate(g_modelview_stack.back().m,
+                          cmd.translate[0], cmd.translate[1], cmd.translate[2]);
         }
         if (cmd.texId != 0) {
             auto tit = g_gl_textures.find(cmd.texId);
@@ -635,7 +643,7 @@ void call_list_replay(const DisplayList& dl) {
         }
         immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
                            cmd.fmt, cmd.shader);
-        if (cmd.hasModelview) g_modelview_stack.back() = savedMv;
+        if (cmd.hasTranslate) g_modelview_stack.back() = savedMv;
         if (cmd.texId != 0) {
             g_current_texture = savedTex;
             g_bound_tex_id    = savedTexId;
@@ -846,10 +854,15 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         const int sz = count * vertex_stride(fmt);
         const uint8_t* p = static_cast<const uint8_t*>(data);
         cmd.data.assign(p, p + sz);
-        // G5: capture current modelview - chunks call translateToPos before
-        // t->end() which puts the chunk's world position into top of stack.
-        for (int i = 0; i < 16; i++) cmd.modelview[i] = g_modelview_stack.back().m[i];
-        cmd.hasModelview = true;
+        // G5: capture chunk world translation (set by translateToPos before
+        // t->end()). Applied as translate on top of current modelview at
+        // replay so geometry tracks the live camera.
+        if (g_recording_has_translate) {
+            cmd.translate[0] = g_recording_last_translate[0];
+            cmd.translate[1] = g_recording_last_translate[1];
+            cmd.translate[2] = g_recording_last_translate[2];
+            cmd.hasTranslate = true;
+        }
         // G5: capture currently bound texture id so chunks sample terrain.png
         // at replay even if other things have rebound the texture since.
         cmd.texId = g_bound_tex_id;
@@ -877,6 +890,10 @@ extern "C" int mcle_glbridge_gen_lists(int range) {
 extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
     g_recording_list = id;
     g_lists[id] = DisplayList();
+    g_recording_has_translate = false;
+    g_recording_last_translate[0] = 0;
+    g_recording_last_translate[1] = 0;
+    g_recording_last_translate[2] = 0;
 }
 
 extern "C" void mcle_glbridge_end_list(void) {
