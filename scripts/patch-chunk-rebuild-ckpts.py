@@ -84,6 +84,15 @@ new8 = (
 if old8 not in src: sys.exit("layer loop anchor not found")
 src = src.replace(old8, new8, 1)
 
+# Log post-layer rendered value
+old9 = "\t\tif (rendered)\n\t\t{\n\t\t\tlevelRenderer->clearGlobalChunkFlag(this->x, this->y, this->z, level, LevelRenderer::CHUNK_FLAG_EMPTY0, currentLayer);"
+new9 = (
+    "\t\tapp.DebugPrintf(\"CRB_CKPT layer=%d done rendered=%d started=%d xyz=%d,%d,%d\", currentLayer, (int)rendered, (int)started, this->x, this->y, this->z);\n"
+    "\t\tif (rendered)\n\t\t{\n\t\t\tlevelRenderer->clearGlobalChunkFlag(this->x, this->y, this->z, level, LevelRenderer::CHUNK_FLAG_EMPTY0, currentLayer);"
+)
+if old9 not in src: sys.exit("rendered check anchor not found")
+src = src.replace(old9, new9, 1)
+
 # bracket the started-block setup
 old9 = "\t\t\t\t\t\t\tglNewList(lists + currentLayer, GL_COMPILE);"
 new9 = (
