@@ -27,7 +27,9 @@ new = (
     "\tfor( int i = 0; i < chunks[playerIndex].length; i++, pClipChunk++ )\n"
     "\t{\n"
     "\t\trcTotal++;\n"
-    "\t\tif( !pClipChunk->visible ) { rcInvisible++; continue; }"
+    "\t\t// TEMP: don't skip on visibility either - frustum culling on iOS\n"
+    "\t\t// picks bedrock chunks instead of player-altitude ones. Force all.\n"
+    "\t\tif( !pClipChunk->visible ) { rcInvisible++; /*continue;*/ }"
 )
 if old not in src: sys.exit("renderChunks loop anchor not found")
 src = src.replace(old, new, 1)
