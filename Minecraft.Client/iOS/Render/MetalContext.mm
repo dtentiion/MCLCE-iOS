@@ -83,6 +83,12 @@ inline int vertex_stride(int fmt) {
 // replay so process startup doesn't pay shader compile cost.
 id<MTLRenderPipelineState> g_world_pso        = nil;
 
+// G5: pipeline state for VERTEX_TYPE_COMPRESSED (fmt=4, 16 bytes/vertex):
+// short3 pos*1024 @ 0, short packed_5_6_5_color @ 6, short2 uv*8192 @ 8,
+// short2 lightUV @ 12. This is what chunk rebuild emits when
+// useCompactVertices(true) is set in Tesselator.
+id<MTLRenderPipelineState> g_world_pso_compact = nil;
+
 // G4: 1x1 white default texture + linear sampler. Bound on every world
 // draw so the fragment shader's texture sample stays well-defined even
 // for currently-untextured paths (sky / dark / star / sunset gradient).
@@ -148,6 +154,99 @@ NSString* const kWorldShaderSrc = @R"(
         return i.color * t;
     }
 )";
+
+// G5: shader for fmt=4 compact vertex format. Position is int16x3 scaled
+// by 1024, primary UV is int16x2 scaled by 8192. Color (5:6:5 packed) and
+// secondary lighting UVs ignored on first pass (uniform white tint) so we
+// can verify chunk geometry actually reaches the screen. Refining the
+// color/lighting unpack is parity work for a follow-up commit.
+NSString* const kWorldShaderSrcCompact = @R"(
+    #include <metal_stdlib>
+    using namespace metal;
+
+    struct V_in_c {
+        short3 pos    [[attribute(0)]];
+        short  pcol   [[attribute(1)]];
+        short2 uv     [[attribute(2)]];
+        short2 tex2   [[attribute(3)]];
+    };
+    struct V_out {
+        float4 pos [[position]];
+        float4 color;
+        float2 uv;
+    };
+    struct MVPUniforms   { float4x4 mvp; };
+    struct ColorUniforms { float4 currentColor; };
+
+    vertex V_out world_vert_compact(V_in_c v [[stage_in]],
+                                     constant MVPUniforms&   m [[buffer(1)]],
+                                     constant ColorUniforms& c [[buffer(2)]]) {
+        V_out o;
+        float3 pos = float3(v.pos) / 1024.0;
+        float2 uv  = float2(v.uv) / 8192.0;
+        o.pos   = m.mvp * float4(pos, 1.0);
+        o.color = c.currentColor;
+        o.uv    = uv;
+        return o;
+    }
+)";
+
+bool ensure_world_pipeline_compact() {
+    if (g_world_pso_compact) return true;
+    if (!g.device)           return false;
+
+    NSError* err = nil;
+    id<MTLLibrary> lib = [g.device newLibraryWithSource:kWorldShaderSrcCompact
+                                                options:nil
+                                                  error:&err];
+    if (!lib) {
+        NSLog(@"[mcle_metal G5c] compact shader compile failed: %@", err);
+        return false;
+    }
+
+    MTLVertexDescriptor* vd = [[MTLVertexDescriptor alloc] init];
+    vd.attributes[0].format      = MTLVertexFormatShort3;
+    vd.attributes[0].offset      = 0;
+    vd.attributes[0].bufferIndex = 0;
+    vd.attributes[1].format      = MTLVertexFormatShort;
+    vd.attributes[1].offset      = 6;
+    vd.attributes[1].bufferIndex = 0;
+    vd.attributes[2].format      = MTLVertexFormatShort2;
+    vd.attributes[2].offset      = 8;
+    vd.attributes[2].bufferIndex = 0;
+    vd.attributes[3].format      = MTLVertexFormatShort2;
+    vd.attributes[3].offset      = 12;
+    vd.attributes[3].bufferIndex = 0;
+    vd.layouts[0].stride         = 16;
+    vd.layouts[0].stepFunction   = MTLVertexStepFunctionPerVertex;
+
+    MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc] init];
+    desc.vertexFunction                  = [lib newFunctionWithName:@"world_vert_compact"];
+    // Reuse world_frag from the main shader - it just samples the bound
+    // texture and modulates with vertex color.
+    {
+        NSError* ferr = nil;
+        id<MTLLibrary> mainLib = [g.device newLibraryWithSource:kWorldShaderSrc
+                                                        options:nil
+                                                          error:&ferr];
+        if (!mainLib) {
+            NSLog(@"[mcle_metal G5c] could not reload main lib for fragment shader: %@", ferr);
+            return false;
+        }
+        desc.fragmentFunction = [mainLib newFunctionWithName:@"world_frag"];
+    }
+    desc.vertexDescriptor                 = vd;
+    desc.colorAttachments[0].pixelFormat  = MTLPixelFormatBGRA8Unorm;
+    desc.depthAttachmentPixelFormat       = MTLPixelFormatDepth32Float;
+
+    g_world_pso_compact = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_compact) {
+        NSLog(@"[mcle_metal G5c] compact pso build failed: %@", err);
+        return false;
+    }
+    NSLog(@"[mcle_metal G5c] compact pipeline ready");
+    return true;
+}
 
 bool ensure_world_pipeline() {
     if (g_world_pso) return true;
@@ -505,10 +604,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 
     if (!g.inFrame || !g.enc)        return;
     if (count <= 0 || !data)         return;
-    if (fmt != 1 && fmt != 2)        return;  // only PF3_TF2_CB4_NB4_XW1 for now
-    if (!ensure_world_pipeline())    return;
+    if (fmt != 1 && fmt != 2 && fmt != 4) return;
 
-    const int stride = 32;
+    const bool isCompact = (fmt == 4);
+    if (isCompact) {
+        if (!ensure_world_pipeline_compact()) return;
+    } else {
+        if (!ensure_world_pipeline()) return;
+    }
+
+    const int stride = vertex_stride(fmt);
     const NSUInteger byteLen = (NSUInteger)count * (NSUInteger)stride;
 
     id<MTLBuffer> vbuf = [g.device newBufferWithBytes:data
@@ -520,7 +625,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     float mvp[16];
     compute_mvp(mvp);
 
-    [g.enc setRenderPipelineState:g_world_pso];
+    [g.enc setRenderPipelineState:(isCompact ? g_world_pso_compact : g_world_pso)];
     if (g.depthState) [g.enc setDepthStencilState:g.depthState];
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
