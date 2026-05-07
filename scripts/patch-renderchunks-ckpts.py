@@ -68,10 +68,10 @@ new4 = (
     "\t\t}\n"
     "\t\tcount++;\n"
     "\t}\n"
-    "\tstatic int rcLogCount = 0;\n"
-    "\tif (rcLogCount < 10) {\n"
-    "\t\tapp.DebugPrintf(\"RC_CKPT layer=%d total=%d invisible=%d badIdx=%d empty=%d drawn=%d\", layer, rcTotal, rcInvisible, rcBadIdx, rcEmpty, rcDrawn);\n"
-    "\t\trcLogCount++;\n"
+    "\tstatic int rcCallNum = 0;\n"
+    "\trcCallNum++;\n"
+    "\tif (rcCallNum < 20 || (rcCallNum % 120) == 0) {\n"
+    "\t\tapp.DebugPrintf(\"RC_CKPT call=%d layer=%d total=%d invisible=%d badIdx=%d empty=%d drawn=%d\", rcCallNum, layer, rcTotal, rcInvisible, rcBadIdx, rcEmpty, rcDrawn);\n"
     "\t}"
 )
 if old4 not in src: sys.exit("drawn anchor not found")
