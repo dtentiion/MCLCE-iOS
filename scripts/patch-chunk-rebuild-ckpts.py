@@ -96,9 +96,14 @@ src = src.replace(old9, new9, 1)
 # bracket the started-block setup
 old9 = "\t\t\t\t\t\t\tglNewList(lists + currentLayer, GL_COMPILE);"
 new9 = (
-    "\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT before glNewList lists=%d layer=%d\", lists, currentLayer);\n"
-    "\t\t\t\t\t\t\tglNewList(lists + currentLayer, GL_COMPILE);\n"
-    "\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT after glNewList\");"
+    "\t\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\t\tstatic int s_glnlCount = 0;\n"
+    "\t\t\t\t\t\t\t\tif (s_glnlCount < 8) {\n"
+    "\t\t\t\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT glNewList id=%d (lists=%d + layer=%d) chunkLists=%d xyz=%d,%d,%d\", lists+currentLayer, lists, currentLayer, levelRenderer->chunkLists, this->x, this->y, this->z);\n"
+    "\t\t\t\t\t\t\t\t\ts_glnlCount++;\n"
+    "\t\t\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\t\tglNewList(lists + currentLayer, GL_COMPILE);"
 )
 if old9 not in src: sys.exit("glNewList anchor not found")
 src = src.replace(old9, new9, 1)
