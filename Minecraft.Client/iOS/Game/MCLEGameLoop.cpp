@@ -1247,9 +1247,10 @@ extern "C" void mcle_world_drive_renderer(void) {
         // yaw=0 looks south but our default camera looks down -Z (north).
         mcle_glbridge_rotate((float)g_player->xRot, 1.0f, 0.0f, 0.0f);
         mcle_glbridge_rotate((float)g_player->yRot + 180.0f, 0.0f, 1.0f, 0.0f);
-        mcle_glbridge_translate(-(float)g_player->x,
-                                -(float)g_player->y,
-                                -(float)g_player->z);
+        // Player translation is applied INSIDE upstream LevelRenderer::renderChunks
+        // via glPushMatrix; glTranslatef(-xOff, -yOff, -zOff). Adding it here too
+        // would double-translate chunks. Sky/clouds/sun apply their own translations
+        // per-pass so they're unaffected.
 
         // G5-step3: process the dirty-chunk rebuild queue. Throttled to
         // every 15 frames (~250ms at 60fps) because upstream's
