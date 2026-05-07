@@ -59,6 +59,9 @@ struct DrawCmd {
     // 16 floats = 4x4 column-major matrix.
     float                modelview[16];
     bool                 hasModelview = false;
+    // G5: also capture bound texture so chunks sample terrain.png instead of
+    // whatever happens to be bound at replay time.
+    unsigned int         texId = 0;
 };
 
 struct DisplayList {
@@ -161,10 +164,9 @@ NSString* const kWorldShaderSrc = @R"(
 )";
 
 // G5: shader for fmt=4 compact vertex format. Position is int16x3 scaled
-// by 1024, primary UV is int16x2 scaled by 8192. Color (5:6:5 packed) and
-// secondary lighting UVs ignored on first pass (uniform white tint) so we
-// can verify chunk geometry actually reaches the screen. Refining the
-// color/lighting unpack is parity work for a follow-up commit.
+// by 1024, primary UV is int16x2 scaled by 8192. Packed color is signed
+// int16 with bits 15-11=A 10-5=R 4-0=G (per Tesselator.cpp:774). UVs go
+// through to fragment shader for atlas sampling.
 NSString* const kWorldShaderSrcCompact = @R"(
     #include <metal_stdlib>
     using namespace metal;
@@ -190,7 +192,13 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float3 pos = float3(v.pos) / 1024.0;
         float2 uv  = float2(v.uv) / 8192.0;
         o.pos   = m.mvp * float4(pos, 1.0);
-        o.color = c.currentColor;
+        // Decode packed 5:6:5-ish lighting color. Stored as signed int16
+        // shifted by -32768 so we offset back. Then unpack as A:R:G bit fields.
+        int packed = int(v.pcol) + 32768;
+        float a = float((packed >> 11) & 0x1F) / 31.0;
+        float r = float((packed >>  5) & 0x3F) / 63.0;
+        float g = float((packed      ) & 0x1F) / 31.0;
+        o.color = float4(r, g, a, 1.0) * c.currentColor;
         o.uv    = uv;
         return o;
     }
@@ -807,6 +815,9 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         // t->end() which puts the chunk's world position into top of stack.
         for (int i = 0; i < 16; i++) cmd.modelview[i] = g_modelview_stack.back().m[i];
         cmd.hasModelview = true;
+        // G5: capture currently bound texture id so chunks sample terrain.png
+        // at replay even if other things have rebound the texture since.
+        cmd.texId = g_bound_tex_id;
         g_lists[g_recording_list].draws.push_back(std::move(cmd));
         return;
     }
@@ -863,15 +874,24 @@ extern "C" void mcle_glbridge_call_list(int id) {
         // G5: if cmd has a recorded modelview (chunk lists do), temporarily
         // swap it onto the stack so compute_mvp inside immediate_dispatch
         // applies the correct chunk world translation. Restore after.
+        // Same dance for the bound texture.
+        Mat4 savedMv = g_modelview_stack.back();
+        unsigned int savedTexId = g_bound_tex_id;
+        id<MTLTexture> savedTex = g_current_texture;
         if (cmd.hasModelview) {
-            Mat4 saved = g_modelview_stack.back();
             for (int i = 0; i < 16; i++) g_modelview_stack.back().m[i] = cmd.modelview[i];
-            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
-                               cmd.fmt, cmd.shader);
-            g_modelview_stack.back() = saved;
-        } else {
-            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
-                               cmd.fmt, cmd.shader);
+        }
+        if (cmd.texId != 0) {
+            auto tit = g_gl_textures.find(cmd.texId);
+            g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
+            g_bound_tex_id    = cmd.texId;
+        }
+        immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                           cmd.fmt, cmd.shader);
+        if (cmd.hasModelview) g_modelview_stack.back() = savedMv;
+        if (cmd.texId != 0) {
+            g_current_texture = savedTex;
+            g_bound_tex_id    = savedTexId;
         }
     }
 }
