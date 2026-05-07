@@ -620,7 +620,13 @@ void call_list_replay(const DisplayList& dl) {
         unsigned int savedTexId = g_bound_tex_id;
         id<MTLTexture> savedTex = g_current_texture;
         if (cmd.hasModelview) {
-            for (int i = 0; i < 16; i++) g_modelview_stack.back().m[i] = cmd.modelview[i];
+            // Recorded modelview captured the chunk's world translation
+            // (translateToPos at record time, view was ~identity then).
+            // Compose with CURRENT view so chunks follow the camera:
+            //   new_top = current_view * recorded_chunk_translation
+            Mat4 composed;
+            mat_mul(composed.m, savedMv.m, cmd.modelview);
+            g_modelview_stack.back() = composed;
         }
         if (cmd.texId != 0) {
             auto tit = g_gl_textures.find(cmd.texId);
