@@ -604,12 +604,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 
     if (!g.inFrame || !g.enc)        return;
     if (count <= 0 || !data)         return;
-    // TEMP: compact pipeline disabled - building it crashes on first dispatch.
-    // Need to debug why before re-enabling.
-    if (fmt != 1 && fmt != 2)        return;
-    if (!ensure_world_pipeline())    return;
+    if (fmt != 1 && fmt != 2 && fmt != 4) return;
 
-    const int stride = 32;
+    const bool isCompact = (fmt == 4);
+    if (isCompact) {
+        if (!ensure_world_pipeline_compact()) return;
+    } else {
+        if (!ensure_world_pipeline()) return;
+    }
+
+    const int stride = vertex_stride(fmt);
     const NSUInteger byteLen = (NSUInteger)count * (NSUInteger)stride;
 
     id<MTLBuffer> vbuf = [g.device newBufferWithBytes:data
@@ -621,7 +625,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     float mvp[16];
     compute_mvp(mvp);
 
-    [g.enc setRenderPipelineState:g_world_pso];
+    [g.enc setRenderPipelineState:(isCompact ? g_world_pso_compact : g_world_pso)];
     if (g.depthState) [g.enc setDepthStencilState:g.depthState];
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
