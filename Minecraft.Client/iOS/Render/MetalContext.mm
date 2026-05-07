@@ -608,6 +608,35 @@ void compute_mvp(float* mvp16) {
             g_modelview_stack.back().m);
 }
 
+inline void immediate_dispatch(int prim, int count, const void* data,
+                                int fmt, int shader);
+
+// Replay a recorded display list. Per-cmd modelview/texture get swapped in
+// before each draw so chunk lists translate to their world position and
+// sample their recorded texture (terrain.png) regardless of current state.
+void call_list_replay(const DisplayList& dl) {
+    for (const auto& cmd : dl.draws) {
+        Mat4 savedMv = g_modelview_stack.back();
+        unsigned int savedTexId = g_bound_tex_id;
+        id<MTLTexture> savedTex = g_current_texture;
+        if (cmd.hasModelview) {
+            for (int i = 0; i < 16; i++) g_modelview_stack.back().m[i] = cmd.modelview[i];
+        }
+        if (cmd.texId != 0) {
+            auto tit = g_gl_textures.find(cmd.texId);
+            g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
+            g_bound_tex_id    = cmd.texId;
+        }
+        immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                           cmd.fmt, cmd.shader);
+        if (cmd.hasModelview) g_modelview_stack.back() = savedMv;
+        if (cmd.texId != 0) {
+            g_current_texture = savedTex;
+            g_bound_tex_id    = savedTexId;
+        }
+    }
+}
+
 // Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.
 // G3d builds an MVP from the player's live position so we look out into
 // the world from where the simulation thinks the player stands.
@@ -870,30 +899,7 @@ extern "C" void mcle_glbridge_call_list(int id) {
     g_call_list_last_hit_id = id;
     g_call_list_hits++;
     if (id < 4000000) g_call_list_hits_low++; else g_call_list_hits_high++;
-    for (const auto& cmd : it->second.draws) {
-        // G5: if cmd has a recorded modelview (chunk lists do), temporarily
-        // swap it onto the stack so compute_mvp inside immediate_dispatch
-        // applies the correct chunk world translation. Restore after.
-        // Same dance for the bound texture.
-        Mat4 savedMv = g_modelview_stack.back();
-        unsigned int savedTexId = g_bound_tex_id;
-        id<MTLTexture> savedTex = g_current_texture;
-        if (cmd.hasModelview) {
-            for (int i = 0; i < 16; i++) g_modelview_stack.back().m[i] = cmd.modelview[i];
-        }
-        if (cmd.texId != 0) {
-            auto tit = g_gl_textures.find(cmd.texId);
-            g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
-            g_bound_tex_id    = cmd.texId;
-        }
-        immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
-                           cmd.fmt, cmd.shader);
-        if (cmd.hasModelview) g_modelview_stack.back() = savedMv;
-        if (cmd.texId != 0) {
-            g_current_texture = savedTex;
-            g_bound_tex_id    = savedTexId;
-        }
-    }
+    call_list_replay(it->second);
 }
 
 // Sampled getter so the consumer logs once per second instead of per call.
@@ -930,10 +936,7 @@ extern "C" unsigned long long mcle_glbridge_list_count(void) {
 // is wired (G3e). Remove this helper at that point.
 extern "C" void mcle_glbridge_replay_all_lists(void) {
     for (const auto& kv : g_lists) {
-        for (const auto& cmd : kv.second.draws) {
-            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
-                               cmd.fmt, cmd.shader);
-        }
+        call_list_replay(kv.second);
     }
 }
 
