@@ -677,9 +677,13 @@ extern "C" void mcle_metal_frame_end(void) {
 // recorder when glNewList is active; otherwise dispatches immediately.
 // Counter bumps only on the immediate path so per-frame tick logs reflect
 // actual draws, not the one-shot ctor recording.
+// Track fmt distribution so we can see what formats chunks actually emit.
+static unsigned long g_fmt_counts[16] = {0};
+
 extern "C" void mcle_metal_draw_vertices(int prim, int count,
                                           const void* data,
                                           int fmt, int shader) {
+    if (fmt >= 0 && fmt < 16) g_fmt_counts[fmt]++;
     if (g_recording_list != 0) {
         DrawCmd cmd;
         cmd.prim   = prim;
@@ -693,6 +697,11 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         return;
     }
     immediate_dispatch(prim, count, data, fmt, shader);
+}
+
+extern "C" void mcle_glbridge_fmt_stats(unsigned long *out, int max_count) {
+    int n = (max_count < 16) ? max_count : 16;
+    for (int i = 0; i < n; i++) out[i] = g_fmt_counts[i];
 }
 
 extern "C" unsigned long long mcle_metal_draw_count(void) {

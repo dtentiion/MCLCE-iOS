@@ -49,6 +49,7 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 extern "C" unsigned long long mcle_glbridge_list_count(void);
 extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long *misses,
                                                 int *first_miss, int *first_hit, unsigned long *list_count);
+extern "C" void mcle_glbridge_fmt_stats(unsigned long *out, int max_count);
 
 // G1B-probe: defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
@@ -1298,6 +1299,12 @@ extern "C" void mcle_world_drive_renderer(void) {
             mcle_glbridge_call_list_stats(&hits, &misses, &firstMiss, &firstHit, &count);
             MCLE_LOG("CL_CKPT call_list: hits=%lu misses=%lu firstHit=%d firstMiss=%d totalLists=%lu",
                      hits, misses, firstHit, firstMiss, count);
+
+            unsigned long fmts[16] = {0};
+            mcle_glbridge_fmt_stats(fmts, 16);
+            MCLE_LOG("FMT_CKPT fmt counts: 1=%lu 2=%lu 3=%lu 4=%lu 5=%lu other=%lu+%lu+%lu+%lu+%lu+%lu+%lu",
+                     fmts[1], fmts[2], fmts[3], fmts[4], fmts[5],
+                     fmts[0], fmts[6], fmts[7], fmts[8], fmts[9], fmts[10], fmts[11]);
         }
     } catch (...) {}
 }
