@@ -46,7 +46,10 @@ old3 = (
     "\t\tif( ( globalChunkFlags[pClipChunk->globalIdx] & emptyFlag ) == emptyFlag ) continue;\t// Check that this particular layer isn't empty"
 )
 new3 = (
-    "\t\tif( ( globalChunkFlags[pClipChunk->globalIdx] & emptyFlag ) == emptyFlag ) { rcEmpty++; continue; }\t// Check that this particular layer isn't empty"
+    "\t\t// TEMP: don't skip on EMPTY flag - force CBuffCall on all visible\n"
+    "\t\t// chunks. Compact pipeline (fmt=4) is wired now so chunks should\n"
+    "\t\t// actually replay through Metal instead of being silently dropped.\n"
+    "\t\tif( ( globalChunkFlags[pClipChunk->globalIdx] & emptyFlag ) == emptyFlag ) { rcEmpty++; /*continue;*/ }\t// Check that this particular layer isn't empty"
 )
 if old3 not in src: sys.exit("empty-flag anchor not found")
 src = src.replace(old3, new3, 1)
