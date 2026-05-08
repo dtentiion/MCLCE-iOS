@@ -372,6 +372,8 @@ extern "C" void         mcle_glbridge_bind_texture(unsigned int id);
 // call it (G5-step29).
 const char *texture_name_relpath(_TEXTURE_NAME tn) {
     switch (tn) {
+        case TN_TERRAIN:             return "terrain";
+        case TN_GUI_ITEMS:           return "items";
         case TN_TERRAIN_SUN:         return "terrain/sun";
         case TN_TERRAIN_MOON_PHASES: return "terrain/moon_phases";
         case TN_TERRAIN_MOON:        return "terrain/moon";
