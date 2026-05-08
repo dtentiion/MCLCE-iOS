@@ -997,10 +997,14 @@ void initImpl() {
                 // atlas slots. If grass-DOWN icon == grass-UP icon, the bug
                 // isn't in tessellation - it's in icon registration / lookup.
                 try {
-                    Tile *grassBase = static_cast<Tile *>(Tile::grass);
-                    Icon *grassUp   = grassBase ? grassBase->getTexture(1) : nullptr;
-                    Icon *grassDown = grassBase ? grassBase->getTexture(0) : nullptr;
-                    Icon *dirtIcon  = Tile::dirt  ? Tile::dirt->getTexture(0)  : nullptr;
+                    // Tile::grass is GrassTile* and that's only fwd-declared
+                    // here, so go through Tile::tiles[id] which is Tile* and
+                    // dispatch virtually.
+                    Tile *grassTile = Tile::tiles[2]; // grass id
+                    Tile *dirtTile  = Tile::tiles[3]; // dirt id
+                    Icon *grassUp   = grassTile ? grassTile->getTexture(1) : nullptr;
+                    Icon *grassDown = grassTile ? grassTile->getTexture(0) : nullptr;
+                    Icon *dirtIcon  = dirtTile  ? dirtTile->getTexture(0)  : nullptr;
                     MCLE_LOG("ICON_CKPT grass UP=%p DOWN=%p, dirt=%p (DOWN should == dirt)",
                              grassUp, grassDown, dirtIcon);
                     if (grassUp) {
