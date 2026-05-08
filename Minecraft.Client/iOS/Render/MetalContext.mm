@@ -636,7 +636,13 @@ void call_list_replay(const DisplayList& dl) {
             mat_translate(g_modelview_stack.back().m,
                           cmd.translate[0], cmd.translate[1], cmd.translate[2]);
         }
-        if (cmd.texId != 0) {
+        // Per-cmd texture override - skip for fmt=4 (chunks). Chunks all
+        // use the terrain atlas bound externally before render() runs;
+        // their captured texId at record time is whatever was bound during
+        // boot stitch (often a misc texture) and overriding to it gives
+        // wrong pixels.
+        const bool overrideTex = (cmd.texId != 0 && cmd.fmt != 4);
+        if (overrideTex) {
             auto tit = g_gl_textures.find(cmd.texId);
             g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
             g_bound_tex_id    = cmd.texId;
@@ -644,7 +650,7 @@ void call_list_replay(const DisplayList& dl) {
         immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
                            cmd.fmt, cmd.shader);
         if (cmd.hasTranslate) g_modelview_stack.back() = savedMv;
-        if (cmd.texId != 0) {
+        if (overrideTex) {
             g_current_texture = savedTex;
             g_bound_tex_id    = savedTexId;
         }
