@@ -2,6 +2,7 @@
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/CAMetalLayer.h>
+#include <mach/mach_time.h>
 
 #include <atomic>
 #include <cstdint>
@@ -96,6 +97,11 @@ id<MTLRenderPipelineState> g_world_pso        = nil;
 // short2 lightUV @ 12. This is what chunk rebuild emits when
 // useCompactVertices(true) is set in Tesselator.
 id<MTLRenderPipelineState> g_world_pso_compact = nil;
+
+// Cached encoder state. Reset to "unknown" at frame begin so the first
+// dispatch issues the actual setCullMode / setFrontFacingWinding call.
+MTLCullMode g_lastCullMode = (MTLCullMode)-1;
+MTLWinding  g_lastWinding  = (MTLWinding)-1;
 
 // G4: 1x1 white default texture + linear sampler. Bound on every world
 // draw so the fragment shader's texture sample stays well-defined even
@@ -697,15 +703,23 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     [g.enc setRenderPipelineState:(isCompact ? g_world_pso_compact : g_world_pso)];
     if (g.depthState) [g.enc setDepthStencilState:g.depthState];
     // Parity with upstream chunks: glEnable(GL_CULL_FACE) with default
-    // GL CCW winding. Without this, free-flying inside a grass block
-    // shows the top face's CW backside (grass_top texture) instead of
-    // letting the dirt-bottom face stay visible from below. Sky/clouds
-    // (non-compact) stay double-sided like upstream.
+    // GL CCW winding. Track last-applied state so we don't issue redundant
+    // setCullMode / setFrontFacingWinding on every one of ~2300+ dispatches
+    // per frame. g_lastCullMode / g_lastWinding reset at frame begin.
     if (isCompact) {
-        [g.enc setFrontFacingWinding:MTLWindingCounterClockwise];
-        [g.enc setCullMode:MTLCullModeBack];
+        if (g_lastWinding != MTLWindingCounterClockwise) {
+            [g.enc setFrontFacingWinding:MTLWindingCounterClockwise];
+            g_lastWinding = MTLWindingCounterClockwise;
+        }
+        if (g_lastCullMode != MTLCullModeBack) {
+            [g.enc setCullMode:MTLCullModeBack];
+            g_lastCullMode = MTLCullModeBack;
+        }
     } else {
-        [g.enc setCullMode:MTLCullModeNone];
+        if (g_lastCullMode != MTLCullModeNone) {
+            [g.enc setCullMode:MTLCullModeNone];
+            g_lastCullMode = MTLCullModeNone;
+        }
     }
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
@@ -835,6 +849,35 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g.cmd = [g.queue commandBuffer];
     g.enc = [g.cmd renderCommandEncoderWithDescriptor:rpd];
     g.inFrame = true;
+    // Encoder is fresh - default state is no cull / clockwise winding.
+    g_lastCullMode = MTLCullModeNone;
+    g_lastWinding  = MTLWindingClockwise;
+
+    // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
+    // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
+    // produces different frame durations.
+    {
+        static uint64_t s_lastNs = 0;
+        static uint64_t s_minNs = UINT64_MAX, s_maxNs = 0, s_sumNs = 0;
+        static int      s_count = 0;
+        const uint64_t now = mach_absolute_time();
+        static mach_timebase_info_data_t s_tb = {0};
+        if (s_tb.denom == 0) mach_timebase_info(&s_tb);
+        if (s_lastNs != 0) {
+            uint64_t dt = ((now - s_lastNs) * s_tb.numer) / s_tb.denom;
+            if (dt < s_minNs) s_minNs = dt;
+            if (dt > s_maxNs) s_maxNs = dt;
+            s_sumNs += dt;
+            s_count++;
+            if (s_count >= 60) {
+                NSLog(@"[mcle_metal] frame_ms min=%.2f avg=%.2f max=%.2f n=%d",
+                      s_minNs / 1.0e6, (s_sumNs / (double)s_count) / 1.0e6,
+                      s_maxNs / 1.0e6, s_count);
+                s_minNs = UINT64_MAX; s_maxNs = 0; s_sumNs = 0; s_count = 0;
+            }
+        }
+        s_lastNs = now;
+    }
     return 0;
 }
 
