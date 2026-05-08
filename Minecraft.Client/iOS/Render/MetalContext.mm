@@ -199,7 +199,10 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float r = float((packed >>  5) & 0x3F) / 63.0;
         float g = float((packed      ) & 0x1F) / 31.0;
         o.color = float4(r, g, a, 1.0) * c.currentColor;
-        o.uv    = uv;
+        // Flip V: PNG row 0 is top, but OpenGL UV V=0 means bottom. Upstream's
+        // Tesselator computes UVs assuming GL convention; flipping here aligns
+        // the sampler so block faces render right-side-up.
+        o.uv    = float2(uv.x, 1.0 - uv.y);
         return o;
     }
 )";
