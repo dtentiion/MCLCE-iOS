@@ -1282,10 +1282,13 @@ extern "C" void mcle_world_drive_renderer(void) {
         // GameRenderer::renderLevel does this; we don't run GameRenderer
         // so we call it directly here. Routes to our patched
         // Textures::bindTexture which loads terrain.png and binds the GL id.
-        if (g_minecraftShim && g_minecraftShim->textures) {
-            try {
-                g_minecraftShim->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);
-            } catch (...) {}
+        {
+            Minecraft *mc = Minecraft::GetInstance();
+            if (mc && mc->textures) {
+                try {
+                    mc->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);
+                } catch (...) {}
+            }
         }
 
         {
