@@ -1217,6 +1217,7 @@ extern "C" int  mcle_ios_input_poll_rx(int pad);
 extern "C" int  mcle_ios_input_poll_ry(int pad);
 extern "C" int  mcle_ios_input_poll_lx(int pad);
 extern "C" int  mcle_ios_input_poll_ly(int pad);
+extern "C" int  mcle_ios_input_poll_buttons(int pad);
 
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
@@ -1293,6 +1294,11 @@ extern "C" void mcle_world_drive_renderer(void) {
             const float kStickToInput = 1.0f / 1000.0f;
             g_player->xxa = (float)mcle_ios_input_poll_lx(0) * kStickToInput;
             g_player->yya = -(float)mcle_ios_input_poll_ly(0) * kStickToInput;
+
+            // Jump = A button (bit 0 = _360_JOY_BUTTON_A). LivingEntity::aiStep
+            // reads `jumping` and applies jumpFromGround() when onGround.
+            const int buttons = mcle_ios_input_poll_buttons(0);
+            g_player->setJumping((buttons & 0x1) != 0);
         }
 
         // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
@@ -1301,6 +1307,13 @@ extern "C" void mcle_world_drive_renderer(void) {
         // yaw=0 looks south but our default camera looks down -Z (north).
         mcle_glbridge_rotate((float)g_player->xRot, 1.0f, 0.0f, 0.0f);
         mcle_glbridge_rotate((float)g_player->yRot + 180.0f, 0.0f, 1.0f, 0.0f);
+        // Eye-height offset. Parity with GameRenderer.cpp:463+576:
+        //   float heightOffset = player->heightOffset - 1.62f;
+        //   glTranslatef(0, heightOffset, 0);
+        // ServerPlayer sets heightOffset=0 (4J fix - see ServerPlayer.cpp:119)
+        // so this resolves to glTranslate(0, -1.62, 0). Lifts the camera to
+        // standing eye level instead of leaving it at foot level.
+        mcle_glbridge_translate(0.0f, (float)g_player->heightOffset - 1.62f, 0.0f);
         // Player translation is applied INSIDE upstream LevelRenderer::renderChunks
         // via glPushMatrix; glTranslatef(-xOff, -yOff, -zOff). Adding it here too
         // would double-translate chunks. Sky/clouds/sun apply their own translations
