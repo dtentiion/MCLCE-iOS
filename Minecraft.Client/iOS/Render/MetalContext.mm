@@ -870,9 +870,13 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
             s_sumNs += dt;
             s_count++;
             if (s_count >= 60) {
-                NSLog(@"[mcle_metal] frame_ms min=%.2f avg=%.2f max=%.2f n=%d",
-                      s_minNs / 1.0e6, (s_sumNs / (double)s_count) / 1.0e6,
-                      s_maxNs / 1.0e6, s_count);
+                char buf[160];
+                snprintf(buf, sizeof(buf),
+                         "frame_ms min=%.2f avg=%.2f max=%.2f n=%d",
+                         s_minNs / 1.0e6, (s_sumNs / (double)s_count) / 1.0e6,
+                         s_maxNs / 1.0e6, s_count);
+                extern int mcle_log_msg(const char *msg);
+                mcle_log_msg(buf);
                 s_minNs = UINT64_MAX; s_maxNs = 0; s_sumNs = 0; s_count = 0;
             }
         }
