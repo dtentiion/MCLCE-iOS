@@ -26,6 +26,7 @@
 #include <os/log.h>
 #include <pthread.h>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1199,8 +1200,22 @@ extern "C" void mcle_world_drive_renderer(void) {
         // this short-circuit makes the controller drive the camera +
         // position. No collision, no gravity - we float through the
         // world freely.
+        // Match upstream: simulation ticks at 20Hz (50ms), camera renders
+        // at frame rate using xOld + (x - xOld) * partialTick. Movement
+        // speeds match Minecraft: ~4.317 blocks/sec walking, ~140 deg/sec
+        // look at full deflection.
+        float frame_partial_tick = 1.0f;
         {
-            const float kLook = 4.0f / 1000.0f;     // ~4 degrees/frame at full deflection
+            using clock = std::chrono::steady_clock;
+            static auto s_lastTickTime = clock::now();
+            const auto now = clock::now();
+            const auto sinceTick = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastTickTime).count();
+
+            // Look stays per-frame for responsiveness (matches upstream
+            // GameRenderer doing rotation outside the tick).
+            // Stick polls return -1000..1000. 140 deg/sec at 60fps full deflection
+            // = 2.33 deg/frame, so kLook = 140 / 60 / 1000 = 0.00233.
+            const float kLook = 140.0f / 60.0f / 1000.0f;
             const float rx = (float)mcle_ios_input_poll_rx(0) * kLook;
             const float ry = (float)mcle_ios_input_poll_ry(0) * kLook;
             g_player->yRot += rx;
@@ -1208,18 +1223,26 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (g_player->xRot > 90.0f)  g_player->xRot = 90.0f;
             if (g_player->xRot < -90.0f) g_player->xRot = -90.0f;
 
-            // Left stick: y = forward/back along the player's facing
-            // direction, x = strafe right/left. Free-fly (ignores y / pitch).
-            const float kWalk = 0.4f / 1000.0f;       // blocks/frame at full deflection
-            const float lx = (float)mcle_ios_input_poll_lx(0) * kWalk;
-            const float ly = (float)mcle_ios_input_poll_ly(0) * kWalk;
-            const float yawRad = g_player->yRot * (float)M_PI / 180.0f;
-            const float fwdX   = -sinf(yawRad);  // upstream yaw convention: 0 = south (-Z)
-            const float fwdZ   =  cosf(yawRad);
-            const float strafeX = -fwdZ;         // 90deg right of forward
-            const float strafeZ =  fwdX;
-            g_player->x += fwdX  * (-ly) + strafeX * lx;
-            g_player->z += fwdZ  * (-ly) + strafeZ * lx;
+            // Tick movement at 20Hz. Save xOld/zOld at tick boundary so the
+            // frame loop can interp between ticks.
+            if (sinceTick >= 50) {
+                s_lastTickTime = now;
+                g_player->xOld = g_player->x;
+                g_player->yOld = g_player->y;
+                g_player->zOld = g_player->z;
+
+                // Walking speed: 4.317 blocks/sec * 0.05 = ~0.216 blocks/tick
+                const float kWalkPerTick = 4.317f * 0.05f / 1000.0f;
+                const float lx = (float)mcle_ios_input_poll_lx(0) * kWalkPerTick;
+                const float ly = (float)mcle_ios_input_poll_ly(0) * kWalkPerTick;
+                const float yawRad = g_player->yRot * (float)M_PI / 180.0f;
+                const float fwdX   = -sinf(yawRad);
+                const float fwdZ   =  cosf(yawRad);
+                const float strafeX = -fwdZ;
+                const float strafeZ =  fwdX;
+                g_player->x += fwdX * (-ly) + strafeX * lx;
+                g_player->z += fwdZ * (-ly) + strafeZ * lx;
+            }
 
             // TEMP: clamp the walk to the preloaded chunk area. Preload
             // radius is r=3 -> 7x7 chunk ring centered on spawn -> 112x112
@@ -1242,6 +1265,14 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (g_player->x > s_maxX) g_player->x = s_maxX;
             if (g_player->z < s_minZ) g_player->z = s_minZ;
             if (g_player->z > s_maxZ) g_player->z = s_maxZ;
+
+            // Partial tick for camera interpolation: 0..1 across the
+            // current 50ms tick window. Renderer uses this to compute
+            // xOff = xOld + (x - xOld) * alpha.
+            float alpha = (float)sinceTick / 50.0f;
+            if (alpha < 0.0f) alpha = 0.0f;
+            if (alpha > 1.0f) alpha = 1.0f;
+            frame_partial_tick = alpha;
         }
 
         // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
@@ -1306,7 +1337,11 @@ extern "C" void mcle_world_drive_renderer(void) {
         {
             static int s_renderCalls = 0;
             if (s_renderCalls < 3) MCLE_LOG("WD_CKPT before render call=%d", s_renderCalls);
-            g_levelRenderer->render(g_player, /*layer*/0, /*alpha*/1.0,
+            // Pass partial tick so renderChunks interpolates the camera
+            // translate(-player) between xOld and x. Smooths motion when
+            // input ticks at 20Hz but rendering is at 60Hz.
+            g_levelRenderer->render(g_player, /*layer*/0,
+                                    /*alpha*/(double)frame_partial_tick,
                                     /*updateChunks*/false);
             if (s_renderCalls < 3) MCLE_LOG("WD_CKPT after render call=%d", s_renderCalls);
             s_renderCalls++;
@@ -1315,8 +1350,8 @@ extern "C" void mcle_world_drive_renderer(void) {
         // G3e-step5: re-enable renderSky/renderClouds with line-by-line
         // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
         // line printed before crash pins the offending deref.
-        try { g_levelRenderer->renderSky(1.0f);    } catch (...) {}
-        try { g_levelRenderer->renderClouds(1.0f); } catch (...) {}
+        try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
+        try { g_levelRenderer->renderClouds(frame_partial_tick); } catch (...) {}
 
         mcle_glbridge_replay_all_lists();
 
