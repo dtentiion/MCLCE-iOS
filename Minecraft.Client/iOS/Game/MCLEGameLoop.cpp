@@ -128,6 +128,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 #include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 #include "../../../upstream/Minecraft.Client/TextureManager.h"
+#include "../../../upstream/Minecraft.Client/TextureAtlas.h"
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
@@ -1275,6 +1276,16 @@ extern "C" void mcle_world_drive_renderer(void) {
                 if (logThis) MCLE_LOG("WD_CKPT after updateDirtyChunks call=%d", s_dirtyCalls);
                 s_dirtyCalls++;
             }
+        }
+
+        // Bind the terrain atlas before chunks render. Upstream's
+        // GameRenderer::renderLevel does this; we don't run GameRenderer
+        // so we call it directly here. Routes to our patched
+        // Textures::bindTexture which loads terrain.png and binds the GL id.
+        if (g_minecraftShim && g_minecraftShim->textures) {
+            try {
+                g_minecraftShim->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);
+            } catch (...) {}
         }
 
         {
