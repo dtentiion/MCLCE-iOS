@@ -321,8 +321,10 @@ bool ensure_world_pipeline() {
     }
     if (!g_default_sampler) {
         MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
-        sd.minFilter    = MTLSamplerMinMagFilterLinear;
-        sd.magFilter    = MTLSamplerMinMagFilterLinear;
+        // Minecraft textures are pixel-art; nearest-neighbor preserves the
+        // crisp 16x16 pixel grid. Linear would blur block faces.
+        sd.minFilter    = MTLSamplerMinMagFilterNearest;
+        sd.magFilter    = MTLSamplerMinMagFilterNearest;
         sd.sAddressMode = MTLSamplerAddressModeRepeat;
         sd.tAddressMode = MTLSamplerAddressModeRepeat;
         g_default_sampler = [g.device newSamplerStateWithDescriptor:sd];
