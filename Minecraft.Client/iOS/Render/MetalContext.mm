@@ -155,10 +155,15 @@ NSString* const kWorldShaderSrc = @R"(
     // colour (which is already vertex_color * currentColor from above).
     // Untextured paths bind a 1x1 white texture so sample returns 1.0
     // and the output reduces to just the colour.
+    // Alpha test (parity with upstream glAlphaFunc(GL_GREATER, 0.1) +
+    // glEnable(GL_ALPHA_TEST)): discard fragments with low texture alpha so
+    // foliage / flowers / cross sprites have transparent surrounds instead
+    // of black squares.
     fragment float4 world_frag(V_out i           [[stage_in]],
                                 texture2d<float> tex     [[texture(0)]],
                                 sampler          texSamp [[sampler(0)]]) {
         float4 t = tex.sample(texSamp, i.uv);
+        if (t.a < 0.1) discard_fragment();
         return i.color * t;
     }
 )";
