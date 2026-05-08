@@ -696,6 +696,17 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 
     [g.enc setRenderPipelineState:(isCompact ? g_world_pso_compact : g_world_pso)];
     if (g.depthState) [g.enc setDepthStencilState:g.depthState];
+    // Parity with upstream chunks: glEnable(GL_CULL_FACE) with default
+    // GL CCW winding. Without this, free-flying inside a grass block
+    // shows the top face's CW backside (grass_top texture) instead of
+    // letting the dirt-bottom face stay visible from below. Sky/clouds
+    // (non-compact) stay double-sided like upstream.
+    if (isCompact) {
+        [g.enc setFrontFacingWinding:MTLWindingCounterClockwise];
+        [g.enc setCullMode:MTLCullModeBack];
+    } else {
+        [g.enc setCullMode:MTLCullModeNone];
+    }
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
     [g.enc setVertexBytes:g_current_color length:sizeof(g_current_color) atIndex:2];
