@@ -132,15 +132,11 @@ old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
 new12 = (
     "\t\t\t\t\tvoid *_tileVtbl = tile ? *(void**)tile : (void*)0;\n"
     "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT pre-tess tileId=%d tile=%p vptr=%p\", (int)tileId, tile, _tileVtbl);\n"
-    "\t\t\t\t\t// Skip tiles known to crash inside their tessellation:\n"
-    "\t\t\t\t\t// id=31 TallGrass (cross shape, addr 0x8)\n"
-    "\t\t\t\t\t// id=78 TopSnow   (snow layer slab, addr 0xe0)\n"
-    "\t\t\t\t\tif (tileId == 31 || tileId == 78) {\n"
-    "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT skip: tileId=%d\", (int)tileId);\n"
-    "\t\t\t\t\t} else {\n"
-    "\t\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
-    "\t\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT post-tess tileId=%d rendered=%d\", (int)tileId, (int)rendered);\n"
-    "\t\t\t\t\t}"
+    "\t\t\t\t\t// TallGrass (id=31) and TopSnow (id=78) were skipped to dodge\n"
+    "\t\t\t\t\t// addr-0x8 / addr-0xe0 crashes from G5-step27. ColourTable null\n"
+    "\t\t\t\t\t// guard + getTexture null guard since landed; trying upstream path.\n"
+    "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
+    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT post-tess tileId=%d rendered=%d\", (int)tileId, (int)rendered);"
 )
 if old12 not in src: sys.exit("tesselateInWorld anchor not found")
 src = src.replace(old12, new12, 1)
