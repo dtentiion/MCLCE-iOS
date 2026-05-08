@@ -78,6 +78,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/Recipes.h"
 #include "../../../upstream/Minecraft.World/Tile.h"
+#include "../../../upstream/Minecraft.World/Icon.h"
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
 #include "../../../upstream/Minecraft.World/Entity.h"
@@ -992,6 +993,33 @@ void initImpl() {
             try {
                 textures->stitch();
                 MCLE_LOG("mcle_game_init: textures->stitch done");
+                // Diagnostic: confirm grass / dirt icons resolved to distinct
+                // atlas slots. If grass-DOWN icon == grass-UP icon, the bug
+                // isn't in tessellation - it's in icon registration / lookup.
+                try {
+                    Icon *grassUp   = Tile::grass ? Tile::grass->getTexture(1) : nullptr;
+                    Icon *grassDown = Tile::grass ? Tile::grass->getTexture(0) : nullptr;
+                    Icon *dirtIcon  = Tile::dirt  ? Tile::dirt->getTexture(0)  : nullptr;
+                    MCLE_LOG("ICON_CKPT grass UP=%p DOWN=%p, dirt=%p (DOWN should == dirt)",
+                             grassUp, grassDown, dirtIcon);
+                    if (grassUp) {
+                        MCLE_LOG("ICON_CKPT grassUp uv u0=%f v0=%f u1=%f v1=%f",
+                                 grassUp->getU0(true), grassUp->getV0(true),
+                                 grassUp->getU1(true), grassUp->getV1(true));
+                    }
+                    if (grassDown) {
+                        MCLE_LOG("ICON_CKPT grassDown uv u0=%f v0=%f u1=%f v1=%f",
+                                 grassDown->getU0(true), grassDown->getV0(true),
+                                 grassDown->getU1(true), grassDown->getV1(true));
+                    }
+                    if (dirtIcon) {
+                        MCLE_LOG("ICON_CKPT dirt uv u0=%f v0=%f u1=%f v1=%f",
+                                 dirtIcon->getU0(true), dirtIcon->getV0(true),
+                                 dirtIcon->getU1(true), dirtIcon->getV1(true));
+                    }
+                } catch (...) {
+                    MCLE_LOG("ICON_CKPT diagnostic threw");
+                }
             } catch (...) {
                 MCLE_LOG("mcle_game_init: textures->stitch threw");
             }
