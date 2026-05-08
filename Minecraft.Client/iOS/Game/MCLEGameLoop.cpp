@@ -1209,7 +1209,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             using clock = std::chrono::steady_clock;
             static auto s_lastTickTime = clock::now();
             const auto now = clock::now();
-            const auto sinceTick = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastTickTime).count();
+            auto sinceTick = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastTickTime).count();
 
             // Look stays per-frame for responsiveness (matches upstream
             // GameRenderer doing rotation outside the tick).
@@ -1242,6 +1242,11 @@ extern "C" void mcle_world_drive_renderer(void) {
                 const float strafeZ =  fwdX;
                 g_player->x += fwdX * (-ly) + strafeX * lx;
                 g_player->z += fwdZ * (-ly) + strafeZ * lx;
+                // Tick just fired - alpha must reset to 0 so the camera
+                // sits at xOld this frame (not jump straight to x). Without
+                // this we'd render xOff = xOld + (x-xOld)*1.0 = x, a full
+                // tick step jump every 50ms.
+                sinceTick = 0;
             }
 
             // TEMP: clamp the walk to the preloaded chunk area. Preload
