@@ -47,6 +47,8 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 // is wired correctly. Counter version of draws climbs per frame once
 // glCallList replays start firing.
 extern "C" unsigned long long mcle_glbridge_list_count(void);
+extern "C" unsigned int mcle_glbridge_get_bound_texture(void);
+extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char *path);
 extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long *misses,
                                                 int *first_miss, int *first_hit, unsigned long *list_count);
 extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
@@ -1284,10 +1286,20 @@ extern "C" void mcle_world_drive_renderer(void) {
         // Textures::bindTexture which loads terrain.png and binds the GL id.
         {
             Minecraft *mc = Minecraft::GetInstance();
+            static int s_bindCount = 0;
+            if (s_bindCount < 3) {
+                MCLE_LOG("BIND_CKPT pre-render bindTexture(LOCATION_BLOCKS): mc=%p textures=%p",
+                         (void*)mc, mc ? (void*)mc->textures : nullptr);
+            }
             if (mc && mc->textures) {
                 try {
                     mc->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);
                 } catch (...) {}
+            }
+            if (s_bindCount < 3) {
+                MCLE_LOG("BIND_CKPT post-bind bound_tex_id=%u",
+                         mcle_glbridge_get_bound_texture());
+                s_bindCount++;
             }
         }
 
