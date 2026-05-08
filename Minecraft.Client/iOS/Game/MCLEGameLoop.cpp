@@ -1143,6 +1143,39 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
+    // Player physics: run aiStep so xxa/yya/jumping (set per-frame from the
+    // controller in mcle_world_drive_renderer) drive travel() -> move() with
+    // collision against level block AABBs and gravity. tickEntities above
+    // already saved xOld via Level::tick before calling ServerPlayer::tick
+    // (which does no physics), so the camera-interp anchor is correct.
+    if (g_player) {
+        try { g_player->aiStep(); } catch (...) {
+            MCLE_LOG("mcle_game_tick: aiStep threw");
+        }
+    }
+
+    // Clamp player to preloaded chunk area. Even with collision, chunks
+    // outside the r=3 ring aren't loaded and Level::getBiome would deref
+    // null at the new position. Bounds snapshot once from the spawn point.
+    if (g_player) {
+        static bool s_spawnChunkInit = false;
+        static float s_minX, s_maxX, s_minZ, s_maxZ;
+        if (!s_spawnChunkInit) {
+            static constexpr int kClampRadiusChunks = 3;
+            int cx = ((int)floorf((float)g_player->x)) >> 4;
+            int cz = ((int)floorf((float)g_player->z)) >> 4;
+            s_minX = (float)((cx - kClampRadiusChunks) * 16);
+            s_maxX = (float)((cx + kClampRadiusChunks) * 16 + 15) + 0.999f;
+            s_minZ = (float)((cz - kClampRadiusChunks) * 16);
+            s_maxZ = (float)((cz + kClampRadiusChunks) * 16 + 15) + 0.999f;
+            s_spawnChunkInit = true;
+        }
+        if (g_player->x < s_minX) g_player->x = s_minX;
+        if (g_player->x > s_maxX) g_player->x = s_maxX;
+        if (g_player->z < s_minZ) g_player->z = s_minZ;
+        if (g_player->z > s_maxZ) g_player->z = s_maxZ;
+    }
+
     if ((g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
@@ -1239,11 +1272,6 @@ extern "C" void mcle_world_drive_renderer(void) {
         // look at full deflection.
         float frame_partial_tick = 1.0f;
         {
-            using clock = std::chrono::steady_clock;
-            static auto s_lastTickTime = clock::now();
-            const auto now = clock::now();
-            auto sinceTick = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastTickTime).count();
-
             // Look stays per-frame for responsiveness (matches upstream
             // GameRenderer doing rotation outside the tick).
             // Stick polls return -1000..1000. 140 deg/sec at 60fps full deflection
@@ -1256,61 +1284,15 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (g_player->xRot > 90.0f)  g_player->xRot = 90.0f;
             if (g_player->xRot < -90.0f) g_player->xRot = -90.0f;
 
-            // Tick movement at 20Hz. Save xOld/zOld at tick boundary so the
-            // frame loop can interp between ticks.
-            if (sinceTick >= 50) {
-                s_lastTickTime = now;
-                g_player->xOld = g_player->x;
-                g_player->yOld = g_player->y;
-                g_player->zOld = g_player->z;
-
-                // Walking speed: 4.317 blocks/sec * 0.05 = ~0.216 blocks/tick
-                const float kWalkPerTick = 4.317f * 0.05f / 1000.0f;
-                const float lx = (float)mcle_ios_input_poll_lx(0) * kWalkPerTick;
-                const float ly = (float)mcle_ios_input_poll_ly(0) * kWalkPerTick;
-                const float yawRad = g_player->yRot * (float)M_PI / 180.0f;
-                const float fwdX   = -sinf(yawRad);
-                const float fwdZ   =  cosf(yawRad);
-                const float strafeX = -fwdZ;
-                const float strafeZ =  fwdX;
-                g_player->x += fwdX * (-ly) + strafeX * lx;
-                g_player->z += fwdZ * (-ly) + strafeZ * lx;
-                // Tick just fired - alpha must reset to 0 so the camera
-                // sits at xOld this frame (not jump straight to x). Without
-                // this we'd render xOff = xOld + (x-xOld)*1.0 = x, a full
-                // tick step jump every 50ms.
-                sinceTick = 0;
-            }
-
-            // TEMP: clamp the walk to the preloaded chunk area. Preload
-            // radius is r=3 -> 7x7 chunk ring centered on spawn -> 112x112
-            // block area. Stepping outside hits an unloaded chunk and
-            // Level::getBiome derefs at 0x68. Bounds snapshot once on
-            // first frame from the spawn position.
-            static bool s_spawnChunkInit = false;
-            static float s_minX, s_maxX, s_minZ, s_maxZ;
-            if (!s_spawnChunkInit) {
-                static constexpr int kClampRadiusChunks = 3;
-                int cx = ((int)floorf(g_player->x)) >> 4;
-                int cz = ((int)floorf(g_player->z)) >> 4;
-                s_minX = (float)((cx - kClampRadiusChunks) * 16);
-                s_maxX = (float)((cx + kClampRadiusChunks) * 16 + 15) + 0.999f;
-                s_minZ = (float)((cz - kClampRadiusChunks) * 16);
-                s_maxZ = (float)((cz + kClampRadiusChunks) * 16 + 15) + 0.999f;
-                s_spawnChunkInit = true;
-            }
-            if (g_player->x < s_minX) g_player->x = s_minX;
-            if (g_player->x > s_maxX) g_player->x = s_maxX;
-            if (g_player->z < s_minZ) g_player->z = s_minZ;
-            if (g_player->z > s_maxZ) g_player->z = s_maxZ;
-
-            // Partial tick for camera interpolation: 0..1 across the
-            // current 50ms tick window. Renderer uses this to compute
-            // xOff = xOld + (x - xOld) * alpha.
-            float alpha = (float)sinceTick / 50.0f;
-            if (alpha < 0.0f) alpha = 0.0f;
-            if (alpha > 1.0f) alpha = 1.0f;
-            frame_partial_tick = alpha;
+            // Walk input fed into the player's xxa/yya fields - LivingEntity::aiStep
+            // (called from game tick after tickEntities) reads these and runs
+            // travel() -> moveRelative() -> move() with collision against the
+            // level's block AABBs. xxa = strafe, yya = forward (upstream sign).
+            // Stick poll returns -1000..1000; LivingEntity expects ~[-1, 1].
+            // getSpeed() inside travel() applies the actual walking speed.
+            const float kStickToInput = 1.0f / 1000.0f;
+            g_player->xxa = (float)mcle_ios_input_poll_lx(0) * kStickToInput;
+            g_player->yya = -(float)mcle_ios_input_poll_ly(0) * kStickToInput;
         }
 
         // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
