@@ -1219,14 +1219,10 @@ extern "C" void mcle_game_tick(void) {
                 }
             }
         }
-        // TEMP-NON-PARITY day/night speedup. 100x was too fast (~12s/cycle).
-        // 9 -> ~2-min cycle, slow enough to look natural while still visible
-        // in a short test session. Revert to 0 once parity-speed cycle is
-        // verified on a longer session.
-        constexpr int kDayTimeSpeedup = 9;
-        if (kDayTimeSpeedup > 0 && g_levels[0]) {
-            g_levels[0]->setDayTime(g_levels[0]->getDayTime() + kDayTimeSpeedup);
-        }
+        // (Earlier had a non-parity day-time speedup here for visual debug;
+        // reverted to parity. ServerLevel::tick already advances dayTime by
+        // 1 per 20Hz tick = 24000-tick day = 20-minute cycle, matching
+        // upstream RULE_DAYLIGHT default behaviour.)
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
         g_initState = kStateFailed;
