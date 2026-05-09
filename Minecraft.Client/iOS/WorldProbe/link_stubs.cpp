@@ -525,7 +525,6 @@ int64_t Minecraft::currentTimeMillis() {
 // into the build their references became live; the owning .cpps for these
 // don't compile yet. Stubs return safe defaults / no-ops.
 
-#include "stubs.h"
 class FloatBuffer;
 void glLight(int, int, FloatBuffer *) {}
 
