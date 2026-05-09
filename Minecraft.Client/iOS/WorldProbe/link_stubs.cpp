@@ -535,20 +535,27 @@ int g_rScreenHeight = 0;
 
 // setupGuiScreen sets up the orthographic projection for HUD rendering.
 // Parity with upstream GameRenderer.cpp:1923-1934 - clear depth, ortho
-// projection in screen pixel coords, modelview at z=-2000 so HUD
-// vertices end up at the near plane.
+// projection in SCALED gui coords (rawWidth/rawHeight), modelview at
+// z=-2000 so HUD vertices end up at the near plane. Critical: ortho
+// uses scaled dims, NOT physical, because Gui.cpp emits all vertices in
+// scaled-coord space (computed via ScreenSizeCalculator with the same
+// forceScale). Mismatch -> hotbar renders as a tiny corner blob.
 extern "C" void mcle_glbridge_matrix_mode(int mode);
 extern "C" void mcle_glbridge_load_identity(void);
 extern "C" void mcle_glbridge_translate(float, float, float);
 extern "C" void mcle_glbridge_metal_ortho(float, float, float, float, float, float);
 #include "GameRenderer.h"
-void GameRenderer::setupGuiScreen(int /*forceScale*/) {
+#include "ScreenSizeCalculator.h"
+void GameRenderer::setupGuiScreen(int forceScale) {
     Minecraft *mc = Minecraft::GetInstance();
     if (!mc || mc->width <= 0 || mc->height <= 0) return;
+    ScreenSizeCalculator ssc(mc->options, mc->width, mc->height, forceScale);
+    int rw = ssc.getWidth();
+    int rh = ssc.getHeight();
+    if (rw <= 0 || rh <= 0) { rw = mc->width; rh = mc->height; }
     mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
     mcle_glbridge_load_identity();
-    mcle_glbridge_metal_ortho(0.0f, (float)mc->width,
-                               (float)mc->height, 0.0f,
+    mcle_glbridge_metal_ortho(0.0f, (float)rw, (float)rh, 0.0f,
                                1000.0f, 3000.0f);
     mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
     mcle_glbridge_load_identity();
