@@ -692,6 +692,14 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // class.
 #include "../Minecraft.Client/Minecraft.h"
 
+// Upstream Minecraft.Client/stdafx.h is wrapped in #ifndef __APPLE_IOS__
+// (see scripts/patch-upstream-stdafx.sh patch_stdafx_no_op), so includes
+// like ClientConstants.h that upstream pulls into every Client TU don't
+// reach our build. Gui.cpp's debug overlay reads ClientConstants::VERSION_STRING
+// and BRANCH_STRING at lines 1070-1071 - pull the header in here so
+// those references resolve.
+#include "../Minecraft.Client/ClientConstants.h"
+
 // Minimal SoundEngine for the probe. Real upstream SoundEngine.h pulls
 // miniaudio.h (~95k lines) which would balloon every-TU compile time.
 // MultiPlayerLevel.cpp invokes only play() and schedule() on
