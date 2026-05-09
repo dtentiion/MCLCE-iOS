@@ -512,6 +512,16 @@ BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return i
 const std::wstring ClientConstants::VERSION_STRING = std::wstring();
 const std::wstring ClientConstants::BRANCH_STRING  = std::wstring();
 
+// Bridge from probe_stub.cpp's glColor4f shim into Tesselator's color
+// state. Without this sync, vertex emits use stale Tesselator _col
+// (e.g. sunrise glow leaving alpha=0), making downstream sun/moon
+// vertices render as black-on-black.
+#include "Tesselator.h"
+extern "C" void Tesselator_setColorBridge(float r, float g, float b, float a) {
+    Tesselator *t = Tesselator::getInstance();
+    if (t) t->color(r, g, b, a);
+}
+
 // Minecraft::currentTimeMillis - declared static in Minecraft.h:303 but no
 // definition in Minecraft.cpp. ItemRenderer::renderItemBillboard uses it for
 // the bobbing item-on-ground animation. Route through chrono steady_clock.
