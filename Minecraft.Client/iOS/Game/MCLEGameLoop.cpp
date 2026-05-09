@@ -1219,10 +1219,15 @@ extern "C" void mcle_game_tick(void) {
                 }
             }
         }
-        // (Earlier had a non-parity day-time speedup here for visual debug;
-        // reverted to parity. ServerLevel::tick already advances dayTime by
-        // 1 per 20Hz tick = 24000-tick day = 20-minute cycle, matching
-        // upstream RULE_DAYLIGHT default behaviour.)
+        // TEMP-NON-PARITY day-time speedup for visual debug. Each tick
+        // already advances dayTime by 1 (parity, 20-min cycle). Adding +N
+        // here gives a (20/(N+1))-min cycle. N=9 -> ~2-min full day,
+        // visible inside a short test session. Revert to 0 for parity once
+        // visual confirmation lands.
+        constexpr int kDayTimeSpeedup = 9;
+        if (kDayTimeSpeedup > 0 && g_levels[0]) {
+            g_levels[0]->setDayTime(g_levels[0]->getDayTime() + kDayTimeSpeedup);
+        }
         // DAYTIME diagnostic: every 100 sim ticks, log getDayTime so we can
         // verify ServerLevel::tick is actually incrementing it. If this is
         // flat, virtual dispatch isn't reaching ServerLevel::tick or
