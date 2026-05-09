@@ -97,15 +97,17 @@ struct McleAppStub {
         return 100;
     }
     template<class... A> int            GetGameSettingsDebugMask(A...) { return 0; }
-    // GameRules::getBoolean(RULE_DAYLIGHT) routes to
-    // GetGameHostOption(eGameHostOption_DoDaylightCycle=31). Returning 0
-    // for all options freezes the day/night cycle (ServerLevel::tick skips
-    // setDayTime). Special-case daylight=on, defaults stay 0 for the rest.
-    int GetGameHostOption(int option) {
-        if (option == 31 /*eGameHostOption_DoDaylightCycle*/) return 1;
+    // GameRules::getBoolean(RULE_DAYLIGHT) routes through
+    // GetGameHostOption(eGameHostOption_DoDaylightCycle=31). All call sites
+    // pass a single enum/int. Use a single-arg template so this wins over
+    // the variadic catch-all and handles the enum without conversion rank
+    // penalties. Special-case daylight=on; defaults stay 0 for the rest.
+    template<class T>
+    int GetGameHostOption(T option) {
+        const int v = static_cast<int>(option);
+        if (v == 31 /*eGameHostOption_DoDaylightCycle*/) return 1;
         return 0;
     }
-    template<class... A> int            GetGameHostOption(A...) { return 0; }
     template<class... A> void           SetGameHostOption(A...) {}
     template<class... A> int            GetGameNewHellScale(A...) { return 1; }
     template<class... A> int            GetGameNewWorldSize(A...) { return 0; }
