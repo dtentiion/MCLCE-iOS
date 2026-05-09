@@ -53,6 +53,17 @@ const char* mcle_swf_last_status(void);
 // mcle_swf_last_status.
 const char* mcle_swf_gameswf_log(void);
 
+// Call an AS3 method on the root SWF with a numeric-only argument list.
+// Wraps Ruffle's ruffle_ios_call_root_method_numbers; matches the console
+// IggyPlayerCallMethodRS pattern (method name + double[] args). Used by
+// IUIScene_HUD-style state pumps to push player state (health, slot, food
+// ...) into the HUD SWF each frame.
+//
+// Returns 0 on success, non-zero on failure (no movie / not ready / call
+// failed). args may be NULL when arg_count is 0.
+int mcle_swf_call_root_method(const char* method_name,
+                              const double* args, int arg_count);
+
 #ifdef __cplusplus
 }
 #endif
