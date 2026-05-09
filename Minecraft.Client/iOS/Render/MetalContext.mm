@@ -132,6 +132,9 @@ extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
     g_blend_enabled = (enabled != 0);
 }
 
+// (Diagnostic getter mcle_glbridge_get_modelview lives below the
+// anonymous-namespace block where g_modelview_stack is declared.)
+
 // glBlendFunc is shimmed to a no-op for now: the blending pipelines bake
 // srcAlpha/oneMinusSrcAlpha as the static blend func. This handles the
 // common cloud / sky / vignette case correctly and the deviation for the
@@ -491,6 +494,14 @@ inline std::vector<Mat4>& current_stack() {
 inline float* current_matrix_data() { return current_stack().back().m; }
 
 } // namespace
+
+// Diagnostic getter: copies the current modelview matrix into out16. Used
+// by MCLEGameLoop's MV_CKPT to confirm the matrix flow before renderSky.
+extern "C" void mcle_glbridge_get_modelview(float *out16) {
+    if (!out16) return;
+    const Mat4 &m = g_modelview_stack.back();
+    for (int i = 0; i < 16; i++) out16[i] = m.m[i];
+}
 
 // Public matrix bridge - probe_stub.cpp's gl* matrix stubs forward here.
 extern "C" void mcle_glbridge_matrix_mode(int mode) {

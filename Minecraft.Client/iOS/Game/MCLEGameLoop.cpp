@@ -1223,6 +1223,21 @@ extern "C" void mcle_game_tick(void) {
         // reverted to parity. ServerLevel::tick already advances dayTime by
         // 1 per 20Hz tick = 24000-tick day = 20-minute cycle, matching
         // upstream RULE_DAYLIGHT default behaviour.)
+        // DAYTIME diagnostic: every 100 sim ticks, log getDayTime so we can
+        // verify ServerLevel::tick is actually incrementing it. If this is
+        // flat, virtual dispatch isn't reaching ServerLevel::tick or
+        // RULE_DAYLIGHT is false.
+        if (g_levels[0]) {
+            static int s_dayTimeLog = 0;
+            if ((s_dayTimeLog++ % 100) == 0) {
+                try {
+                    int64_t dt = g_levels[0]->getDayTime();
+                    int64_t gt = g_levels[0]->getGameTime();
+                    MCLE_LOG("DAYTIME_CKPT log=%d gameTime=%lld dayTime=%lld",
+                             s_dayTimeLog, (long long)gt, (long long)dt);
+                } catch (...) {}
+            }
+        }
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
         g_initState = kStateFailed;
@@ -1496,6 +1511,31 @@ extern "C" void mcle_world_drive_renderer(void) {
         // G3e-step5: re-enable renderSky/renderClouds with line-by-line
         // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
         // line printed before crash pins the offending deref.
+
+        // Diagnostic: dump modelview matrix + sun angle right before
+        // renderSky. This is the matrix all sky/sun/moon/cloud passes
+        // operate on. Expected ~ R_pitch * R_yaw * T(0,heightOff-1.62,0).
+        {
+            static int s_skyDiag = 0;
+            if ((s_skyDiag++ % 60) == 0) {
+                float mv[16] = {0};
+                extern void mcle_glbridge_get_modelview(float *out16);
+                mcle_glbridge_get_modelview(mv);
+                MCLE_LOG("MV_CKPT log=%d row0=[%.3f %.3f %.3f %.3f] row3=[%.3f %.3f %.3f %.3f]",
+                         s_skyDiag,
+                         mv[0],  mv[1],  mv[2],  mv[3],
+                         mv[12], mv[13], mv[14], mv[15]);
+                if (g_levels[0]) {
+                    try {
+                        float td  = g_levels[0]->getTimeOfDay(frame_partial_tick);
+                        float san = g_levels[0]->getSunAngle(frame_partial_tick);
+                        MCLE_LOG("SUN_ANGLE log=%d timeOfDay=%.4f sunAngle=%.4f",
+                                 s_skyDiag, td, san);
+                    } catch (...) {}
+                }
+            }
+        }
+
         try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
         try { g_levelRenderer->renderClouds(frame_partial_tick); } catch (...) {}
 
