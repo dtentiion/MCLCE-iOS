@@ -1466,11 +1466,14 @@ extern "C" void mcle_world_drive_renderer(void) {
         // Gui::render after the world. Hotbar, health/hunger/xp bars,
         // crosshair all happen inside this call. Push screen size into
         // the shim so ScreenSizeCalculator gets the right pixels.
-        if (g_gui && g_minecraftShim) {
+        // g_minecraftShim is function-local in initImpl; reach the same
+        // pointer via Minecraft::GetInstance() (set in initImpl).
+        Minecraft *mcShim = Minecraft::GetInstance();
+        if (g_gui && mcShim) {
             int sw = 0, sh = 0;
             mcle_metal_current_size(&sw, &sh);
-            g_minecraftShim->width  = sw;
-            g_minecraftShim->height = sh;
+            mcShim->width  = sw;
+            mcShim->height = sh;
             try {
                 g_gui->render(frame_partial_tick, /*mouseFree*/false,
                               /*xMouse*/0, /*yMouse*/0);
