@@ -1190,12 +1190,19 @@ extern "C" void mcle_game_tick(void) {
             g_levels[i]->tick();
             g_levels[i]->tickEntities();
         }
-        // TEMP-NON-PARITY day/night speedup. Each tick advances dayTime by
-        // 1 (parity = 20-minute day). To make the day cycle visible during
-        // testing we add an extra +N here, giving a ~(20/N+1)-minute cycle.
-        // N=99 -> ~12 sec/day, plenty to see sun arc + sky color + clouds
-        // shift. Revert to 0 once parity-speed cycle is verified.
-        constexpr int kDayTimeSpeedup = 99;
+        // LevelRenderer::tick increments the renderer-side `ticks` member
+        // which renderClouds reads for the cloud drift offset
+        // (time * 0.03f at LevelRenderer.cpp:1330). Without this the cloud
+        // layer is frozen in place. Also drives destroying-block animations
+        // and the per-second tick maintenance branch.
+        if (g_levelRenderer) {
+            try { g_levelRenderer->tick(); } catch (...) {}
+        }
+        // TEMP-NON-PARITY day/night speedup. 100x was too fast (~12s/cycle).
+        // 9 -> ~2-min cycle, slow enough to look natural while still visible
+        // in a short test session. Revert to 0 once parity-speed cycle is
+        // verified on a longer session.
+        constexpr int kDayTimeSpeedup = 9;
         if (kDayTimeSpeedup > 0 && g_levels[0]) {
             g_levels[0]->setDayTime(g_levels[0]->getDayTime() + kDayTimeSpeedup);
         }
