@@ -1472,8 +1472,15 @@ extern "C" void mcle_world_drive_renderer(void) {
         if (g_gui && mcShim) {
             int sw = 0, sh = 0;
             mcle_metal_current_size(&sw, &sh);
-            mcShim->width  = sw;
-            mcShim->height = sh;
+            mcShim->width       = sw;
+            mcShim->height      = sh;
+            // width_phys / height_phys are the physical-pixel dims (vs the
+            // potentially-scaled width/height). GuiComponent::blit divides
+            // by width_phys; without this it's 0 -> NaN vertex coords ->
+            // HUD invisible. iOS retina has the framebuffer already at
+            // physical size so width == width_phys.
+            mcShim->width_phys  = sw;
+            mcShim->height_phys = sh;
             try {
                 g_gui->render(frame_partial_tick, /*mouseFree*/false,
                               /*xMouse*/0, /*yMouse*/0);
