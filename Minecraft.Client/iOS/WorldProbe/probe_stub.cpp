@@ -146,7 +146,16 @@ void glMatrixMode(unsigned int mode)                       { mcle_glbridge_matri
 void glTranslatef(float x, float y, float z)               { mcle_glbridge_translate(x, y, z); }
 void glRotatef(float angle, float x, float y, float z)     { mcle_glbridge_rotate(angle, x, y, z); }
 void glScalef(float x, float y, float z)                   { mcle_glbridge_scale(x, y, z); }
-void glColor4f(float r, float g, float b, float a)         { mcle_glbridge_color4f(r, g, b, a); }
+// glColor4f also syncs Tesselator's internal _col so subsequent
+// t->vertexUV() emits pick up the new color. Without this, vertex colors
+// stay at whatever the last t->color() call set (e.g. alpha=0 leftover
+// from sunrise glow), and the sun renders as a black box because every
+// vertex multiplies the texture by alpha=0.
+extern "C" void Tesselator_setColorBridge(float r, float g, float b, float a);
+void glColor4f(float r, float g, float b, float a) {
+    mcle_glbridge_color4f(r, g, b, a);
+    Tesselator_setColorBridge(r, g, b, a);
+}
 void glBegin(unsigned int)                                 {}
 void glEnd(void)                                           {}
 void glVertex3f(float, float, float)                       {}
