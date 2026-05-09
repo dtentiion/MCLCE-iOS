@@ -129,13 +129,22 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 //
 // G2b: defined with C++ linkage (no extern "C") so the header decls
 // in iOS_WinCompat.h can declare upstream-wrapper overloads.
-// GL_DEPTH_TEST is the only state HUD code (Gui.cpp) toggles that we
-// actually need to honour - without this, glDisable(GL_DEPTH_TEST) is a
-// no-op, so the depth test stays on and HUD fragments at z=0.5 lose to
-// closer world geometry in the depth buffer, making the hotbar invisible.
+// Track GL_DEPTH_TEST and GL_BLEND. Other caps are no-op.
+//   GL_DEPTH_TEST 0x0B71: HUD path needs it off so HUD fragments at
+//     z=0.5 don't lose to closer world depth.
+//   GL_BLEND 0x0BE2: sky/sun/cloud/HUD passes need srcAlpha/oneMinusSrcAlpha
+//     blending so transparent edges of sprites blend with the framebuffer
+//     instead of writing rgba=0 directly (visible black box around sun etc).
 extern "C" void mcle_glbridge_set_depth_test(int enabled);
-void glEnable(unsigned int cap)  { if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(1); }
-void glDisable(unsigned int cap) { if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(0); }
+extern "C" void mcle_glbridge_set_blend_enabled(int enabled);
+void glEnable(unsigned int cap) {
+    if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(1);
+    else if (cap == 0x0BE2 /*GL_BLEND*/) mcle_glbridge_set_blend_enabled(1);
+}
+void glDisable(unsigned int cap) {
+    if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(0);
+    else if (cap == 0x0BE2 /*GL_BLEND*/) mcle_glbridge_set_blend_enabled(0);
+}
 void glClear(unsigned int)                                 {}
 void glClearColor(float, float, float, float)              {}
 void glViewport(int, int, int, int)                        {}
@@ -169,7 +178,15 @@ void glBindTexture(unsigned int /*target*/, unsigned int id)  { mcle_glbridge_bi
 void glTexParameteri(unsigned int, unsigned int, int)      {}
 void glDepthFunc(unsigned int)                             {}
 void glAlphaFunc(unsigned int, float)                      {}
-void glBlendFunc(unsigned int, unsigned int)               {}
+// glBlendFunc: route src/dst factors to the bridge. Current Metal
+// pipeline bakes srcAlpha/oneMinusSrcAlpha as the static blend func,
+// so the bridge ignores them for now - sun's additive (srcAlpha,ONE)
+// renders as srcAlpha-over instead, which still removes the black box
+// without breaking other passes.
+extern "C" void mcle_glbridge_set_blend_func(int src, int dst);
+void glBlendFunc(unsigned int src, unsigned int dst) {
+    mcle_glbridge_set_blend_func((int)src, (int)dst);
+}
 void glShadeModel(unsigned int)                            {}
 void glDepthMask(unsigned char)                            {}
 void glColorMask(unsigned char, unsigned char, unsigned char, unsigned char) {}
