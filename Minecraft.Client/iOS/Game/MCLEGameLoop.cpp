@@ -1473,7 +1473,14 @@ extern "C" void mcle_world_drive_renderer(void) {
         // g_minecraftShim is function-local in initImpl; reach the same
         // pointer via Minecraft::GetInstance() (set in initImpl).
         Minecraft *mcShim = Minecraft::GetInstance();
-        if (g_gui && mcShim) {
+        // HUD rendering disabled: Gui::render's pre-RENDER_HUD overlays
+        // (renderPumpkin / renderTp / renderVignette) kept firing on our
+        // partially-initialised player state, painting full-screen blue/
+        // pumpkin overlays. Real HUD lands via the Ruffle/SWF path - phases
+        // 2-4 of project_hud_swf_plan.md - which renders HUD1080.swf on
+        // top of the world. Until then, skip gui->render entirely.
+        constexpr bool kEnableNativeGuiRender = false;
+        if (kEnableNativeGuiRender && g_gui && mcShim) {
             int sw = 0, sh = 0;
             mcle_metal_current_size(&sw, &sh);
             mcShim->width       = sw;
