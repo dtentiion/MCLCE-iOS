@@ -240,6 +240,10 @@ std::wstring                  g_levelName;
 // but the compiler can still reorder them with surrounding writes
 // (g_levels[0] = ...) and starve the tick of a happens-before edge.
 std::atomic<int>              g_initState{ kStateUnstarted };
+// Wall-clock ns of the last simulation tick (set by mcle_game_tick when the
+// 20Hz throttle gate fires). Render thread reads this to compute the
+// partial-tick alpha for camera-position interpolation.
+std::atomic<uint64_t>         g_lastSimTickNs{ 0 };
 uint64_t                      g_tickCount    = 0;
 // Init runs on a background pthread so the main-thread tick stays free
 // to render the placeholder SWF + handle input while save loading is
@@ -1128,6 +1132,8 @@ extern "C" void mcle_game_tick(void) {
     // Throttle simulation to 20Hz (50ms per tick) to match upstream parity.
     // CADisplayLink calls us at 60Hz; without this, aiStep + tickEntities run
     // 3x too fast and walking / gravity / friction all feel sped up.
+    // Publish tick start time so the render thread can compute partial-tick
+    // alpha for smooth camera interp between 20Hz simulation steps.
     {
         using clock = std::chrono::steady_clock;
         static auto s_lastSimTick = clock::now() - std::chrono::milliseconds(50);
@@ -1136,6 +1142,10 @@ extern "C" void mcle_game_tick(void) {
                                  now - s_lastSimTick).count();
         if (sinceMs < 50) return;
         s_lastSimTick = now;
+        g_lastSimTickNs.store(
+            (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                now.time_since_epoch()).count(),
+            std::memory_order_relaxed);
     }
 
     // Tick all three dimensions in order. Parity with how the upstream
@@ -1312,6 +1322,23 @@ extern "C" void mcle_world_drive_renderer(void) {
             // reads `jumping` and applies jumpFromGround() when onGround.
             const int buttons = mcle_ios_input_poll_buttons(0);
             g_player->setJumping((buttons & 0x1) != 0);
+
+            // Partial-tick alpha for camera position interp. Sim ticks at 20Hz
+            // (50ms) but rendering at 60Hz - without interp the camera judders
+            // every tick. renderChunks already does
+            //   xOff = xOld + (x - xOld) * alpha
+            // so we just need to feed alpha = (now - lastTick) / 50ms.
+            const uint64_t lastTickNs = g_lastSimTickNs.load(std::memory_order_relaxed);
+            if (lastTickNs > 0) {
+                using clock = std::chrono::steady_clock;
+                const uint64_t nowNs = (uint64_t)std::chrono::duration_cast<
+                    std::chrono::nanoseconds>(clock::now().time_since_epoch()).count();
+                const uint64_t deltaNs = (nowNs > lastTickNs) ? (nowNs - lastTickNs) : 0;
+                float a = (float)((double)deltaNs / 50000000.0);
+                if (a < 0.0f) a = 0.0f;
+                if (a > 1.0f) a = 1.0f;
+                frame_partial_tick = a;
+            }
         }
 
         // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
