@@ -622,6 +622,26 @@ extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg,
     current_stack().back() = P;
 }
 
+// Replaces the active matrix with a Metal-style orthographic projection.
+// Standard 2D HUD setup: glOrtho(left, right, bottom, top, near, far) with
+// y-down screen coords if you set top<bottom. Depth maps to [0..1] (Metal).
+extern "C" void mcle_glbridge_metal_ortho(float left, float right,
+                                           float bottom, float top,
+                                           float near_z, float far_z) {
+    const float rl = right - left;
+    const float tb = top   - bottom;
+    const float fn = far_z - near_z;
+    Mat4 P;
+    P.m[0]  = 2.0f / rl;          P.m[1]  = 0;                  P.m[2]  = 0;                          P.m[3]  = 0;
+    P.m[4]  = 0;                  P.m[5]  = 2.0f / tb;          P.m[6]  = 0;                          P.m[7]  = 0;
+    P.m[8]  = 0;                  P.m[9]  = 0;                  P.m[10] = -1.0f / fn;                 P.m[11] = 0;
+    P.m[12] = -(right + left)/rl; P.m[13] = -(top + bottom)/tb; P.m[14] = -near_z / fn;               P.m[15] = 1;
+    current_stack().back() = P;
+}
+
+// HUD draw helper is defined further down (after the anonymous namespace
+// where immediate_dispatch lives), since it dispatches via that function.
+
 
 namespace {
 
@@ -767,6 +787,75 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 }
 
 } // namespace
+
+// HUD: draw a textured quad in screen-space pixel coords. Self-contained:
+// saves + restores matrices, sets ortho, and dispatches a single quad
+// through the existing 32-byte vertex pipeline (g_world_pso). Defined here
+// so immediate_dispatch (anonymous namespace above) is in scope by name.
+extern "C" void mcle_hud_draw_textured_quad(int x, int y, int w, int h,
+                                             float u0, float v0,
+                                             float u1, float v1,
+                                             unsigned int tex_id) {
+    if (!g.inFrame || !g.enc) return;
+    int sw = 0, sh = 0;
+    mcle_metal_current_size(&sw, &sh);
+    if (sw <= 0 || sh <= 0) return;
+
+    Mat4 savedProj = g_projection_stack.back();
+    Mat4 savedMv   = g_modelview_stack.back();
+    unsigned int savedTexId = g_bound_tex_id;
+    id<MTLTexture> savedTex = g_current_texture;
+
+    // Ortho with screen pixel coords, y-down (top=0, bottom=sh).
+    mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
+    mcle_glbridge_load_identity();
+    mcle_glbridge_metal_ortho(0.0f, (float)sw, (float)sh, 0.0f, -1.0f, 1.0f);
+    mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
+    mcle_glbridge_load_identity();
+
+    if (tex_id != 0) mcle_glbridge_bind_texture(tex_id);
+
+    // 32-byte vertex (fmt=1): pos float3 @0, uv float2 @12, color uchar4 @20,
+    // normal uchar4 @24, extra @28. world_vert reads pos/uv/color/normal.
+    struct V {
+        float    pos[3];
+        float    uv[2];
+        uint8_t  color[4];
+        uint8_t  normal[4];
+        uint8_t  extra[4];
+    };
+    static_assert(sizeof(V) == 32, "HUD vertex must be 32 bytes");
+    V v[4];
+    const float fx0 = (float)x;
+    const float fy0 = (float)y;
+    const float fx1 = (float)(x + w);
+    const float fy1 = (float)(y + h);
+    const uint8_t white[4] = {255, 255, 255, 255};
+    const uint8_t up[4]    = {0, 127, 0, 0};
+    const uint8_t zero[4]  = {0, 0, 0, 0};
+    auto fill = [&](V& vv, float px, float py, float pu, float pv) {
+        vv.pos[0] = px; vv.pos[1] = py; vv.pos[2] = 0.0f;
+        vv.uv[0]  = pu; vv.uv[1]  = pv;
+        memcpy(vv.color,  white, 4);
+        memcpy(vv.normal, up,    4);
+        memcpy(vv.extra,  zero,  4);
+    };
+    // Order: tl, bl, br, tr - CCW when viewed from camera (-z toward viewer
+    // with y-down ortho means tl->bl->br->tr is the CCW orientation).
+    fill(v[0], fx0, fy0, u0, v0);
+    fill(v[1], fx0, fy1, u0, v1);
+    fill(v[2], fx1, fy1, u1, v1);
+    fill(v[3], fx1, fy0, u1, v0);
+
+    immediate_dispatch(7 /* GL_QUADS */, 4, v, 1 /* fmt */, 0);
+
+    g_projection_stack.back() = savedProj;
+    g_modelview_stack.back()  = savedMv;
+    if (tex_id != 0) {
+        g_current_texture = savedTex;
+        g_bound_tex_id    = savedTexId;
+    }
+}
 
 extern "C" int mcle_metal_ensure_device(void) {
     if (g.device) return 0;
