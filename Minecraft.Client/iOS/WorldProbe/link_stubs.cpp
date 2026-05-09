@@ -511,3 +511,12 @@ BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return i
 #include "ClientConstants.h"
 const std::wstring ClientConstants::VERSION_STRING = std::wstring();
 const std::wstring ClientConstants::BRANCH_STRING  = std::wstring();
+
+// Minecraft::currentTimeMillis - declared static in Minecraft.h:303 but no
+// definition in Minecraft.cpp. ItemRenderer::renderItemBillboard uses it for
+// the bobbing item-on-ground animation. Route through chrono steady_clock.
+#include <chrono>
+int64_t Minecraft::currentTimeMillis() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch()).count();
+}
