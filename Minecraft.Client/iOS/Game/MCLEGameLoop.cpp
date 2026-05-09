@@ -1485,28 +1485,6 @@ extern "C" void mcle_world_drive_renderer(void) {
             // physical size so width == width_phys.
             mcShim->width_phys  = sw;
             mcShim->height_phys = sh;
-            // Diagnostic: log first 5 HUD frames so we can verify the call
-            // is reached and the shim has live state. If these don't show,
-            // wrapper is bailing on the if-condition above. If they show
-            // but HUD is invisible, problem is downstream of Gui::render.
-            {
-                static int s_hudlog = 0;
-                if (s_hudlog < 5) {
-                    MCLE_LOG("HUD frame %d: w=%d h=%d phys=%dx%d player=%p options=%p alpha=%.3f gui=%p",
-                             s_hudlog, sw, sh, mcShim->width_phys, mcShim->height_phys,
-                             (void*)mcShim->player.get(), (void*)mcShim->options,
-                             frame_partial_tick, (void*)g_gui);
-                    s_hudlog++;
-                }
-            }
-            // Also draw a hardcoded debug rectangle in the top-left corner
-            // BEFORE Gui::render. If this red square shows up but the
-            // Gui-rendered hotbar doesn't, our 2D pipeline works and the
-            // bug is inside Gui::render's draw chain. If neither shows,
-            // our 2D path itself is broken.
-            mcle_hud_draw_textured_quad(20, 20, 100, 100,
-                                         0.0f, 0.0f, 1.0f, 1.0f,
-                                         /*tex_id*/0);
             try {
                 g_gui->render(frame_partial_tick, /*mouseFree*/false,
                               /*xMouse*/0, /*yMouse*/0);
