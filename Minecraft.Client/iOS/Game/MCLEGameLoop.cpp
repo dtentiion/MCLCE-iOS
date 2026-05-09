@@ -857,6 +857,10 @@ void initImpl() {
         // G5: viewDistance left at Options::init default (0). allChanged
         // is now wired to fire properly via setLevel below.
         g_minecraftShim->options->viewDistance = 0;
+        // Force fancyGraphics off so renderClouds takes the simple
+        // 2D-quad path instead of renderAdvancedClouds (which depends on
+        // glMultiTexCoord2f + viewport clip planes we don't shim well).
+        g_minecraftShim->options->fancyGraphics = false;
         MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
                  (void*)g_minecraftShim->options,
                  g_minecraftShim->options->viewDistance,
@@ -1196,7 +1200,25 @@ extern "C" void mcle_game_tick(void) {
         // layer is frozen in place. Also drives destroying-block animations
         // and the per-second tick maintenance branch.
         if (g_levelRenderer) {
-            try { g_levelRenderer->tick(); } catch (...) {}
+            static int s_lrTickLog = 0;
+            try {
+                g_levelRenderer->tick();
+                if (s_lrTickLog < 3) {
+                    MCLE_LOG("LR_TICK_OK call=%d ticks=%d",
+                             s_lrTickLog, (int)g_levelRenderer->ticks);
+                    s_lrTickLog++;
+                }
+            } catch (const std::exception &e) {
+                if (s_lrTickLog < 3) {
+                    MCLE_LOG("LR_TICK_THREW: %{public}s", e.what());
+                    s_lrTickLog++;
+                }
+            } catch (...) {
+                if (s_lrTickLog < 3) {
+                    MCLE_LOG("LR_TICK_THREW unknown");
+                    s_lrTickLog++;
+                }
+            }
         }
         // TEMP-NON-PARITY day/night speedup. 100x was too fast (~12s/cycle).
         // 9 -> ~2-min cycle, slow enough to look natural while still visible
