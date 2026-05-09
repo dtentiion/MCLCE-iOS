@@ -1442,3 +1442,11 @@ GSS_PY="$REPO_ROOT/scripts/patch-gui-screensection.py"
 if [ -f "$GSS_PY" ]; then
     python3 "$GSS_PY"
 fi
+
+# Gui.cpp RENDER_HUD 0 -> 1 to enable the PC-style native hotbar code.
+# 4J turned it off on consoles where SWF/XUI handles the HUD. We have no
+# XUI HUD wired up so we re-enable the native path.
+GRH_PY="$REPO_ROOT/scripts/patch-gui-render-hud.py"
+if [ -f "$GRH_PY" ]; then
+    python3 "$GRH_PY"
+fi
