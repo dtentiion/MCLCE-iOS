@@ -1443,3 +1443,11 @@ if [ -f "$GSS_PY" ]; then
     python3 "$GSS_PY"
 fi
 
+# Tesselator.cpp: always write per-vertex color (default white) so the
+# Metal pipeline doesn't read garbage when upstream emits vertices via
+# t->vertex() without a preceding t->color() (skyList build).
+TDC_PY="$REPO_ROOT/scripts/patch-tesselator-default-color.py"
+if [ -f "$TDC_PY" ]; then
+    python3 "$TDC_PY"
+fi
+
