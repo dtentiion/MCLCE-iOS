@@ -1125,6 +1125,19 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
+    // Throttle simulation to 20Hz (50ms per tick) to match upstream parity.
+    // CADisplayLink calls us at 60Hz; without this, aiStep + tickEntities run
+    // 3x too fast and walking / gravity / friction all feel sped up.
+    {
+        using clock = std::chrono::steady_clock;
+        static auto s_lastSimTick = clock::now() - std::chrono::milliseconds(50);
+        const auto now = clock::now();
+        const auto sinceMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 now - s_lastSimTick).count();
+        if (sinceMs < 50) return;
+        s_lastSimTick = now;
+    }
+
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
     try {
