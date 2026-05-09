@@ -520,3 +520,32 @@ int64_t Minecraft::currentTimeMillis() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+
+// HUD-pulled symbols. Once Gui.cpp / GuiComponent.cpp / Lighting.cpp went
+// into the build their references became live; the owning .cpps for these
+// don't compile yet. Stubs return safe defaults / no-ops.
+
+#include "stubs.h"
+class FloatBuffer;
+void glLight(int, int, FloatBuffer *) {}
+
+// Screen size accessed by Gui::render via extern int g_rScreen{Width,Height}.
+// Gui only reads these in a couple of branches we don't hit; default 0.
+int g_rScreenWidth  = 0;
+int g_rScreenHeight = 0;
+
+#include "GameRenderer.h"
+void GameRenderer::setupGuiScreen(int /*forceScale*/) {}
+
+#include "MultiPlayerGameMode.h"
+bool MultiPlayerGameMode::isCutScene() { return false; }
+
+#include "Font.h"
+void Font::drawShadow(const std::wstring & /*str*/, int /*x*/, int /*y*/, int /*color*/) {}
+
+// Gui::render's debug overlay reads these stat strings - empty is fine.
+std::wstring Minecraft::gatherStats1() { return std::wstring(); }
+std::wstring Minecraft::gatherStats2() { return std::wstring(); }
+std::wstring Minecraft::gatherStats3() { return std::wstring(); }
+std::wstring Minecraft::gatherStats4() { return std::wstring(); }
+bool         Minecraft::useFancyGraphics() { return true; }
