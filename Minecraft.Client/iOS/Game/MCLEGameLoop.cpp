@@ -1204,8 +1204,7 @@ extern "C" void mcle_game_tick(void) {
             try {
                 g_levelRenderer->tick();
                 if (s_lrTickLog < 3) {
-                    MCLE_LOG("LR_TICK_OK call=%d ticks=%d",
-                             s_lrTickLog, (int)g_levelRenderer->ticks);
+                    MCLE_LOG("LR_TICK_OK call=%d", s_lrTickLog);
                     s_lrTickLog++;
                 }
             } catch (const std::exception &e) {
