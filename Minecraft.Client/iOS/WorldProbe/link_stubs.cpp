@@ -573,4 +573,8 @@ std::wstring Minecraft::gatherStats1() { return std::wstring(); }
 std::wstring Minecraft::gatherStats2() { return std::wstring(); }
 std::wstring Minecraft::gatherStats3() { return std::wstring(); }
 std::wstring Minecraft::gatherStats4() { return std::wstring(); }
-bool         Minecraft::useFancyGraphics() { return true; }
+// Returning false skips Gui::render's renderVignette call - that's a
+// full-screen overlay that without the proper texture binding paints
+// the screen blue. Once vignette texture loading is wired we can flip
+// this back on.
+bool         Minecraft::useFancyGraphics() { return false; }
