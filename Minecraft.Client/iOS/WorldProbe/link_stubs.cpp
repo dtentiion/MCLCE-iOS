@@ -504,3 +504,10 @@ int UIScene_SettingsGraphicsMenu::LevelToDistance(int /*dist*/) { return 4; }
 // we haven't pulled in). Stub the vtable anchor.
 #include "MobSkinMemTextureProcessor.h"
 BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return in; }
+
+// ClientConstants: real .cpp uses Win32-style VER_FILEVERSION_STR_W /
+// VER_BRANCHVERSION_STR_W macros from a generated version.h we don't have.
+// Gui.cpp's debug overlay reads these strings; iOS shows them as empty.
+#include "ClientConstants.h"
+const std::wstring ClientConstants::VERSION_STRING = std::wstring();
+const std::wstring ClientConstants::BRANCH_STRING  = std::wstring();

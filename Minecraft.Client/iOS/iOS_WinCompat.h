@@ -426,7 +426,33 @@ enum {
     XC_LANGUAGE_SCHINESE   = 10,
     XC_LANGUAGE_POLISH     = 11,
     XC_LANGUAGE_RUSSIAN    = 12,
+    // Extra languages referenced by UIScene_LanguageSelector.h. Values are
+    // arbitrary - we never actually do language switching on iOS, but the
+    // enum needs all the names declared so that header parses.
+    XC_LANGUAGE_DANISH     = 13,
+    XC_LANGUAGE_FINISH     = 14,
+    XC_LANGUAGE_DUTCH      = 15,
+    XC_LANGUAGE_SWEDISH    = 16,
+    XC_LANGUAGE_BNORWEGIAN = 17,
+    XC_LANGUAGE_GREEK      = 18,
 };
+#endif
+
+// Locale enum referenced by UIScene_LanguageSelector.h. Same deal - never
+// actually used, just needs the names to exist.
+#ifndef XC_LOCALE_SPAIN
+enum {
+    XC_LOCALE_SPAIN          = 1,
+    XC_LOCALE_LATIN_AMERICA  = 2,
+    XC_LOCALE_PORTUGAL       = 3,
+    XC_LOCALE_BRAZIL         = 4,
+};
+#endif
+
+// Credits screen size constant referenced by UIScene_Credits.h. iOS never
+// shows the credits screen but the header references this.
+#ifndef MAX_CREDIT_STRINGS
+#  define MAX_CREDIT_STRINGS 1
 #endif
 
 // Xbox helper for fetching the system locale id. iOS hands back English.
