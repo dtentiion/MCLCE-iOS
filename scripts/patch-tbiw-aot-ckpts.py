@@ -19,9 +19,13 @@ new = (
 if src.count(old) != 1: sys.exit(f"entry anchor count={src.count(old)}")
 src = src.replace(old, new, 1)
 
-# bracket the getTexture(tt)->getFlags() call
+# bracket the getTexture(tt)->getFlags() call AND inspect tt's vtable pointer
 old2 = "\t\tif ( getTexture(tt)->getFlags() == Icon::IS_GRASS_TOP ) tintSides = false;"
 new2 = (
+    "\t\t{\n"
+    "\t\t\tvoid *_vt = tt ? *(void**)tt : (void*)0xDEAD;\n"
+    "\t\t\tapp.DebugPrintf(\"TBIW_CKPT inspect tt=%p vptr=%p id=%d\", tt, _vt, tt?tt->id:-1);\n"
+    "\t\t}\n"
     "\t\tapp.DebugPrintf(\"TBIW_CKPT before getTexture(tt) tt=%p\", tt);\n"
     "\t\tIcon *_tbiwTex = getTexture(tt);\n"
     "\t\tapp.DebugPrintf(\"TBIW_CKPT getTexture returned %p\", _tbiwTex);\n"
