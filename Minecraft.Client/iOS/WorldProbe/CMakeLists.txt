@@ -864,6 +864,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/FlameParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/FrustumData.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/FurnaceScreen.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Gui.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/GuiMessage.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/GuiParticles.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/HeartParticle.cpp
