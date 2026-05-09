@@ -129,8 +129,13 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 //
 // G2b: defined with C++ linkage (no extern "C") so the header decls
 // in iOS_WinCompat.h can declare upstream-wrapper overloads.
-void glEnable(unsigned int)                                {}
-void glDisable(unsigned int)                               {}
+// GL_DEPTH_TEST is the only state HUD code (Gui.cpp) toggles that we
+// actually need to honour - without this, glDisable(GL_DEPTH_TEST) is a
+// no-op, so the depth test stays on and HUD fragments at z=0.5 lose to
+// closer world geometry in the depth buffer, making the hotbar invisible.
+extern "C" void mcle_glbridge_set_depth_test(int enabled);
+void glEnable(unsigned int cap)  { if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(1); }
+void glDisable(unsigned int cap) { if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(0); }
 void glClear(unsigned int)                                 {}
 void glClearColor(float, float, float, float)              {}
 void glViewport(int, int, int, int)                        {}

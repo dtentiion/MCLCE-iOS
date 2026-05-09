@@ -34,7 +34,8 @@ struct Ctx {
     id<MTLTexture>             depthTex = nil;
     int                        depthTexW = 0;
     int                        depthTexH = 0;
-    id<MTLDepthStencilState>   depthState = nil;
+    id<MTLDepthStencilState>   depthState       = nil;  // less + write
+    id<MTLDepthStencilState>   depthStateNoTest = nil;  // always + no write
 
     bool inFrame = false;
 };
@@ -102,6 +103,14 @@ id<MTLRenderPipelineState> g_world_pso_compact = nil;
 // dispatch issues the actual setCullMode / setFrontFacingWinding call.
 MTLCullMode g_lastCullMode = (MTLCullMode)-1;
 MTLWinding  g_lastWinding  = (MTLWinding)-1;
+// glEnable/glDisable(GL_DEPTH_TEST) writes here. Default: enabled (matches
+// upstream initial GL state). Reset to true at frame begin.
+bool        g_depth_test_enabled = true;
+id<MTLDepthStencilState> g_lastDepthState = nil;
+
+extern "C" void mcle_glbridge_set_depth_test(int enabled) {
+    g_depth_test_enabled = (enabled != 0);
+}
 
 // G4: 1x1 white default texture + linear sampler. Bound on every world
 // draw so the fragment shader's texture sample stays well-defined even
@@ -721,7 +730,15 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     compute_mvp(mvp);
 
     [g.enc setRenderPipelineState:(isCompact ? g_world_pso_compact : g_world_pso)];
-    if (g.depthState) [g.enc setDepthStencilState:g.depthState];
+    {
+        id<MTLDepthStencilState> ds = g_depth_test_enabled
+            ? g.depthState
+            : g.depthStateNoTest;
+        if (ds && ds != g_lastDepthState) {
+            [g.enc setDepthStencilState:ds];
+            g_lastDepthState = ds;
+        }
+    }
     // Parity with upstream chunks: glEnable(GL_CULL_FACE) with default
     // GL CCW winding. Track last-applied state so we don't issue redundant
     // setCullMode / setFrontFacingWinding on every one of ~2300+ dispatches
@@ -924,6 +941,12 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
         dsd.depthWriteEnabled    = YES;
         g.depthState = [g.device newDepthStencilStateWithDescriptor:dsd];
     }
+    if (!g.depthStateNoTest) {
+        MTLDepthStencilDescriptor* dsd = [[MTLDepthStencilDescriptor alloc] init];
+        dsd.depthCompareFunction = MTLCompareFunctionAlways;
+        dsd.depthWriteEnabled    = NO;
+        g.depthStateNoTest = [g.device newDepthStencilStateWithDescriptor:dsd];
+    }
 
     MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
     rpd.colorAttachments[0].texture     = g.drawable.texture;
@@ -941,6 +964,10 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     // Encoder is fresh - default state is no cull / clockwise winding.
     g_lastCullMode = MTLCullModeNone;
     g_lastWinding  = MTLWindingClockwise;
+    g_lastDepthState = nil;
+    // Each frame starts with depth test enabled (matches upstream default
+    // GL state). Gui::render disables it for HUD pass via glDisable.
+    g_depth_test_enabled = true;
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
     // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
