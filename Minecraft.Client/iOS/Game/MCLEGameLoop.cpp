@@ -1349,7 +1349,9 @@ extern "C" void mcle_world_drive_renderer(void) {
             // Stick poll returns -1000..1000; LivingEntity expects ~[-1, 1].
             // getSpeed() inside travel() applies the actual walking speed.
             const float kStickToInput = 1.0f / 1000.0f;
-            g_player->xxa = (float)mcle_ios_input_poll_lx(0) * kStickToInput;
+            // Stick lx>0 = right; xxa>0 = strafe-right in moveRelative. User
+            // reported inverted - flipping sign to match upstream convention.
+            g_player->xxa = -(float)mcle_ios_input_poll_lx(0) * kStickToInput;
             g_player->yya = -(float)mcle_ios_input_poll_ly(0) * kStickToInput;
 
             // Jump = A button (bit 0 = _360_JOY_BUTTON_A). LivingEntity::aiStep
