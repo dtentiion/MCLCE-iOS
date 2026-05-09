@@ -125,6 +125,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Tesselator.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
+#include "../../../upstream/Minecraft.Client/Gui.h"
 #include "../../../upstream/Minecraft.Client/GameRenderer.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLocalPlayer.h"
@@ -244,6 +245,10 @@ std::atomic<int>              g_initState{ kStateUnstarted };
 // 20Hz throttle gate fires). Render thread reads this to compute the
 // partial-tick alpha for camera-position interpolation.
 std::atomic<uint64_t>         g_lastSimTickNs{ 0 };
+// Gui instance for HUD rendering (hotbar, health bars, crosshair).
+// Constructed in mcle_game_init after textures->stitch (parity with
+// upstream Minecraft::init). Render thread calls g_gui->render() each frame.
+Gui                          *g_gui = nullptr;
 uint64_t                      g_tickCount    = 0;
 // Init runs on a background pthread so the main-thread tick stays free
 // to render the placeholder SWF + handle input while save loading is
@@ -1037,6 +1042,35 @@ void initImpl() {
         }
     }
 
+    // Wire minecraft->player. Gui::render reads
+    // player->m_iScreenSection (patched out in patch-gui-screensection.py),
+    // getXboxPad(), inventory, etc. ServerPlayer-as-MultiplayerLocalPlayer
+    // via reinterpret_pointer_cast - safe for the read-only HUD path now
+    // that the only non-virtual layout-dependent access (m_iScreenSection)
+    // is gone.
+    if (g_player && g_minecraftShim) {
+        std::shared_ptr<MultiplayerLocalPlayer> *slot =
+            reinterpret_cast<std::shared_ptr<MultiplayerLocalPlayer> *>(
+                &g_minecraftShim->player);
+        new (slot) std::shared_ptr<MultiplayerLocalPlayer>(
+            std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player));
+        MCLE_LOG("mcle_game_init: minecraft->player aliased to g_player");
+    }
+
+    // Construct Gui (HUD renderer) - parity with upstream Minecraft::init.
+    // Stores minecraft pointer + initialises bookkeeping. Actual render
+    // happens in mcle_world_drive_renderer per frame.
+    if (g_minecraftShim) {
+        try {
+            g_gui = new Gui(g_minecraftShim);
+            MCLE_LOG("mcle_game_init: Gui ctor at %p", (void*)g_gui);
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: Gui ctor threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: Gui ctor threw unknown");
+        }
+    }
+
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
@@ -1425,6 +1459,33 @@ extern "C" void mcle_world_drive_renderer(void) {
         // line printed before crash pins the offending deref.
         try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
         try { g_levelRenderer->renderClouds(frame_partial_tick); } catch (...) {}
+
+        // HUD: parity with upstream GameRenderer::render which calls
+        // Gui::render after the world. Hotbar, health/hunger/xp bars,
+        // crosshair all happen inside this call. Push screen size into
+        // the shim so ScreenSizeCalculator gets the right pixels.
+        if (g_gui && g_minecraftShim) {
+            int sw = 0, sh = 0;
+            mcle_metal_current_size(&sw, &sh);
+            g_minecraftShim->width  = sw;
+            g_minecraftShim->height = sh;
+            try {
+                g_gui->render(frame_partial_tick, /*mouseFree*/false,
+                              /*xMouse*/0, /*yMouse*/0);
+            } catch (const std::exception &e) {
+                static int s_huderr = 0;
+                if (s_huderr < 3) {
+                    MCLE_LOG("Gui::render threw: %{public}s", e.what());
+                    s_huderr++;
+                }
+            } catch (...) {
+                static int s_huderr2 = 0;
+                if (s_huderr2 < 3) {
+                    MCLE_LOG("Gui::render threw unknown");
+                    s_huderr2++;
+                }
+            }
+        }
 
         mcle_glbridge_replay_all_lists();
 

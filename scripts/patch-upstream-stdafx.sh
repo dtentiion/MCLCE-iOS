@@ -1435,3 +1435,10 @@ RC_PY="$REPO_ROOT/scripts/patch-renderchunks-ckpts.py"
 if [ -f "$RC_PY" ]; then
     python3 "$RC_PY"
 fi
+
+# Gui.cpp m_iScreenSection -> VIEWPORT_TYPE_FULLSCREEN; ServerPlayer has no
+# m_iScreenSection field (LocalPlayer-only), iOS is single-player anyway.
+GSS_PY="$REPO_ROOT/scripts/patch-gui-screensection.py"
+if [ -f "$GSS_PY" ]; then
+    python3 "$GSS_PY"
+fi
