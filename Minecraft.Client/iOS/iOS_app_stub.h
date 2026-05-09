@@ -89,7 +89,13 @@ struct McleAppStub {
     // Our stub now provides both so static_cast<float>(GetGameSettings(p,s))
     // resolves to int->float instead of pointer->float.
     GAME_SETTINGS *GetGameSettings(int /*pad*/)               { return nullptr; }
-    int            GetGameSettings(int /*pad*/, int /*setting*/) { return 100; }
+    int            GetGameSettings(int /*pad*/, int setting) {
+        // eGameSetting_UISize=171 / UISizeSplitscreen=172: Gui::render adds 2
+        // to get guiScale (so 1 -> 3 = default fullscreen). Default 100 made
+        // guiScale 102, shrinking the HUD to a single-pixel corner blob.
+        if (setting == 171 || setting == 172) return 1;
+        return 100;
+    }
     template<class... A> int            GetGameSettingsDebugMask(A...) { return 0; }
     template<class... A> int            GetGameHostOption(A...) { return 0; }
     template<class... A> void           SetGameHostOption(A...) {}
