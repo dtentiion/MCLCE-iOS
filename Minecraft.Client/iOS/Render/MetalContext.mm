@@ -99,6 +99,14 @@ id<MTLRenderPipelineState> g_world_pso        = nil;
 // useCompactVertices(true) is set in Tesselator.
 id<MTLRenderPipelineState> g_world_pso_compact = nil;
 
+// Blending variants. Same vertex layouts and shaders as above, but with
+// the color attachment configured for srcAlpha/oneMinusSrcAlpha blending.
+// Used when glEnable(GL_BLEND) is in effect (sky / sun / moon / cloud
+// passes). For terrain (alpha=1 pixels), srcAlpha-over blending degenerates
+// to plain replace, so toggling between these two pipelines is safe.
+id<MTLRenderPipelineState> g_world_pso_blend         = nil;
+id<MTLRenderPipelineState> g_world_pso_compact_blend = nil;
+
 // Cached encoder state. Reset to "unknown" at frame begin so the first
 // dispatch issues the actual setCullMode / setFrontFacingWinding call.
 MTLCullMode g_lastCullMode = (MTLCullMode)-1;
@@ -108,9 +116,30 @@ MTLWinding  g_lastWinding  = (MTLWinding)-1;
 bool        g_depth_test_enabled = true;
 id<MTLDepthStencilState> g_lastDepthState = nil;
 
+// glEnable/glDisable(GL_BLEND) tracking. Default off (matches upstream
+// initial GL state). When on, immediate_dispatch picks the blending
+// pipeline variant (srcAlpha/oneMinusSrcAlpha) so transparent edges of
+// sky/sun/moon/cloud sprites blend with the framebuffer instead of
+// writing rgba=0 directly. Reset to off at frame begin.
+bool g_blend_enabled = false;
+id<MTLRenderPipelineState> g_lastWorldPso = nil;
+
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
     g_depth_test_enabled = (enabled != 0);
 }
+
+extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
+    g_blend_enabled = (enabled != 0);
+}
+
+// glBlendFunc is shimmed to a no-op for now: the blending pipelines bake
+// srcAlpha/oneMinusSrcAlpha as the static blend func. This handles the
+// common cloud / sky / vignette case correctly and the deviation for the
+// sun's additive (srcAlpha, ONE) blend is small (sun renders "over" sky
+// instead of "additive" - looks fine, no black box). If precise per-pass
+// blending is needed later we'll build extra pipeline variants and route
+// based on src/dst factors here.
+extern "C" void mcle_glbridge_set_blend_func(int /*src*/, int /*dst*/) {}
 
 // G4: 1x1 white default texture + linear sampler. Bound on every world
 // draw so the fragment shader's texture sample stays well-defined even
@@ -277,7 +306,23 @@ bool ensure_world_pipeline_compact() {
         NSLog(@"[mcle_metal G5c] compact pso build failed: %@", err);
         return false;
     }
-    NSLog(@"[mcle_metal G5c] compact pipeline ready");
+
+    // Blending variant: same vertex/fragment/layout, color attachment now
+    // does srcAlpha/oneMinusSrcAlpha blending. Picked when GL_BLEND is on.
+    desc.colorAttachments[0].blendingEnabled             = YES;
+    desc.colorAttachments[0].rgbBlendOperation           = MTLBlendOperationAdd;
+    desc.colorAttachments[0].alphaBlendOperation         = MTLBlendOperationAdd;
+    desc.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorSourceAlpha;
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOneMinusSourceAlpha;
+    desc.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorOne;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    g_world_pso_compact_blend = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_compact_blend) {
+        NSLog(@"[mcle_metal G5c] compact blend pso build failed: %@", err);
+        return false;
+    }
+
+    NSLog(@"[mcle_metal G5c] compact pipelines ready (no-blend + blend)");
     return true;
 }
 
@@ -320,6 +365,21 @@ bool ensure_world_pipeline() {
     g_world_pso = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_world_pso) {
         NSLog(@"[mcle_metal G3c] pso build failed: %@", err);
+        return false;
+    }
+
+    // Blending variant for sky/sun/moon/clouds. Same shaders + vertex
+    // layout, color attachment now does srcAlpha-over-oneMinusSrcAlpha.
+    desc.colorAttachments[0].blendingEnabled             = YES;
+    desc.colorAttachments[0].rgbBlendOperation           = MTLBlendOperationAdd;
+    desc.colorAttachments[0].alphaBlendOperation         = MTLBlendOperationAdd;
+    desc.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorSourceAlpha;
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOneMinusSourceAlpha;
+    desc.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorOne;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    g_world_pso_blend = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_blend) {
+        NSLog(@"[mcle_metal G3c] blend pso build failed: %@", err);
         return false;
     }
 
@@ -729,7 +789,18 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     float mvp[16];
     compute_mvp(mvp);
 
-    [g.enc setRenderPipelineState:(isCompact ? g_world_pso_compact : g_world_pso)];
+    // Pick blend / no-blend variant based on glEnable(GL_BLEND) state.
+    // Skip redundant set across dispatches by caching last-applied PSO.
+    id<MTLRenderPipelineState> pso = nil;
+    if (isCompact) {
+        pso = g_blend_enabled ? g_world_pso_compact_blend : g_world_pso_compact;
+    } else {
+        pso = g_blend_enabled ? g_world_pso_blend : g_world_pso;
+    }
+    if (pso && pso != g_lastWorldPso) {
+        [g.enc setRenderPipelineState:pso];
+        g_lastWorldPso = pso;
+    }
     {
         id<MTLDepthStencilState> ds = g_depth_test_enabled
             ? g.depthState
@@ -965,9 +1036,12 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_lastCullMode = MTLCullModeNone;
     g_lastWinding  = MTLWindingClockwise;
     g_lastDepthState = nil;
-    // Each frame starts with depth test enabled (matches upstream default
-    // GL state). Gui::render disables it for HUD pass via glDisable.
+    g_lastWorldPso   = nil;
+    // Each frame starts with depth test enabled and blend disabled
+    // (matches upstream default GL state). renderSky/renderClouds
+    // glEnable(GL_BLEND) etc. flip these via the bridge.
     g_depth_test_enabled = true;
+    g_blend_enabled      = false;
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
     // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
