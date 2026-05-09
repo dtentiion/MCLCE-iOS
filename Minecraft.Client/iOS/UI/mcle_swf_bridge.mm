@@ -228,3 +228,31 @@ extern "C" int mcle_swf_load(const char* path) {
     }
     return 0;
 }
+
+// Phase 1 of HUD-via-Ruffle: thin wrapper over Ruffle's
+// ruffle_ios_call_root_method_numbers. Lets C++ pump state into the HUD
+// SWF (SetHealth, SetActiveSlot, etc.) the same way upstream's
+// IUIScene_HUD does on console via IggyPlayerCallMethodRS.
+//
+// Targets the global Ruffle player (g_ruffle_player, owned by AppDelegate).
+// Phase 2 lands a separate HUD player handle - this function will then
+// take an additional handle parameter or get a HUD-specific variant.
+extern "C" {
+    typedef struct PlayerHandle PlayerHandle;
+    extern PlayerHandle *g_ruffle_player;
+    int ruffle_ios_call_root_method_numbers(PlayerHandle *h,
+                                             const uint8_t *method, size_t method_len,
+                                             const double *args, size_t args_len);
+}
+
+extern "C" int mcle_swf_call_root_method(const char *method_name,
+                                          const double *args, int arg_count) {
+    if (!method_name) return 1;
+    if (!g_ruffle_player) return 2;
+    const size_t mlen = strlen(method_name);
+    const size_t alen = (arg_count > 0 && args) ? (size_t)arg_count : 0;
+    return ruffle_ios_call_root_method_numbers(
+        g_ruffle_player,
+        (const uint8_t *)method_name, mlen,
+        alen ? args : nullptr, alen);
+}
