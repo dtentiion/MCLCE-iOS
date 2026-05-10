@@ -106,6 +106,12 @@ id<MTLRenderPipelineState> g_world_pso_compact = nil;
 // to plain replace, so toggling between these two pipelines is safe.
 id<MTLRenderPipelineState> g_world_pso_blend         = nil;
 id<MTLRenderPipelineState> g_world_pso_compact_blend = nil;
+// Additive blending variant (srcAlpha, ONE). Upstream uses this for the
+// sun and stars - black border pixels (rgb=0) contribute nothing to dst,
+// only the bright sun disc adds color. Without this we'd see the sun's
+// black border replacing the sky.
+id<MTLRenderPipelineState> g_world_pso_additive         = nil;
+id<MTLRenderPipelineState> g_world_pso_compact_additive = nil;
 
 // Cached encoder state. Reset to "unknown" at frame begin so the first
 // dispatch issues the actual setCullMode / setFrontFacingWinding call.
@@ -121,7 +127,10 @@ id<MTLDepthStencilState> g_lastDepthState = nil;
 // pipeline variant (srcAlpha/oneMinusSrcAlpha) so transparent edges of
 // sky/sun/moon/cloud sprites blend with the framebuffer instead of
 // writing rgba=0 directly. Reset to off at frame begin.
-bool g_blend_enabled = false;
+bool g_blend_enabled  = false;
+// Blend func tracking: 0 = srcAlpha/oneMinusSrcAlpha (default over),
+// 1 = srcAlpha/ONE (additive, used by sun + stars). Set by glBlendFunc.
+int  g_blend_func_mode = 0;
 id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
@@ -135,14 +144,16 @@ extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
 // (Diagnostic getter mcle_glbridge_get_modelview lives below the
 // anonymous-namespace block where g_modelview_stack is declared.)
 
-// glBlendFunc is shimmed to a no-op for now: the blending pipelines bake
-// srcAlpha/oneMinusSrcAlpha as the static blend func. This handles the
-// common cloud / sky / vignette case correctly and the deviation for the
-// sun's additive (srcAlpha, ONE) blend is small (sun renders "over" sky
-// instead of "additive" - looks fine, no black box). If precise per-pass
-// blending is needed later we'll build extra pipeline variants and route
-// based on src/dst factors here.
-extern "C" void mcle_glbridge_set_blend_func(int /*src*/, int /*dst*/) {}
+// glBlendFunc routing: pick additive (srcAlpha, ONE) vs over
+// (srcAlpha, oneMinusSrcAlpha) based on the requested factors.
+// GL_ZERO=0, GL_ONE=1, GL_SRC_ALPHA=0x0302, GL_ONE_MINUS_SRC_ALPHA=0x0303.
+extern "C" void mcle_glbridge_set_blend_func(int src, int dst) {
+    if (src == 0x0302 /*GL_SRC_ALPHA*/ && dst == 0x0001 /*GL_ONE*/) {
+        g_blend_func_mode = 1; // additive (sun, stars)
+    } else {
+        g_blend_func_mode = 0; // over (clouds, vignette, default)
+    }
+}
 
 // G4: 1x1 white default texture + linear sampler. Bound on every world
 // draw so the fragment shader's texture sample stays well-defined even
@@ -325,7 +336,17 @@ bool ensure_world_pipeline_compact() {
         return false;
     }
 
-    NSLog(@"[mcle_metal G5c] compact pipelines ready (no-blend + blend)");
+    // Additive variant: GL_SRC_ALPHA, GL_ONE. Sun + stars use this so
+    // black border pixels contribute nothing to dst (no black box around sun).
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOne;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
+    g_world_pso_compact_additive = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_compact_additive) {
+        NSLog(@"[mcle_metal G5c] compact additive pso build failed: %@", err);
+        return false;
+    }
+
+    NSLog(@"[mcle_metal G5c] compact pipelines ready (no-blend + blend + additive)");
     return true;
 }
 
@@ -383,6 +404,15 @@ bool ensure_world_pipeline() {
     g_world_pso_blend = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_world_pso_blend) {
         NSLog(@"[mcle_metal G3c] blend pso build failed: %@", err);
+        return false;
+    }
+
+    // Additive variant for sun / stars (srcAlpha, ONE).
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOne;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
+    g_world_pso_additive = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_additive) {
+        NSLog(@"[mcle_metal G3c] additive pso build failed: %@", err);
         return false;
     }
 
@@ -800,13 +830,17 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     float mvp[16];
     compute_mvp(mvp);
 
-    // Pick blend / no-blend variant based on glEnable(GL_BLEND) state.
-    // Skip redundant set across dispatches by caching last-applied PSO.
+    // Pick pipeline variant: no-blend / blend-over / blend-additive.
+    // Cache last-applied PSO so dispatches don't re-bind unnecessarily.
     id<MTLRenderPipelineState> pso = nil;
     if (isCompact) {
-        pso = g_blend_enabled ? g_world_pso_compact_blend : g_world_pso_compact;
+        if (!g_blend_enabled)            pso = g_world_pso_compact;
+        else if (g_blend_func_mode == 1) pso = g_world_pso_compact_additive;
+        else                             pso = g_world_pso_compact_blend;
     } else {
-        pso = g_blend_enabled ? g_world_pso_blend : g_world_pso;
+        if (!g_blend_enabled)            pso = g_world_pso;
+        else if (g_blend_func_mode == 1) pso = g_world_pso_additive;
+        else                             pso = g_world_pso_blend;
     }
     if (pso && pso != g_lastWorldPso) {
         [g.enc setRenderPipelineState:pso];
@@ -1053,6 +1087,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     // glEnable(GL_BLEND) etc. flip these via the bridge.
     g_depth_test_enabled = true;
     g_blend_enabled      = false;
+    g_blend_func_mode    = 0;
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
     // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
