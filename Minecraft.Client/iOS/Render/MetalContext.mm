@@ -34,8 +34,9 @@ struct Ctx {
     id<MTLTexture>             depthTex = nil;
     int                        depthTexW = 0;
     int                        depthTexH = 0;
-    id<MTLDepthStencilState>   depthState       = nil;  // less + write
-    id<MTLDepthStencilState>   depthStateNoTest = nil;  // always + no write
+    id<MTLDepthStencilState>   depthState        = nil;  // less + write
+    id<MTLDepthStencilState>   depthStateNoTest  = nil;  // always + no write
+    id<MTLDepthStencilState>   depthStateNoWrite = nil;  // less + no write (sky dome)
 
     bool inFrame = false;
 };
@@ -120,6 +121,12 @@ MTLWinding  g_lastWinding  = (MTLWinding)-1;
 // glEnable/glDisable(GL_DEPTH_TEST) writes here. Default: enabled (matches
 // upstream initial GL state). Reset to true at frame begin.
 bool        g_depth_test_enabled = true;
+// glDepthMask writes here. Default: enabled (matches upstream initial GL
+// state). renderSky calls glDepthMask(false) before drawing the sky dome
+// so the dome doesn't write depth - sun/moon then pass the depth test
+// against terrain only and aren't occluded by the dome. Reset to true at
+// frame begin.
+bool        g_depth_write_enabled = true;
 id<MTLDepthStencilState> g_lastDepthState = nil;
 
 // glEnable/glDisable(GL_BLEND) tracking. Default off (matches upstream
@@ -135,6 +142,10 @@ id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
     g_depth_test_enabled = (enabled != 0);
+}
+
+extern "C" void mcle_glbridge_set_depth_write(int enabled) {
+    g_depth_write_enabled = (enabled != 0);
 }
 
 extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
@@ -847,9 +858,19 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         g_lastWorldPso = pso;
     }
     {
-        id<MTLDepthStencilState> ds = g_depth_test_enabled
-            ? g.depthState
-            : g.depthStateNoTest;
+        // Three modes mirroring GL: (test=on,write=on) normal, (test=on,
+        // write=off) sky dome - reads but doesn't occlude later passes,
+        // (test=off,write=off) HUD/overlay. glDepthMask(false) before
+        // skyList draw is what lets the sun/moon pass the depth test
+        // against terrain instead of being clipped by the dome.
+        id<MTLDepthStencilState> ds;
+        if (!g_depth_test_enabled) {
+            ds = g.depthStateNoTest;
+        } else if (!g_depth_write_enabled) {
+            ds = g.depthStateNoWrite;
+        } else {
+            ds = g.depthState;
+        }
         if (ds && ds != g_lastDepthState) {
             [g.enc setDepthStencilState:ds];
             g_lastDepthState = ds;
@@ -1063,6 +1084,12 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
         dsd.depthWriteEnabled    = NO;
         g.depthStateNoTest = [g.device newDepthStencilStateWithDescriptor:dsd];
     }
+    if (!g.depthStateNoWrite) {
+        MTLDepthStencilDescriptor* dsd = [[MTLDepthStencilDescriptor alloc] init];
+        dsd.depthCompareFunction = MTLCompareFunctionLess;
+        dsd.depthWriteEnabled    = NO;
+        g.depthStateNoWrite = [g.device newDepthStencilStateWithDescriptor:dsd];
+    }
 
     MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
     rpd.colorAttachments[0].texture     = g.drawable.texture;
@@ -1082,12 +1109,13 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_lastWinding  = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
-    // Each frame starts with depth test enabled and blend disabled
+    // Each frame starts with depth test/write enabled and blend disabled
     // (matches upstream default GL state). renderSky/renderClouds
-    // glEnable(GL_BLEND) etc. flip these via the bridge.
-    g_depth_test_enabled = true;
-    g_blend_enabled      = false;
-    g_blend_func_mode    = 0;
+    // glEnable(GL_BLEND), glDepthMask etc. flip these via the bridge.
+    g_depth_test_enabled  = true;
+    g_depth_write_enabled = true;
+    g_blend_enabled       = false;
+    g_blend_func_mode     = 0;
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
     // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
