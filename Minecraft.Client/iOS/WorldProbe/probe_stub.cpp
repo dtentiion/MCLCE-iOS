@@ -188,7 +188,14 @@ void glBlendFunc(unsigned int src, unsigned int dst) {
     mcle_glbridge_set_blend_func((int)src, (int)dst);
 }
 void glShadeModel(unsigned int)                            {}
-void glDepthMask(unsigned char)                            {}
+// glDepthMask: route to depth-write flag. renderSky calls glDepthMask(false)
+// before drawing skyList so the dome reads but doesn't write depth - that's
+// what lets sun/moon (drawn after, against the same depth buffer) pass the
+// less-than test against terrain instead of being clipped by the dome.
+extern "C" void mcle_glbridge_set_depth_write(int enabled);
+void glDepthMask(unsigned char flag) {
+    mcle_glbridge_set_depth_write(flag ? 1 : 0);
+}
 void glColorMask(unsigned char, unsigned char, unsigned char, unsigned char) {}
 void glFrontFace(unsigned int)                             {}
 void glCullFace(unsigned int)                              {}
