@@ -375,10 +375,12 @@ const char *texture_name_relpath(_TEXTURE_NAME tn) {
         case TN_TERRAIN:             return "terrain";
         case TN_GUI_ITEMS:           return "items";
         case TN_TERRAIN_SUN:         return "terrain/sun";
-        // TU19 packs the moon-phases atlas as terrain/moon.png (not
-        // moon_phases.png as on PC). Both enum values map to the same
-        // file so renderSky's bindTexture(MOON_PHASES_LOCATION) works.
-        case TN_TERRAIN_MOON_PHASES: return "terrain/moon";
+        // moon_phases.png is the 4x2 atlas (8 phases). moon.png is a
+        // single full-moon tile. renderSky slices the bound texture into
+        // 4x2 cells per phase index, so MOON_PHASES must point at the
+        // atlas - otherwise UV slicing carves up a single moon and you
+        // see only 1/8 of it (cropped corner).
+        case TN_TERRAIN_MOON_PHASES: return "terrain/moon_phases";
         case TN_TERRAIN_MOON:        return "terrain/moon";
         case TN_ENVIRONMENT_CLOUDS:  return "environment/clouds";
         case TN_ENVIRONMENT_RAIN:    return "environment/rain";
