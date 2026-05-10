@@ -74,23 +74,29 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
     const char *root_c = ios_documents_dir();
     const std::string root = (root_c && *root_c) ? std::string(root_c) : std::string();
 
-    // Search order. 4J's tubuild.plx flattens Common/res/1_2_2/ into the
-    // deployed root at install time, so on Win64/Xbox a path like
-    // "terrain/moon_phases" resolves directly. Our iOS bundle copies
-    // Common/res/ verbatim with 1_2_2/ kept as a subdir, so the same
-    // name needs a "1_2_2/" prefix fallback. Without this, textures
-    // added in TU 1.2.2 (terrain/moon_phases, mob/cavespider, etc.)
-    // silently fail to load and the previously-bound texture stays
-    // active - hence the moon rendering as a 1/8 slice of the sun.
+    // Search order. Upstream passes paths like "Common/res/terrain/X.png".
+    // 4J's tubuild.plx flattens Common/res/1_2_2/* into Common/res/ at
+    // install time on Win64/Xbox, so a TU 1.2.2 texture (terrain/moon_phases,
+    // mob/cavespider, etc.) resolves at Common/res/terrain/moon_phases.png
+    // on deployed hardware. Our iOS bundle copies Common/res/ verbatim,
+    // keeping 1_2_2/ as a subdir - so the same asset lives at
+    // Common/res/1_2_2/terrain/moon_phases.png. Inject 1_2_2/ after the
+    // Common/res/ prefix as a fallback so both layouts work.
     std::string full = rel;
     auto try_path = [&](const std::string &p) -> bool {
         if (file_exists(p)) { full = p; return true; }
         return false;
     };
+    auto with_1_2_2 = [](const std::string &p) -> std::string {
+        const std::string pfx = "Common/res/";
+        if (p.rfind(pfx, 0) == 0) return pfx + "1_2_2/" + p.substr(pfx.size());
+        return "1_2_2/" + p;
+    };
+    const std::string rel122 = with_1_2_2(rel);
     bool found = file_exists(full);
     if (!found && !root.empty()) found = try_path(root + "/" + rel);
-    if (!found)                  found = try_path("1_2_2/" + rel);
-    if (!found && !root.empty()) found = try_path(root + "/1_2_2/" + rel);
+    if (!found)                  found = try_path(rel122);
+    if (!found && !root.empty()) found = try_path(root + "/" + rel122);
     {
         std::string m = std::string("BIL_CKPT path=") + path + " full=" + full +
             " exists=" + (found ? "1" : "0");
