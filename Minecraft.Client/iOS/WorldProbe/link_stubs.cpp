@@ -375,7 +375,10 @@ const char *texture_name_relpath(_TEXTURE_NAME tn) {
         case TN_TERRAIN:             return "terrain";
         case TN_GUI_ITEMS:           return "items";
         case TN_TERRAIN_SUN:         return "terrain/sun";
-        case TN_TERRAIN_MOON_PHASES: return "terrain/moon_phases";
+        // TU19 packs the moon-phases atlas as terrain/moon.png (not
+        // moon_phases.png as on PC). Both enum values map to the same
+        // file so renderSky's bindTexture(MOON_PHASES_LOCATION) works.
+        case TN_TERRAIN_MOON_PHASES: return "terrain/moon";
         case TN_TERRAIN_MOON:        return "terrain/moon";
         case TN_ENVIRONMENT_CLOUDS:  return "environment/clouds";
         case TN_ENVIRONMENT_RAIN:    return "environment/rain";
