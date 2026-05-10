@@ -71,20 +71,32 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
     *out_height = 0;
 
     std::string rel = normalize_slashes(path);
+    const char *root_c = ios_documents_dir();
+    const std::string root = (root_c && *root_c) ? std::string(root_c) : std::string();
+
+    // Search order. 4J's tubuild.plx flattens Common/res/1_2_2/ into the
+    // deployed root at install time, so on Win64/Xbox a path like
+    // "terrain/moon_phases" resolves directly. Our iOS bundle copies
+    // Common/res/ verbatim with 1_2_2/ kept as a subdir, so the same
+    // name needs a "1_2_2/" prefix fallback. Without this, textures
+    // added in TU 1.2.2 (terrain/moon_phases, mob/cavespider, etc.)
+    // silently fail to load and the previously-bound texture stays
+    // active - hence the moon rendering as a 1/8 slice of the sun.
     std::string full = rel;
-    if (!file_exists(full)) {
-        // Treat as relative to Documents sandbox.
-        const char *root = ios_documents_dir();
-        if (root && *root) {
-            full = std::string(root) + "/" + rel;
-        }
-    }
+    auto try_path = [&](const std::string &p) -> bool {
+        if (file_exists(p)) { full = p; return true; }
+        return false;
+    };
+    bool found = file_exists(full);
+    if (!found && !root.empty()) found = try_path(root + "/" + rel);
+    if (!found)                  found = try_path("1_2_2/" + rel);
+    if (!found && !root.empty()) found = try_path(root + "/1_2_2/" + rel);
     {
         std::string m = std::string("BIL_CKPT path=") + path + " full=" + full +
-            " exists=" + (file_exists(full) ? "1" : "0");
+            " exists=" + (found ? "1" : "0");
         mcle_log_msg(m.c_str());
     }
-    if (!file_exists(full)) return -2;
+    if (!found) return -2;
 
     std::string bytes;
     if (!read_file(full, bytes)) return -3;
