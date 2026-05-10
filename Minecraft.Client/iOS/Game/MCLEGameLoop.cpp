@@ -1534,8 +1534,33 @@ extern "C" void mcle_world_drive_renderer(void) {
                     try {
                         float td  = g_levels[0]->getTimeOfDay(frame_partial_tick);
                         float san = g_levels[0]->getSunAngle(frame_partial_tick);
-                        MCLE_LOG("SUN_ANGLE log=%d timeOfDay=%.4f sunAngle=%.4f",
-                                 s_skyDiag, td, san);
+                        // Compute the sun's centre eye-space position after
+                        // the renderSky local rotations (R_-90Y * R_td*360X
+                        // applied to (0, 100, 0)) plus the current camera
+                        // modelview. This tells us exactly where the sun
+                        // ends up on screen.
+                        const float kPi = 3.14159265358979323846f;
+                        float ang = td * 2.0f * kPi;
+                        // After R_X(td*360) on (0,100,0): (0, 100*cos, 100*sin)
+                        float sx = 0.0f;
+                        float sy = 100.0f * std::cos(ang);
+                        float sz = 100.0f * std::sin(ang);
+                        // After R_Y(-90): (a,b,c)->(-c, b, a)
+                        float wx = -sz, wy = sy, wz = sx;
+                        // Apply camera modelview (column-major mv).
+                        float ex = mv[0]*wx + mv[4]*wy + mv[8] *wz + mv[12];
+                        float ey = mv[1]*wx + mv[5]*wy + mv[9] *wz + mv[13];
+                        float ez = mv[2]*wx + mv[6]*wy + mv[10]*wz + mv[14];
+                        // Crude NDC (no projection matrix applied; just check sign of z).
+                        const char *zside = (ez < 0) ? "front" : "behind";
+                        MCLE_LOG("SUN_ANGLE log=%d xRot=%.1f yRot=%.1f td=%.4f sunAngle=%.4f world=(%.1f,%.1f,%.1f) eye=(%.1f,%.1f,%.1f) zside=%s",
+                                 s_skyDiag,
+                                 g_player ? g_player->xRot : 0.0f,
+                                 g_player ? g_player->yRot : 0.0f,
+                                 td, san,
+                                 wx, wy, wz,
+                                 ex, ey, ez,
+                                 zside);
                     } catch (...) {}
                 }
             }
