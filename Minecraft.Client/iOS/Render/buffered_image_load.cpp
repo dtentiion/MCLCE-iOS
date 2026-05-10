@@ -83,8 +83,15 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
     // Common/res/1_2_2/terrain/moon_phases.png. Inject 1_2_2/ after the
     // Common/res/ prefix as a fallback so both layouts work.
     std::string full = rel;
-    auto try_path = [&](const std::string &p) -> bool {
-        if (file_exists(p)) { full = p; return true; }
+    bool found = false;
+    auto try_path = [&](const char *label, const std::string &p) -> bool {
+        const bool e = file_exists(p);
+        {
+            std::string m = std::string("BIL_TRY ") + label + " p=" + p +
+                " exists=" + (e ? "1" : "0");
+            mcle_log_msg(m.c_str());
+        }
+        if (e) { full = p; return true; }
         return false;
     };
     auto with_1_2_2 = [](const std::string &p) -> std::string {
@@ -93,10 +100,10 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
         return "1_2_2/" + p;
     };
     const std::string rel122 = with_1_2_2(rel);
-    bool found = file_exists(full);
-    if (!found && !root.empty()) found = try_path(root + "/" + rel);
-    if (!found)                  found = try_path(rel122);
-    if (!found && !root.empty()) found = try_path(root + "/" + rel122);
+    if (!found)                  found = try_path("rel",          rel);
+    if (!found && !root.empty()) found = try_path("doc+rel",      root + "/" + rel);
+    if (!found)                  found = try_path("rel122",       rel122);
+    if (!found && !root.empty()) found = try_path("doc+rel122",   root + "/" + rel122);
     {
         std::string m = std::string("BIL_CKPT path=") + path + " full=" + full +
             " exists=" + (found ? "1" : "0");
