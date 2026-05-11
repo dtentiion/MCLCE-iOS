@@ -129,6 +129,14 @@ bool        g_depth_test_enabled = true;
 bool        g_depth_write_enabled = true;
 id<MTLDepthStencilState> g_lastDepthState = nil;
 
+// glEnable/glDisable(GL_ALPHA_TEST) writes here. Default on - chunks
+// rely on the cutout for foliage / flowers. renderSky's
+// glDisable(GL_ALPHA_TEST) before sun/moon flips it off so their
+// semi-transparent texture bodies aren't discarded, then re-enables
+// for subsequent chunk passes. Threshold 0.1 matches upstream's
+// glAlphaFunc(GL_GREATER, 0.1).
+bool g_alpha_test_enabled = true;
+
 // glEnable/glDisable(GL_BLEND) tracking. Default off (matches upstream
 // initial GL state). When on, immediate_dispatch picks the blending
 // pipeline variant (srcAlpha/oneMinusSrcAlpha) so transparent edges of
@@ -146,6 +154,10 @@ extern "C" void mcle_glbridge_set_depth_test(int enabled) {
 
 extern "C" void mcle_glbridge_set_depth_write(int enabled) {
     g_depth_write_enabled = (enabled != 0);
+}
+
+extern "C" void mcle_glbridge_set_alpha_test(int enabled) {
+    g_alpha_test_enabled = (enabled != 0);
 }
 
 extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
@@ -225,14 +237,19 @@ NSString* const kWorldShaderSrc = @R"(
     // Untextured paths bind a 1x1 white texture so sample returns 1.0
     // and the output reduces to just the colour.
     // Alpha test (parity with upstream glAlphaFunc(GL_GREATER, 0.1) +
-    // glEnable(GL_ALPHA_TEST)): discard fragments with low texture alpha so
-    // foliage / flowers / cross sprites have transparent surrounds instead
-    // of black squares.
+    // glEnable(GL_ALPHA_TEST)): discard fragments with low texture alpha
+    // so foliage / flowers / cross sprites have transparent surrounds
+    // instead of black squares. renderSky calls glDisable(GL_ALPHA_TEST)
+    // before drawing the sun/moon (LevelRenderer.cpp:1047) so their
+    // semi-transparent bodies aren't discarded; we honor that via a
+    // CPU-side flag that passes 0.0 vs 0.1 as the threshold here.
+    struct FragUniforms { float alphaTestThreshold; };
     fragment float4 world_frag(V_out i           [[stage_in]],
                                 texture2d<float> tex     [[texture(0)]],
-                                sampler          texSamp [[sampler(0)]]) {
+                                sampler          texSamp [[sampler(0)]],
+                                constant FragUniforms& f [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
-        if (t.a < 0.1) discard_fragment();
+        if (t.a < f.alphaTestThreshold) discard_fragment();
         return i.color * t;
     }
 )";
@@ -934,6 +951,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
     if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
 
+    // Alpha test threshold: parity with upstream glAlphaFunc(GL_GREATER, 0.1).
+    // 0.0 when GL_ALPHA_TEST is disabled (sun/moon path) so semi-transparent
+    // texture pixels survive into the additive blend.
+    {
+        float alphaThreshold = g_alpha_test_enabled ? 0.1f : 0.0f;
+        [g.enc setFragmentBytes:&alphaThreshold
+                          length:sizeof(alphaThreshold)
+                         atIndex:3];
+    }
+
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
     // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
     // GL_QUADS so most ctor draws come through this path.
@@ -1139,11 +1166,13 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_lastWinding  = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
-    // Each frame starts with depth test/write enabled and blend disabled
-    // (matches upstream default GL state). renderSky/renderClouds
-    // glEnable(GL_BLEND), glDepthMask etc. flip these via the bridge.
+    // Each frame starts with depth test/write enabled, alpha test on
+    // (chunks need cutout for foliage), blend disabled (matches upstream
+    // default GL state). renderSky/renderClouds glEnable(GL_BLEND),
+    // glDepthMask, glDisable(GL_ALPHA_TEST) etc. flip these via the bridge.
     g_depth_test_enabled  = true;
     g_depth_write_enabled = true;
+    g_alpha_test_enabled  = true;
     g_blend_enabled       = false;
     g_blend_func_mode     = 0;
 
