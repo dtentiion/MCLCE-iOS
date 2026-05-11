@@ -1451,3 +1451,12 @@ if [ -f "$TDC_PY" ]; then
     python3 "$TDC_PY"
 fi
 
+# LevelRenderer.cpp: force the simple 2D cloud path regardless of
+# fancyGraphics. This lets fancyGraphics stay true (for leaf cutout
+# transparency at LevelRenderer.cpp:427 setFancy()) without triggering
+# renderAdvancedClouds which depends on GL we don't shim well.
+RCS_PY="$REPO_ROOT/scripts/patch-renderclouds-force-simple.py"
+if [ -f "$RCS_PY" ]; then
+    python3 "$RCS_PY"
+fi
+

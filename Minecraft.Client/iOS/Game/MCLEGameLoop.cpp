@@ -857,10 +857,13 @@ void initImpl() {
         // G5: viewDistance left at Options::init default (0). allChanged
         // is now wired to fire properly via setLevel below.
         g_minecraftShim->options->viewDistance = 0;
-        // Force fancyGraphics off so renderClouds takes the simple
-        // 2D-quad path instead of renderAdvancedClouds (which depends on
-        // glMultiTexCoord2f + viewport clip planes we don't shim well).
-        g_minecraftShim->options->fancyGraphics = false;
+        // fancyGraphics=true gives leaves the cutout-transparency path
+        // (LevelRenderer.cpp:427 Tile::leaves->setFancy). Clouds normally
+        // branch to renderAdvancedClouds when this is true, but our
+        // patch-renderclouds-force-simple.py rewires renderClouds to
+        // always take the simple 2D path on iOS - so we get fancy leaves
+        // without the unsupported advanced cloud path.
+        g_minecraftShim->options->fancyGraphics = true;
         MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
                  (void*)g_minecraftShim->options,
                  g_minecraftShim->options->viewDistance,
