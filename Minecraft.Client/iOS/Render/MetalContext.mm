@@ -688,7 +688,7 @@ extern "C" void mcle_glbridge_bind_texture(unsigned int tex_id) {
                      "BIND_TEX id=%u registered=%d tex=%p",
                      tex_id,
                      (int)(g_gl_textures.find(tex_id) != g_gl_textures.end()),
-                     (void*)g_current_texture);
+                     (__bridge void*)g_current_texture);
             mcle_log_msg(buf);
             s_count++;
         }
