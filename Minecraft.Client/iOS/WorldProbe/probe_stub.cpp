@@ -137,13 +137,16 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 //     instead of writing rgba=0 directly (visible black box around sun etc).
 extern "C" void mcle_glbridge_set_depth_test(int enabled);
 extern "C" void mcle_glbridge_set_blend_enabled(int enabled);
+extern "C" void mcle_glbridge_set_alpha_test(int enabled);
 void glEnable(unsigned int cap) {
     if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(1);
-    else if (cap == 0x0BE2 /*GL_BLEND*/) mcle_glbridge_set_blend_enabled(1);
+    else if (cap == 0x0BE2 /*GL_BLEND*/)      mcle_glbridge_set_blend_enabled(1);
+    else if (cap == 0x0BC0 /*GL_ALPHA_TEST*/) mcle_glbridge_set_alpha_test(1);
 }
 void glDisable(unsigned int cap) {
     if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(0);
-    else if (cap == 0x0BE2 /*GL_BLEND*/) mcle_glbridge_set_blend_enabled(0);
+    else if (cap == 0x0BE2 /*GL_BLEND*/)      mcle_glbridge_set_blend_enabled(0);
+    else if (cap == 0x0BC0 /*GL_ALPHA_TEST*/) mcle_glbridge_set_alpha_test(0);
 }
 void glClear(unsigned int)                                 {}
 void glClearColor(float, float, float, float)              {}
