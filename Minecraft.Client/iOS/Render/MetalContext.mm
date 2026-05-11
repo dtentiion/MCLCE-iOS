@@ -165,6 +165,19 @@ extern "C" void mcle_glbridge_set_depth_write(int enabled) {
 
 extern "C" void mcle_glbridge_set_alpha_test(int enabled) {
     g_alpha_test_enabled = (enabled != 0);
+    // Diagnostic: confirm upstream's glEnable/glDisable(GL_ALPHA_TEST)
+    // is actually reaching the shim. If renderSky's glDisable(...) call
+    // never logs here, the shim isn't being wired up correctly.
+    {
+        static int s_count = 0;
+        if (s_count < 30) {
+            extern int mcle_log_msg(const char *);
+            char buf[80];
+            snprintf(buf, sizeof(buf), "ATEST_TOGGLE enabled=%d", enabled);
+            mcle_log_msg(buf);
+            s_count++;
+        }
+    }
 }
 
 extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
@@ -966,6 +979,31 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (pso && pso != g_lastWorldPso) {
         [g.enc setRenderPipelineState:pso];
         g_lastWorldPso = pso;
+        // Diagnostic: log which PSO variant is active when binding the
+        // texture changes (sun -> moon -> back). Mostly useful right
+        // after BIND_TEX so we can see if alpha-test=off actually picks
+        // the nocut variant.
+        static int s_count = 0;
+        if (s_count < 60) {
+            extern int mcle_log_msg(const char *);
+            const char *name = "?";
+            if      (pso == g_world_pso)                  name = "fmt1_noblend_cut";
+            else if (pso == g_world_pso_blend)            name = "fmt1_blend_cut";
+            else if (pso == g_world_pso_additive)         name = "fmt1_add_cut";
+            else if (pso == g_world_pso_blend_nocut)      name = "fmt1_blend_NOCUT";
+            else if (pso == g_world_pso_additive_nocut)   name = "fmt1_add_NOCUT";
+            else if (pso == g_world_pso_compact)          name = "fmt4_noblend";
+            else if (pso == g_world_pso_compact_blend)    name = "fmt4_blend";
+            else if (pso == g_world_pso_compact_additive) name = "fmt4_add";
+            char buf[120];
+            snprintf(buf, sizeof(buf),
+                     "PSO_PICK %s atest=%d blend=%d func=%d tex=%u",
+                     name, (int)g_alpha_test_enabled,
+                     (int)g_blend_enabled, g_blend_func_mode,
+                     g_bound_tex_id);
+            mcle_log_msg(buf);
+            s_count++;
+        }
     }
     {
         // Three modes mirroring GL: (test=on,write=on) normal, (test=on,
