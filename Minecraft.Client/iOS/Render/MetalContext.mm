@@ -672,10 +672,27 @@ extern "C" void mcle_glbridge_bind_texture(unsigned int tex_id) {
     g_bound_tex_id = tex_id;
     if (tex_id == 0) {
         g_current_texture = nil;
-        return;
+    } else {
+        auto it = g_gl_textures.find(tex_id);
+        g_current_texture = (it != g_gl_textures.end()) ? it->second : nil;
     }
-    auto it = g_gl_textures.find(tex_id);
-    g_current_texture = (it != g_gl_textures.end()) ? it->second : nil;
+    // Diagnostic: log each bind so we can correlate sun/moon binds with
+    // their draw dispatches. Throttled to first 200 binds to avoid
+    // flooding the log once steady-state is reached.
+    {
+        static int s_count = 0;
+        if (s_count < 200) {
+            extern int mcle_log_msg(const char *);
+            char buf[160];
+            snprintf(buf, sizeof(buf),
+                     "BIND_TEX id=%u registered=%d tex=%p",
+                     tex_id,
+                     (int)(g_gl_textures.find(tex_id) != g_gl_textures.end()),
+                     (void*)g_current_texture);
+            mcle_log_msg(buf);
+            s_count++;
+        }
+    }
 }
 extern "C" unsigned int mcle_glbridge_get_bound_texture(void) {
     return g_bound_tex_id;
@@ -700,6 +717,19 @@ extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, 
     }
     g_gl_textures[tex_id] = tex;
     if (tex_id == g_bound_tex_id) g_current_texture = tex;
+    // Diagnostic: log each texture upload so we can match texture id
+    // back to the upload source (which BIL_CKPT path produced it).
+    {
+        static int s_count = 0;
+        if (s_count < 50) {
+            extern int mcle_log_msg(const char *);
+            char buf[160];
+            snprintf(buf, sizeof(buf),
+                     "TEX_UPLOAD id=%u w=%d h=%d", tex_id, width, height);
+            mcle_log_msg(buf);
+            s_count++;
+        }
+    }
 }
 
 // G3f: GL_CURRENT_COLOR setters. Each draw reads the live values into a
