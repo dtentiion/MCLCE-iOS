@@ -114,6 +114,13 @@ id<MTLRenderPipelineState> g_world_pso_compact_blend = nil;
 id<MTLRenderPipelineState> g_world_pso_additive         = nil;
 id<MTLRenderPipelineState> g_world_pso_compact_additive = nil;
 
+// No-cutout variants for the sun/moon/sunrise pass. renderSky's
+// glDisable(GL_ALPHA_TEST) is honored by switching to a pipeline whose
+// fragment shader skips the discard - this lets the semi-transparent
+// moon body pixels survive into the additive blend.
+id<MTLRenderPipelineState> g_world_pso_blend_nocut    = nil;
+id<MTLRenderPipelineState> g_world_pso_additive_nocut = nil;
+
 // Cached encoder state. Reset to "unknown" at frame begin so the first
 // dispatch issues the actual setCullMode / setFrontFacingWinding call.
 MTLCullMode g_lastCullMode = (MTLCullMode)-1;
@@ -243,13 +250,22 @@ NSString* const kWorldShaderSrc = @R"(
     // before drawing the sun/moon (LevelRenderer.cpp:1047) so their
     // semi-transparent bodies aren't discarded; we honor that via a
     // CPU-side flag that passes 0.0 vs 0.1 as the threshold here.
-    struct FragUniforms { float4 alphaTestPacked; };
     fragment float4 world_frag(V_out i           [[stage_in]],
                                 texture2d<float> tex     [[texture(0)]],
-                                sampler          texSamp [[sampler(0)]],
-                                constant FragUniforms& f [[buffer(3)]]) {
+                                sampler          texSamp [[sampler(0)]]) {
         float4 t = tex.sample(texSamp, i.uv);
-        if (t.a < f.alphaTestPacked.x) discard_fragment();
+        if (t.a < 0.1) discard_fragment();
+        return i.color * t;
+    }
+
+    // No-cutout variant for sun/moon path. renderSky's
+    // glDisable(GL_ALPHA_TEST) before drawing the sun/moon needs us to
+    // skip the discard so semi-transparent body pixels survive into
+    // the additive blend.
+    fragment float4 world_frag_nocut(V_out i           [[stage_in]],
+                                      texture2d<float> tex     [[texture(0)]],
+                                      sampler          texSamp [[sampler(0)]]) {
+        float4 t = tex.sample(texSamp, i.uv);
         return i.color * t;
     }
 )";
@@ -441,6 +457,27 @@ bool ensure_world_pipeline() {
     g_world_pso_additive = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_world_pso_additive) {
         NSLog(@"[mcle_metal G3c] additive pso build failed: %@", err);
+        return false;
+    }
+
+    // No-cutout additive variant for sun/moon (renderSky disables alpha
+    // test before this pass). Same blend factors, but fragment shader is
+    // world_frag_nocut which skips the t.a < 0.1 discard - lets
+    // semi-transparent moon body pixels survive into the additive blend.
+    desc.fragmentFunction = [lib newFunctionWithName:@"world_frag_nocut"];
+    g_world_pso_additive_nocut = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_additive_nocut) {
+        NSLog(@"[mcle_metal G3c] additive nocut pso build failed: %@", err);
+        return false;
+    }
+
+    // No-cutout over-blend variant for the sunrise gradient triangle fan
+    // (over-blend + alpha test off).
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorOneMinusSourceAlpha;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    g_world_pso_blend_nocut = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_blend_nocut) {
+        NSLog(@"[mcle_metal G3c] blend nocut pso build failed: %@", err);
         return false;
     }
 
@@ -915,9 +952,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         else if (g_blend_func_mode == 1) pso = g_world_pso_compact_additive;
         else                             pso = g_world_pso_compact_blend;
     } else {
-        if (!g_blend_enabled)            pso = g_world_pso;
-        else if (g_blend_func_mode == 1) pso = g_world_pso_additive;
-        else                             pso = g_world_pso_blend;
+        // fmt=1 path. When alpha test is disabled (sun/moon/sunrise pass)
+        // use the no-cutout fragment shader so semi-transparent texture
+        // pixels survive. Chunks/fmt=4 always keep the cutout (foliage).
+        if (!g_blend_enabled) {
+            pso = g_world_pso;  // no-blend has no nocut variant; not used by sky
+        } else if (g_blend_func_mode == 1) {
+            pso = g_alpha_test_enabled ? g_world_pso_additive : g_world_pso_additive_nocut;
+        } else {
+            pso = g_alpha_test_enabled ? g_world_pso_blend : g_world_pso_blend_nocut;
+        }
     }
     if (pso && pso != g_lastWorldPso) {
         [g.enc setRenderPipelineState:pso];
@@ -970,19 +1014,6 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
     if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
 
-    // Alpha test threshold: parity with upstream glAlphaFunc(GL_GREATER, 0.1).
-    // 0.0 when GL_ALPHA_TEST is disabled (sun/moon path) so semi-transparent
-    // texture pixels survive into the additive blend. Padded to 16 bytes
-    // (float4) because Metal can be finicky about sub-16-byte uniforms.
-    {
-        float threshold[4] = {
-            g_alpha_test_enabled ? 0.1f : 0.0f,
-            0.0f, 0.0f, 0.0f
-        };
-        [g.enc setFragmentBytes:threshold
-                          length:sizeof(threshold)
-                         atIndex:3];
-    }
 
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
     // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
