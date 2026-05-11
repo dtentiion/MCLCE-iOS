@@ -243,13 +243,13 @@ NSString* const kWorldShaderSrc = @R"(
     // before drawing the sun/moon (LevelRenderer.cpp:1047) so their
     // semi-transparent bodies aren't discarded; we honor that via a
     // CPU-side flag that passes 0.0 vs 0.1 as the threshold here.
-    struct FragUniforms { float alphaTestThreshold; };
+    struct FragUniforms { float4 alphaTestPacked; };
     fragment float4 world_frag(V_out i           [[stage_in]],
                                 texture2d<float> tex     [[texture(0)]],
                                 sampler          texSamp [[sampler(0)]],
                                 constant FragUniforms& f [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
-        if (t.a < f.alphaTestThreshold) discard_fragment();
+        if (t.a < f.alphaTestPacked.x) discard_fragment();
         return i.color * t;
     }
 )";
@@ -736,14 +736,33 @@ extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, 
     if (tex_id == g_bound_tex_id) g_current_texture = tex;
     // Diagnostic: log each texture upload so we can match texture id
     // back to the upload source (which BIL_CKPT path produced it).
+    // For moon_phases.png (128x64), additionally dump the center pixels
+    // of the top-left cell so we can confirm channel order is correct -
+    // expected RGB ~ (175, 184, 204) blue-white, NOT (204, 184, 175).
     {
         static int s_count = 0;
         if (s_count < 50) {
             extern int mcle_log_msg(const char *);
-            char buf[160];
+            char buf[256];
             snprintf(buf, sizeof(buf),
                      "TEX_UPLOAD id=%u w=%d h=%d", tex_id, width, height);
             mcle_log_msg(buf);
+            if (rgba_pixels && width == 128 && height == 64) {
+                const unsigned char* px = (const unsigned char*)rgba_pixels;
+                int idx = (16 * 128 + 16) * 4;  // pixel (16,16), cell-0 center
+                snprintf(buf, sizeof(buf),
+                         "TEX_PIXEL moon(16,16) R=%u G=%u B=%u A=%u",
+                         px[idx+0], px[idx+1], px[idx+2], px[idx+3]);
+                mcle_log_msg(buf);
+            }
+            if (rgba_pixels && width == 32 && height == 32) {
+                const unsigned char* px = (const unsigned char*)rgba_pixels;
+                int idx = (16 * 32 + 16) * 4;  // pixel (16,16), sun center
+                snprintf(buf, sizeof(buf),
+                         "TEX_PIXEL sun(16,16) R=%u G=%u B=%u A=%u",
+                         px[idx+0], px[idx+1], px[idx+2], px[idx+3]);
+                mcle_log_msg(buf);
+            }
             s_count++;
         }
     }
@@ -953,11 +972,15 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 
     // Alpha test threshold: parity with upstream glAlphaFunc(GL_GREATER, 0.1).
     // 0.0 when GL_ALPHA_TEST is disabled (sun/moon path) so semi-transparent
-    // texture pixels survive into the additive blend.
+    // texture pixels survive into the additive blend. Padded to 16 bytes
+    // (float4) because Metal can be finicky about sub-16-byte uniforms.
     {
-        float alphaThreshold = g_alpha_test_enabled ? 0.1f : 0.0f;
-        [g.enc setFragmentBytes:&alphaThreshold
-                          length:sizeof(alphaThreshold)
+        float threshold[4] = {
+            g_alpha_test_enabled ? 0.1f : 0.0f,
+            0.0f, 0.0f, 0.0f
+        };
+        [g.enc setFragmentBytes:threshold
+                          length:sizeof(threshold)
                          atIndex:3];
     }
 
