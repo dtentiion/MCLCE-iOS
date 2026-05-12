@@ -1682,34 +1682,35 @@ extern "C" int mcle_world_is_ticking(void) {
     return (g_initState == kStateTicking && g_levels[0] != nullptr) ? 1 : 0;
 }
 
-// G1B (interim): day-night sky driven by upstream Level::getTimeOfDay.
-// Mirrors the brightness formula at Level.cpp:2049-2053 + the standard
-// plains biome sky color (0x78A7FF) without going through getBiome,
-// which crashes at offset 0x130 (separate investigation). Once that
-// is fixed this routes through Level::getSkyColor for full parity.
+// Route through upstream Level::getSkyColor for full parity with LCE
+// Win64. That function returns biome-tinted RGB modulated by time-of-day
+// brightness, rain darkening, thunder darkening, and sky-flash. The
+// older stub used a hardcoded plains-biome color (no biome tint) - which
+// is why dawn/dusk sky colors looked wrong vs LCE.
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
-    // Plains biome sky as the static base (RGB 120, 167, 255).
-    float baseR = 120.0f / 255.0f;
-    float baseG = 167.0f / 255.0f;
-    float baseB = 255.0f / 255.0f;
-    float br = 1.0f;
+    // Fallback values: plains biome at full brightness. Used pre-world-tick
+    // (menu / loading), or if upstream call throws.
+    float fr = 120.0f / 255.0f;
+    float fg = 167.0f / 255.0f;
+    float fb = 255.0f / 255.0f;
 
-    if (g_initState == kStateTicking && g_levels[0]) {
+    if (g_initState == kStateTicking && g_levels[0] && g_player) {
         try {
-            // Mirrors Level::getSkyColor brightness term.
-            float td = g_levels[0]->getTimeOfDay(1.0f);
-            const float kPi = 3.14159265358979323846f;
-            br = std::cos(td * kPi * 2.0f) * 2.0f + 0.5f;
-            if (br < 0.0f) br = 0.0f;
-            if (br > 1.0f) br = 1.0f;
+            Vec3 *sky = g_levels[0]->getSkyColor(g_player, /*alpha*/1.0f);
+            if (sky) {
+                fr = (float)sky->x;
+                fg = (float)sky->y;
+                fb = (float)sky->z;
+            }
         } catch (...) {
-            br = 1.0f;
+            // Keep fallback values on any throw - matches the old stub's
+            // behavior so we don't regress visible state.
         }
     }
 
-    if (r) *r = baseR * br;
-    if (g) *g = baseG * br;
-    if (b) *b = baseB * br;
+    if (r) *r = fr;
+    if (g) *g = fg;
+    if (b) *b = fb;
 }
 
 // G1B-probe: layered call into upstream Level::getSkyColor pieces so
