@@ -71,6 +71,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/File.h"
 #include "../../../upstream/Minecraft.World/FileInputStream.h"
 #include "../../../upstream/Minecraft.World/Level.h"
+#include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/LevelData.h"
 #include "../../../upstream/Minecraft.World/LevelSettings.h"
 #include "../../../upstream/Minecraft.World/LevelType.h"
@@ -1485,27 +1486,56 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
-        // Minimal setupFog equivalent. Upstream GameRenderer::setupFog
-        // (GameRenderer.cpp:2102) builds fog color from getFogColor with
-        // a sunrise blend toward sun direction, then sets GL_FOG_START /
-        // GL_FOG_END based on render distance. We replicate just the
-        // basics here so the cloud sheet, chunk horizon, etc. fade into
-        // the sky color at distance instead of forming sharp perspective
-        // edges (e.g. the cloud-sheet wedge behind the camera).
+        // setupFog equivalent. Mirrors upstream GameRenderer::setupFog
+        // (GameRenderer.cpp:2102+) and the fog-color computation at
+        // GameRenderer.cpp:1944-1968. Fog color = Level::getFogColor (muted
+        // blue tones from the colour table, modulated by time-of-day
+        // brightness). Then at low view distance, blend toward the
+        // sunrise-color palette in proportion to how much the view vector
+        // points toward the sun. That blend creates the "warm horizon
+        // toward the sun at dawn/dusk" effect.
         //
-        // Defer the sunrise sun-direction blend (needs view vector dot
-        // sun angle + getSunriseColor). The basic fog-equals-sky-color
-        // is enough to dissolve the wedge into horizon haze.
-        //
-        // Upstream renderSky and prepareAndRenderClouds toggle GL_FOG
-        // internally for sun/moon/stars (which shouldn't fade), so our
-        // glEnable(GL_FOG) shim tracking handles the per-pass on/off
-        // sequence automatically.
+        // Upstream renderSky toggles GL_FOG via glEnable/glDisable around
+        // sun/moon/stars so they don't fade; our shim tracks those.
         {
-            float sr = 0.47f, sg = 0.65f, sb = 1.0f;
-            mcle_world_get_sky_color(&sr, &sg, &sb);
+            float fr = 0.47f, fg = 0.65f, fb = 1.0f;
+            if (g_initState == kStateTicking && g_levels[0] && g_player) {
+                try {
+                    Vec3 *fc = g_levels[0]->getFogColor(frame_partial_tick);
+                    if (fc) { fr = (float)fc->x; fg = (float)fc->y; fb = (float)fc->z; }
+
+                    // Sunrise sun-direction blend. Upstream picks (-1,0,0)
+                    // when sin(sunAngle) > 0 (afternoon/sunset side), else
+                    // (+1,0,0) for morning/sunrise side. View vector dot
+                    // gives "how much player looks toward sun"; mixed in
+                    // by sunrise alpha.
+                    float td = g_levels[0]->getTimeOfDay(frame_partial_tick);
+                    float sunAngle = g_levels[0]->getSunAngle(frame_partial_tick);
+                    float sunDirX = (std::sin(sunAngle) > 0.0f) ? -1.0f : 1.0f;
+                    Vec3 *vv = g_player->getViewVector(frame_partial_tick);
+                    if (vv) {
+                        float d = (float)vv->x * sunDirX;
+                        if (d < 0.0f) d = 0.0f;
+                        if (d > 0.0f) {
+                            Dimension *dim = g_levels[0]->dimension;
+                            if (dim) {
+                                float *c = dim->getSunriseColor(td, frame_partial_tick);
+                                if (c) {
+                                    d *= c[3];
+                                    fr = fr * (1.0f - d) + c[0] * d;
+                                    fg = fg * (1.0f - d) + c[1] * d;
+                                    fb = fb * (1.0f - d) + c[2] * d;
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {
+                    // Keep fallback values on any throw - safer than
+                    // disabling fog mid-frame.
+                }
+            }
             const float renderDistance = 256.0f;  // viewDistance=0 in our build
-            mcle_glbridge_set_fog_color(sr, sg, sb, 1.0f);
+            mcle_glbridge_set_fog_color(fr, fg, fb, 1.0f);
             mcle_glbridge_set_fog_start(renderDistance * 0.25f);
             mcle_glbridge_set_fog_end(renderDistance);
             mcle_glbridge_set_fog_enabled(1);
