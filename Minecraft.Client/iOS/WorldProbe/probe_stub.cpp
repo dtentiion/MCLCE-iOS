@@ -138,15 +138,18 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 extern "C" void mcle_glbridge_set_depth_test(int enabled);
 extern "C" void mcle_glbridge_set_blend_enabled(int enabled);
 extern "C" void mcle_glbridge_set_alpha_test(int enabled);
+extern "C" void mcle_glbridge_set_fog_enabled(int enabled);
 void glEnable(unsigned int cap) {
     if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(1);
     else if (cap == 0x0BE2 /*GL_BLEND*/)      mcle_glbridge_set_blend_enabled(1);
     else if (cap == 0x0BC0 /*GL_ALPHA_TEST*/) mcle_glbridge_set_alpha_test(1);
+    else if (cap == 0x0B60 /*GL_FOG*/)        mcle_glbridge_set_fog_enabled(1);
 }
 void glDisable(unsigned int cap) {
     if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(0);
     else if (cap == 0x0BE2 /*GL_BLEND*/)      mcle_glbridge_set_blend_enabled(0);
     else if (cap == 0x0BC0 /*GL_ALPHA_TEST*/) mcle_glbridge_set_alpha_test(0);
+    else if (cap == 0x0B60 /*GL_FOG*/)        mcle_glbridge_set_fog_enabled(0);
 }
 void glClear(unsigned int)                                 {}
 void glClearColor(float, float, float, float)              {}
@@ -276,9 +279,26 @@ void glGetFloat(int, FloatBuffer*)                         {} // upstream Frustu
 void glTexGeni(unsigned int, unsigned int, int)            {} // TheEndPortalRenderer.cpp
 void glTexGenfv(unsigned int, unsigned int, const float*)  {} // TheEndPortalRenderer.cpp
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
-void glFogf(unsigned int, float)                           {}
-void glFogi(unsigned int, int)                             {}
-void glFogfv(unsigned int, const float*)                   {}
+// Fog parameter shim. Upstream GameRenderer::setupFog issues:
+//   glFog(GL_FOG_COLOR, vec4)        - via glFogfv
+//   glFogi(GL_FOG_MODE, GL_LINEAR)   - we always linear; no-op
+//   glFogf(GL_FOG_START, near)
+//   glFogf(GL_FOG_END, far)
+// GL constants: GL_FOG_COLOR=0x0B66, GL_FOG_MODE=0x0B65,
+// GL_FOG_START=0x0B63, GL_FOG_END=0x0B64.
+extern "C" void mcle_glbridge_set_fog_color(float r, float g, float b, float a);
+extern "C" void mcle_glbridge_set_fog_start(float v);
+extern "C" void mcle_glbridge_set_fog_end(float v);
+void glFogf(unsigned int pname, float param) {
+    if (pname == 0x0B63 /*GL_FOG_START*/) mcle_glbridge_set_fog_start(param);
+    else if (pname == 0x0B64 /*GL_FOG_END*/) mcle_glbridge_set_fog_end(param);
+}
+void glFogi(unsigned int, int) {}  // mode/distance hint - we always do linear
+void glFogfv(unsigned int pname, const float *params) {
+    if (pname == 0x0B66 /*GL_FOG_COLOR*/ && params) {
+        mcle_glbridge_set_fog_color(params[0], params[1], params[2], params[3]);
+    }
+}
 void glMultMatrixf(const float*)                           {}
 void glLoadMatrixf(const float*)                           {}
 void glGetFloatv(unsigned int, float*)                     {}

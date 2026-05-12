@@ -1480,6 +1480,37 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
+        // Minimal setupFog equivalent. Upstream GameRenderer::setupFog
+        // (GameRenderer.cpp:2102) builds fog color from getFogColor with
+        // a sunrise blend toward sun direction, then sets GL_FOG_START /
+        // GL_FOG_END based on render distance. We replicate just the
+        // basics here so the cloud sheet, chunk horizon, etc. fade into
+        // the sky color at distance instead of forming sharp perspective
+        // edges (e.g. the cloud-sheet wedge behind the camera).
+        //
+        // Defer the sunrise sun-direction blend (needs view vector dot
+        // sun angle + getSunriseColor). The basic fog-equals-sky-color
+        // is enough to dissolve the wedge into horizon haze.
+        //
+        // Upstream renderSky and prepareAndRenderClouds toggle GL_FOG
+        // internally for sun/moon/stars (which shouldn't fade), so our
+        // glEnable(GL_FOG) shim tracking handles the per-pass on/off
+        // sequence automatically.
+        {
+            extern "C" void mcle_glbridge_set_fog_enabled(int);
+            extern "C" void mcle_glbridge_set_fog_color(float, float, float, float);
+            extern "C" void mcle_glbridge_set_fog_start(float);
+            extern "C" void mcle_glbridge_set_fog_end(float);
+            extern "C" void mcle_world_get_sky_color(float *, float *, float *);
+            float sr = 0.47f, sg = 0.65f, sb = 1.0f;
+            mcle_world_get_sky_color(&sr, &sg, &sb);
+            const float renderDistance = 256.0f;  // viewDistance=0 in our build
+            mcle_glbridge_set_fog_color(sr, sg, sb, 1.0f);
+            mcle_glbridge_set_fog_start(renderDistance * 0.25f);
+            mcle_glbridge_set_fog_end(renderDistance);
+            mcle_glbridge_set_fog_enabled(1);
+        }
+
         // Bind the terrain atlas before chunks render. Upstream's
         // GameRenderer::renderLevel does this; we don't run GameRenderer
         // so we call it directly here. Routes to our patched
