@@ -1600,6 +1600,22 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
+        // Diagnostic for star rendering. getStarBrightness should be >0
+        // at night so glCallList(starList) actually fires inside renderSky
+        // (upstream LevelRenderer.cpp:1138-1142). If brightness is 0 at
+        // what looks like night, the time-of-day or dimension check is
+        // wrong. If brightness is >0 but no stars appear, the starList
+        // capture didn't happen at LevelRenderer ctor time.
+        {
+            static int s_starDiag = 0;
+            if ((s_starDiag++ % 60) == 0 && g_levels[0]) {
+                try {
+                    float sb = g_levels[0]->getStarBrightness(frame_partial_tick);
+                    MCLE_LOG("STAR_CKPT log=%d starBrightness=%.4f",
+                             s_starDiag, sb);
+                } catch (...) {}
+            }
+        }
         try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
         // Modelview at this point should match what entered renderSky.
         // Upstream renderClouds expects: rotations + eye-height translate,

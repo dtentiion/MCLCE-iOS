@@ -1440,6 +1440,24 @@ extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
 }
 
 extern "C" void mcle_glbridge_end_list(void) {
+    // Diagnostic: log every list ID + draw count captured. Used to confirm
+    // the starList capture inside LevelRenderer ctor (line 167-172 upstream)
+    // actually executes - if no LIST_END entry near the chunkLists range,
+    // upstream's renderStars() didn't fire and stars will never render.
+    {
+        static int s_count = 0;
+        if (s_count < 50) {
+            int id = g_recording_list;
+            int draws = 0;
+            auto it = g_lists.find(id);
+            if (it != g_lists.end()) draws = (int)it->second.draws.size();
+            extern int mcle_log_msg(const char *);
+            char buf[80];
+            snprintf(buf, sizeof(buf), "LIST_END id=%d draws=%d", id, draws);
+            mcle_log_msg(buf);
+            s_count++;
+        }
+    }
     g_recording_list = 0;
 }
 
