@@ -1570,6 +1570,31 @@ extern "C" void mcle_world_drive_renderer(void) {
         }
 
         try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
+        // Modelview at this point should match what entered renderSky.
+        // Upstream renderClouds expects: rotations + eye-height translate,
+        // no XZ player translate. Log every 60 frames so we can confirm
+        // matrix state hasn't been corrupted by renderChunks/renderSky's
+        // push/pops.
+        {
+            static int s_mvCloud = 0;
+            if ((s_mvCloud++ % 60) == 0) {
+                float mv[16] = {0};
+                extern void mcle_glbridge_get_modelview(float *out16);
+                mcle_glbridge_get_modelview(mv);
+                MCLE_LOG("MV_CLOUD log=%d row0=[%.3f %.3f %.3f %.3f] row1=[%.3f %.3f %.3f %.3f] row2=[%.3f %.3f %.3f %.3f] row3=[%.3f %.3f %.3f %.3f]",
+                         s_mvCloud,
+                         mv[0],  mv[1],  mv[2],  mv[3],
+                         mv[4],  mv[5],  mv[6],  mv[7],
+                         mv[8],  mv[9],  mv[10], mv[11],
+                         mv[12], mv[13], mv[14], mv[15]);
+                if (g_player) {
+                    MCLE_LOG("MV_CLOUD log=%d player_x=%.2f y=%.2f z=%.2f xRot=%.1f yRot=%.1f",
+                             s_mvCloud,
+                             (float)g_player->x, (float)g_player->y, (float)g_player->z,
+                             g_player->xRot, g_player->yRot);
+                }
+            }
+        }
         try { g_levelRenderer->renderClouds(frame_partial_tick); } catch (...) {}
 
         // HUD: parity with upstream GameRenderer::render which calls
