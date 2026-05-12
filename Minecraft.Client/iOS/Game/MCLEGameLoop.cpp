@@ -1504,24 +1504,26 @@ extern "C" void mcle_world_drive_renderer(void) {
                     Vec3 *fc = g_levels[0]->getFogColor(frame_partial_tick);
                     if (fc) { fr = (float)fc->x; fg = (float)fc->y; fb = (float)fc->z; }
 
-                    // Sunrise sun-direction blend. Upstream picks (-1,0,0)
-                    // when sin(sunAngle) > 0 (afternoon/sunset side), else
-                    // (+1,0,0) for morning/sunrise side. View vector dot
-                    // gives "how much player looks toward sun"; mixed in
-                    // by sunrise alpha.
                     float td = g_levels[0]->getTimeOfDay(frame_partial_tick);
                     float sunAngle = g_levels[0]->getSunAngle(frame_partial_tick);
                     float sunDirX = (std::sin(sunAngle) > 0.0f) ? -1.0f : 1.0f;
                     Vec3 *vv = g_player->getViewVector(frame_partial_tick);
+                    float d_raw = 0.0f, d_blend = 0.0f;
+                    int sunrise_ok = 0;
+                    float c0 = 0, c1 = 0, c2 = 0, c3 = 0;
                     if (vv) {
-                        float d = (float)vv->x * sunDirX;
+                        d_raw = (float)vv->x * sunDirX;
+                        float d = d_raw;
                         if (d < 0.0f) d = 0.0f;
                         if (d > 0.0f) {
                             Dimension *dim = g_levels[0]->dimension;
                             if (dim) {
                                 float *c = dim->getSunriseColor(td, frame_partial_tick);
                                 if (c) {
+                                    sunrise_ok = 1;
+                                    c0 = c[0]; c1 = c[1]; c2 = c[2]; c3 = c[3];
                                     d *= c[3];
+                                    d_blend = d;
                                     fr = fr * (1.0f - d) + c[0] * d;
                                     fg = fg * (1.0f - d) + c[1] * d;
                                     fb = fb * (1.0f - d) + c[2] * d;
@@ -1529,9 +1531,20 @@ extern "C" void mcle_world_drive_renderer(void) {
                             }
                         }
                     }
+                    // Every 30 frames, dump the blend inputs so we can
+                    // see why the sunrise tint isn't showing visually.
+                    {
+                        static int s_fb = 0;
+                        if ((s_fb++ % 30) == 0) {
+                            MCLE_LOG("FOG_BLEND td=%.3f sunAngle=%.3f sunDirX=%.1f vv_x=%.3f d_raw=%.3f sunriseOk=%d sunrise=(%.2f,%.2f,%.2f,%.2f) d_blend=%.3f fog=(%.3f,%.3f,%.3f)",
+                                     td, sunAngle, sunDirX,
+                                     vv ? (float)vv->x : 0.0f, d_raw,
+                                     sunrise_ok, c0, c1, c2, c3,
+                                     d_blend, fr, fg, fb);
+                        }
+                    }
                 } catch (...) {
-                    // Keep fallback values on any throw - safer than
-                    // disabling fog mid-frame.
+                    MCLE_LOG("FOG_BLEND threw");
                 }
             }
             const float renderDistance = 256.0f;  // viewDistance=0 in our build
