@@ -1091,8 +1091,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     // effect off when GL_FOG is disabled - matches GL fixed-function.
     {
         float modelview[16];
-        extern void mcle_glbridge_get_modelview(float *out16);
-        mcle_glbridge_get_modelview(modelview);
+        ::mcle_glbridge_get_modelview(modelview);
         // Row 2 of a column-major 4x4 = elements [2, 6, 10, 14].
         float fogBuf[12] = {
             g_fog_r, g_fog_g, g_fog_b, g_fog_enabled ? 1.0f : 0.0f,
