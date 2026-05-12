@@ -144,6 +144,15 @@ id<MTLDepthStencilState> g_lastDepthState = nil;
 // glAlphaFunc(GL_GREATER, 0.1).
 bool g_alpha_test_enabled = true;
 
+// Fog state. Mirrors upstream GameRenderer::setupFog which calls
+// glFog(GL_FOG_COLOR), glFogi(GL_FOG_MODE), glFogf(GL_FOG_START/END).
+// Default off (matches GL initial state). Fragment shader applies
+// linear fog over eye-space depth.
+bool  g_fog_enabled = false;
+float g_fog_r = 0.0f, g_fog_g = 0.0f, g_fog_b = 0.0f;
+float g_fog_start = 0.0f;
+float g_fog_end   = 1.0f;
+
 // glEnable/glDisable(GL_BLEND) tracking. Default off (matches upstream
 // initial GL state). When on, immediate_dispatch picks the blending
 // pipeline variant (srcAlpha/oneMinusSrcAlpha) so transparent edges of
@@ -162,6 +171,15 @@ extern "C" void mcle_glbridge_set_depth_test(int enabled) {
 extern "C" void mcle_glbridge_set_depth_write(int enabled) {
     g_depth_write_enabled = (enabled != 0);
 }
+
+extern "C" void mcle_glbridge_set_fog_enabled(int enabled) {
+    g_fog_enabled = (enabled != 0);
+}
+extern "C" void mcle_glbridge_set_fog_color(float r, float gr, float b, float /*a*/) {
+    g_fog_r = r; g_fog_g = gr; g_fog_b = b;
+}
+extern "C" void mcle_glbridge_set_fog_start(float v) { g_fog_start = v; }
+extern "C" void mcle_glbridge_set_fog_end(float v)   { g_fog_end   = v; }
 
 extern "C" void mcle_glbridge_set_alpha_test(int enabled) {
     g_alpha_test_enabled = (enabled != 0);
@@ -228,6 +246,7 @@ NSString* const kWorldShaderSrc = @R"(
         float4 pos [[position]];
         float4 color;
         float2 uv;
+        float  fogDist;  // eye-space depth for distance fog
     };
     struct MVPUniforms {
         float4x4 mvp;
@@ -235,51 +254,62 @@ NSString* const kWorldShaderSrc = @R"(
     struct ColorUniforms {
         float4 currentColor;
     };
+    // FogParams.fogColor.w doubles as the fog-enabled flag (1.0 = on,
+    // 0.0 = off). Parity with upstream's GL_FOG state: when fogEnabled
+    // is 0 the mix factor collapses to 0 and the fragment passes through
+    // unchanged.
+    struct FogParams {
+        float4 fogColor;        // rgb + enabled
+        float4 fogRange;        // start in x, end in y, modeLinear in z
+        float4 modelviewRow2;   // row 2 of modelview for eye-z calc
+    };
 
-    // G3f: per-vertex color is modulated with the current GL color
-    // (set via glColor3f / glColor4f). Matches D3D9 fixed-function
-    // modulate so glCallList replays pick up the live sky/sunset/sun
-    // tint that renderSky sets before the dispatch.
-    // G4: UV passed through to fragment shader for texture sampling.
     vertex V_out world_vert(V_in v [[stage_in]],
                              constant MVPUniforms&   m [[buffer(1)]],
-                             constant ColorUniforms& c [[buffer(2)]]) {
+                             constant ColorUniforms& c [[buffer(2)]],
+                             constant FogParams&     f [[buffer(3)]]) {
         V_out o;
         o.pos   = m.mvp * float4(v.pos, 1.0);
         float4 vc = float4(v.color) / 255.0;
         o.color = vc * c.currentColor;
         o.uv    = v.uv;
+        // Eye-space distance. Upstream uses GL_LINEAR fog over eye-Z
+        // (default GL_FOG_DISTANCE_MODE) - we mirror by projecting the
+        // world position onto the modelview's row 2 axis, then taking
+        // its absolute value. Matches the depth distance a fragment is
+        // from the camera in eye space.
+        o.fogDist = abs(dot(f.modelviewRow2, float4(v.pos, 1.0)));
         return o;
     }
 
-    // G4: sample current bound texture and modulate with the per-vertex
-    // colour (which is already vertex_color * currentColor from above).
-    // Untextured paths bind a 1x1 white texture so sample returns 1.0
-    // and the output reduces to just the colour.
-    // Alpha test (parity with upstream glAlphaFunc(GL_GREATER, 0.1) +
-    // glEnable(GL_ALPHA_TEST)): discard fragments with low texture alpha
-    // so foliage / flowers / cross sprites have transparent surrounds
-    // instead of black squares. renderSky calls glDisable(GL_ALPHA_TEST)
-    // before drawing the sun/moon (LevelRenderer.cpp:1047) so their
-    // semi-transparent bodies aren't discarded; we honor that via a
-    // CPU-side flag that passes 0.0 vs 0.1 as the threshold here.
-    fragment float4 world_frag(V_out i           [[stage_in]],
-                                texture2d<float> tex     [[texture(0)]],
-                                sampler          texSamp [[sampler(0)]]) {
-        float4 t = tex.sample(texSamp, i.uv);
-        if (t.a < 0.1) discard_fragment();
-        return i.color * t;
+    // Apply linear distance fog. factor goes 0 at fogStart to 1 at
+    // fogEnd, then mixes output toward fog color. fogColor.w gates the
+    // effect off entirely when GL_FOG is disabled.
+    float3 apply_fog(float3 rgb, float fogDist, constant FogParams& f) {
+        float t = clamp((fogDist - f.fogRange.x) /
+                        (f.fogRange.y - f.fogRange.x), 0.0, 1.0);
+        return mix(rgb, f.fogColor.rgb, t * f.fogColor.w);
     }
 
-    // No-cutout variant for sun/moon path. renderSky's
-    // glDisable(GL_ALPHA_TEST) before drawing the sun/moon needs us to
-    // skip the discard so semi-transparent body pixels survive into
-    // the additive blend.
-    fragment float4 world_frag_nocut(V_out i           [[stage_in]],
-                                      texture2d<float> tex     [[texture(0)]],
-                                      sampler          texSamp [[sampler(0)]]) {
+    fragment float4 world_frag(V_out i           [[stage_in]],
+                                texture2d<float>     tex     [[texture(0)]],
+                                sampler              texSamp [[sampler(0)]],
+                                constant FogParams&  f       [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
-        return i.color * t;
+        if (t.a < 0.1) discard_fragment();
+        float4 outc = i.color * t;
+        outc.rgb = apply_fog(outc.rgb, i.fogDist, f);
+        return outc;
+    }
+
+    fragment float4 world_frag_nocut(V_out i           [[stage_in]],
+                                      texture2d<float>     tex     [[texture(0)]],
+                                      sampler              texSamp [[sampler(0)]],
+                                      constant FogParams&  f       [[buffer(3)]]) {
+        float4 t = tex.sample(texSamp, i.uv);
+        float4 outc = i.color * t;
+        outc.rgb = apply_fog(outc.rgb, i.fogDist, f);
+        return outc;
     }
 )";
 
@@ -301,13 +331,20 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float4 pos [[position]];
         float4 color;
         float2 uv;
+        float  fogDist;
     };
     struct MVPUniforms   { float4x4 mvp; };
     struct ColorUniforms { float4 currentColor; };
+    struct FogParams {
+        float4 fogColor;
+        float4 fogRange;
+        float4 modelviewRow2;
+    };
 
     vertex V_out world_vert_compact(V_in_c v [[stage_in]],
                                      constant MVPUniforms&   m [[buffer(1)]],
-                                     constant ColorUniforms& c [[buffer(2)]]) {
+                                     constant ColorUniforms& c [[buffer(2)]],
+                                     constant FogParams&     f [[buffer(3)]]) {
         V_out o;
         float3 pos = float3(v.pos) / 1024.0;
         float2 uv  = float2(v.uv) / 8192.0;
@@ -320,6 +357,7 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float g = float((packed      ) & 0x1F) / 31.0;
         o.color = float4(r, g, a, 1.0) * c.currentColor;
         o.uv    = uv;
+        o.fogDist = abs(dot(f.modelviewRow2, float4(pos, 1.0)));
         return o;
     }
 )";
@@ -1047,6 +1085,24 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
     [g.enc setVertexBytes:g_current_color length:sizeof(g_current_color) atIndex:2];
 
+    // Fog uniforms at vertex/fragment buffer 3. Vertex shader reads
+    // modelviewRow2 to compute eye-space depth; fragment reads fogColor
+    // + fogRange to mix output toward fog color. fogColor.w gates the
+    // effect off when GL_FOG is disabled - matches GL fixed-function.
+    {
+        float modelview[16];
+        extern void mcle_glbridge_get_modelview(float *out16);
+        mcle_glbridge_get_modelview(modelview);
+        // Row 2 of a column-major 4x4 = elements [2, 6, 10, 14].
+        float fogBuf[12] = {
+            g_fog_r, g_fog_g, g_fog_b, g_fog_enabled ? 1.0f : 0.0f,
+            g_fog_start, g_fog_end, 0.0f, 0.0f,
+            modelview[2], modelview[6], modelview[10], modelview[14]
+        };
+        [g.enc setVertexBytes:fogBuf   length:sizeof(fogBuf) atIndex:3];
+        [g.enc setFragmentBytes:fogBuf length:sizeof(fogBuf) atIndex:3];
+    }
+
     // G4: bind whatever's current (defaults to 1x1 white) + sampler.
     id<MTLTexture> tex = g_current_texture ? g_current_texture : g_default_texture;
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
@@ -1259,14 +1315,16 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
     // Each frame starts with depth test/write enabled, alpha test on
-    // (chunks need cutout for foliage), blend disabled (matches upstream
-    // default GL state). renderSky/renderClouds glEnable(GL_BLEND),
-    // glDepthMask, glDisable(GL_ALPHA_TEST) etc. flip these via the bridge.
+    // (chunks need cutout for foliage), blend disabled, fog disabled
+    // (matches upstream default GL state). renderSky/renderClouds
+    // glEnable(GL_BLEND), glEnable(GL_FOG), glDepthMask,
+    // glDisable(GL_ALPHA_TEST) etc. flip these via the bridge.
     g_depth_test_enabled  = true;
     g_depth_write_enabled = true;
     g_alpha_test_enabled  = true;
     g_blend_enabled       = false;
     g_blend_func_mode     = 0;
+    g_fog_enabled         = false;
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
     // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
