@@ -1325,6 +1325,11 @@ extern "C" void mcle_glbridge_matrix_mode(int mode);
 extern "C" void mcle_glbridge_load_identity(void);
 extern "C" void mcle_glbridge_translate(float, float, float);
 extern "C" void mcle_glbridge_rotate(float angle_deg, float x, float y, float z);
+extern "C" void mcle_glbridge_set_fog_enabled(int enabled);
+extern "C" void mcle_glbridge_set_fog_color(float r, float g, float b, float a);
+extern "C" void mcle_glbridge_set_fog_start(float v);
+extern "C" void mcle_glbridge_set_fog_end(float v);
+extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
 extern "C" void mcle_metal_current_size(int*, int*);
 extern "C" int  mcle_ios_input_poll_rx(int pad);
 extern "C" int  mcle_ios_input_poll_ry(int pad);
@@ -1497,11 +1502,6 @@ extern "C" void mcle_world_drive_renderer(void) {
         // glEnable(GL_FOG) shim tracking handles the per-pass on/off
         // sequence automatically.
         {
-            extern "C" void mcle_glbridge_set_fog_enabled(int);
-            extern "C" void mcle_glbridge_set_fog_color(float, float, float, float);
-            extern "C" void mcle_glbridge_set_fog_start(float);
-            extern "C" void mcle_glbridge_set_fog_end(float);
-            extern "C" void mcle_world_get_sky_color(float *, float *, float *);
             float sr = 0.47f, sg = 0.65f, sb = 1.0f;
             mcle_world_get_sky_color(&sr, &sg, &sb);
             const float renderDistance = 256.0f;  // viewDistance=0 in our build
