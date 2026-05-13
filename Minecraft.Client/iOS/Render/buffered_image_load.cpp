@@ -99,11 +99,27 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
         if (p.rfind(pfx, 0) == 0) return pfx + "1_2_2/" + p.substr(pfx.size());
         return "1_2_2/" + p;
     };
-    const std::string rel122 = with_1_2_2(rel);
-    if (!found)                  found = try_path("rel",          rel);
-    if (!found && !root.empty()) found = try_path("doc+rel",      root + "/" + rel);
-    if (!found)                  found = try_path("rel122",       rel122);
-    if (!found && !root.empty()) found = try_path("doc+rel122",   root + "/" + rel122);
+    auto with_tu_inner = [](const std::string &p) -> std::string {
+        const std::string pfx = "Common/res/";
+        if (p.rfind(pfx, 0) == 0) return pfx + "TitleUpdate/res/" + p.substr(pfx.size());
+        return "Common/res/TitleUpdate/res/" + p;
+    };
+    auto with_tu_sibling = [](const std::string &p) -> std::string {
+        const std::string pfx = "Common/res/";
+        if (p.rfind(pfx, 0) == 0) return "Common/TitleUpdate/res/" + p.substr(pfx.size());
+        return "Common/TitleUpdate/res/" + p;
+    };
+    const std::string rel122    = with_1_2_2(rel);
+    const std::string relTUin   = with_tu_inner(rel);
+    const std::string relTUsib  = with_tu_sibling(rel);
+    if (!found)                  found = try_path("rel",            rel);
+    if (!found)                  found = try_path("relTUin",        relTUin);
+    if (!found && !root.empty()) found = try_path("doc+relTUin",    root + "/" + relTUin);
+    if (!found)                  found = try_path("relTUsib",       relTUsib);
+    if (!found && !root.empty()) found = try_path("doc+relTUsib",   root + "/" + relTUsib);
+    if (!found && !root.empty()) found = try_path("doc+rel",        root + "/" + rel);
+    if (!found)                  found = try_path("rel122",         rel122);
+    if (!found && !root.empty()) found = try_path("doc+rel122",     root + "/" + rel122);
     {
         std::string m = std::string("BIL_CKPT path=") + path + " full=" + full +
             " exists=" + (found ? "1" : "0");
