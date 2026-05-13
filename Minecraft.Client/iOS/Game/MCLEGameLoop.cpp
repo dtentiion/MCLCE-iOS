@@ -79,6 +79,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/Recipes.h"
 #include "../../../upstream/Minecraft.World/Tile.h"
+#include "../../../upstream/Minecraft.World/GrassTile.h"
 #include "../../../upstream/Minecraft.World/Icon.h"
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
