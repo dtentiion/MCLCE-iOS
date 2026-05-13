@@ -259,12 +259,19 @@ extern "C" int mcle_log_msg(const char *msg);
 static void load_colours_xml(unsigned int *vals, size_t n) {
     const char *root = ios_documents_dir();
     if (!root || !*root) return;
-    // Two candidate paths (TU 1.2.2 flattens onto Common/res/ at install
-    // time on Win64/Xbox; our iOS bundle preserves the subfolder).
-    const std::string p1 = std::string(root) + "/Common/res/TitleUpdate/res/colours.xml";
-    const std::string p2 = std::string(root) + "/Common/res/1_2_2/TitleUpdate/res/colours.xml";
+    // Search order mirrors bindTexture / buffered_image_load: try the
+    // canonical Win64 path first (Common/res/TitleUpdate/res/), then
+    // the sibling layout users typically have on iOS
+    // (Common/TitleUpdate/res/), then 1_2_2 source, then base.
+    const std::string base = std::string(root) + "/Common/";
+    const std::string p1 = base + "res/TitleUpdate/res/colours.xml";
+    const std::string p2 = base + "TitleUpdate/res/colours.xml";
+    const std::string p3 = base + "res/1_2_2/TitleUpdate/res/colours.xml";
+    const std::string p4 = base + "res/colours.xml";
     std::ifstream f(p1);
     if (!f.is_open()) f.open(p2);
+    if (!f.is_open()) f.open(p3);
+    if (!f.is_open()) f.open(p4);
     if (!f.is_open()) {
         mcle_log_msg("CT_XML colours.xml not found, using plains-blue fallback");
         return;
