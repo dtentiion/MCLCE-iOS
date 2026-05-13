@@ -1460,3 +1460,10 @@ if [ -f "$RCS_PY" ]; then
     python3 "$RCS_PY"
 fi
 
+# ColourTable.h: expose the static name table publicly so our iOS shim
+# can parse colours.xml and look up names against it.
+CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
+if [ -f "$CTP_PY" ]; then
+    python3 "$CTP_PY"
+fi
+
