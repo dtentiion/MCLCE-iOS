@@ -1467,3 +1467,10 @@ if [ -f "$CTP_PY" ]; then
     python3 "$CTP_PY"
 fi
 
+# TileRenderer.cpp: one-shot diagnostic inside the grass-side overlay
+# second pass so we can see pBase / vertex color values when it fires.
+GOL_PY="$REPO_ROOT/scripts/patch-grasside-overlay-log.py"
+if [ -f "$GOL_PY" ]; then
+    python3 "$GOL_PY"
+fi
+
