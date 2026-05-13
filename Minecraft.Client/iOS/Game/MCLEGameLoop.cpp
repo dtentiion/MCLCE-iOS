@@ -1039,6 +1039,21 @@ void initImpl() {
                                  dirtIcon->getU0(true), dirtIcon->getV0(true),
                                  dirtIcon->getU1(true), dirtIcon->getV1(true));
                     }
+                    // Grass side: check the IS_GRASS_SIDE flag (1) is set
+                    // and the iconSideOverlay pointer is non-null. Either
+                    // missing breaks the second-pass biome-tint overlay
+                    // at TileRenderer.cpp:5599+ that gives grass sides
+                    // their biome color.
+                    Icon *grassSide = grassTile ? grassTile->getTexture(2) : nullptr;
+                    int sideFlags = grassSide ? grassSide->getFlags() : -1;
+                    Icon *sideOverlay = GrassTile::getSideTextureOverlay();
+                    MCLE_LOG("ICON_CKPT grassSide=%p flags=%d (IS_GRASS_SIDE=1) sideOverlay=%p",
+                             grassSide, sideFlags, sideOverlay);
+                    if (sideOverlay) {
+                        MCLE_LOG("ICON_CKPT sideOverlay uv u0=%f v0=%f u1=%f v1=%f",
+                                 sideOverlay->getU0(true), sideOverlay->getV0(true),
+                                 sideOverlay->getU1(true), sideOverlay->getV1(true));
+                    }
                 } catch (...) {
                     MCLE_LOG("ICON_CKPT diagnostic threw");
                 }
