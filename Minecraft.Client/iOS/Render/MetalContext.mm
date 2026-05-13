@@ -349,13 +349,17 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float3 pos = float3(v.pos) / 1024.0;
         float2 uv  = float2(v.uv) / 8192.0;
         o.pos   = m.mvp * float4(pos, 1.0);
-        // Decode packed 5:6:5-ish lighting color. Stored as signed int16
-        // shifted by -32768 so we offset back. Then unpack as A:R:G bit fields.
+        // Decode RGB565 packed color. Upstream Tesselator.cpp:774-776 packs
+        // as: bits 15-11 = top 5 of R, bits 10-5 = top 6 of G, bits 4-0 =
+        // top 5 of B (alpha dropped). The source `col` is in RGBA byte
+        // order from Tesselator::color line 326: (r<<24) | (g<<16) |
+        // (b<<8) | a. Signed int16 stored with -32768 offset so we add
+        // back to get the unsigned 0..65535 packed value.
         int packed = int(v.pcol) + 32768;
-        float a = float((packed >> 11) & 0x1F) / 31.0;
-        float r = float((packed >>  5) & 0x3F) / 63.0;
-        float g = float((packed      ) & 0x1F) / 31.0;
-        o.color = float4(r, g, a, 1.0) * c.currentColor;
+        float src_r = float((packed >> 11) & 0x1F) / 31.0;
+        float src_g = float((packed >>  5) & 0x3F) / 63.0;
+        float src_b = float((packed      ) & 0x1F) / 31.0;
+        o.color = float4(src_r, src_g, src_b, 1.0) * c.currentColor;
         o.uv    = uv;
         o.fogDist = abs(dot(f.modelviewRow2, float4(pos, 1.0)));
         return o;
