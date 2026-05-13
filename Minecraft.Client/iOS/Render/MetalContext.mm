@@ -724,6 +724,12 @@ extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path) {
     FILE* f = fopen(path, "rb");
     if (!f) {
         NSLog(@"[mcle_glbridge G4] PNG missing: %s", path);
+        // Also log to crash_log.txt so we can diagnose load-order issues
+        // in shared logs. Otherwise these attempts only land in NSLog
+        // (Apple system log) which the user can't easily capture.
+        extern int mcle_log_msg(const char *);
+        std::string m = std::string("PNG_MISSING ") + path;
+        mcle_log_msg(m.c_str());
         g_path_to_tex[path] = 0;
         return 0;
     }
@@ -754,6 +760,16 @@ extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path) {
     mcle_png_decode_free(rgba);
     g_path_to_tex[path] = id;
     NSLog(@"[mcle_glbridge G4] loaded %s -> id=%u (%dx%d)", path, id, w, h);
+    {
+        // Also log to crash_log.txt - critical for diagnosing which file
+        // path wins the bindTexture fallback chain (TitleUpdate/res vs
+        // 1_2_2/ vs base) and what atlas dimensions the result has.
+        extern int mcle_log_msg(const char *);
+        char buf[512];
+        snprintf(buf, sizeof(buf), "PNG_LOADED %s -> id=%u (%dx%d)",
+                 path, id, w, h);
+        mcle_log_msg(buf);
+    }
     return id;
 }
 
