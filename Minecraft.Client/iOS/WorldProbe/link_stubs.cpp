@@ -241,13 +241,82 @@ const int AddEntityPacket::FISH_HOOK;
 // iOS shell never reaches into Minecraft, so safe defaults are fine.
 // ---------------------------------------------------------------------------
 Minecraft *Minecraft::m_instance = nullptr;
-// G3e-step3 / G3f: flood-filled ColourTable shim. ColourTable has no
-// virtuals, just an unsigned int array indexed by eMinecraftColour.
-// All entries are the plains sky tint (0x78A7FF) so any biome's
-// getSkyColor lookup returns a sane blue. Real DLC-loaded values land
-// when the texture-pack pipeline is wired (G4); this is a parity-safe
-// placeholder until then.
+// ColourTable shim. ColourTable is an unsigned int array indexed by
+// eMinecraftColour. Real upstream loads values from a DLC .col binary;
+// the authoring source is Common/res/TitleUpdate/res/colours.xml. We
+// parse the XML directly on first access so sunrise gradient, fog
+// color, cloud color, biome tints, etc. all get their proper LCE values
+// instead of a flat plains-blue fallback. The fallback (0x78A7FF) is
+// still used for any enum entries not present in the XML.
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
+#include <fstream>
+#include <sstream>
+#include <cwchar>
+#include <cstring>
+extern "C" const char *ios_documents_dir(void);
+extern "C" int mcle_log_msg(const char *msg);
+
+static void load_colours_xml(unsigned int *vals, size_t n) {
+    const char *root = ios_documents_dir();
+    if (!root || !*root) return;
+    // Two candidate paths (TU 1.2.2 flattens onto Common/res/ at install
+    // time on Win64/Xbox; our iOS bundle preserves the subfolder).
+    const std::string p1 = std::string(root) + "/Common/res/TitleUpdate/res/colours.xml";
+    const std::string p2 = std::string(root) + "/Common/res/1_2_2/TitleUpdate/res/colours.xml";
+    std::ifstream f(p1);
+    if (!f.is_open()) f.open(p2);
+    if (!f.is_open()) {
+        mcle_log_msg("CT_XML colours.xml not found, using plains-blue fallback");
+        return;
+    }
+    std::stringstream ss; ss << f.rdbuf();
+    const std::string xml = ss.str();
+    int hits = 0;
+    // Scan for <colour name="X" value="HEX"/> entries. The XML is small
+    // (~350 entries) so an O(N*M) name-lookup is fine.
+    size_t pos = 0;
+    while ((pos = xml.find("<colour ", pos)) != std::string::npos) {
+        size_t name_start = xml.find("name=\"", pos);
+        if (name_start == std::string::npos) break;
+        name_start += 6;
+        size_t name_end = xml.find('"', name_start);
+        if (name_end == std::string::npos) break;
+        size_t val_start = xml.find("value=\"", name_end);
+        if (val_start == std::string::npos) break;
+        val_start += 7;
+        size_t val_end = xml.find('"', val_start);
+        if (val_end == std::string::npos) break;
+        const std::string name = xml.substr(name_start, name_end - name_start);
+        const std::string val  = xml.substr(val_start,  val_end  - val_start);
+        unsigned int hex = 0;
+        for (char c : val) {
+            unsigned int d = 0;
+            if (c >= '0' && c <= '9') d = (unsigned)(c - '0');
+            else if (c >= 'a' && c <= 'f') d = 10 + (unsigned)(c - 'a');
+            else if (c >= 'A' && c <= 'F') d = 10 + (unsigned)(c - 'A');
+            else { hex = 0xFFFFFFFFu; break; }
+            hex = (hex << 4) | d;
+        }
+        if (hex != 0xFFFFFFFFu) {
+            // Linear search the ColourTableElements wchar_t array for a
+            // matching name. Convert ASCII C string to wstring for compare.
+            std::wstring wname(name.begin(), name.end());
+            for (size_t i = 0; i < n; i++) {
+                const wchar_t *elem = ColourTable::ColourTableElements[i];
+                if (elem && wcscmp(elem, wname.c_str()) == 0) {
+                    vals[i] = hex;
+                    hits++;
+                    break;
+                }
+            }
+        }
+        pos = val_end;
+    }
+    char buf[128];
+    snprintf(buf, sizeof(buf), "CT_XML parsed colours.xml: %d entries applied (of %zu)", hits, n);
+    mcle_log_msg(buf);
+}
+
 static ColourTable *get_colour_table_shim() {
     static char           s_buf[sizeof(ColourTable)];
     static bool           s_init = false;
@@ -255,6 +324,7 @@ static ColourTable *get_colour_table_shim() {
         unsigned int *vals = reinterpret_cast<unsigned int *>(s_buf);
         const size_t  n    = sizeof(ColourTable) / sizeof(unsigned int);
         for (size_t i = 0; i < n; i++) vals[i] = 0x78A7FF;
+        load_colours_xml(vals, n);
         s_init = true;
     }
     return reinterpret_cast<ColourTable *>(s_buf);
