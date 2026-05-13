@@ -1297,8 +1297,13 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
         g.depthTexH    = g.height;
     }
     if (!g.depthState) {
+        // LessEqual (not strict Less) for parity with upstream
+        // Minecraft.cpp:394 glDepthFunc(GL_LEQUAL). Lets the grass-side
+        // overlay's second pass (TileRenderer.cpp:5599+) render at the
+        // exact same Z as the first pass instead of being depth-discarded;
+        // also matches upstream's behavior for any other same-Z draws.
         MTLDepthStencilDescriptor* dsd = [[MTLDepthStencilDescriptor alloc] init];
-        dsd.depthCompareFunction = MTLCompareFunctionLess;
+        dsd.depthCompareFunction = MTLCompareFunctionLessEqual;
         dsd.depthWriteEnabled    = YES;
         g.depthState = [g.device newDepthStencilStateWithDescriptor:dsd];
     }
@@ -1310,7 +1315,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     }
     if (!g.depthStateNoWrite) {
         MTLDepthStencilDescriptor* dsd = [[MTLDepthStencilDescriptor alloc] init];
-        dsd.depthCompareFunction = MTLCompareFunctionLess;
+        dsd.depthCompareFunction = MTLCompareFunctionLessEqual;
         dsd.depthWriteEnabled    = NO;
         g.depthStateNoWrite = [g.device newDepthStencilStateWithDescriptor:dsd];
     }
