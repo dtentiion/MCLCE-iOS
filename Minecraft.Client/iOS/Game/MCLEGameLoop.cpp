@@ -866,6 +866,15 @@ void initImpl() {
         // always take the simple 2D path on iOS - so we get fancy leaves
         // without the unsupported advanced cloud path.
         g_minecraftShim->options->fancyGraphics = true;
+        // Ambient occlusion controls TileRenderer's per-vertex
+        // light-blending pass (TileRenderer.cpp:5246+). With it off, every
+        // face gets a single uniform light value from one block and
+        // shadows look blocky. With it on, each face corner averages the
+        // light of 4 neighbour blocks so shadows fade smoothly across
+        // tree canopies, terrain folds, etc. Upstream Options::init sets
+        // ambientOcclusion = true by default; our zero-buffer Options
+        // skips init so we have to set it explicitly.
+        g_minecraftShim->options->ambientOcclusion = true;
         MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
                  (void*)g_minecraftShim->options,
                  g_minecraftShim->options->viewDistance,
