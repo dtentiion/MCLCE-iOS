@@ -1576,36 +1576,46 @@ extern "C" void mcle_world_drive_renderer(void) {
         // GameRenderer::updateLightTexture (GameRenderer.cpp:849-946):
         // 256 entries indexed by (skyLevel << 4) | blockLevel. Sky
         // component is dimmed by Level::getSkyDarken so terrain
-        // darkens at night; block component uses dimension->brightnessRamp
-        // straight so torches stay bright. Rain and thunder slightly
-        // brighten the block contribution.
+        // darkens at night; block component is constant so torches
+        // stay bright. Rain and thunder slightly brighten the block
+        // contribution.
+        //
+        // brightnessRamp would normally come from dimension->brightnessRamp[16]
+        // populated by Dimension::updateLightRamp (Dimension.cpp:28-36).
+        // Compute it inline with the same formula so this works whether
+        // or not the upstream Dimension ctor fully ran in our build.
         if (g_initState == kStateTicking && g_levels[0]) {
             try {
                 Level *lv = g_levels[0];
-                Dimension *dim = lv->dimension;
                 float skyDarken = lv->getSkyDarken(frame_partial_tick);
                 float darken    = skyDarken * 0.95f + 0.05f;
                 float rainLevel    = lv->getRainLevel(frame_partial_tick);
                 float thunderLevel = lv->getThunderLevel(frame_partial_tick);
                 float blr = rainLevel + thunderLevel;
-                if (dim) {
-                    for (int i = 0; i < 256; i++) {
-                        int skyLevel   = i >> 4;
-                        int blockLevel = i & 0xF;
-                        float sky   = dim->brightnessRamp[skyLevel]   * darken;
-                        float block = dim->brightnessRamp[blockLevel] * (blr * 0.1f + 1.5f);
-                        float r = sky * (skyDarken * 0.65f + 0.35f) + block;
-                        float g = sky * (skyDarken * 0.65f + 0.35f) + block * ((block * 0.6f + 0.4f) * 0.6f + 0.4f);
-                        float b = sky                                + block * ((block * block) * 0.6f + 0.4f);
-                        if (r > 1.0f) r = 1.0f; if (r < 0.0f) r = 0.0f;
-                        if (g > 1.0f) g = 1.0f; if (g < 0.0f) g = 0.0f;
-                        if (b > 1.0f) b = 1.0f; if (b < 0.0f) b = 0.0f;
-                        mcle_lightmap_set_entry(i, r, g, b);
-                    }
-                    mcle_lightmap_upload();
+                // Compute brightnessRamp[0..15] inline, parity with
+                // upstream Dimension::updateLightRamp at ambientLight=0.
+                float brightnessRamp[16];
+                const float MAX_BRIGHTNESS = 15.0f;
+                for (int i = 0; i <= 15; i++) {
+                    float v = 1.0f - (float)i / MAX_BRIGHTNESS;
+                    brightnessRamp[i] = (1.0f - v) / (v * 3.0f + 1.0f);
                 }
+                for (int i = 0; i < 256; i++) {
+                    int skyLevel   = i >> 4;
+                    int blockLevel = i & 0xF;
+                    float sky   = brightnessRamp[skyLevel]   * darken;
+                    float block = brightnessRamp[blockLevel] * (blr * 0.1f + 1.5f);
+                    float r = sky * (skyDarken * 0.65f + 0.35f) + block;
+                    float g = sky * (skyDarken * 0.65f + 0.35f) + block * ((block * 0.6f + 0.4f) * 0.6f + 0.4f);
+                    float b = sky                                + block * ((block * block) * 0.6f + 0.4f);
+                    if (r > 1.0f) r = 1.0f; if (r < 0.0f) r = 0.0f;
+                    if (g > 1.0f) g = 1.0f; if (g < 0.0f) g = 0.0f;
+                    if (b > 1.0f) b = 1.0f; if (b < 0.0f) b = 0.0f;
+                    mcle_lightmap_set_entry(i, r, g, b);
+                }
+                mcle_lightmap_upload();
             } catch (...) {
-                // Leave previous frame's lightmap in place on any throw -
+                // Leave previous frame's lightmap in place on any throw,
                 // safer than blanking the world.
             }
         }
