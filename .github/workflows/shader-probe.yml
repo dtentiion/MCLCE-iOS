@@ -34,6 +34,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 1
+          token: ${{ secrets.VAULT_TOKEN }}
 
       - name: Install glslang and spirv-cross
         run: |
