@@ -1230,6 +1230,27 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     id<MTLTexture> lm = isCompact ? g_lightmap_texture : g_lightmap_white_texture;
     if (lm) [g.enc setFragmentTexture:lm atIndex:1];
 
+    // One-shot diagnostic on the first compact-format dispatch: dump
+    // bytes 0-15 of the first vertex so we can see what's in the tex2
+    // slot (offset 12-15). If those bytes are all zero, chunks have
+    // skyLevel=0 baked in. If they're non-zero, our shader is decoding
+    // the wrong byte and needs adjustment.
+    if (isCompact) {
+        static int s_cvDumped = 0;
+        if (s_cvDumped < 3 && data && count >= 1) {
+            const uint8_t *p = (const uint8_t *)data;
+            extern int mcle_log_msg(const char *);
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "CV_DUMP v0[0..15]=%02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x  tex2[12..15]=%02x %02x %02x %02x",
+                     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7],
+                     p[8], p[9], p[10], p[11],
+                     p[12], p[13], p[14], p[15]);
+            mcle_log_msg(buf);
+            s_cvDumped++;
+        }
+    }
+
 
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
     // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
