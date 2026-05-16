@@ -53,8 +53,8 @@ Each is its own commit on `main`. Newest first. Drop into AltStore/Sideloadly in
 Sideload the newest IPA (whichever of the builds above is highest in
 GHA — the miniaudio one if it built green). Plug in controller.
 
-- [ ] Menu music plays. Copy `menu1.ogg`..`menu4.ogg` from
-      `C:\Users\bilaw\Documents\GitHub\MinecraftConsoles\build\windows64\Minecraft.Client\Release\music\music\`
+- [ ] Menu music plays. Copy `menu1.ogg`..`menu4.ogg` from your local
+      upstream build's `Minecraft.Client/Release/music/music/` directory
       into the device's app Documents folder. Should shuffle across
       all four tracks. If miniaudio build failed and you fall back to
       the earlier MP3 build, `Downloads/menu_music.mp3` is pre-

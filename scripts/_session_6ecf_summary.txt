@@ -78,7 +78,7 @@ out size: 247,482 bytes
 ## **STRUCTURED HANDOFF BRIEF: Minecraft LCE iOS Session Recovery**
 
 **Goal of the session:**
-Port Minecraft: Legacy Console Edition (TU19, from MinecraftConsoles repo) to native iOS via Ruffle (Rust SWF runtime) + MetalANGLE for rendering. The user successfully got UI buttons rendering on iPhone 16, but glyphs were missing. Through the session, the root cause was diagnosed: LCE's menu SWFs are empty shells driven by ExternalInterface calls from the C++ host. The AS3 constructor runs once and then waits indefinitely for the host to call methods like `Init(label, id)` on button instances by name. This never happened, so the menu was dead silent.
+Port TU19 Legacy Console Edition to native iOS via Ruffle (Rust SWF runtime) + MetalANGLE for rendering. Code only; no game assets in the repo. The user successfully got UI buttons rendering on iPhone 16, but glyphs were missing. Through the session, the root cause was diagnosed: LCE's menu SWFs are empty shells driven by ExternalInterface calls from the C++ host. The AS3 constructor runs once and then waits indefinitely for the host to call methods like `Init(label, id)` on button instances by name. This never happened, so the menu was dead silent.
 
 **Commits landed during session:**
 1. **Ruffle fork (mclce-ios-patches branch, 6 commits pushed)**:

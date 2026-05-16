@@ -7,7 +7,7 @@ endif()
 
 project(MCLE_iOS
   VERSION 0.0.1
-  DESCRIPTION "Native iOS port of MinecraftConsoles (TU19 LCE)"
+  DESCRIPTION "Native iOS port of TU19 Legacy Console Edition. Code only, no game assets included."
   LANGUAGES C CXX OBJC OBJCXX
 )
 
@@ -20,7 +20,7 @@ if(NOT PLATFORM_IOS)
   message(FATAL_ERROR
     "This build targets iOS only. Configure with the iOS toolchain:\n"
     "  cmake -B build-ios -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/ios.toolchain.cmake -DPLATFORM=OS64\n"
-    "For desktop builds, work from upstream/ (MCLCE/MinecraftConsoles)."
+    "For desktop builds, work from the upstream/ submodule directly."
   )
 endif()
 
