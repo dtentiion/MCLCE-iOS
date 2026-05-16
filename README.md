@@ -5,7 +5,7 @@
 [![Downloads](https://img.shields.io/github/downloads/dtentiion/MCLCE-iOS/total?color=6cc644&label=downloads)](https://github.com/dtentiion/MCLCE-iOS/releases)
 [![Stars](https://img.shields.io/github/stars/dtentiion/MCLCE-iOS?color=6cc644)](https://github.com/dtentiion/MCLCE-iOS/stargazers)
 
-Native iOS port of [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) (the TU19 Legacy Console Edition base).
+Native iOS port of TU19 Legacy Console Edition. **Code only - no Minecraft game assets are included in or distributed with this repo. Users must supply their own.**
 
 **Status: menus working, gameplay code linked into the .ipa, simulation hook ticking on device.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. The full Help & Options / Settings tree walks. Underneath, the upstream gameplay simulation library (Entity, Level, LevelChunk, Player, Tile, TileEntity, Mob, LivingEntity, ItemInstance, Container, ServerLevel, PlayerList, MultiPlayerLevel and ~840 supporting files) is now linked into the binary. A bootstrap entry point fires from the render loop on launch and ticks once per frame, confirmed via live device log. The next phase constructs a real `Minecraft` instance and drives the tick against a loaded save. See [STATUS.md](STATUS.md) for the full breakdown.
 
@@ -13,7 +13,7 @@ CI builds an `.ipa` on every push. Grab the latest from the [Actions tab](https:
 
 ## Distribution variants
 
-This repo ports the [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) tree (TU19 Legacy Console Edition base). If you want a different LCE flavour, look for a sibling iOS repo:
+This repo ports the TU19 Legacy Console Edition base. No game assets ship in this repo; users must supply their own. If you want a different LCE flavour, look for a sibling iOS repo:
 
 - **MCLCE-iOS** (this one): TU19 base, the canonical LCE codebase.
 - **NeoLegacy-iOS** (planned): community NeoLegacy fork once that branch is cut.
@@ -60,8 +60,8 @@ See [ROADMAP.md](ROADMAP.md) and [STATUS.md](STATUS.md) for where things actuall
 
 If you know iOS, Metal, GL ES, or anything about LCE's Flash UI internals, help is very welcome. Open an issue before starting anything big so we don't duplicate work.
 
-For general LCE porting conventions follow the upstream [CONTRIBUTING.md](https://github.com/MCLCE/MinecraftConsoles/blob/main/CONTRIBUTING.md) from MinecraftConsoles. This repo inherits those rules.
+For general LCE porting conventions: parity-first with the TU19 Legacy Console Edition codebase, small focused commits, and no game assets in the repo.
 
 ## Legal
 
-This project is based on the MinecraftConsoles source tree. Minecraft is a trademark of Mojang AB / Microsoft. Not affiliated with, endorsed by, or connected to Mojang, Microsoft, or 4J Studios. No Minecraft game assets are redistributed in this repo.
+This project is an unofficial native iOS port of TU19 Legacy Console Edition. Minecraft is a trademark of Mojang AB / Microsoft. Not affiliated with, endorsed by, or connected to Mojang, Microsoft, or 4J Studios. **No Minecraft game assets are redistributed in this repo - users supply their own at runtime.**

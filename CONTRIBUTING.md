@@ -12,7 +12,7 @@ See [STATUS.md](STATUS.md) for the current "what builds, what doesn't" snapshot 
 
 ## Ground rules
 
-- Respect upstream [MCLCE/MinecraftConsoles](https://github.com/MCLCE/MinecraftConsoles) contribution rules regarding parity with LCE. This repo inherits them.
+- Maintain parity with TU19 Legacy Console Edition. This is a code-only port; no Minecraft game assets live in this repo and none should be added.
 - Don't commit Minecraft game assets. The port relies on user-supplied asset files at runtime.
 - Don't commit Apple signing material (`.p12`, `.mobileprovision`, `.p8`). The CI intentionally produces unsigned `.ipa` files.
 - Prefer small, focused commits over big sweeping ones. It is easier to bisect port regressions that way.
