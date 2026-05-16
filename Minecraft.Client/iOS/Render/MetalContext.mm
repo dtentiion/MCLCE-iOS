@@ -1248,23 +1248,24 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (lm) [g.enc setFragmentTexture:lm atIndex:1];
     if (g_lightmap_sampler) [g.enc setFragmentSamplerState:g_lightmap_sampler atIndex:1];
 
-    // One-shot diagnostic on the first compact-format dispatch: dump
-    // bytes 0-15 of the first vertex so we can see what's in the tex2
-    // slot (offset 12-15). If those bytes are all zero, chunks have
-    // skyLevel=0 baked in. If they're non-zero, our shader is decoding
-    // the wrong byte and needs adjustment.
+    // Diagnostic on the first compact dispatch: dump tex2 bytes from
+    // the first 4 vertices (one quad). If 4 corners of one face show
+    // DIFFERENT tex2 values, smooth lighting is firing in tessellation.
+    // If all 4 are identical, AO smoothing isn't reaching our buffer
+    // and shadows will look blocky regardless of sampler.
     if (isCompact) {
         static int s_cvDumped = 0;
-        if (s_cvDumped < 3 && data && count >= 1) {
+        if (s_cvDumped < 1 && data && count >= 4) {
             const uint8_t *p = (const uint8_t *)data;
             extern int mcle_log_msg(const char *);
             char buf[256];
-            snprintf(buf, sizeof(buf),
-                     "CV_DUMP v0[0..15]=%02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x  tex2[12..15]=%02x %02x %02x %02x",
-                     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7],
-                     p[8], p[9], p[10], p[11],
-                     p[12], p[13], p[14], p[15]);
-            mcle_log_msg(buf);
+            for (int v = 0; v < 4; v++) {
+                const uint8_t *q = p + (v * 16);
+                snprintf(buf, sizeof(buf),
+                         "CV_QUAD v%d tex2=%02x %02x %02x %02x", v,
+                         q[12], q[13], q[14], q[15]);
+                mcle_log_msg(buf);
+            }
             s_cvDumped++;
         }
     }
