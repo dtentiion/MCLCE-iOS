@@ -187,6 +187,12 @@ extern "C" void mcle_glbridge_set_fog_end(float v)   { g_fog_end   = v; }
 // push the CPU buffer to the GPU texture. Pattern mirrors upstream's
 // GameRenderer::updateLightTexture (GameRenderer.cpp:849-946) which
 // fills a 256-int buffer then calls Textures::replaceTextureDirect.
+//
+// Forward-declare the two pieces of state these functions touch since
+// the actual definitions live further down with the other texture
+// globals (and the definitions are in the right place for init order).
+extern uint8_t        g_lightmap_pixels[16*16*4];
+extern id<MTLTexture> g_lightmap_texture;
 extern "C" void mcle_lightmap_set_entry(int idx, float r, float g, float b) {
     if (idx < 0 || idx >= 256) return;
     int ir = (int)(r * 255.0f); if (ir < 0) ir = 0; if (ir > 255) ir = 255;
