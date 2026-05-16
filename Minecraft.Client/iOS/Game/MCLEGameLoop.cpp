@@ -1347,6 +1347,8 @@ extern "C" void mcle_glbridge_set_fog_color(float r, float g, float b, float a);
 extern "C" void mcle_glbridge_set_fog_start(float v);
 extern "C" void mcle_glbridge_set_fog_end(float v);
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
+extern "C" void mcle_lightmap_set_entry(int idx, float r, float g, float b);
+extern "C" void mcle_lightmap_upload(void);
 extern "C" void mcle_metal_current_size(int*, int*);
 extern "C" int  mcle_ios_input_poll_rx(int pad);
 extern "C" int  mcle_ios_input_poll_ry(int pad);
@@ -1568,6 +1570,44 @@ extern "C" void mcle_world_drive_renderer(void) {
             mcle_glbridge_set_fog_start(renderDistance * 0.25f);
             mcle_glbridge_set_fog_end(renderDistance);
             mcle_glbridge_set_fog_enabled(1);
+        }
+
+        // Per-frame lightmap rebuild. Mirrors upstream
+        // GameRenderer::updateLightTexture (GameRenderer.cpp:849-946):
+        // 256 entries indexed by (skyLevel << 4) | blockLevel. Sky
+        // component is dimmed by Level::getSkyDarken so terrain
+        // darkens at night; block component uses dimension->brightnessRamp
+        // straight so torches stay bright. Rain and thunder slightly
+        // brighten the block contribution.
+        if (g_initState == kStateTicking && g_levels[0]) {
+            try {
+                Level *lv = g_levels[0];
+                Dimension *dim = lv->dimension;
+                float skyDarken = lv->getSkyDarken(frame_partial_tick);
+                float darken    = skyDarken * 0.95f + 0.05f;
+                float rainLevel    = lv->getRainLevel(frame_partial_tick);
+                float thunderLevel = lv->getThunderLevel(frame_partial_tick);
+                float blr = rainLevel + thunderLevel;
+                if (dim) {
+                    for (int i = 0; i < 256; i++) {
+                        int skyLevel   = i >> 4;
+                        int blockLevel = i & 0xF;
+                        float sky   = dim->brightnessRamp[skyLevel]   * darken;
+                        float block = dim->brightnessRamp[blockLevel] * (blr * 0.1f + 1.5f);
+                        float r = sky * (skyDarken * 0.65f + 0.35f) + block;
+                        float g = sky * (skyDarken * 0.65f + 0.35f) + block * ((block * 0.6f + 0.4f) * 0.6f + 0.4f);
+                        float b = sky                                + block * ((block * block) * 0.6f + 0.4f);
+                        if (r > 1.0f) r = 1.0f; if (r < 0.0f) r = 0.0f;
+                        if (g > 1.0f) g = 1.0f; if (g < 0.0f) g = 0.0f;
+                        if (b > 1.0f) b = 1.0f; if (b < 0.0f) b = 0.0f;
+                        mcle_lightmap_set_entry(i, r, g, b);
+                    }
+                    mcle_lightmap_upload();
+                }
+            } catch (...) {
+                // Leave previous frame's lightmap in place on any throw -
+                // safer than blanking the world.
+            }
         }
 
         // Bind the terrain atlas before chunks render. Upstream's

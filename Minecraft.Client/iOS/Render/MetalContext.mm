@@ -181,6 +181,30 @@ extern "C" void mcle_glbridge_set_fog_color(float r, float gr, float b, float /*
 extern "C" void mcle_glbridge_set_fog_start(float v) { g_fog_start = v; }
 extern "C" void mcle_glbridge_set_fog_end(float v)   { g_fog_end   = v; }
 
+// Lightmap bridge. MCLEGameLoop computes each of the 256 entries from
+// upstream Level::getSkyDarken + dimension->brightnessRamp and writes
+// them via mcle_lightmap_set_entry, then calls mcle_lightmap_upload to
+// push the CPU buffer to the GPU texture. Pattern mirrors upstream's
+// GameRenderer::updateLightTexture (GameRenderer.cpp:849-946) which
+// fills a 256-int buffer then calls Textures::replaceTextureDirect.
+extern "C" void mcle_lightmap_set_entry(int idx, float r, float g, float b) {
+    if (idx < 0 || idx >= 256) return;
+    int ir = (int)(r * 255.0f); if (ir < 0) ir = 0; if (ir > 255) ir = 255;
+    int ig = (int)(g * 255.0f); if (ig < 0) ig = 0; if (ig > 255) ig = 255;
+    int ib = (int)(b * 255.0f); if (ib < 0) ib = 0; if (ib > 255) ib = 255;
+    g_lightmap_pixels[idx*4+0] = (uint8_t)ir;
+    g_lightmap_pixels[idx*4+1] = (uint8_t)ig;
+    g_lightmap_pixels[idx*4+2] = (uint8_t)ib;
+    g_lightmap_pixels[idx*4+3] = 255;
+}
+extern "C" void mcle_lightmap_upload(void) {
+    if (!g_lightmap_texture) return;
+    [g_lightmap_texture replaceRegion:MTLRegionMake2D(0, 0, 16, 16)
+                          mipmapLevel:0
+                            withBytes:g_lightmap_pixels
+                          bytesPerRow:16*4];
+}
+
 extern "C" void mcle_glbridge_set_alpha_test(int enabled) {
     g_alpha_test_enabled = (enabled != 0);
     // Diagnostic: confirm upstream's glEnable/glDisable(GL_ALPHA_TEST)
@@ -224,6 +248,19 @@ id<MTLTexture>      g_default_texture = nil;
 id<MTLSamplerState> g_default_sampler = nil;
 id<MTLTexture>      g_current_texture = nil;
 
+// 16x16 lightmap. Upstream rebuilds this every frame via
+// GameRenderer::updateLightTexture (GameRenderer.cpp:849-946) from
+// Level::getSkyDarken + dimension->brightnessRamp. Indexed by
+// (skyLevel << 4) | blockLevel. Chunk vertices reference it through
+// the secondary tex2 UV. Init to all-white as a no-op fallback before
+// the first real update.
+id<MTLTexture> g_lightmap_texture       = nil;
+uint8_t        g_lightmap_pixels[16*16*4];
+// 1x1 white bound at fragment unit 1 for fmt=1 sky/sun/moon/cloud
+// dispatches. Their vertex tex2 is uninitialized so we hide the
+// lightmap entirely for those passes by sampling a constant 1.0.
+id<MTLTexture> g_lightmap_white_texture = nil;
+
 // G4-step2: GL texture object registry. glGenTextures hands out IDs;
 // glBindTexture(target, id) sets the active texture; glTexImage2D
 // uploads data to the bound texture. IDs are dense small integers
@@ -246,6 +283,7 @@ NSString* const kWorldShaderSrc = @R"(
         float4 pos [[position]];
         float4 color;
         float2 uv;
+        float2 lightmapUV;
         float  fogDist;  // eye-space depth for distance fog
     };
     struct MVPUniforms {
@@ -273,11 +311,11 @@ NSString* const kWorldShaderSrc = @R"(
         float4 vc = float4(v.color) / 255.0;
         o.color = vc * c.currentColor;
         o.uv    = v.uv;
-        // Eye-space distance. Upstream uses GL_LINEAR fog over eye-Z
-        // (default GL_FOG_DISTANCE_MODE) - we mirror by projecting the
-        // world position onto the modelview's row 2 axis, then taking
-        // its absolute value. Matches the depth distance a fragment is
-        // from the camera in eye space.
+        // fmt=1 vertices (sky/sun/moon/clouds) have no real lightmap UV.
+        // Dispatch binds a 1x1 white lightmap for those passes so the
+        // sample is a no-op. Routing the UV to (0.5, 0.5) keeps it inside
+        // the texture for any sampler clamp mode.
+        o.lightmapUV = float2(0.5, 0.5);
         o.fogDist = abs(dot(f.modelviewRow2, float4(v.pos, 1.0)));
         return o;
     }
@@ -292,22 +330,31 @@ NSString* const kWorldShaderSrc = @R"(
     }
 
     fragment float4 world_frag(V_out i           [[stage_in]],
-                                texture2d<float>     tex     [[texture(0)]],
-                                sampler              texSamp [[sampler(0)]],
-                                constant FogParams&  f       [[buffer(3)]]) {
+                                texture2d<float>     tex      [[texture(0)]],
+                                texture2d<float>     lightmap [[texture(1)]],
+                                sampler              texSamp  [[sampler(0)]],
+                                constant FogParams&  f        [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
         if (t.a < 0.1) discard_fragment();
         float4 outc = i.color * t;
+        // Multiply by the per-vertex sky+block lightmap sample. fmt=1
+        // dispatches bind a 1x1 white at unit 1 so the sample is 1.0
+        // and the multiplication is a no-op for sky elements.
+        float3 lm = lightmap.sample(texSamp, i.lightmapUV).rgb;
+        outc.rgb *= lm;
         outc.rgb = apply_fog(outc.rgb, i.fogDist, f);
         return outc;
     }
 
     fragment float4 world_frag_nocut(V_out i           [[stage_in]],
-                                      texture2d<float>     tex     [[texture(0)]],
-                                      sampler              texSamp [[sampler(0)]],
-                                      constant FogParams&  f       [[buffer(3)]]) {
+                                      texture2d<float>     tex      [[texture(0)]],
+                                      texture2d<float>     lightmap [[texture(1)]],
+                                      sampler              texSamp  [[sampler(0)]],
+                                      constant FogParams&  f        [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
         float4 outc = i.color * t;
+        float3 lm = lightmap.sample(texSamp, i.lightmapUV).rgb;
+        outc.rgb *= lm;
         outc.rgb = apply_fog(outc.rgb, i.fogDist, f);
         return outc;
     }
@@ -331,6 +378,7 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float4 pos [[position]];
         float4 color;
         float2 uv;
+        float2 lightmapUV;
         float  fogDist;
     };
     struct MVPUniforms   { float4x4 mvp; };
@@ -349,18 +397,21 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float3 pos = float3(v.pos) / 1024.0;
         float2 uv  = float2(v.uv) / 8192.0;
         o.pos   = m.mvp * float4(pos, 1.0);
-        // Decode RGB565 packed color. Upstream Tesselator.cpp:774-776 packs
-        // as: bits 15-11 = top 5 of R, bits 10-5 = top 6 of G, bits 4-0 =
-        // top 5 of B (alpha dropped). The source `col` is in RGBA byte
-        // order from Tesselator::color line 326: (r<<24) | (g<<16) |
-        // (b<<8) | a. Signed int16 stored with -32768 offset so we add
-        // back to get the unsigned 0..65535 packed value.
         int packed = int(v.pcol) + 32768;
         float src_r = float((packed >> 11) & 0x1F) / 31.0;
         float src_g = float((packed >>  5) & 0x3F) / 63.0;
         float src_b = float((packed      ) & 0x1F) / 31.0;
         o.color = float4(src_r, src_g, src_b, 1.0) * c.currentColor;
         o.uv    = uv;
+        // Lightmap UV. Upstream encodes block light at bits 7-4 and sky
+        // light at bits 3-0 of m_t2 (Tesselator.cpp:768). Our chunk
+        // vertex's tex2.x holds the same byte; sample at the centre of
+        // the corresponding 16x16 lightmap cell.
+        int packedLight = int(v.tex2.x) & 0xFF;
+        float blockLevel = float((packedLight >> 4) & 0xF);
+        float skyLevel   = float(packedLight & 0xF);
+        o.lightmapUV = float2((blockLevel + 0.5) / 16.0,
+                              (skyLevel   + 0.5) / 16.0);
         o.fogDist = abs(dot(f.modelviewRow2, float4(pos, 1.0)));
         return o;
     }
@@ -561,6 +612,45 @@ bool ensure_world_pipeline() {
         sd.sAddressMode = MTLSamplerAddressModeRepeat;
         sd.tAddressMode = MTLSamplerAddressModeRepeat;
         g_default_sampler = [g.device newSamplerStateWithDescriptor:sd];
+    }
+    // Lightmap: 16x16 RGBA, all-white until first mcle_lightmap_update.
+    // Same Tesselator-driven secondary UV that upstream GameRenderer
+    // uploads at line 944. The 1x1 white sibling stands in for sky-pass
+    // fmt=1 binds where there's no real lightmap UV in the vertex data.
+    if (!g_lightmap_texture) {
+        MTLTextureDescriptor* td =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                width:16
+                                                               height:16
+                                                            mipmapped:NO];
+        td.usage       = MTLTextureUsageShaderRead;
+        td.storageMode = MTLStorageModeShared;
+        g_lightmap_texture = [g.device newTextureWithDescriptor:td];
+        for (int i = 0; i < 16*16; i++) {
+            g_lightmap_pixels[i*4+0] = 255;
+            g_lightmap_pixels[i*4+1] = 255;
+            g_lightmap_pixels[i*4+2] = 255;
+            g_lightmap_pixels[i*4+3] = 255;
+        }
+        [g_lightmap_texture replaceRegion:MTLRegionMake2D(0, 0, 16, 16)
+                              mipmapLevel:0
+                                withBytes:g_lightmap_pixels
+                              bytesPerRow:16*4];
+    }
+    if (!g_lightmap_white_texture) {
+        MTLTextureDescriptor* td =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                width:1
+                                                               height:1
+                                                            mipmapped:NO];
+        td.usage       = MTLTextureUsageShaderRead;
+        td.storageMode = MTLStorageModeShared;
+        g_lightmap_white_texture = [g.device newTextureWithDescriptor:td];
+        const uint8_t white[4] = { 255, 255, 255, 255 };
+        [g_lightmap_white_texture replaceRegion:MTLRegionMake2D(0, 0, 1, 1)
+                                    mipmapLevel:0
+                                      withBytes:white
+                                    bytesPerRow:4];
     }
     NSLog(@"[mcle_metal G3c/G4] world pipeline + default texture built");
     return true;
@@ -1126,6 +1216,13 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     id<MTLTexture> tex = g_current_texture ? g_current_texture : g_default_texture;
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
     if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
+
+    // Lightmap at fragment unit 1. Only chunk vertices (fmt=4) carry a
+    // real tex2 with sky+block light levels; fmt=1 sky/cloud passes get
+    // the 1x1 white sibling so the shader's lightmap multiply is a no-op
+    // for those.
+    id<MTLTexture> lm = isCompact ? g_lightmap_texture : g_lightmap_white_texture;
+    if (lm) [g.enc setFragmentTexture:lm atIndex:1];
 
 
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
