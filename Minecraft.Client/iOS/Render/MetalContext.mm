@@ -251,7 +251,13 @@ extern "C" void mcle_glbridge_set_blend_func(int src, int dst) {
 // for currently-untextured paths (sky / dark / star / sunset gradient).
 // Real textures from glBindTexture override this in G4-step2.
 id<MTLTexture>      g_default_texture = nil;
-id<MTLSamplerState> g_default_sampler = nil;
+id<MTLSamplerState> g_default_sampler  = nil;
+// Lightmap is a 16x16 lookup table sampled per-fragment via the
+// interpolated tex2 UV. We want LINEAR filtering on this one (not
+// nearest like the terrain atlas) so a fragment whose UV lands
+// between two cells gets a smooth mix, producing soft shadow
+// gradients across block faces instead of sharp per-cell edges.
+id<MTLSamplerState> g_lightmap_sampler = nil;
 id<MTLTexture>      g_current_texture = nil;
 
 // 16x16 lightmap. Upstream rebuilds this every frame via
@@ -339,14 +345,15 @@ NSString* const kWorldShaderSrc = @R"(
                                 texture2d<float>     tex      [[texture(0)]],
                                 texture2d<float>     lightmap [[texture(1)]],
                                 sampler              texSamp  [[sampler(0)]],
+                                sampler              lmSamp   [[sampler(1)]],
                                 constant FogParams&  f        [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
         if (t.a < 0.1) discard_fragment();
         float4 outc = i.color * t;
-        // Multiply by the per-vertex sky+block lightmap sample. fmt=1
-        // dispatches bind a 1x1 white at unit 1 so the sample is 1.0
-        // and the multiplication is a no-op for sky elements.
-        float3 lm = lightmap.sample(texSamp, i.lightmapUV).rgb;
+        // Lightmap sampled with the dedicated linear-filter sampler so
+        // fragments whose UV lands between two cells get a smooth mix.
+        // Gives soft shadow gradients across block faces.
+        float3 lm = lightmap.sample(lmSamp, i.lightmapUV).rgb;
         outc.rgb *= lm;
         outc.rgb = apply_fog(outc.rgb, i.fogDist, f);
         return outc;
@@ -356,10 +363,11 @@ NSString* const kWorldShaderSrc = @R"(
                                       texture2d<float>     tex      [[texture(0)]],
                                       texture2d<float>     lightmap [[texture(1)]],
                                       sampler              texSamp  [[sampler(0)]],
+                                      sampler              lmSamp   [[sampler(1)]],
                                       constant FogParams&  f        [[buffer(3)]]) {
         float4 t = tex.sample(texSamp, i.uv);
         float4 outc = i.color * t;
-        float3 lm = lightmap.sample(texSamp, i.lightmapUV).rgb;
+        float3 lm = lightmap.sample(lmSamp, i.lightmapUV).rgb;
         outc.rgb *= lm;
         outc.rgb = apply_fog(outc.rgb, i.fogDist, f);
         return outc;
@@ -619,6 +627,14 @@ bool ensure_world_pipeline() {
         sd.sAddressMode = MTLSamplerAddressModeRepeat;
         sd.tAddressMode = MTLSamplerAddressModeRepeat;
         g_default_sampler = [g.device newSamplerStateWithDescriptor:sd];
+    }
+    if (!g_lightmap_sampler) {
+        MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
+        sd.minFilter    = MTLSamplerMinMagFilterLinear;
+        sd.magFilter    = MTLSamplerMinMagFilterLinear;
+        sd.sAddressMode = MTLSamplerAddressModeClampToEdge;
+        sd.tAddressMode = MTLSamplerAddressModeClampToEdge;
+        g_lightmap_sampler = [g.device newSamplerStateWithDescriptor:sd];
     }
     // Lightmap: 16x16 RGBA, all-white until first mcle_lightmap_update.
     // Same Tesselator-driven secondary UV that upstream GameRenderer
@@ -1230,6 +1246,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     // for those.
     id<MTLTexture> lm = isCompact ? g_lightmap_texture : g_lightmap_white_texture;
     if (lm) [g.enc setFragmentTexture:lm atIndex:1];
+    if (g_lightmap_sampler) [g.enc setFragmentSamplerState:g_lightmap_sampler atIndex:1];
 
     // One-shot diagnostic on the first compact-format dispatch: dump
     // bytes 0-15 of the first vertex so we can see what's in the tex2
