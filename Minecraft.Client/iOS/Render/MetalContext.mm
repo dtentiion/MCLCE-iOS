@@ -409,15 +409,16 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float src_b = float((packed      ) & 0x1F) / 31.0;
         o.color = float4(src_r, src_g, src_b, 1.0) * c.currentColor;
         o.uv    = uv;
-        // Lightmap UV. Upstream encodes block light at bits 7-4 and sky
-        // light at bits 3-0 of m_t2 (Tesselator.cpp:768). Our chunk
-        // vertex's tex2.x holds the same byte; sample at the centre of
-        // the corresponding 16x16 lightmap cell.
-        int packedLight = int(v.tex2.x) & 0xFF;
-        float blockLevel = float((packedLight >> 4) & 0xF);
-        float skyLevel   = float(packedLight & 0xF);
-        o.lightmapUV = float2((blockLevel + 0.5) / 16.0,
-                              (skyLevel   + 0.5) / 16.0);
+        // Lightmap UV. The chunk vertex's tex2 carries two pre-scaled
+        // lightmap UV components: tex2.x holds blockLevel * 16 and
+        // tex2.y holds skyLevel * 16 (so level 15 == 240, level 0 ==
+        // 0). The +8 nudges each component to the centre of its 1/16
+        // wide cell so nearest sampling lands cleanly on the right
+        // entry. Mirrors upstream's PSVita compact-vertex path
+        // (Tesselator.cpp:943-947) which writes the same scaled pair.
+        float u = (float(v.tex2.x) + 8.0) / 256.0;
+        float vlm = (float(v.tex2.y) + 8.0) / 256.0;
+        o.lightmapUV = float2(u, vlm);
         o.fogDist = abs(dot(f.modelviewRow2, float4(pos, 1.0)));
         return o;
     }
