@@ -1251,6 +1251,23 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         const Mat4 &tm = g_texture_stack.back();
         for (int i = 0; i < 16; i++) uniforms[16+i] = tm.m[i];
         [g.enc setVertexBytes:uniforms length:sizeof(uniforms) atIndex:1];
+        // Diagnostic: log the texture-matrix translate component
+        // (elements 12, 13 in column-major) for the first 40 fmt=1 draws.
+        // Across renderAdvancedClouds the per-cell glTranslatef should
+        // give varying values; if they stay identity (0,0) the per-cell
+        // matrix isn't reaching dispatch.
+        if (!isCompact) {
+            static int s_tmDumped = 0;
+            if (s_tmDumped < 40) {
+                extern int mcle_log_msg(const char *);
+                char buf[128];
+                snprintf(buf, sizeof(buf),
+                         "TM_DUMP idx=%d tx=%.4f ty=%.4f",
+                         s_tmDumped, tm.m[12], tm.m[13]);
+                mcle_log_msg(buf);
+                s_tmDumped++;
+            }
+        }
     }
     [g.enc setVertexBytes:g_current_color length:sizeof(g_current_color) atIndex:2];
 
