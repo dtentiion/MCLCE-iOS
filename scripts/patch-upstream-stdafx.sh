@@ -1485,6 +1485,15 @@ if [ -f "$RSD_PY" ]; then
     python3 "$RSD_PY"
 fi
 
+# DIAGNOSTIC ONLY: paint the moon quad bright magenta so we can tell
+# whether the 'blue rectangle on the opposite-of-sun side that pops up
+# at sunrise/sunset' is the moon quad with a broken texture. Remove
+# once identified.
+MND_PY="$REPO_ROOT/scripts/patch-moon-debug-magenta.py"
+if [ -f "$MND_PY" ]; then
+    python3 "$MND_PY"
+fi
+
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
