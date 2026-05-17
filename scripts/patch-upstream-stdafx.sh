@@ -1485,6 +1485,16 @@ if [ -f "$RSD_PY" ]; then
     python3 "$RSD_PY"
 fi
 
+# LevelRenderer.cpp: skip the sunrise gradient triangle fan. its
+# 120-radius ring dips below the horizon after rotation, and our
+# chunk-after-sky render order means anywhere chunks don't cover
+# the screen below horizon shows the fan color noclipping into
+# the ground for the few seconds the fan is alive.
+RSF_PY="$REPO_ROOT/scripts/patch-rendersky-no-sunrise-fan.py"
+if [ -f "$RSF_PY" ]; then
+    python3 "$RSF_PY"
+fi
+
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
