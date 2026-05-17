@@ -122,7 +122,13 @@ extern "C" void mcle_render_frame(void) {
     // SWF so the bootstrap-alive signal is visible.
     float cr, cg, cb;
     if (worldAlive) {
-        mcle_world_get_sky_color(&cr, &cg, &cb);
+        // DIAGNOSTIC: force bright cyan clear so we can tell whether the
+        // "blue rectangle rising/lowering with the sun" is the
+        // sky-colored clear showing through gaps or real geometry. If it
+        // becomes cyan, it's the clear color. If it stays blue, it's a
+        // geometry draw. Revert once identified.
+        cr = 0.0f; cg = 1.0f; cb = 1.0f;
+        (void)mcle_world_get_sky_color;
     } else {
         cr = 0.07f; cg = 0.07f; cb = 0.09f;
     }
