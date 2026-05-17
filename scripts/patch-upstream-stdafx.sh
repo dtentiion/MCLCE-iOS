@@ -1451,14 +1451,13 @@ if [ -f "$TDC_PY" ]; then
     python3 "$TDC_PY"
 fi
 
-# LevelRenderer.cpp: force the simple 2D cloud path regardless of
-# fancyGraphics. This lets fancyGraphics stay true (for leaf cutout
-# transparency at LevelRenderer.cpp:427 setFancy()) without triggering
-# renderAdvancedClouds which depends on GL we don't shim well.
-RCS_PY="$REPO_ROOT/scripts/patch-renderclouds-force-simple.py"
-if [ -f "$RCS_PY" ]; then
-    python3 "$RCS_PY"
-fi
+# LevelRenderer.cpp: renderAdvancedClouds path is now supported on iOS
+# (texture matrix stack added, glMultiTexCoord2f and viewport-clip-plane
+# state stubbed to no-ops). Letting upstream's own fancyGraphics branch
+# decide; with fancyGraphics=true that gives proper 3D cube clouds
+# tiling around the player instead of the simple flat sheet.
+# patch-renderclouds-force-simple.py kept on disk in case we need to
+# fall back, but no longer applied by default.
 
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
