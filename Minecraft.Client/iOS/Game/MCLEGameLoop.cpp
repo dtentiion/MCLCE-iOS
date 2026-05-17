@@ -56,6 +56,7 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
                                                     unsigned long *hits_high,
                                                     int *last_hit);
 extern "C" void mcle_glbridge_fmt_stats(unsigned long *out, int max_count);
+extern "C" void mcle_glbridge_skip_autoreplay(int id);
 
 // G1B-probe: defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
@@ -1373,7 +1374,6 @@ extern "C" void mcle_game_tick(void) {
 // m_instance null chain (Biome::getSkyColor etc) may bite here. If so
 // the signal handler logs the address, we patch the next null deref.
 extern "C" void mcle_glbridge_replay_all_lists(void);
-extern "C" void mcle_glbridge_skip_autoreplay(int id);
 extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg, float aspect,
                                                  float near_z, float far_z);
 extern "C" void mcle_glbridge_matrix_mode(int mode);

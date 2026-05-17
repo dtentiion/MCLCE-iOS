@@ -1468,6 +1468,15 @@ if [ -f "$RSE_PY" ]; then
     python3 "$RSE_PY"
 fi
 
+# LevelRenderer.h: expose starList/skyList/darkList/haloRingList/
+# cloudList as public. MCLEGameLoop reads them post-ctor to register
+# the auto-replay skip set so haloRingList et al stop drawing every
+# frame as a stuck wedge.
+LPL_PY="$REPO_ROOT/scripts/patch-levelrenderer-public-lists.py"
+if [ -f "$LPL_PY" ]; then
+    python3 "$LPL_PY"
+fi
+
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
