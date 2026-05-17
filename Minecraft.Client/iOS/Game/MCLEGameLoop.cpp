@@ -1763,7 +1763,28 @@ extern "C" void mcle_world_drive_renderer(void) {
                 } catch (...) {}
             }
         }
+        // Upstream's GameRenderer::setupFog(-1, a) called right before
+        // renderSky uses different start/end values than the chunk pass:
+        // FOG_START=0, FOG_END=renderDistance*0.8 (GameRenderer.cpp:2209-
+        // 2213). This pulls the entire sky dome toward the fog color
+        // (warm tones near the sun at sunset) even close to the camera,
+        // which is what produces the smooth blue-to-orange gradient at
+        // the horizon. With only the chunk-pass values (start=64,
+        // end=256) the dome stays nearly full sky color and never blends
+        // to fog - that's the "blue layer covering the orange horizon"
+        // visible at sunset. Swap start/end here, then restore the
+        // chunk values right after renderSky for the later passes.
+        {
+            const float renderDistance = 256.0f;
+            mcle_glbridge_set_fog_start(0.0f);
+            mcle_glbridge_set_fog_end(renderDistance * 0.8f);
+        }
         try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
+        {
+            const float renderDistance = 256.0f;
+            mcle_glbridge_set_fog_start(renderDistance * 0.25f);
+            mcle_glbridge_set_fog_end(renderDistance);
+        }
         // Modelview at this point should match what entered renderSky.
         // Upstream renderClouds expects: rotations + eye-height translate,
         // no XZ player translate. Log every 60 frames so we can confirm
