@@ -1459,6 +1459,15 @@ fi
 # patch-renderclouds-force-simple.py kept on disk in case we need to
 # fall back, but no longer applied by default.
 
+# LevelRenderer.cpp: neuter the End-dimension sky-cube branch at the
+# top of renderSky. We're overworld-only and that branch draws a
+# tunnel-textured cube around the camera that turns into a stuck
+# wedge if dimension->id ever lands on 1.
+RSE_PY="$REPO_ROOT/scripts/patch-rendersky-no-end.py"
+if [ -f "$RSE_PY" ]; then
+    python3 "$RSE_PY"
+fi
+
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
