@@ -797,6 +797,20 @@ extern "C" void mcle_glbridge_matrix_mode(int mode) {
         case kGL_TEXTURE:    g_matrix_mode = kMatrixModeTexture;    break;
         default:             g_matrix_mode = kMatrixModeModelview;  break;
     }
+    // Diagnostic: log the first few GL_TEXTURE switches. If this doesn't
+    // fire even once during cloud render, renderAdvancedClouds is exiting
+    // the per-cube loop before its glMatrixMode(GL_TEXTURE) call - usually
+    // because Frustum::cubeInFrustum is rejecting everything.
+    if (mode == kGL_TEXTURE) {
+        static int s_texModeHits = 0;
+        if (s_texModeHits < 20) {
+            extern int mcle_log_msg(const char *);
+            char buf[64];
+            snprintf(buf, sizeof(buf), "MM_TEXTURE hit=%d", s_texModeHits);
+            mcle_log_msg(buf);
+            s_texModeHits++;
+        }
+    }
 }
 extern "C" void mcle_glbridge_load_identity(void) {
     current_stack().back() = mat_identity();
