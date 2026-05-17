@@ -10,6 +10,7 @@
 #include <cstring>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "MetalContext.h"
@@ -1837,12 +1838,31 @@ extern "C" unsigned long long mcle_glbridge_list_count(void) {
     return static_cast<unsigned long long>(g_lists.size());
 }
 
-// G3b TEMP: replay every recorded list back through the immediate
-// dispatch path. Used before the upstream renderSky/renderClouds calls
-// drive glCallList naturally - parity comes once setLevel + level state
-// is wired (G3e). Remove this helper at that point.
+// Set of list IDs that the auto-replay must skip. Populated from
+// MCLEGameLoop after LevelRenderer construction with the world-
+// decoration list IDs (starList, skyList, darkList, haloRingList,
+// cloudList[0..6]). Those are already drawn by upstream's renderSky /
+// renderAdvancedClouds via glCallList, so auto-replaying them again
+// draws a second copy stuck around the player - haloRingList in
+// particular is never called by upstream (the call site checks for a
+// specific player skin) so without skipping it we render a 100-radius
+// textured ring on every frame that becomes the "wedge" visible
+// across the upper sky.
+static std::unordered_set<int> g_skip_autoreplay_lists;
+
+extern "C" void mcle_glbridge_skip_autoreplay(int id) {
+    g_skip_autoreplay_lists.insert(id);
+}
+
+// G3b: chunks still rely on this auto-replay because our
+// glCallLists(IntBuffer*) is a no-op stub, so OffsettedRenderList's
+// upstream render path doesn't actually call our display lists. World
+// decoration lists registered via mcle_glbridge_skip_autoreplay get
+// filtered out so they're only drawn once - from upstream's explicit
+// glCallList sites.
 extern "C" void mcle_glbridge_replay_all_lists(void) {
     for (const auto& kv : g_lists) {
+        if (g_skip_autoreplay_lists.count(kv.first)) continue;
         call_list_replay(kv.second);
     }
 }
