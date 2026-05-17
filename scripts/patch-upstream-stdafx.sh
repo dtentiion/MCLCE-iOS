@@ -1477,6 +1477,14 @@ if [ -f "$LPL_PY" ]; then
     python3 "$LPL_PY"
 fi
 
+# LevelRenderer.cpp: skip the always-on darkList draw at the bottom
+# of renderSky. Chunks render after renderSky in our build so chunk
+# gaps showed the dome through them as blue jittery patches.
+RSD_PY="$REPO_ROOT/scripts/patch-rendersky-no-darklist-overworld.py"
+if [ -f "$RSD_PY" ]; then
+    python3 "$RSD_PY"
+fi
+
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
