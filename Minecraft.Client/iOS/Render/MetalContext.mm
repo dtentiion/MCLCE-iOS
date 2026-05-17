@@ -790,6 +790,18 @@ extern "C" void mcle_glbridge_get_modelview(float *out16) {
     for (int i = 0; i < 16; i++) out16[i] = m.m[i];
 }
 
+// Companion getter for the projection stack. Used by Frustum::calculateFrustum
+// (Frustum.cpp:56) which reads both matrices via glGetFloat(GL_PROJECTION_MATRIX)
+// / glGetFloat(GL_MODELVIEW_MATRIX) to compute the 6 clip planes. With a
+// no-op shim those planes stay zero and FrustumData::cubeInFrustum rejects
+// every cube - matters for renderAdvancedClouds which inner-loop-skips on
+// every cube otherwise.
+extern "C" void mcle_glbridge_get_projection(float *out16) {
+    if (!out16) return;
+    const Mat4 &m = g_projection_stack.back();
+    for (int i = 0; i < 16; i++) out16[i] = m.m[i];
+}
+
 // Public matrix bridge - probe_stub.cpp's gl* matrix stubs forward here.
 extern "C" void mcle_glbridge_matrix_mode(int mode) {
     switch (mode) {

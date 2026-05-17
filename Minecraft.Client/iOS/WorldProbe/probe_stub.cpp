@@ -274,8 +274,27 @@ void glCallLists(IntBuffer *)                              {}
 void glLightModel(unsigned int, FloatBuffer *)             {}
 void glColorMaterial(unsigned int, unsigned int)           {}
 void glLightModelfv(unsigned int, const float*)            {}
-class FloatBuffer;
-void glGetFloat(int, FloatBuffer*)                         {} // upstream Frustum.cpp
+// glGetFloat(matrix, FloatBuffer*) - Frustum::calculateFrustum (Frustum.cpp:56)
+// calls this with GL_PROJECTION_MATRIX (0x0BA7) or GL_MODELVIEW_MATRIX
+// (0x0BA6) to read the live matrices, then computes the 6 clip planes for
+// cubeInFrustum. With a no-op shim the planes stay zero and every cube
+// (including each renderAdvancedClouds cube cell) gets rejected. Wire it
+// to our real matrix stacks so frustum culling works.
+#include "../../../upstream/Minecraft.World/FloatBuffer.h"
+extern "C" void mcle_glbridge_get_modelview(float *out16);
+extern "C" void mcle_glbridge_get_projection(float *out16);
+void glGetFloat(int param, FloatBuffer *buf) {
+    if (!buf) return;
+    float m[16];
+    if (param == 0x0BA7 /*GL_PROJECTION_MATRIX*/) {
+        mcle_glbridge_get_projection(m);
+    } else if (param == 0x0BA6 /*GL_MODELVIEW_MATRIX*/) {
+        mcle_glbridge_get_modelview(m);
+    } else {
+        return;
+    }
+    for (int i = 0; i < 16; i++) buf->put(m[i]);
+}
 void glTexGeni(unsigned int, unsigned int, int)            {} // TheEndPortalRenderer.cpp
 void glTexGenfv(unsigned int, unsigned int, const float*)  {} // TheEndPortalRenderer.cpp
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
