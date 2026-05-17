@@ -300,6 +300,12 @@ NSString* const kWorldShaderSrc = @R"(
     };
     struct MVPUniforms {
         float4x4 mvp;
+        // Texture matrix (active GL_TEXTURE stack top). Multiplied into
+        // per-vertex UV so renderAdvancedClouds's per-cell UV-translate
+        // (and any future water/lava animation) actually moves the
+        // sampled coords. Identity matrix = no-op = parity with shaders
+        // that don't touch it.
+        float4x4 texMatrix;
     };
     struct ColorUniforms {
         float4 currentColor;
@@ -322,7 +328,10 @@ NSString* const kWorldShaderSrc = @R"(
         o.pos   = m.mvp * float4(v.pos, 1.0);
         float4 vc = float4(v.color) / 255.0;
         o.color = vc * c.currentColor;
-        o.uv    = v.uv;
+        // Apply texture matrix (identity by default, translates per
+        // tile cell when renderAdvancedClouds is active).
+        float4 tcoord = m.texMatrix * float4(v.uv, 0.0, 1.0);
+        o.uv    = tcoord.xy;
         // fmt=1 vertices (sky/sun/moon/clouds) have no real lightmap UV.
         // Dispatch binds a 1x1 white lightmap for those passes so the
         // sample is a no-op. Routing the UV to (0.5, 0.5) keeps it inside
@@ -395,7 +404,7 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float2 lightmapUV;
         float  fogDist;
     };
-    struct MVPUniforms   { float4x4 mvp; };
+    struct MVPUniforms   { float4x4 mvp; float4x4 texMatrix; };
     struct ColorUniforms { float4 currentColor; };
     struct FogParams {
         float4 fogColor;
@@ -411,6 +420,10 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float3 pos = float3(v.pos) / 1024.0;
         float2 uv  = float2(v.uv) / 8192.0;
         o.pos   = m.mvp * float4(pos, 1.0);
+        // Apply texture matrix to the decoded UV (no-op identity for
+        // chunks, translates for cloud cube cells).
+        float4 tcoord = m.texMatrix * float4(uv, 0.0, 1.0);
+        uv = tcoord.xy;
         int packed = int(v.pcol) + 32768;
         float src_r = float((packed >> 11) & 0x1F) / 31.0;
         float src_g = float((packed >>  5) & 0x3F) / 63.0;
@@ -736,12 +749,21 @@ inline void mat_scale(float* m, float sx, float sy, float sz) {
 
 constexpr int kMatrixModeModelview  = 0;
 constexpr int kMatrixModeProjection = 1;
+constexpr int kMatrixModeTexture    = 2;
 constexpr int kGL_MODELVIEW         = 0x1700;
 constexpr int kGL_PROJECTION        = 0x1701;
+constexpr int kGL_TEXTURE           = 0x1702;
 
 int                g_matrix_mode = kMatrixModeModelview;
 std::vector<Mat4>  g_modelview_stack { mat_identity() };
 std::vector<Mat4>  g_projection_stack{ mat_identity() };
+// Texture matrix stack. Used by renderAdvancedClouds (the 3D cube
+// cloud path) to scroll the cloud UV pattern per frame. Upstream calls
+// glMatrixMode(GL_TEXTURE) + glLoadIdentity + glTranslatef to feed each
+// cube cell its own UV offset, then resets back when done. Each
+// dispatch reads the top of this stack into a vertex-shader uniform
+// that multiplies the per-vertex UV.
+std::vector<Mat4>  g_texture_stack  { mat_identity() };
 
 // G3f: GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
 // multiplied with this in the world vertex shader so glColor3f /
@@ -750,9 +772,11 @@ std::vector<Mat4>  g_projection_stack{ mat_identity() };
 float g_current_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 inline std::vector<Mat4>& current_stack() {
-    return (g_matrix_mode == kMatrixModeProjection)
-               ? g_projection_stack
-               : g_modelview_stack;
+    switch (g_matrix_mode) {
+        case kMatrixModeProjection: return g_projection_stack;
+        case kMatrixModeTexture:    return g_texture_stack;
+        default:                    return g_modelview_stack;
+    }
 }
 inline float* current_matrix_data() { return current_stack().back().m; }
 
@@ -768,8 +792,11 @@ extern "C" void mcle_glbridge_get_modelview(float *out16) {
 
 // Public matrix bridge - probe_stub.cpp's gl* matrix stubs forward here.
 extern "C" void mcle_glbridge_matrix_mode(int mode) {
-    g_matrix_mode = (mode == kGL_PROJECTION) ? kMatrixModeProjection
-                                              : kMatrixModeModelview;
+    switch (mode) {
+        case kGL_PROJECTION: g_matrix_mode = kMatrixModeProjection; break;
+        case kGL_TEXTURE:    g_matrix_mode = kMatrixModeTexture;    break;
+        default:             g_matrix_mode = kMatrixModeModelview;  break;
+    }
 }
 extern "C" void mcle_glbridge_load_identity(void) {
     current_stack().back() = mat_identity();
@@ -1215,7 +1242,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         }
     }
     [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
-    [g.enc setVertexBytes:mvp length:sizeof(mvp) atIndex:1];
+    // MVPUniforms = mvp + texMatrix (top of texture stack). Identity for
+    // chunks; translates for cloud cube cells when renderAdvancedClouds
+    // sets up per-cell UV offsets via glMatrixMode(GL_TEXTURE).
+    {
+        float uniforms[32];
+        for (int i = 0; i < 16; i++) uniforms[i]    = mvp[i];
+        const Mat4 &tm = g_texture_stack.back();
+        for (int i = 0; i < 16; i++) uniforms[16+i] = tm.m[i];
+        [g.enc setVertexBytes:uniforms length:sizeof(uniforms) atIndex:1];
+    }
     [g.enc setVertexBytes:g_current_color length:sizeof(g_current_color) atIndex:2];
 
     // Fog uniforms at vertex/fragment buffer 3. Vertex shader reads
