@@ -1251,21 +1251,26 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         const Mat4 &tm = g_texture_stack.back();
         for (int i = 0; i < 16; i++) uniforms[16+i] = tm.m[i];
         [g.enc setVertexBytes:uniforms length:sizeof(uniforms) atIndex:1];
-        // Diagnostic: log the texture-matrix translate component
-        // (elements 12, 13 in column-major) for the first 40 fmt=1 draws.
-        // Across renderAdvancedClouds the per-cell glTranslatef should
-        // give varying values; if they stay identity (0,0) the per-cell
-        // matrix isn't reaching dispatch.
+        // Diagnostic: log fmt=1 dispatches where the texture matrix is
+        // NOT identity. renderAdvancedClouds is the only path that sets
+        // GL_TEXTURE translates - sun/moon/sky dome leave it at identity.
+        // Filtering to non-identity skips the noise from earlier sky
+        // dispatches and pins whether renderAdvancedClouds actually
+        // routes per-cube UV offsets through our matrix stack.
         if (!isCompact) {
-            static int s_tmDumped = 0;
-            if (s_tmDumped < 40) {
-                extern int mcle_log_msg(const char *);
-                char buf[128];
-                snprintf(buf, sizeof(buf),
-                         "TM_DUMP idx=%d tx=%.4f ty=%.4f",
-                         s_tmDumped, tm.m[12], tm.m[13]);
-                mcle_log_msg(buf);
-                s_tmDumped++;
+            const float tx = tm.m[12];
+            const float ty = tm.m[13];
+            if (tx != 0.0f || ty != 0.0f) {
+                static int s_tmDumped = 0;
+                if (s_tmDumped < 60) {
+                    extern int mcle_log_msg(const char *);
+                    char buf[128];
+                    snprintf(buf, sizeof(buf),
+                             "TM_NONID idx=%d tx=%.4f ty=%.4f",
+                             s_tmDumped, tx, ty);
+                    mcle_log_msg(buf);
+                    s_tmDumped++;
+                }
             }
         }
     }
