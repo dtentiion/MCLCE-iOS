@@ -907,6 +907,34 @@ void initImpl() {
         g_levelRenderer = new LevelRenderer(g_minecraftShim, nullptr);
         g_minecraftShim->levelRenderer = g_levelRenderer;
         MCLE_LOG("mcle_game_init: LevelRenderer at %p", (void*)g_levelRenderer);
+
+        // Exclude world-decoration display lists from the per-frame
+        // auto-replay. They're already drawn by upstream renderSky /
+        // renderAdvancedClouds via glCallList - auto-replaying them
+        // again draws a second copy anchored to the player. The 100-
+        // radius haloRingList is the worst offender: upstream never
+        // calls it (gated on a specific skin id) so without skipping it
+        // we render a textured ring on every frame that sits as a
+        // stuck "wedge" across the upper sky.
+        const int starList     = g_levelRenderer->starList;
+        const int skyList      = starList + 1;
+        const int darkList     = starList + 2;
+        const int haloRingList = starList + 3;
+        mcle_glbridge_skip_autoreplay(starList);
+        mcle_glbridge_skip_autoreplay(skyList);
+        mcle_glbridge_skip_autoreplay(darkList);
+        mcle_glbridge_skip_autoreplay(haloRingList);
+        // createCloudMesh allocates 7 list IDs immediately after the
+        // four above. The 7-deep range stays in MemoryTracker's
+        // genLists order so we can derive it from haloRingList + 1.
+        for (int i = 0; i < 7; i++) {
+            mcle_glbridge_skip_autoreplay(haloRingList + 1 + i);
+        }
+        MCLE_LOG("mcle_game_init: registered %d world-decoration lists "
+                 "for autoreplay skip (starList=%d, haloRingList=%d, "
+                 "cloudList=%d..%d)",
+                 4 + 7, starList, haloRingList,
+                 haloRingList + 1, haloRingList + 7);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: LevelRenderer ctor threw: %{public}s", e.what());
     } catch (...) {
@@ -1345,6 +1373,7 @@ extern "C" void mcle_game_tick(void) {
 // m_instance null chain (Biome::getSkyColor etc) may bite here. If so
 // the signal handler logs the address, we patch the next null deref.
 extern "C" void mcle_glbridge_replay_all_lists(void);
+extern "C" void mcle_glbridge_skip_autoreplay(int id);
 extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg, float aspect,
                                                  float near_z, float far_z);
 extern "C" void mcle_glbridge_matrix_mode(int mode);
