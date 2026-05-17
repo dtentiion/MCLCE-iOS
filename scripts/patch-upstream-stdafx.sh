@@ -1485,6 +1485,14 @@ if [ -f "$RSD_PY" ]; then
     python3 "$RSD_PY"
 fi
 
+# DIAGNOSTIC ONLY: paint skyList bright red so we can tell whether the
+# "blue layer at sunset" the player reports is the sky-dome plane
+# showing through chunk gaps. Remove once identified.
+SKD_PY="$REPO_ROOT/scripts/patch-skylist-debug-red.py"
+if [ -f "$SKD_PY" ]; then
+    python3 "$SKD_PY"
+fi
+
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
