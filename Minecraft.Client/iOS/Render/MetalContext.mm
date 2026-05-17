@@ -1457,6 +1457,35 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         return;
     }
 
+    // GL_TRIANGLE_FAN (6) has no direct Metal equivalent. Expand it
+    // into an indexed triangle list (v0, v1, v2), (v0, v2, v3), ...
+    // so the center vertex participates in every fan triangle. Without
+    // this expansion the dispatch would fall through to plain Triangle
+    // mode and treat the 18 vertices as 6 disconnected triangles - the
+    // first one (center + 2 ring) renders as a gradient wedge, which
+    // is the right-angle triangle visible during sunset.
+    if (prim == 6 /*GL_TRIANGLE_FAN*/ && count >= 3) {
+        const int triCount = count - 2;
+        const int idxCount = triCount * 3;
+        std::vector<uint16_t> idxs(idxCount);
+        for (int i = 0; i < triCount; i++) {
+            idxs[i * 3 + 0] = 0;
+            idxs[i * 3 + 1] = (uint16_t)(i + 1);
+            idxs[i * 3 + 2] = (uint16_t)(i + 2);
+        }
+        id<MTLBuffer> ibuf =
+            [g.device newBufferWithBytes:idxs.data()
+                                  length:idxs.size() * sizeof(uint16_t)
+                                 options:MTLResourceStorageModeShared];
+        if (!ibuf) return;
+        [g.enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                          indexCount:(NSUInteger)idxCount
+                           indexType:MTLIndexTypeUInt16
+                         indexBuffer:ibuf
+                   indexBufferOffset:0];
+        return;
+    }
+
     MTLPrimitiveType mtlPrim = MTLPrimitiveTypeTriangle;
     if (prim == 5) mtlPrim = MTLPrimitiveTypeTriangleStrip;
 
