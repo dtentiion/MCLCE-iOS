@@ -121,6 +121,16 @@ id<MTLRenderPipelineState> g_world_pso_compact_additive = nil;
 id<MTLRenderPipelineState> g_world_pso_blend_nocut    = nil;
 id<MTLRenderPipelineState> g_world_pso_additive_nocut = nil;
 
+// Depth-only variants. renderAdvancedClouds runs a two-pass loop where
+// pass 0 calls glBlendFunc(GL_ZERO, GL_ONE) - source contributes nothing,
+// destination preserved - so color buffer is untouched while depth still
+// gets the cloud geometry. Without this variant the over-blend pipeline
+// runs for pass 0 too and we end up drawing clouds twice per frame, which
+// is what produced the visible flat checkered cloud sheet on top of the
+// proper 3D cube layer.
+id<MTLRenderPipelineState> g_world_pso_depth_only         = nil;
+id<MTLRenderPipelineState> g_world_pso_compact_depth_only = nil;
+
 // Cached encoder state. Reset to "unknown" at frame begin so the first
 // dispatch issues the actual setCullMode / setFrontFacingWinding call.
 MTLCullMode g_lastCullMode = (MTLCullMode)-1;
@@ -144,6 +154,18 @@ id<MTLDepthStencilState> g_lastDepthState = nil;
 // glAlphaFunc(GL_GREATER, 0.1).
 bool g_alpha_test_enabled = true;
 
+// glEnable/glDisable(GL_TEXTURE_2D) writes here. Default on. renderSky
+// disables texturing for the sky dome (skyList), sunrise gradient,
+// starList, and darkList - those draws are vertex-color only. Without
+// honoring this flag the fragment shader still samples whatever texture
+// is bound at the time. skyList has no per-vertex UVs (only t->vertex,
+// not t->vertexUV), so undefined UV bytes get interpolated against
+// whichever texture is current - producing a chaotic textured slab
+// stuck around the player. When this flag is off, immediate_dispatch
+// binds the 1x1 white texture so sample * vertex_color collapses to
+// vertex_color (parity with fixed-function GL).
+bool g_texture_2d_enabled = true;
+
 // Fog state. Mirrors upstream GameRenderer::setupFog which calls
 // glFog(GL_FOG_COLOR), glFogi(GL_FOG_MODE), glFogf(GL_FOG_START/END).
 // Default off (matches GL initial state). Fragment shader applies
@@ -160,12 +182,17 @@ float g_fog_end   = 1.0f;
 // writing rgba=0 directly. Reset to off at frame begin.
 bool g_blend_enabled  = false;
 // Blend func tracking: 0 = srcAlpha/oneMinusSrcAlpha (default over),
-// 1 = srcAlpha/ONE (additive, used by sun + stars). Set by glBlendFunc.
+// 1 = srcAlpha/ONE (additive, used by sun + stars),
+// 2 = GL_ZERO/GL_ONE (depth-only, cloud pass 0). Set by glBlendFunc.
 int  g_blend_func_mode = 0;
 id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
     g_depth_test_enabled = (enabled != 0);
+}
+
+extern "C" void mcle_glbridge_set_texture_2d(int enabled) {
+    g_texture_2d_enabled = (enabled != 0);
 }
 
 extern "C" void mcle_glbridge_set_depth_write(int enabled) {
@@ -241,6 +268,8 @@ extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
 extern "C" void mcle_glbridge_set_blend_func(int src, int dst) {
     if (src == 0x0302 /*GL_SRC_ALPHA*/ && dst == 0x0001 /*GL_ONE*/) {
         g_blend_func_mode = 1; // additive (sun, stars)
+    } else if (src == 0x0000 /*GL_ZERO*/ && dst == 0x0001 /*GL_ONE*/) {
+        g_blend_func_mode = 2; // depth-only (renderAdvancedClouds pass 0)
     } else {
         g_blend_func_mode = 0; // over (clouds, vignette, default)
     }
@@ -524,7 +553,18 @@ bool ensure_world_pipeline_compact() {
         return false;
     }
 
-    NSLog(@"[mcle_metal G5c] compact pipelines ready (no-blend + blend + additive)");
+    // Depth-only variant: writeMask=none so the color attachment is not
+    // touched. renderAdvancedClouds' pass-0 glBlendFunc(GL_ZERO, GL_ONE)
+    // routes here.
+    desc.colorAttachments[0].writeMask = MTLColorWriteMaskNone;
+    g_world_pso_compact_depth_only = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_compact_depth_only) {
+        NSLog(@"[mcle_metal G5c] compact depth-only pso build failed: %@", err);
+        return false;
+    }
+    desc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+
+    NSLog(@"[mcle_metal G5c] compact pipelines ready (no-blend + blend + additive + depth-only)");
     return true;
 }
 
@@ -614,6 +654,22 @@ bool ensure_world_pipeline() {
         NSLog(@"[mcle_metal G3c] blend nocut pso build failed: %@", err);
         return false;
     }
+
+    // Depth-only variant: writeMask=none so the color attachment stays
+    // untouched while depth is still written. renderAdvancedClouds pass 0
+    // sets glBlendFunc(GL_ZERO, GL_ONE) - a depth pre-pass with zero color
+    // contribution. Restore the fragment function to world_frag and the
+    // writeMask back to All afterwards so the next pipeline build (none
+    // here for fmt=1, but parity for future variants) starts from a
+    // known state.
+    desc.fragmentFunction = [lib newFunctionWithName:@"world_frag"];
+    desc.colorAttachments[0].writeMask = MTLColorWriteMaskNone;
+    g_world_pso_depth_only = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_depth_only) {
+        NSLog(@"[mcle_metal G3c] depth-only pso build failed: %@", err);
+        return false;
+    }
+    desc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
 
     // G4: build the 1x1 white default texture + linear sampler.
     if (!g_default_texture) {
@@ -1181,12 +1237,14 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     float mvp[16];
     compute_mvp(mvp);
 
-    // Pick pipeline variant: no-blend / blend-over / blend-additive.
-    // Cache last-applied PSO so dispatches don't re-bind unnecessarily.
+    // Pick pipeline variant: no-blend / blend-over / blend-additive /
+    // depth-only. Cache last-applied PSO so dispatches don't re-bind
+    // unnecessarily.
     id<MTLRenderPipelineState> pso = nil;
     if (isCompact) {
         if (!g_blend_enabled)            pso = g_world_pso_compact;
         else if (g_blend_func_mode == 1) pso = g_world_pso_compact_additive;
+        else if (g_blend_func_mode == 2) pso = g_world_pso_compact_depth_only;
         else                             pso = g_world_pso_compact_blend;
     } else {
         // fmt=1 path. When alpha test is disabled (sun/moon/sunrise pass)
@@ -1196,6 +1254,8 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             pso = g_world_pso;  // no-blend has no nocut variant; not used by sky
         } else if (g_blend_func_mode == 1) {
             pso = g_alpha_test_enabled ? g_world_pso_additive : g_world_pso_additive_nocut;
+        } else if (g_blend_func_mode == 2) {
+            pso = g_world_pso_depth_only;
         } else {
             pso = g_alpha_test_enabled ? g_world_pso_blend : g_world_pso_blend_nocut;
         }
@@ -1211,14 +1271,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         if (s_count < 60) {
             extern int mcle_log_msg(const char *);
             const char *name = "?";
-            if      (pso == g_world_pso)                  name = "fmt1_noblend_cut";
-            else if (pso == g_world_pso_blend)            name = "fmt1_blend_cut";
-            else if (pso == g_world_pso_additive)         name = "fmt1_add_cut";
-            else if (pso == g_world_pso_blend_nocut)      name = "fmt1_blend_NOCUT";
-            else if (pso == g_world_pso_additive_nocut)   name = "fmt1_add_NOCUT";
-            else if (pso == g_world_pso_compact)          name = "fmt4_noblend";
-            else if (pso == g_world_pso_compact_blend)    name = "fmt4_blend";
-            else if (pso == g_world_pso_compact_additive) name = "fmt4_add";
+            if      (pso == g_world_pso)                    name = "fmt1_noblend_cut";
+            else if (pso == g_world_pso_blend)              name = "fmt1_blend_cut";
+            else if (pso == g_world_pso_additive)           name = "fmt1_add_cut";
+            else if (pso == g_world_pso_blend_nocut)        name = "fmt1_blend_NOCUT";
+            else if (pso == g_world_pso_additive_nocut)     name = "fmt1_add_NOCUT";
+            else if (pso == g_world_pso_depth_only)         name = "fmt1_depth_only";
+            else if (pso == g_world_pso_compact)            name = "fmt4_noblend";
+            else if (pso == g_world_pso_compact_blend)      name = "fmt4_blend";
+            else if (pso == g_world_pso_compact_additive)   name = "fmt4_add";
+            else if (pso == g_world_pso_compact_depth_only) name = "fmt4_depth_only";
             char buf[120];
             snprintf(buf, sizeof(buf),
                      "PSO_PICK %s atest=%d blend=%d func=%d tex=%u",
@@ -1320,7 +1382,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     }
 
     // G4: bind whatever's current (defaults to 1x1 white) + sampler.
-    id<MTLTexture> tex = g_current_texture ? g_current_texture : g_default_texture;
+    // When GL_TEXTURE_2D is disabled (skyList / starList / darkList /
+    // sunrise gradient fan), force the 1x1 white texture so sample x
+    // vertex_color collapses to vertex_color - parity with fixed-function
+    // GL where disabled texturing means the fragment is just the primary
+    // color. Without this, those vertex-color-only draws sample whatever
+    // atlas happens to be bound at uninitialized UVs and produce a
+    // chaotic textured slab stuck around the player.
+    id<MTLTexture> tex = !g_texture_2d_enabled
+                            ? g_default_texture
+                            : (g_current_texture ? g_current_texture : g_default_texture);
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
     if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
 
