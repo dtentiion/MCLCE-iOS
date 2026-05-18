@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <mutex>
 #include <vector>
 
 #include "MetalContext.h"
@@ -73,7 +74,19 @@ struct DisplayList {
 };
 
 std::unordered_map<int, DisplayList> g_lists;
-int                                   g_recording_list = 0;
+// g_lists is shared across threads (worker chunk-rebuild threads each
+// commit their compiled list when glEndList fires). Guard reads + writes
+// with this mutex. Replay (call_list_replay) runs on the main thread so
+// it doesn't need to lock for read - but to be safe, all modifying ops
+// (insert/erase) and the dispatch read take the lock briefly.
+std::mutex                            g_lists_mu;
+// Per-thread recording state. Each chunk rebuild worker drives its own
+// glNewList -> Tesselator emits -> glEndList sequence; without thread-
+// local routing they would all stomp on a single global "current list"
+// and produce one tangled display list instead of one per chunk.
+thread_local int  g_recording_list           = 0;
+thread_local bool g_recording_has_translate  = false;
+thread_local float g_recording_last_translate[3] = {0, 0, 0};
 std::atomic<int>                      g_next_list_id{1};
 
 // Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
@@ -818,16 +831,23 @@ constexpr int kGL_MODELVIEW         = 0x1700;
 constexpr int kGL_PROJECTION        = 0x1701;
 constexpr int kGL_TEXTURE           = 0x1702;
 
-int                g_matrix_mode = kMatrixModeModelview;
-std::vector<Mat4>  g_modelview_stack { mat_identity() };
-std::vector<Mat4>  g_projection_stack{ mat_identity() };
+// Matrix mode + stacks are thread-local so chunk-rebuild worker threads
+// can run glPushMatrix / glTranslatef / glScalef / glPopMatrix inside
+// Chunk::rebuild (upstream Chunk.cpp:389-447) without stomping on the
+// main thread's modelview. Each thread maintains its own three stacks
+// initialized to identity; the captured DrawCmd.translate carries any
+// position offset across to replay where the main thread's modelview
+// is what actually feeds the shader uniform.
+thread_local int                g_matrix_mode = kMatrixModeModelview;
+thread_local std::vector<Mat4>  g_modelview_stack { mat_identity() };
+thread_local std::vector<Mat4>  g_projection_stack{ mat_identity() };
 // Texture matrix stack. Used by renderAdvancedClouds (the 3D cube
 // cloud path) to scroll the cloud UV pattern per frame. Upstream calls
 // glMatrixMode(GL_TEXTURE) + glLoadIdentity + glTranslatef to feed each
 // cube cell its own UV offset, then resets back when done. Each
 // dispatch reads the top of this stack into a vertex-shader uniform
 // that multiplies the per-vertex UV.
-std::vector<Mat4>  g_texture_stack  { mat_identity() };
+thread_local std::vector<Mat4>  g_texture_stack  { mat_identity() };
 
 // G3f: GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
 // multiplied with this in the world vertex shader so glColor3f /
@@ -907,10 +927,10 @@ extern "C" void mcle_glbridge_push_matrix(void) {
 extern "C" void mcle_glbridge_pop_matrix(void) {
     if (current_stack().size() > 1) current_stack().pop_back();
 }
-// G5: remember last translate applied while a list is being recorded, so
-// chunk display lists can carry their world position to replay.
-static float g_recording_last_translate[3] = {0, 0, 0};
-static bool  g_recording_has_translate = false;
+// g_recording_last_translate / g_recording_has_translate are declared
+// thread_local up at the top of this file alongside g_recording_list,
+// so multiple chunk-rebuild worker threads can each record their own
+// chunk without stomping on a shared "current translate".
 
 extern "C" void mcle_glbridge_translate(float x, float y, float z) {
     mat_translate(current_matrix_data(), x, y, z);
@@ -1769,7 +1789,10 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         // G5: capture currently bound texture id so chunks sample terrain.png
         // at replay even if other things have rebound the texture since.
         cmd.texId = g_bound_tex_id;
-        g_lists[g_recording_list].draws.push_back(std::move(cmd));
+        {
+            std::lock_guard<std::mutex> lk(g_lists_mu);
+            g_lists[g_recording_list].draws.push_back(std::move(cmd));
+        }
         return;
     }
     immediate_dispatch(prim, count, data, fmt, shader);
@@ -1792,7 +1815,10 @@ extern "C" int mcle_glbridge_gen_lists(int range) {
 
 extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
     g_recording_list = id;
-    g_lists[id] = DisplayList();
+    {
+        std::lock_guard<std::mutex> lk(g_lists_mu);
+        g_lists[id] = DisplayList();
+    }
     g_recording_has_translate = false;
     g_recording_last_translate[0] = 0;
     g_recording_last_translate[1] = 0;
@@ -1809,8 +1835,11 @@ extern "C" void mcle_glbridge_end_list(void) {
         if (s_count < 50) {
             int id = g_recording_list;
             int draws = 0;
-            auto it = g_lists.find(id);
-            if (it != g_lists.end()) draws = (int)it->second.draws.size();
+            {
+                std::lock_guard<std::mutex> lk(g_lists_mu);
+                auto it = g_lists.find(id);
+                if (it != g_lists.end()) draws = (int)it->second.draws.size();
+            }
             extern int mcle_log_msg(const char *);
             char buf[80];
             snprintf(buf, sizeof(buf), "LIST_END id=%d draws=%d", id, draws);
@@ -1833,8 +1862,19 @@ static unsigned long g_call_list_hits_low  = 0;  // id < 4000000 (chunk range ty
 static unsigned long g_call_list_hits_high = 0;  // id >= 4000000
 
 extern "C" void mcle_glbridge_call_list(int id) {
-    auto it = g_lists.find(id);
-    if (it == g_lists.end()) {
+    // Snapshot the DisplayList under the lock so we can replay without
+    // holding it (call_list_replay can take a while and we don't want
+    // to block worker-thread inserts). The map's iterators are
+    // invalidated by concurrent inserts so copy out.
+    DisplayList snapshot;
+    bool found;
+    {
+        std::lock_guard<std::mutex> lk(g_lists_mu);
+        auto it = g_lists.find(id);
+        found = (it != g_lists.end());
+        if (found) snapshot = it->second;
+    }
+    if (!found) {
         if (g_call_list_first_miss_id == -1) g_call_list_first_miss_id = id;
         g_call_list_misses++;
         return;
@@ -1843,7 +1883,7 @@ extern "C" void mcle_glbridge_call_list(int id) {
     g_call_list_last_hit_id = id;
     g_call_list_hits++;
     if (id < 4000000) g_call_list_hits_low++; else g_call_list_hits_high++;
-    call_list_replay(it->second);
+    call_list_replay(snapshot);
 }
 
 // Sampled getter so the consumer logs once per second instead of per call.
@@ -1865,6 +1905,7 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
 }
 
 extern "C" void mcle_glbridge_release_lists(int id, int range) {
+    std::lock_guard<std::mutex> lk(g_lists_mu);
     for (int i = 0; i < range; i++) g_lists.erase(id + i);
 }
 
@@ -1897,8 +1938,20 @@ extern "C" void mcle_glbridge_skip_autoreplay(int id) {
 // filtered out so they're only drawn once - from upstream's explicit
 // glCallList sites.
 extern "C" void mcle_glbridge_replay_all_lists(void) {
-    for (const auto& kv : g_lists) {
-        if (g_skip_autoreplay_lists.count(kv.first)) continue;
+    // Snapshot the (id -> DisplayList) pairs under the lock so we can
+    // replay without holding it; worker threads can still commit new
+    // lists while we draw. Each DisplayList copy is cheap (vector of
+    // small draws).
+    std::vector<std::pair<int, DisplayList>> snapshot;
+    {
+        std::lock_guard<std::mutex> lk(g_lists_mu);
+        snapshot.reserve(g_lists.size());
+        for (const auto& kv : g_lists) {
+            if (g_skip_autoreplay_lists.count(kv.first)) continue;
+            snapshot.emplace_back(kv.first, kv.second);
+        }
+    }
+    for (const auto& kv : snapshot) {
         call_list_replay(kv.second);
     }
 }
