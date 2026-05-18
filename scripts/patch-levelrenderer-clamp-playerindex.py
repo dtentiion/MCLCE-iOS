@@ -36,8 +36,11 @@ if "MCLE_iOS_CLAMP_PLAYERINDEX" in src:
 # after it. Preserve indentation by capturing the leading whitespace.
 import re
 
+# Match either the original form `int playerIndex = mc->player->GetXboxPad();`
+# or the null-guarded form `int playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);`
+# that patch-levelrenderer-checkpoints.py rewrites it into.
 pattern = re.compile(
-    r"^(\t+)int playerIndex = mc->player->GetXboxPad\(\);[^\n]*\n",
+    r"^(\t+)int playerIndex = (?:mc->player->GetXboxPad\(\)|\(mc->player \? mc->player->GetXboxPad\(\) : 0\));[^\n]*\n",
     re.MULTILINE,
 )
 
