@@ -46,9 +46,12 @@ pattern = re.compile(
 
 def replace(m):
     indent = m.group(1)
+    # Single-player setup only ever populates chunks[0] / level[0]. Any
+    # non-zero index from garbage GetXboxPad reads will hit a null
+    # slot and fault, so force to 0 unconditionally.
     return (
         m.group(0)
-        + f"{indent}if (playerIndex < 0 || playerIndex >= 4) playerIndex = 0; /* MCLE_iOS_CLAMP_PLAYERINDEX */\n"
+        + f"{indent}playerIndex = 0; /* MCLE_iOS_CLAMP_PLAYERINDEX */\n"
     )
 
 new_src, count = pattern.subn(replace, src)
