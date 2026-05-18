@@ -1499,3 +1499,10 @@ if [ -f "$GOL_PY" ]; then
     python3 "$GOL_PY"
 fi
 
+# TallGrass.cpp: zero icons in ctor + null guard in getTexture so the
+# intermittent 1-in-15-launches EXC_BAD_ACCESS at 0x8 stops.
+TGN_PY="$REPO_ROOT/scripts/patch-tallgrass-null-icons.py"
+if [ -f "$TGN_PY" ]; then
+    python3 "$TGN_PY"
+fi
+
