@@ -1485,33 +1485,6 @@ if [ -f "$RSD_PY" ]; then
     python3 "$RSD_PY"
 fi
 
-# DIAGNOSTIC ONLY: paint the moon quad bright magenta so we can tell
-# whether the 'blue rectangle on the opposite-of-sun side that pops up
-# at sunrise/sunset' is the moon quad with a broken texture. Remove
-# once identified.
-MND_PY="$REPO_ROOT/scripts/patch-moon-debug-magenta.py"
-if [ -f "$MND_PY" ]; then
-    python3 "$MND_PY"
-fi
-
-# DIAGNOSTIC ONLY: paint the sun quad bright green. Triangulates with
-# the magenta moon and the disabled darklists to identify the flat
-# blue carpet on the opposite-of-sun side at sunrise/sunset.
-SGD_PY="$REPO_ROOT/scripts/patch-sun-debug-green.py"
-if [ -f "$SGD_PY" ]; then
-    python3 "$SGD_PY"
-fi
-
-# DIAGNOSTIC ONLY: also skip the underwater/cave darkList draw in
-# renderSky. The always-on overworld one was disabled earlier; this
-# probe disables the gated one too so we can confirm whether the
-# flat blue carpet at sunset/sunrise is the darkList firing due to
-# alpha-interpolated yy briefly going below 63.
-RDU_PY="$REPO_ROOT/scripts/patch-rendersky-no-darklist-underwater.py"
-if [ -f "$RDU_PY" ]; then
-    python3 "$RDU_PY"
-fi
-
 # ColourTable.h: expose the static name table publicly so our iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"

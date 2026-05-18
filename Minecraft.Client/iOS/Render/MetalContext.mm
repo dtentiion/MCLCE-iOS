@@ -1427,6 +1427,45 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     }
 
 
+    // SKY_CENSUS diagnostic: log every unique fmt=1 (sky/sun/moon/cloud)
+    // dispatch shape. Dedup by a hash of (prim, count, texId, color,
+    // blend, alpha-test, fog) so each "shape" logs once. Helps identify
+    // which draw produces the "flat blue carpet on opposite-of-sun side
+    // at sunrise/sunset" by capturing color + bound texture + first
+    // vertex position. Pull crash_log.txt and look for SKY_CENSUS lines.
+    if (!isCompact && data && count >= 1) {
+        static std::unordered_set<uint64_t> s_seenShapes;
+        uint64_t h = (uint64_t)prim;
+        h = h * 1315423911u + (uint64_t)count;
+        h = h * 1315423911u + (uint64_t)g_bound_tex_id;
+        h = h * 1315423911u + (uint64_t)(g_current_color[0] * 255.0f);
+        h = h * 1315423911u + (uint64_t)(g_current_color[1] * 255.0f);
+        h = h * 1315423911u + (uint64_t)(g_current_color[2] * 255.0f);
+        h = h * 1315423911u + (uint64_t)(g_current_color[3] * 255.0f);
+        h = h * 1315423911u + (uint64_t)(g_blend_enabled ? 1 : 0);
+        h = h * 1315423911u + (uint64_t)g_blend_func_mode;
+        h = h * 1315423911u + (uint64_t)(g_alpha_test_enabled ? 1 : 0);
+        h = h * 1315423911u + (uint64_t)(g_fog_enabled ? 1 : 0);
+        h = h * 1315423911u + (uint64_t)(g_texture_2d_enabled ? 1 : 0);
+        if (s_seenShapes.find(h) == s_seenShapes.end()) {
+            s_seenShapes.insert(h);
+            extern int mcle_log_msg(const char *);
+            const float *fv = (const float *)data;
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "SKY_CENSUS prim=%d count=%d tex=%u col=(%.2f,%.2f,%.2f,%.2f) "
+                     "blend=%d func=%d atest=%d fog=%d tex2d=%d v0=(%.1f,%.1f,%.1f)",
+                     prim, count, g_bound_tex_id,
+                     g_current_color[0], g_current_color[1],
+                     g_current_color[2], g_current_color[3],
+                     (int)g_blend_enabled, g_blend_func_mode,
+                     (int)g_alpha_test_enabled, (int)g_fog_enabled,
+                     (int)g_texture_2d_enabled,
+                     fv[0], fv[1], fv[2]);
+            mcle_log_msg(buf);
+        }
+    }
+
     // GL_QUADS (7) has no Metal equivalent. Expand to a triangle index
     // buffer (0,1,2 + 0,2,3 per quad). Tesselator's default mode is
     // GL_QUADS so most ctor draws come through this path.
