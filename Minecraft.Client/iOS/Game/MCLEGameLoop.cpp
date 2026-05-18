@@ -1529,15 +1529,33 @@ extern "C" void mcle_world_drive_renderer(void) {
         // can lose lines if process dies fast; os_log via MCLE_LOG is
         // retained by the system.
         {
-            static int s_frameCounter = 0;
+            // Chunk build throughput. updateDirtyChunks builds at most
+            // one chunk per call (no worker threads on iOS - upstream's
+            // _LARGE_WORLDS spawn path isn't wired). At one call per 15
+            // frames, 2304 visible chunks take roughly 10 minutes to
+            // appear - the "cyan-below-horizon" gap is just chunks that
+            // haven't compiled yet.
+            //
+            // Drive it every frame and loop a few times per frame so
+            // freshly-loaded worlds catch up in seconds. Cap the inner
+            // loop so a flood of dirty work can't blow the frame budget.
             static int s_dirtyCalls = 0;
-            if ((s_frameCounter++ % 15) == 0) {
-                // Log every throttled call (every 250ms) so even a short
-                // log capture sees the current state.
-                bool logThis = true;
-                if (logThis) MCLE_LOG("WD_CKPT before updateDirtyChunks call=%d", s_dirtyCalls);
-                try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
-                if (logThis) MCLE_LOG("WD_CKPT after updateDirtyChunks call=%d", s_dirtyCalls);
+            constexpr int kMaxBuildsPerFrame = 4;
+            int builds = 0;
+            for (; builds < kMaxBuildsPerFrame; builds++) {
+                // updateDirtyChunks returns true only when it has more
+                // atomic-neighbor work to do for the chunk it just built,
+                // not "there are more dirty chunks elsewhere". So keep
+                // calling regardless - the cap kMaxBuildsPerFrame bounds
+                // the per-frame cost.
+                try { g_levelRenderer->updateDirtyChunks(); } catch (...) { break; }
+            }
+            // Log once per second so we can see throughput without
+            // spamming.
+            static int s_frameCounter = 0;
+            if ((s_frameCounter++ % 60) == 0) {
+                MCLE_LOG("WD_CKPT updateDirtyChunks call=%d builtThisFrame=%d",
+                         s_dirtyCalls, builds);
                 s_dirtyCalls++;
             }
         }
