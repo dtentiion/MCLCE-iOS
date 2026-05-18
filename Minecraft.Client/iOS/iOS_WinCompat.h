@@ -323,59 +323,27 @@ static inline DWORD GetCurrentThreadId(void) {
 static inline HANDLE GetCurrentThread(void) {
     return (HANDLE)pthread_self();
 }
-// Real threading + event shims. Backed by pthread mutex/cond in
-// iOS_Threading.cpp. With these wired and the Metal render layer's
-// recording state (g_recording_list / g_recording_*translate) marked
-// thread_local plus g_lists guarded by a mutex, the upstream
-// _LARGE_WORLDS chunk-rebuild worker thread pool can actually run.
-extern "C" void*        mcle_event_create(int manualReset, int initialSignaled);
-extern "C" void         mcle_event_set(void* handle);
-extern "C" void         mcle_event_reset(void* handle);
-extern "C" unsigned int mcle_event_wait(void* handle, unsigned int timeoutMs);
-extern "C" unsigned int mcle_handle_wait(void* handle, unsigned int timeoutMs);
-
-typedef unsigned int (*MCLE_ThreadStartFn)(void*);
-extern "C" void*        mcle_thread_create(MCLE_ThreadStartFn startFn, void* arg,
-                                             unsigned int stackSize, int startSuspended,
-                                             unsigned int* outId);
-extern "C" unsigned int mcle_thread_resume(void* handle);
-
-static inline DWORD ResumeThread(HANDLE h) { return mcle_thread_resume(h); }
+static inline DWORD ResumeThread(HANDLE)              { return 0; }
 static inline DWORD SuspendThread(HANDLE)             { return 0; }
 static inline BOOL  SetThreadAffinityMask(HANDLE, DWORD_PTR) { return TRUE; }
 static inline BOOL  SetThreadPriority(HANDLE, int)    { return TRUE; }
 static inline int   GetThreadPriority(HANDLE)         { return 0; }
-static inline DWORD WaitForSingleObject(HANDLE h, DWORD ms) {
-    return (DWORD)mcle_handle_wait(h, ms);
-}
-static inline DWORD WaitForMultipleObjects(DWORD count, const HANDLE* arr,
-                                            BOOL waitAll, DWORD ms) {
-    if (!arr || count == 0) return 0;
-    if (waitAll) {
-        for (DWORD i = 0; i < count; i++) {
-            (void)mcle_handle_wait((HANDLE)arr[i], ms);
-        }
-        return 0;
-    }
-    for (DWORD i = 0; i < count; i++) {
-        if (mcle_handle_wait((HANDLE)arr[i], 0) == 0) return i;
-    }
-    return 0;
-}
+static inline DWORD WaitForSingleObject(HANDLE, DWORD) { return 0; }
+static inline DWORD WaitForMultipleObjects(DWORD, const HANDLE*, BOOL, DWORD) { return 0; }
 static inline BOOL  TerminateThread(HANDLE, DWORD)    { return TRUE; }
-static inline HANDLE CreateEventA(void*, BOOL bManualReset, BOOL bInitialState, const char*) {
-    return (HANDLE)mcle_event_create(bManualReset != 0, bInitialState != 0);
-}
-static inline HANDLE CreateEventW(void*, BOOL bManualReset, BOOL bInitialState, const wchar_t*) {
-    return (HANDLE)mcle_event_create(bManualReset != 0, bInitialState != 0);
-}
+// INVALID_HANDLE_VALUE is defined further down in this header so we
+// can't use it as the sentinel here without a forward macro. Return
+// nullptr - upstream callers don't compare events to that sentinel,
+// only to NULL.
+static inline HANDLE CreateEventA(void*, BOOL, BOOL, const char*)    { return (HANDLE)0; }
+static inline HANDLE CreateEventW(void*, BOOL, BOOL, const wchar_t*) { return (HANDLE)0; }
 #  ifdef UNICODE
 #    define CreateEvent CreateEventW
 #  else
 #    define CreateEvent CreateEventA
 #  endif
-static inline BOOL  SetEvent(HANDLE h)   { mcle_event_set(h);   return TRUE; }
-static inline BOOL  ResetEvent(HANDLE h) { mcle_event_reset(h); return TRUE; }
+static inline BOOL  SetEvent(HANDLE)   { return TRUE; }
+static inline BOOL  ResetEvent(HANDLE) { return TRUE; }
 
 // Critical sections backed by pthread mutexes. Upstream uses these
 // for the global-lock pattern around C4JThread, command dispatch,
@@ -1391,26 +1359,12 @@ static inline DWORD GetFileSize(HANDLE h, LPDWORD high) {
     return (DWORD)((uint64_t)st.st_size & 0xFFFFFFFFu);
 }
 
-// Win32 thread spawn. Backed by pthread_create in iOS_Threading.cpp.
-// Honors CREATE_SUSPENDED by deferring the pthread_create call until
-// ResumeThread is invoked - C4JThread.cpp:117 + LevelRenderer's
-// chunk-rebuild static ctor allocate activation events between
-// constructing the thread and Run(), so spawning the pthread
-// immediately would race against null event pointers.
+// Win32 thread spawn. Probe never runs threading; null handle is fine.
+// Placed after LPDWORD/INVALID_HANDLE_VALUE so the signature parses.
 typedef DWORD (*LPTHREAD_START_ROUTINE)(void*);
-static inline HANDLE CreateThread(void*, size_t stackSize,
-                                    LPTHREAD_START_ROUTINE startFn, void* arg,
-                                    DWORD creationFlags, LPDWORD outId) {
-    unsigned int id = 0;
-    int suspended = (creationFlags & CREATE_SUSPENDED) ? 1 : 0;
-    void* h = mcle_thread_create(
-        reinterpret_cast<MCLE_ThreadStartFn>(startFn),
-        arg,
-        (unsigned int)stackSize,
-        suspended,
-        &id);
-    if (outId) *outId = (DWORD)id;
-    return (HANDLE)h;
+static inline HANDLE CreateThread(void*, size_t, LPTHREAD_START_ROUTINE, void*, DWORD, LPDWORD outId) {
+    if (outId) *outId = 0;
+    return INVALID_HANDLE_VALUE;
 }
 static inline BOOL CreateDirectoryA(const char*, void*) { return TRUE; }
 static inline BOOL CreateDirectoryW(const wchar_t*, void*) { return TRUE; }
