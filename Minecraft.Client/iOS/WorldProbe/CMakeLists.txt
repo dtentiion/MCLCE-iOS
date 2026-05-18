@@ -1175,11 +1175,6 @@ add_library(mcle_world_probe STATIC
   # Phase E: bodies for upstream symbols whose owning .cpp files don't
   # compile yet. See link_stubs.cpp comments for the per-class story.
   link_stubs.cpp
-  # pthread-backed real implementations behind the Win32 threading +
-  # event shims in iOS_WinCompat.h. needed so C4JThread::Event and
-  # the LevelRenderer chunk-rebuild thread spawn path actually do
-  # work on iOS instead of compiling as no-ops.
-  ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/iOS_Threading.cpp
 )
 
 target_include_directories(mcle_world_probe PRIVATE
