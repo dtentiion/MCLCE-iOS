@@ -1428,13 +1428,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 
 
     // SKY_CENSUS diagnostic: log every unique fmt=1 (sky/sun/moon/cloud)
-    // dispatch shape. Dedup by a hash of (prim, count, texId, color,
-    // blend, alpha-test, fog) so each "shape" logs once. Helps identify
-    // which draw produces the "flat blue carpet on opposite-of-sun side
-    // at sunrise/sunset" by capturing color + bound texture + first
-    // vertex position. Pull crash_log.txt and look for SKY_CENSUS lines.
+    // dispatch shape. Now also captures the actual per-vertex color
+    // bytes from the buffer (Tesselator's t->color() writes there
+    // directly without going through glColor4f, so g_current_color
+    // alone doesn't tell us what the fan/star/cloud vertices actually
+    // are). vertex layout for fmt=1 is float3 pos + float2 uv + uchar4
+    // color at offset 20 + uchar4 normal.
     if (!isCompact && data && count >= 1) {
         static std::unordered_set<uint64_t> s_seenShapes;
+        const uint8_t *pv0 = (const uint8_t *)data;
+        const uint8_t vR = pv0[20], vG = pv0[21], vB = pv0[22], vA = pv0[23];
         uint64_t h = (uint64_t)prim;
         h = h * 1315423911u + (uint64_t)count;
         h = h * 1315423911u + (uint64_t)g_bound_tex_id;
@@ -1442,6 +1445,10 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         h = h * 1315423911u + (uint64_t)(g_current_color[1] * 255.0f);
         h = h * 1315423911u + (uint64_t)(g_current_color[2] * 255.0f);
         h = h * 1315423911u + (uint64_t)(g_current_color[3] * 255.0f);
+        h = h * 1315423911u + (uint64_t)vR;
+        h = h * 1315423911u + (uint64_t)vG;
+        h = h * 1315423911u + (uint64_t)vB;
+        h = h * 1315423911u + (uint64_t)vA;
         h = h * 1315423911u + (uint64_t)(g_blend_enabled ? 1 : 0);
         h = h * 1315423911u + (uint64_t)g_blend_func_mode;
         h = h * 1315423911u + (uint64_t)(g_alpha_test_enabled ? 1 : 0);
@@ -1451,13 +1458,15 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             s_seenShapes.insert(h);
             extern int mcle_log_msg(const char *);
             const float *fv = (const float *)data;
-            char buf[256];
+            char buf[320];
             snprintf(buf, sizeof(buf),
-                     "SKY_CENSUS prim=%d count=%d tex=%u col=(%.2f,%.2f,%.2f,%.2f) "
+                     "SKY_CENSUS prim=%d count=%d tex=%u glCol=(%.2f,%.2f,%.2f,%.2f) "
+                     "v0Col=(%u,%u,%u,%u) "
                      "blend=%d func=%d atest=%d fog=%d tex2d=%d v0=(%.1f,%.1f,%.1f)",
                      prim, count, g_bound_tex_id,
                      g_current_color[0], g_current_color[1],
                      g_current_color[2], g_current_color[3],
+                     vR, vG, vB, vA,
                      (int)g_blend_enabled, g_blend_func_mode,
                      (int)g_alpha_test_enabled, (int)g_fog_enabled,
                      (int)g_texture_2d_enabled,
