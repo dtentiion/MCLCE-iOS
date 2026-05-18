@@ -1506,3 +1506,11 @@ if [ -f "$TGN_PY" ]; then
     python3 "$TGN_PY"
 fi
 
+# TileRenderer.cpp: guard the getMissingIcon fallback so a null
+# minecraft / textures doesn't crash the chunk rebuild path. Covers
+# any Tile subclass with uninit icons in one place.
+TRN_PY="$REPO_ROOT/scripts/patch-tilerenderer-null-textures-guard.py"
+if [ -f "$TRN_PY" ]; then
+    python3 "$TRN_PY"
+fi
+
