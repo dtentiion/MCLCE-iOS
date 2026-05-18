@@ -1514,3 +1514,11 @@ if [ -f "$TRN_PY" ]; then
     python3 "$TRN_PY"
 fi
 
+# LevelRenderer.cpp: clamp playerIndex to [0,3] after GetXboxPad.
+# Our ServerPlayer aliased into mc->player slot can return garbage
+# from this call due to layout mismatch, causing intermittent OOB.
+LCP_PY="$REPO_ROOT/scripts/patch-levelrenderer-clamp-playerindex.py"
+if [ -f "$LCP_PY" ]; then
+    python3 "$LCP_PY"
+fi
+
