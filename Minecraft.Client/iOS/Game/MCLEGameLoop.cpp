@@ -131,6 +131,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Gui.h"
 #include "../../../upstream/Minecraft.Client/GameRenderer.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
+#include "../../../upstream/Minecraft.Client/PlayerChunkMap.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLocalPlayer.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
@@ -809,6 +810,20 @@ void initImpl() {
         } catch (...) {
             MCLE_LOG("mcle_game_init: addEntity threw unknown");
         }
+
+        // Register player with chunk map so on-demand chunk streaming
+        // works as they walk. Upstream wires this via PlayerList::add
+        // through the network handshake; we shortcut.
+        try {
+            PlayerChunkMap *cm = g_levels[0]->getChunkMap();
+            MCLE_LOG("mcle_game_init: chunkMap=%p add(player)", (void*)cm);
+            if (cm) cm->add(g_player);
+            MCLE_LOG("mcle_game_init: chunkMap->add returned");
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle_game_init: chunkMap->add threw: %{public}s", e.what());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: chunkMap->add threw unknown");
+        }
     }
 
     // Flip to ticking state ONLY after the player is fully registered.
@@ -1322,26 +1337,20 @@ extern "C" void mcle_game_tick(void) {
         }
     }
 
-    // Clamp player to preloaded chunk area. Even with collision, chunks
-    // outside the r=3 ring aren't loaded and Level::getBiome would deref
-    // null at the new position. Bounds snapshot once from the spawn point.
-    if (g_player) {
-        static bool s_spawnChunkInit = false;
-        static float s_minX, s_maxX, s_minZ, s_maxZ;
-        if (!s_spawnChunkInit) {
-            static constexpr int kClampRadiusChunks = 3;
-            int cx = ((int)floorf((float)g_player->x)) >> 4;
-            int cz = ((int)floorf((float)g_player->z)) >> 4;
-            s_minX = (float)((cx - kClampRadiusChunks) * 16);
-            s_maxX = (float)((cx + kClampRadiusChunks) * 16 + 15) + 0.999f;
-            s_minZ = (float)((cz - kClampRadiusChunks) * 16);
-            s_maxZ = (float)((cz + kClampRadiusChunks) * 16 + 15) + 0.999f;
-            s_spawnChunkInit = true;
-        }
-        if (g_player->x < s_minX) g_player->x = s_minX;
-        if (g_player->x > s_maxX) g_player->x = s_maxX;
-        if (g_player->z < s_minZ) g_player->z = s_minZ;
-        if (g_player->z > s_maxZ) g_player->z = s_maxZ;
+    // On-demand chunk streaming. Walk clamp is gone; instead drive
+    // PlayerChunkMap each tick so new chunks load as the player moves.
+    // move() queues add/remove based on player-chunk delta (>= 8 blocks
+    // moved). tick() processes one queued add per player per tick via
+    // getChunk(.., true) -> cache->create. Parity with upstream
+    // PlayerConnection -> PlayerList::move + PlayerChunkMap::tick.
+    if (g_player && g_levels[0]) {
+        try {
+            PlayerChunkMap *cm = g_levels[0]->getChunkMap();
+            if (cm) {
+                cm->move(g_player);
+                cm->tick();
+            }
+        } catch (...) {}
     }
 
     if ((g_tickCount % kLogEveryN) == 0) {
