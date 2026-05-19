@@ -1407,13 +1407,21 @@ extern "C" void mcle_world_drive_renderer(void) {
     // Vec3::newTemp (Level::getSkyColor), or Tile::setShape.
     static bool s_renderThreadTlsReady = false;
     if (!s_renderThreadTlsReady) {
+        MCLE_LOG("RTLS_CKPT step=1 Tile");
         Tile::CreateNewThreadStorage();
+        MCLE_LOG("RTLS_CKPT step=2 Tesselator");
         Tesselator::CreateNewThreadStorage(16 * 1024);
+        MCLE_LOG("RTLS_CKPT step=3 Vec3");
         Vec3::CreateNewThreadStorage();
+        MCLE_LOG("RTLS_CKPT step=4 IntCache");
         IntCache::CreateNewThreadStorage();
+        MCLE_LOG("RTLS_CKPT step=5 AABB");
         AABB::CreateNewThreadStorage();
+        MCLE_LOG("RTLS_CKPT step=6 OldChunkStorage");
         OldChunkStorage::CreateNewThreadStorage();
+        MCLE_LOG("RTLS_CKPT step=7 Level lighting cache");
         Level::enableLightingCache();
+        MCLE_LOG("RTLS_CKPT step=8 Chunk");
         Chunk::CreateNewThreadStorage();
         s_renderThreadTlsReady = true;
         MCLE_LOG("mcle_world_drive_renderer: render-thread full TLS init done");
