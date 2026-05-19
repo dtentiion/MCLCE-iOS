@@ -1229,6 +1229,11 @@ extern "C" void mcle_game_tick(void) {
         OldChunkStorage::CreateNewThreadStorage();
         Level::enableLightingCache();
         Chunk::CreateNewThreadStorage();
+        // Compression is a TLS-singleton: getCompression() returns the
+        // current thread's slot. McRegionChunkStorage::load -> RegionFile
+        // -> Compression::getCompression() crashes on null TLS during
+        // chunk streaming on this thread without this init.
+        Compression::CreateNewThreadStorage();
         s_tickThreadTlsReady = true;
         MCLE_LOG("mcle_game_tick: tick-thread full TLS init done");
     }
@@ -1446,6 +1451,8 @@ extern "C" void mcle_world_drive_renderer(void) {
         Level::enableLightingCache();
         MCLE_LOG("RTLS_CKPT step=8 Chunk");
         Chunk::CreateNewThreadStorage();
+        MCLE_LOG("RTLS_CKPT step=9 Compression");
+        Compression::CreateNewThreadStorage();
         s_renderThreadTlsReady = true;
         MCLE_LOG("mcle_world_drive_renderer: render-thread full TLS init done");
     }
