@@ -1545,3 +1545,11 @@ if [ -f "$PCMNC_PY" ]; then
     python3 "$PCMNC_PY"
 fi
 
+# ServerChunkCache.cpp: per-phase log inside create() so we can see
+# exactly which step crashes for the procgen crashes at coords
+# beyond r=3.
+SCCP_PY="$REPO_ROOT/scripts/patch-scc-create-phases.py"
+if [ -f "$SCCP_PY" ]; then
+    python3 "$SCCP_PY"
+fi
+
