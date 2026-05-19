@@ -1529,3 +1529,11 @@ if [ -f "$SCC_PY" ]; then
     python3 "$SCC_PY"
 fi
 
+# PlayerChunkMap.cpp: force add() to queue all chunks (no synchronous
+# 14-ring load) so the initial player-registration doesn't blow up
+# on chunks the synchronous path can't handle in our build.
+PCMA_PY="$REPO_ROOT/scripts/patch-playerchunkmap-add-async.py"
+if [ -f "$PCMA_PY" ]; then
+    python3 "$PCMA_PY"
+fi
+
