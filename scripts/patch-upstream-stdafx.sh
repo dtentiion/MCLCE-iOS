@@ -1537,3 +1537,11 @@ if [ -f "$PCMA_PY" ]; then
     python3 "$PCMA_PY"
 fi
 
+# PlayerChunkMap.cpp: null-guard connection->send sites. Our local
+# player has no network connection, so the chunk-visibility packet
+# broadcasts in add/tick null-deref without this.
+PCMNC_PY="$REPO_ROOT/scripts/patch-playerchunkmap-null-connection.py"
+if [ -f "$PCMNC_PY" ]; then
+    python3 "$PCMNC_PY"
+fi
+
