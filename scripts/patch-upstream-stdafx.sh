@@ -1553,3 +1553,10 @@ if [ -f "$SCCP_PY" ]; then
     python3 "$SCCP_PY"
 fi
 
+# EntityTracker.cpp: skip __debugbreak when entityId >= 16384. dev
+# assert; procgen features spawn chests with high IDs.
+ETB_PY="$REPO_ROOT/scripts/patch-entitytracker-debugbreak.py"
+if [ -f "$ETB_PY" ]; then
+    python3 "$ETB_PY"
+fi
+
