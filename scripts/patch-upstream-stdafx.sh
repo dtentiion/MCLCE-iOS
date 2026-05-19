@@ -1522,3 +1522,10 @@ if [ -f "$LCP_PY" ]; then
     python3 "$LCP_PY"
 fi
 
+# ServerChunkCache.cpp: one-shot SCC_CREATE log so we can see if the
+# on-demand chunk streaming path reaches cache->create.
+SCC_PY="$REPO_ROOT/scripts/patch-scc-create-checkpoint.py"
+if [ -f "$SCC_PY" ]; then
+    python3 "$SCC_PY"
+fi
+
