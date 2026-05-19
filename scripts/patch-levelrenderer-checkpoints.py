@@ -62,8 +62,14 @@ edits = [
     ),
     (
         "\tdouble xOff = player->xOld + (player->x - player->xOld) * alpha;",
-        '\tapp.DebugPrintf("LR_CKPT before player position calc");\n'
+        '\tapp.DebugPrintf("LR_CKPT before player position calc px=%f py=%f pz=%f xOld=%f zOld=%f",'
+        " player->x, player->y, player->z, xOld[playerIndex], zOld[playerIndex]);\n"
         "\tdouble xOff = player->xOld + (player->x - player->xOld) * alpha;",
+    ),
+    (
+        "\t\tresortChunks(Mth::floor(player->x), Mth::floor(player->y), Mth::floor(player->z));",
+        '\t\tapp.DebugPrintf("LR_CKPT resort firing! px=%f pz=%f", player->x, player->z);\n'
+        "\t\tresortChunks(Mth::floor(player->x), Mth::floor(player->y), Mth::floor(player->z));",
     ),
     (
         "\tLighting::turnOff();",
