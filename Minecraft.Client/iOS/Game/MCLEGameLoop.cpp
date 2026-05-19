@@ -1550,7 +1550,16 @@ extern "C" void mcle_world_drive_renderer(void) {
             static int s_dirtyCalls = 0;
             constexpr int kMaxBuildsPerFrame = 4;
             int builds = 0;
-            for (; builds < kMaxBuildsPerFrame; builds++) {
+            // Skip the whole loop if textures aren't ready yet. tiles
+            // with uninit icons return null from getTexture; the
+            // TileRenderer null-guard returns null from the fallback
+            // path; the caller (tesselateBlock...) then derefs that
+            // null icon to read UV coords and faults at addr 0x0.
+            // Wait until textures->stitch has populated icons.
+            Minecraft *mcShimRT = Minecraft::GetInstance();
+            const bool texturesReady =
+                mcShimRT != nullptr && mcShimRT->textures != nullptr;
+            for (; texturesReady && builds < kMaxBuildsPerFrame; builds++) {
                 // updateDirtyChunks returns true only when it has more
                 // atomic-neighbor work to do for the chunk it just built,
                 // not "there are more dirty chunks elsewhere". So keep
