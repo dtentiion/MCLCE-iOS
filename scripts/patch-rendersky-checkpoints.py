@@ -92,9 +92,13 @@ edits = [
         "void LevelRenderer::renderAdvancedClouds(float alpha)\n{\n"
         "\t// MGH - added",
         "void LevelRenderer::renderAdvancedClouds(float alpha)\n{\n"
-        '\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds enter textures=%p", textures);\n'
+        '\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds enter textures=%p mc=%p ctp=%p", textures, mc, mc ? (void*)mc->cameraTargetPlayer.get() : (void*)0);\n'
         "\tif (!textures) {\n"
         '\t\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds bail: textures null");\n'
+        "\t\treturn;\n"
+        "\t}\n"
+        "\tif (!mc || !mc->cameraTargetPlayer) {\n"
+        '\t\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds bail: mc/cameraTargetPlayer null");\n'
         "\t\treturn;\n"
         "\t}\n"
         "\t// MGH - added",
