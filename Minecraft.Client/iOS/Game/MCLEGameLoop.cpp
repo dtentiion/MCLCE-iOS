@@ -811,18 +811,26 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: addEntity threw unknown");
         }
 
-        // Register player with chunk map so on-demand chunk streaming
-        // works as they walk. Upstream wires this via PlayerList::add
-        // through the network handshake; we shortcut.
+        // Minimal chunkMap registration so per-tick move/tick can
+        // process this player without the synchronous 196-chunk
+        // spiral that upstream's add() does. lastMoveX/Z init to the
+        // player's current pos so the first move() doesn't think they
+        // teleported far. Chunks then stream one-per-tick as the
+        // player walks.
         try {
             PlayerChunkMap *cm = g_levels[0]->getChunkMap();
-            MCLE_LOG("mcle_game_init: chunkMap=%p add(player)", (void*)cm);
-            if (cm) cm->add(g_player);
-            MCLE_LOG("mcle_game_init: chunkMap->add returned");
+            MCLE_LOG("mcle_game_init: chunkMap=%p minimal-register player", (void*)cm);
+            if (cm && g_player) {
+                g_player->lastMoveX = g_player->x;
+                g_player->lastMoveZ = g_player->z;
+                cm->players.push_back(g_player);
+                MCLE_LOG("mcle_game_init: chunkMap registered, players=%zu",
+                         cm->players.size());
+            }
         } catch (const std::exception &e) {
-            MCLE_LOG("mcle_game_init: chunkMap->add threw: %{public}s", e.what());
+            MCLE_LOG("mcle_game_init: chunkMap register threw: %{public}s", e.what());
         } catch (...) {
-            MCLE_LOG("mcle_game_init: chunkMap->add threw unknown");
+            MCLE_LOG("mcle_game_init: chunkMap register threw unknown");
         }
     }
 
