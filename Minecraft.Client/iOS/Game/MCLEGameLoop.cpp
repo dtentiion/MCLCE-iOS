@@ -1347,14 +1347,25 @@ extern "C" void mcle_game_tick(void) {
 
     // On-demand chunk streaming. Walk clamp is gone; instead drive
     // PlayerChunkMap each tick so new chunks load as the player moves.
-    // move() queues add/remove based on player-chunk delta (>= 8 blocks
-    // moved). tick() processes one queued add per player per tick via
-    // getChunk(.., true) -> cache->create. Parity with upstream
-    // PlayerConnection -> PlayerList::move + PlayerChunkMap::tick.
     if (g_player && g_levels[0]) {
         try {
             PlayerChunkMap *cm = g_levels[0]->getChunkMap();
             if (cm) {
+                // Log player pos vs lastMove + addRequests size every
+                // ~30 ticks so we can see whether move() is queuing
+                // anything and whether tick() drains it.
+                static int s_pcmLog = 0;
+                if ((s_pcmLog++ % 30) == 0) {
+                    double dx = g_player->lastMoveX - g_player->x;
+                    double dz = g_player->lastMoveZ - g_player->z;
+                    MCLE_LOG("PCM_CKPT players=%zu px=%.1f pz=%.1f "
+                             "lastMoveX=%.1f lastMoveZ=%.1f distSq=%.1f "
+                             "(thresh=64)",
+                             cm->players.size(),
+                             g_player->x, g_player->z,
+                             g_player->lastMoveX, g_player->lastMoveZ,
+                             dx * dx + dz * dz);
+                }
                 cm->move(g_player);
                 cm->tick();
             }
