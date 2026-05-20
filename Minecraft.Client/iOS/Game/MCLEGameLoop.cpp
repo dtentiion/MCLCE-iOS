@@ -646,6 +646,12 @@ void initImpl() {
     try {
         PlayerList *pl = new PlayerList(g_server);
         MCLE_LOG("mcle_game_init: PlayerList allocated at %p, attaching...", (void*)pl);
+        // Default with _LARGE_WORLDS is 16 (33x33 = 1089 chunks). Way
+        // too much on iOS - jetsam kills the process once we've streamed
+        // a few hundred chunks. Drop to 6 (13x13 = 169 chunks) - enough
+        // to see distance without running out of memory.
+        pl->setViewDistance(6);
+        MCLE_LOG("mcle_game_init: PlayerList viewDistance=%d", pl->getViewDistance());
         g_server->setPlayers(pl);
         MCLE_LOG("mcle_game_init: PlayerList attached");
     } catch (const std::exception &e) {
