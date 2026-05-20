@@ -29,7 +29,7 @@ edits = [
         "void LevelRenderer::renderSky(float alpha)\n{\n"
         "\tif (mc->level->dimension->id == 1)",
         "void LevelRenderer::renderSky(float alpha)\n{\n"
-        "\tif (!mc || !mc->level || !mc->level->dimension) return; /* MCLE_SKY_GUARDS */\n"
+        "\tif (!mc || !mc->level || !mc->level->dimension) return; // MCLE_SKY_GUARDS\n"
         "\tif (mc->level->dimension->id == 1)",
     ),
     # getSkyColor: guard level[playerIndex].
