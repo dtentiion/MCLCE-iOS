@@ -1311,11 +1311,19 @@ extern "C" void mcle_game_tick(void) {
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
+    using hrclock = std::chrono::steady_clock;
+    const auto tickStart = hrclock::now();
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
+            const auto lvlStart = hrclock::now();
             g_levels[i]->tick();
             g_levels[i]->tickEntities();
+            const auto lvlMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   hrclock::now() - lvlStart).count();
+            if (lvlMs > 50) {
+                MCLE_LOG("SLOW_TICK level=%d took=%lldms", i, (long long)lvlMs);
+            }
         }
         // LevelRenderer::tick increments the renderer-side `ticks` member
         // which renderClouds reads for the cloud drift offset
@@ -1420,10 +1428,22 @@ extern "C" void mcle_game_tick(void) {
                                  info.virtual_size  / (1024.0 * 1024.0));
                     }
                 }
+                const auto cmStart = hrclock::now();
                 cm->move(g_player);
                 cm->tick();
+                const auto cmMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      hrclock::now() - cmStart).count();
+                if (cmMs > 50) {
+                    MCLE_LOG("SLOW_PCM cm->move+tick took=%lldms", (long long)cmMs);
+                }
             }
         } catch (...) {}
+    }
+
+    const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             hrclock::now() - tickStart).count();
+    if (totalMs > 100) {
+        MCLE_LOG("SLOW_GAME_TICK total=%lldms", (long long)totalMs);
     }
 
     if ((g_tickCount % kLogEveryN) == 0) {
