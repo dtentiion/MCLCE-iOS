@@ -1641,18 +1641,16 @@ extern "C" void mcle_world_drive_renderer(void) {
         // can lose lines if process dies fast; os_log via MCLE_LOG is
         // retained by the system.
         {
-            // Chunk build throughput. updateDirtyChunks builds at most
-            // one chunk per call (no worker threads on iOS - upstream's
-            // _LARGE_WORLDS spawn path isn't wired). At one call per 15
-            // frames, 2304 visible chunks take roughly 10 minutes to
-            // appear - the "cyan-below-horizon" gap is just chunks that
-            // haven't compiled yet.
-            //
-            // Drive it every frame and loop a few times per frame so
-            // freshly-loaded worlds catch up in seconds. Cap the inner
-            // loop so a flood of dirty work can't blow the frame budget.
+            // Chunk build throughput. With phase 2 worker threads wired,
+            // each updateDirtyChunks call dispatches up to 8 chunks in
+            // parallel to workers and blocks at WaitForAll(INFINITE)
+            // until the slowest one finishes. Pre-workers we ran this
+            // 4x per frame because each call only built one chunk;
+            // now 4x means 4 separate WaitForAll barriers per frame
+            // which stacks into 1-2 second render frames. One call per
+            // frame still gets 7-way parallelism per call.
             static int s_dirtyCalls = 0;
-            constexpr int kMaxBuildsPerFrame = 4;
+            constexpr int kMaxBuildsPerFrame = 1;
             int builds = 0;
             // Skip the whole loop if textures aren't ready yet. tiles
             // with uninit icons return null from getTexture; the
