@@ -1626,7 +1626,10 @@ extern "C" void mcle_metal_attach_layer(void* ca_metal_layer, int width, int hei
     }
 }
 
+static uint64_t g_frame_start_ticks = 0;
+
 extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
+    g_frame_start_ticks = mach_absolute_time();
     if (!g.device || !g.layer) return 1;
     if (g.inFrame) return 0;
 
@@ -1750,6 +1753,23 @@ extern "C" void mcle_metal_frame_end(void) {
     g.cmd = nil;
     g.drawable = nil;
     g.inFrame = false;
+
+    // Log when a single render frame takes >200ms. Pin whether the freeze
+    // user reports lives in the render thread (i.e. the WaitForAll barrier
+    // inside updateDirtyChunks blocks here) or somewhere else.
+    if (g_frame_start_ticks != 0) {
+        const uint64_t now = mach_absolute_time();
+        static mach_timebase_info_data_t s_tb = {0};
+        if (s_tb.denom == 0) mach_timebase_info(&s_tb);
+        const uint64_t ns = (now - g_frame_start_ticks) * s_tb.numer / s_tb.denom;
+        const uint64_t ms = ns / 1000000ull;
+        if (ms > 200) {
+            extern int mcle_log_msg(const char *);
+            char buf[80];
+            snprintf(buf, sizeof(buf), "SLOW_FRAME took=%llums", (unsigned long long)ms);
+            mcle_log_msg(buf);
+        }
+    }
 }
 
 // G2a: Tesselator -> Metal hook. G3a: routes into the display-list
