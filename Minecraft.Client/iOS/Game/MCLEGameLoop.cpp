@@ -261,6 +261,12 @@ uint64_t                      g_tickCount    = 0;
 // to render the placeholder SWF + handle input while save loading is
 // in progress. Set once on first tick, never reset.
 std::atomic<bool>             g_initStarted{ false };
+// Phase 3a: dedicated sim thread. Once init succeeds we spawn this
+// thread and it runs the body of mcle_game_tick in a loop. The
+// main thread's call becomes a no-op so chunk-rebuild WaitForAll
+// barriers and entity ticks never block the render frame.
+std::atomic<bool>             g_simThreadStarted{ false };
+pthread_t                     g_simThread{};
 constexpr uint64_t            kLogEveryN     = 60; // ~1 log/sec at 60 fps
 
 // UTF-8 -> wide string conversion. Documents path comes back as char*.
@@ -1243,7 +1249,31 @@ extern "C" void mcle_game_init(void) {
     }
 }
 
+extern "C" void mcle_game_tick(void); // forward decl for the sim loop
+
+// Phase 3a: sim thread runs the tick body in a loop at ~60Hz. The
+// internal 50ms simulation throttle inside mcle_game_tick gates the
+// actual sim step to 20Hz; we sleep 16ms between calls so unused
+// frames don't burn CPU.
+static void *mcle_sim_thread_loop(void *) {
+    MCLE_LOG("mcle_sim_thread_loop: started, beginning ticks");
+    for (;;) {
+        mcle_game_tick();
+        usleep(16 * 1000); // 16ms - ~60Hz wake
+    }
+    return nullptr;
+}
+
 extern "C" void mcle_game_tick(void) {
+    // After the sim thread is up, the iOS main thread's call to
+    // mcle_game_tick from MinecraftViewController is a no-op. The
+    // sim thread itself bypasses this guard via pthread_equal.
+    if (g_simThreadStarted.load(std::memory_order_acquire) &&
+        !pthread_equal(pthread_self(), g_simThread))
+    {
+        return;
+    }
+
     // Lazy-init on the first tick so the bootstrap runs after the SWF
     // menu has had a chance to draw at least one frame. Init runs on a
     // pthread so a long save-load doesn't block the main-thread render
@@ -1258,10 +1288,37 @@ extern "C" void mcle_game_tick(void) {
         pthread_detach(t);
     }
 
-    // Render thread TLS init - mirrors the bootstrap thread setup.
+    // Once init succeeds, spawn the dedicated sim thread (once) and
+    // return immediately so main + sim don't race running the body in
+    // parallel for the first tick. Subsequent main calls return at the
+    // guard at the top.
+    if (g_initState == kStateTicking &&
+        !g_simThreadStarted.load(std::memory_order_acquire))
+    {
+        bool expected = false;
+        if (g_simThreadStarted.compare_exchange_strong(expected, true)) {
+            if (pthread_create(&g_simThread, nullptr,
+                               mcle_sim_thread_loop, nullptr) == 0)
+            {
+                pthread_detach(g_simThread);
+                MCLE_LOG("mcle_game_tick: sim thread spawned, main goes "
+                         "no-op from next call");
+                return; // Don't race the sim thread on its first iteration.
+            }
+            // Spawn failed - reset flag and fall through to tick on main
+            // this frame and every subsequent frame.
+            g_simThreadStarted.store(false);
+            MCLE_LOG("mcle_game_tick: sim thread spawn FAILED, "
+                     "fallback to main-thread tick");
+        }
+    }
+
+    // Per-thread TLS init - mirrors the bootstrap thread setup.
     // Tile::setShape and Tesselator are both TLS-singletons; without
-    // these on this thread the first tick null-derefs.
-    static bool s_tickThreadTlsReady = false;
+    // these on the current thread the first tick null-derefs.
+    // thread_local so the sim thread re-runs init for itself rather
+    // than skipping because main already set the flag.
+    thread_local bool s_tickThreadTlsReady = false;
     if (!s_tickThreadTlsReady) {
         Tile::CreateNewThreadStorage();
         Tesselator::CreateNewThreadStorage(16 * 1024);
