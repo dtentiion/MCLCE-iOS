@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""G2c: bracket LevelRenderer::render + renderChunks with checkpoints so
-each sideload pins the exact line that null-derefs in the upstream
-renderer pipeline.
+"""Null-guards around LevelRenderer::render + renderChunks.
+
+Originally these sites also logged per-frame LR_CKPT lines to pin
+crashes during the renderer bring-up. Those crashes are long fixed
+and the per-frame logging was contributing to os_log backpressure
+once worker threads landed. Keeping only the behavioural changes
+(null guards, mc->player guard removed in renderChunks).
 
 Idempotent.
 """
 import sys
-import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -16,94 +19,44 @@ if not TARGET.exists():
     sys.exit(f"missing: {TARGET}")
 
 src = TARGET.read_text(encoding="utf-8", errors="replace")
-if "LR_CKPT" in src:
+if "MCLE_LR_GUARDS" in src:
     print(f"already patched: {TARGET}")
     sys.exit(0)
 
-# Pre-pass: null-guard every `int playerIndex = mc->player->GetXboxPad();`
-# call site. The iOS shim's mc->player is nullptr until a real
+# Null-guard every `int playerIndex = mc->player->GetXboxPad();` call
+# site. iOS shim's mc->player is nullptr until a real
 # MultiplayerLocalPlayer is wired up; without this, render() and
 # renderChunks() (and 15 other functions) all crash on entry.
 playerIndex_old = "int playerIndex = mc->player->GetXboxPad();"
-playerIndex_new = "int playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);"
+playerIndex_new = "int playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); /* MCLE_LR_GUARDS */"
 src = src.replace(playerIndex_old, playerIndex_new)
 
 edits = [
-    # render() entry + every named-statement boundary upstream sets
+    # render() entry: mc null guard.
     (
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
-        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);",
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); /* MCLE_LR_GUARDS */",
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
-        '\tapp.DebugPrintf("LR_CKPT render enter mc=%p", mc);\n'
         "\tif (!mc) { return 0; }\n"
-        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0);\n"
-        '\tapp.DebugPrintf("LR_CKPT playerIndex=%d", playerIndex);',
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); /* MCLE_LR_GUARDS */",
     ),
+    # viewDistance check: guard mc->options.
     (
-        "\t// 4J - added - if the number of players has changed, we need to rebuild things for the new draw distance this will require\n"
-        "\tif( lastPlayerCount[playerIndex] != activePlayers() )\n"
-        "\t{\n"
-        "\t\tallChanged();\n"
-        "\t}\n"
-        "\telse if (mc->options->viewDistance != lastViewDistance)\n"
-        "\t{\n"
-        "\t\tallChanged();\n"
-        "\t}",
-        '\tapp.DebugPrintf("LR_CKPT before player-count / view-distance checks");\n'
-        "\t// 4J - added - if the number of players has changed, we need to rebuild things for the new draw distance this will require\n"
-        "\tif( lastPlayerCount[playerIndex] != activePlayers() )\n"
-        "\t{\n"
-        "\t\tallChanged();\n"
-        "\t}\n"
-        "\telse if (mc->options && mc->options->viewDistance != lastViewDistance)\n"
-        "\t{\n"
-        "\t\tallChanged();\n"
-        "\t}",
+        "\telse if (mc->options->viewDistance != lastViewDistance)",
+        "\telse if (mc->options && mc->options->viewDistance != lastViewDistance)",
     ),
-    (
-        "\tdouble xOff = player->xOld + (player->x - player->xOld) * alpha;",
-        '\tapp.DebugPrintf("LR_CKPT before player position calc px=%f py=%f pz=%f xOld=%f zOld=%f",'
-        " player->x, player->y, player->z, xOld[playerIndex], zOld[playerIndex]);\n"
-        "\tdouble xOff = player->xOld + (player->x - player->xOld) * alpha;",
-    ),
-    (
-        "\t\tresortChunks(Mth::floor(player->x), Mth::floor(player->y), Mth::floor(player->z));",
-        '\t\tapp.DebugPrintf("LR_CKPT resort firing! px=%f pz=%f", player->x, player->z);\n'
-        "\t\tresortChunks(Mth::floor(player->x), Mth::floor(player->y), Mth::floor(player->z));",
-    ),
-    (
-        "\tLighting::turnOff();",
-        '\tapp.DebugPrintf("LR_CKPT before Lighting::turnOff");\n'
-        "\tLighting::turnOff();\n"
-        '\tapp.DebugPrintf("LR_CKPT after Lighting::turnOff");',
-    ),
-    (
-        "\tint count = renderChunks(0, static_cast<int>(chunks[playerIndex].length), layer, alpha);",
-        '\tapp.DebugPrintf("LR_CKPT before renderChunks");\n'
-        "\tint count = renderChunks(0, static_cast<int>(chunks[playerIndex].length), layer, alpha);\n"
-        '\tapp.DebugPrintf("LR_CKPT renderChunks count=%d", count);',
-    ),
-    # renderChunks body. iOS shim has mc->player == nullptr (no real
-    # MultiplayerLocalPlayer constructed); drop that condition so the
-    # render path can proceed to dispatch chunk geometry.
+    # renderChunks: drop the `mc->player == nullptr` part of the entry
+    # guard so the iOS shim (no MultiplayerLocalPlayer) can dispatch.
     (
         "int LevelRenderer::renderChunks(int from, int to, int layer, double alpha)\n{\n"
         "\tif (mc == nullptr || mc->player == nullptr)",
         "int LevelRenderer::renderChunks(int from, int to, int layer, double alpha)\n{\n"
-        '\tapp.DebugPrintf("LR_CKPT renderChunks enter mc=%p", mc);\n'
         "\tif (mc == nullptr)",
     ),
+    # gameRenderer null guard.
     (
         "\tmc->gameRenderer->turnOnLightLayer(alpha);",
-        '\tapp.DebugPrintf("LR_CKPT before gameRenderer->turnOnLightLayer gameRenderer=%p", mc->gameRenderer);\n'
-        "\tif (mc->gameRenderer) mc->gameRenderer->turnOnLightLayer(alpha);\n"
-        '\tapp.DebugPrintf("LR_CKPT after turnOnLightLayer");',
-    ),
-    (
-        "\tshared_ptr<LivingEntity> player = mc->cameraTargetPlayer;",
-        '\tapp.DebugPrintf("LR_CKPT before cameraTargetPlayer fetch");\n'
-        "\tshared_ptr<LivingEntity> player = mc->cameraTargetPlayer;\n"
-        '\tapp.DebugPrintf("LR_CKPT cameraTargetPlayer=%p", player.get());',
+        "\tif (mc->gameRenderer) mc->gameRenderer->turnOnLightLayer(alpha);",
     ),
 ]
 

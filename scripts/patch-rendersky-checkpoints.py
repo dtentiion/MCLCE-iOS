@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""G3e-step2: bracket LevelRenderer::renderSky + renderClouds with
-LR_SKY_CKPT log lines so each sideload pins which deref crashes the
-upstream renderer-sky path.
+"""Null-guards inside LevelRenderer::renderSky + renderClouds.
+
+Originally bracketed with per-frame LR_SKY_CKPT / LR_CLOUD_CKPT logs to
+pin which deref crashed the upstream renderer-sky path. Those crashes
+are fixed; the per-frame logging contributed to os_log backpressure
+once worker threads landed. Keeping only the structural null guards
+and the cameraTargetPlayer stand-in for mc->player.
 
 Idempotent.
 """
@@ -15,92 +19,49 @@ if not TARGET.exists():
     sys.exit(f"missing: {TARGET}")
 
 src = TARGET.read_text(encoding="utf-8", errors="replace")
-if "LR_SKY_CKPT" in src:
+if "MCLE_SKY_GUARDS" in src:
     print(f"already patched: {TARGET}")
     sys.exit(0)
 
 edits = [
-    # renderSky entry: log mc and the level/dimension state so the
-    # crash address can be correlated with which deref bit.
+    # renderSky entry: bail early if mc/level/dimension null.
     (
         "void LevelRenderer::renderSky(float alpha)\n{\n"
         "\tif (mc->level->dimension->id == 1)",
         "void LevelRenderer::renderSky(float alpha)\n{\n"
-        '\tapp.DebugPrintf("LR_SKY_CKPT renderSky enter mc=%p level=%p", mc, mc ? (void*)mc->level : nullptr);\n'
-        "\tif (!mc || !mc->level || !mc->level->dimension) {\n"
-        '\t\tapp.DebugPrintf("LR_SKY_CKPT renderSky bail: mc/level/dimension null");\n'
-        "\t\treturn;\n"
-        "\t}\n"
-        '\tapp.DebugPrintf("LR_SKY_CKPT before dimension->id check, dim=%p", mc->level->dimension);\n'
+        "\tif (!mc || !mc->level || !mc->level->dimension) return; /* MCLE_SKY_GUARDS */\n"
         "\tif (mc->level->dimension->id == 1)",
     ),
-    # Before isNaturalDimension virtual call.
-    (
-        "\tif (!mc->level->dimension->isNaturalDimension()) return;\n"
-        "\n"
-        "\tglDisable(GL_TEXTURE_2D);",
-        '\tapp.DebugPrintf("LR_SKY_CKPT before isNaturalDimension");\n'
-        "\tif (!mc->level->dimension->isNaturalDimension()) return;\n"
-        '\tapp.DebugPrintf("LR_SKY_CKPT after isNaturalDimension");\n'
-        "\n"
-        "\tglDisable(GL_TEXTURE_2D);",
-    ),
-    # Before getSkyColor virtual call.
+    # getSkyColor: guard level[playerIndex].
     (
         "\tVec3 *sc = level[playerIndex]->getSkyColor(mc->cameraTargetPlayer, alpha);",
-        '\tapp.DebugPrintf("LR_SKY_CKPT before getSkyColor level[%d]=%p", playerIndex, level[playerIndex]);\n'
         "\tif (!level[playerIndex]) return;\n"
-        "\tVec3 *sc = level[playerIndex]->getSkyColor(mc->cameraTargetPlayer, alpha);\n"
-        '\tapp.DebugPrintf("LR_SKY_CKPT after getSkyColor sc=%p", sc);',
+        "\tVec3 *sc = level[playerIndex]->getSkyColor(mc->cameraTargetPlayer, alpha);",
     ),
-    # Before sky list dispatch.
-    (
-        "\tglEnable(GL_FOG);\n"
-        "\tglColor3f(sr, sg, sb);\n"
-        "\tglCallList(skyList);",
-        '\tapp.DebugPrintf("LR_SKY_CKPT before glCallList(skyList=%d)", skyList);\n'
-        "\tglEnable(GL_FOG);\n"
-        "\tglColor3f(sr, sg, sb);\n"
-        "\tglCallList(skyList);\n"
-        '\tapp.DebugPrintf("LR_SKY_CKPT after glCallList(skyList)");',
-    ),
-    # mc->player is null in our shim (only mc->cameraTargetPlayer is set).
-    # Use cameraTargetPlayer's pos as a stand-in. ServerPlayer extends
-    # Entity so getPos works through the Entity base.
+    # mc->player is null in our shim; use cameraTargetPlayer as the
+    # stand-in. ServerPlayer extends Entity so getPos works through
+    # the Entity base.
     (
         "\tdouble yy = mc->player->getPos(alpha)->y - level[playerIndex]->getHorizonHeight();",
-        '\tapp.DebugPrintf("LR_SKY_CKPT before getPos chain mc->player=%p", (void*)mc->player.get());\n'
         "\tshared_ptr<LivingEntity> _camPlayer = mc->cameraTargetPlayer;\n"
-        "\tif (!_camPlayer) { app.DebugPrintf(\"LR_SKY_CKPT bail: cameraTargetPlayer null\"); return; }\n"
+        "\tif (!_camPlayer) return;\n"
         "\tdouble yy = _camPlayer->getPos(alpha)->y - level[playerIndex]->getHorizonHeight();",
     ),
-    # renderClouds entry. fancyGraphics=true in our shim so this calls
-    # renderAdvancedClouds which derefs textures-> bindTexture etc.
+    # renderClouds entry: bail if mc/level/dimension null.
     (
         "void LevelRenderer::renderClouds(float alpha)\n{\n"
         "\tint iTicks=ticks;",
         "void LevelRenderer::renderClouds(float alpha)\n{\n"
-        '\tapp.DebugPrintf("LR_CLOUD_CKPT renderClouds enter mc=%p", mc);\n'
-        "\tif (!mc || !mc->level || !mc->level->dimension) {\n"
-        '\t\tapp.DebugPrintf("LR_CLOUD_CKPT renderClouds bail: mc/level/dimension null");\n'
-        "\t\treturn;\n"
-        "\t}\n"
+        "\tif (!mc || !mc->level || !mc->level->dimension) return;\n"
         "\tint iTicks=ticks;",
     ),
-    # renderAdvancedClouds entry. Derefs textures-> first thing.
+    # renderAdvancedClouds entry: bail if textures or camera null.
     (
         "void LevelRenderer::renderAdvancedClouds(float alpha)\n{\n"
         "\t// MGH - added",
         "void LevelRenderer::renderAdvancedClouds(float alpha)\n{\n"
-        '\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds enter textures=%p mc=%p ctp=%p", textures, mc, mc ? (void*)mc->cameraTargetPlayer.get() : (void*)0);\n'
-        "\tif (!textures) {\n"
-        '\t\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds bail: textures null");\n'
-        "\t\treturn;\n"
-        "\t}\n"
-        "\tif (!mc || !mc->cameraTargetPlayer) {\n"
-        '\t\tapp.DebugPrintf("LR_CLOUD_CKPT renderAdvancedClouds bail: mc/cameraTargetPlayer null");\n'
-        "\t\treturn;\n"
-        "\t}\n"
+        "\tif (!textures) return;\n"
+        "\tif (!mc || !mc->cameraTargetPlayer) return;\n"
         "\t// MGH - added",
     ),
 ]
