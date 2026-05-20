@@ -77,6 +77,9 @@ set_target_properties(Minecraft.LCE PROPERTIES
   XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "${DEPLOYMENT_TARGET}"
   XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
   XCODE_ATTRIBUTE_ENABLE_BITCODE NO
+  # Extended-memory entitlements. Sideloaders honor these even on unsigned
+  # builds - raises the iOS jetsam ceiling so we can hold more streamed chunks.
+  XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/Resources/Minecraft.LCE.entitlements
   # Unsigned build. Install via AltStore / Sideloadly / xtool.
   XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
   XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
