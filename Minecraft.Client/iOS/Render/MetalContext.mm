@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -72,8 +73,15 @@ struct DisplayList {
     std::vector<DrawCmd> draws;
 };
 
+// Shared by every thread that compiles or replays a display list.
+// Workers spawned by LevelRenderer::staticCtor build chunk meshes into
+// here in parallel; the main thread also writes during sky/cloud list
+// capture and reads when replaying. Mutex protects insert/erase + the
+// final read in call_list_replay so the unordered_map's internal
+// rehash doesn't race a writer.
 std::unordered_map<int, DisplayList> g_lists;
-int                                   g_recording_list = 0;
+std::mutex                            g_lists_mu;
+thread_local int                      g_recording_list = 0;
 std::atomic<int>                      g_next_list_id{1};
 
 // Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
@@ -818,16 +826,21 @@ constexpr int kGL_MODELVIEW         = 0x1700;
 constexpr int kGL_PROJECTION        = 0x1701;
 constexpr int kGL_TEXTURE           = 0x1702;
 
-int                g_matrix_mode = kMatrixModeModelview;
-std::vector<Mat4>  g_modelview_stack { mat_identity() };
-std::vector<Mat4>  g_projection_stack{ mat_identity() };
+// Per-thread matrix state. Each worker that compiles a chunk needs its
+// own GL fixed-function stacks - upstream's Chunk::rebuild walks the
+// modelview/projection/texture stacks the same way the main thread
+// does during sky capture. Without thread_local each worker would
+// stomp the main thread's stacks.
+thread_local int                g_matrix_mode = kMatrixModeModelview;
+thread_local std::vector<Mat4>  g_modelview_stack { mat_identity() };
+thread_local std::vector<Mat4>  g_projection_stack{ mat_identity() };
 // Texture matrix stack. Used by renderAdvancedClouds (the 3D cube
 // cloud path) to scroll the cloud UV pattern per frame. Upstream calls
 // glMatrixMode(GL_TEXTURE) + glLoadIdentity + glTranslatef to feed each
 // cube cell its own UV offset, then resets back when done. Each
 // dispatch reads the top of this stack into a vertex-shader uniform
 // that multiplies the per-vertex UV.
-std::vector<Mat4>  g_texture_stack  { mat_identity() };
+thread_local std::vector<Mat4>  g_texture_stack  { mat_identity() };
 
 // G3f: GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
 // multiplied with this in the world vertex shader so glColor3f /
@@ -908,9 +921,11 @@ extern "C" void mcle_glbridge_pop_matrix(void) {
     if (current_stack().size() > 1) current_stack().pop_back();
 }
 // G5: remember last translate applied while a list is being recorded, so
-// chunk display lists can carry their world position to replay.
-static float g_recording_last_translate[3] = {0, 0, 0};
-static bool  g_recording_has_translate = false;
+// chunk display lists can carry their world position to replay. Per-
+// thread because each worker compiles into a different chunk and needs
+// its own remembered offset.
+thread_local float g_recording_last_translate[3] = {0, 0, 0};
+thread_local bool  g_recording_has_translate = false;
 
 extern "C" void mcle_glbridge_translate(float x, float y, float z) {
     mat_translate(current_matrix_data(), x, y, z);
@@ -1769,7 +1784,10 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         // G5: capture currently bound texture id so chunks sample terrain.png
         // at replay even if other things have rebound the texture since.
         cmd.texId = g_bound_tex_id;
-        g_lists[g_recording_list].draws.push_back(std::move(cmd));
+        {
+            std::lock_guard<std::mutex> _lk(g_lists_mu);
+            g_lists[g_recording_list].draws.push_back(std::move(cmd));
+        }
         return;
     }
     immediate_dispatch(prim, count, data, fmt, shader);
@@ -1792,7 +1810,10 @@ extern "C" int mcle_glbridge_gen_lists(int range) {
 
 extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
     g_recording_list = id;
-    g_lists[id] = DisplayList();
+    {
+        std::lock_guard<std::mutex> _lk(g_lists_mu);
+        g_lists[id] = DisplayList();
+    }
     g_recording_has_translate = false;
     g_recording_last_translate[0] = 0;
     g_recording_last_translate[1] = 0;
@@ -1809,8 +1830,11 @@ extern "C" void mcle_glbridge_end_list(void) {
         if (s_count < 50) {
             int id = g_recording_list;
             int draws = 0;
-            auto it = g_lists.find(id);
-            if (it != g_lists.end()) draws = (int)it->second.draws.size();
+            {
+                std::lock_guard<std::mutex> _lk(g_lists_mu);
+                auto it = g_lists.find(id);
+                if (it != g_lists.end()) draws = (int)it->second.draws.size();
+            }
             extern int mcle_log_msg(const char *);
             char buf[80];
             snprintf(buf, sizeof(buf), "LIST_END id=%d draws=%d", id, draws);
@@ -1833,8 +1857,17 @@ static unsigned long g_call_list_hits_low  = 0;  // id < 4000000 (chunk range ty
 static unsigned long g_call_list_hits_high = 0;  // id >= 4000000
 
 extern "C" void mcle_glbridge_call_list(int id) {
-    auto it = g_lists.find(id);
-    if (it == g_lists.end()) {
+    // Snapshot the DisplayList under the lock so a concurrent worker's
+    // insert/rehash can't move the bucket out from under us mid-replay.
+    DisplayList copy;
+    bool found;
+    {
+        std::lock_guard<std::mutex> _lk(g_lists_mu);
+        auto it = g_lists.find(id);
+        found = (it != g_lists.end());
+        if (found) copy = it->second;
+    }
+    if (!found) {
         if (g_call_list_first_miss_id == -1) g_call_list_first_miss_id = id;
         g_call_list_misses++;
         return;
@@ -1843,7 +1876,7 @@ extern "C" void mcle_glbridge_call_list(int id) {
     g_call_list_last_hit_id = id;
     g_call_list_hits++;
     if (id < 4000000) g_call_list_hits_low++; else g_call_list_hits_high++;
-    call_list_replay(it->second);
+    call_list_replay(copy);
 }
 
 // Sampled getter so the consumer logs once per second instead of per call.
@@ -1865,6 +1898,7 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
 }
 
 extern "C" void mcle_glbridge_release_lists(int id, int range) {
+    std::lock_guard<std::mutex> _lk(g_lists_mu);
     for (int i = 0; i < range; i++) g_lists.erase(id + i);
 }
 
