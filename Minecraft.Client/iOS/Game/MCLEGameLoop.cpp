@@ -25,6 +25,7 @@
 
 #include <os/log.h>
 #include <pthread.h>
+#include <mach/mach.h>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -1372,6 +1373,18 @@ extern "C" void mcle_game_tick(void) {
                              g_player->x, g_player->z,
                              g_player->lastMoveX, g_player->lastMoveZ,
                              dx * dx + dz * dz);
+                }
+                // Every ~5s log resident memory so we can see jetsam ceiling.
+                static int s_memLog = 0;
+                if ((s_memLog++ % 300) == 0) {
+                    mach_task_basic_info info{};
+                    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+                    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                                  (task_info_t)&info, &count) == KERN_SUCCESS) {
+                        MCLE_LOG("MEM_CKPT resident=%.1fMB virtual=%.1fMB",
+                                 info.resident_size / (1024.0 * 1024.0),
+                                 info.virtual_size  / (1024.0 * 1024.0));
+                    }
                 }
                 cm->move(g_player);
                 cm->tick();
