@@ -16,7 +16,9 @@
 #include <string.h>
 #include <wchar.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <mach/mach_time.h>
+#include "iOS_Threading.h"
 
 #ifdef __cplusplus
 #include <string>
@@ -323,27 +325,58 @@ static inline DWORD GetCurrentThreadId(void) {
 static inline HANDLE GetCurrentThread(void) {
     return (HANDLE)pthread_self();
 }
-static inline DWORD ResumeThread(HANDLE)              { return 0; }
 static inline DWORD SuspendThread(HANDLE)             { return 0; }
 static inline BOOL  SetThreadAffinityMask(HANDLE, DWORD_PTR) { return TRUE; }
 static inline BOOL  SetThreadPriority(HANDLE, int)    { return TRUE; }
 static inline int   GetThreadPriority(HANDLE)         { return 0; }
-static inline DWORD WaitForSingleObject(HANDLE, DWORD) { return 0; }
-static inline DWORD WaitForMultipleObjects(DWORD, const HANDLE*, BOOL, DWORD) { return 0; }
-static inline BOOL  TerminateThread(HANDLE, DWORD)    { return TRUE; }
-// INVALID_HANDLE_VALUE is defined further down in this header so we
-// can't use it as the sentinel here without a forward macro. Return
-// nullptr - upstream callers don't compare events to that sentinel,
-// only to NULL.
-static inline HANDLE CreateEventA(void*, BOOL, BOOL, const char*)    { return (HANDLE)0; }
-static inline HANDLE CreateEventW(void*, BOOL, BOOL, const wchar_t*) { return (HANDLE)0; }
+// Wait + event + thread shims routed through the pthread-backed impls
+// in iOS_Threading.cpp. Nulls fall through to the previous no-op
+// behaviour so code that holds an uninitialised HANDLE doesn't hang.
+static inline DWORD WaitForSingleObject(HANDLE h, DWORD timeoutMs) {
+    if (!h) return 0;
+    return (DWORD)mcle_handle_wait((void*)h, (unsigned int)timeoutMs);
+}
+static inline DWORD WaitForMultipleObjects(DWORD count, const HANDLE* arr, BOOL waitAll, DWORD timeoutMs) {
+    if (count == 0 || !arr) return 0;
+    if (waitAll) {
+        for (DWORD i = 0; i < count; ++i) {
+            if (!arr[i]) continue;
+            unsigned int r = mcle_handle_wait((void*)arr[i], (unsigned int)timeoutMs);
+            if (r != 0) return r; // bail on first failure/timeout
+        }
+        return 0;
+    }
+    // WAIT_ANY: poll once per handle, then sleep briefly if no signal.
+    // Upstream uses waitAll for the rebuild barrier, so this is a
+    // fallback for less-hot paths.
+    for (;;) {
+        for (DWORD i = 0; i < count; ++i) {
+            if (!arr[i]) continue;
+            unsigned int r = mcle_handle_wait((void*)arr[i], 0);
+            if (r == 0) return i;
+        }
+        if (timeoutMs == 0) return 258u; // WAIT_TIMEOUT
+        usleep(1000);
+    }
+}
+static inline BOOL TerminateThread(HANDLE, DWORD) { return TRUE; }
+static inline HANDLE CreateEventA(void*, BOOL manualReset, BOOL initialSignaled, const char*) {
+    return (HANDLE)mcle_event_create(manualReset ? 1 : 0, initialSignaled ? 1 : 0);
+}
+static inline HANDLE CreateEventW(void*, BOOL manualReset, BOOL initialSignaled, const wchar_t*) {
+    return (HANDLE)mcle_event_create(manualReset ? 1 : 0, initialSignaled ? 1 : 0);
+}
 #  ifdef UNICODE
 #    define CreateEvent CreateEventW
 #  else
 #    define CreateEvent CreateEventA
 #  endif
-static inline BOOL  SetEvent(HANDLE)   { return TRUE; }
-static inline BOOL  ResetEvent(HANDLE) { return TRUE; }
+static inline BOOL SetEvent(HANDLE h)   { if (!h) return TRUE; mcle_event_set((void*)h);   return TRUE; }
+static inline BOOL ResetEvent(HANDLE h) { if (!h) return TRUE; mcle_event_reset((void*)h); return TRUE; }
+static inline DWORD ResumeThread(HANDLE h) {
+    if (!h) return 0;
+    return (DWORD)mcle_thread_resume((void*)h);
+}
 
 // Critical sections backed by pthread mutexes. Upstream uses these
 // for the global-lock pattern around C4JThread, command dispatch,
@@ -1330,7 +1363,16 @@ static inline BOOL WriteFile(HANDLE h, const void *buf, DWORD toWrite, LPDWORD w
     return TRUE;
 }
 static inline BOOL CloseHandle(HANDLE h) {
-    if (h == INVALID_HANDLE_VALUE) return FALSE;
+    if (!h || h == INVALID_HANDLE_VALUE) return FALSE;
+    // Heap-pointer-looking handles may be mcle event/thread structs.
+    // File fds are small ints; treat anything below 64K as a fd to
+    // avoid dereferencing a non-pointer.
+    uintptr_t v = (uintptr_t)h;
+    if (v >= 65536u) {
+        uint32_t magic = *(const uint32_t*)h;
+        if (magic == 0x4D45564Eu) { mcle_event_destroy((void*)h);  return TRUE; } // 'MEVN'
+        if (magic == 0x4D544854u) { mcle_thread_destroy((void*)h); return TRUE; } // 'MTHT'
+    }
     int fd = (int)(intptr_t)h;
     return ::close(fd) == 0 ? TRUE : FALSE;
 }
@@ -1359,12 +1401,25 @@ static inline DWORD GetFileSize(HANDLE h, LPDWORD high) {
     return (DWORD)((uint64_t)st.st_size & 0xFFFFFFFFu);
 }
 
-// Win32 thread spawn. Probe never runs threading; null handle is fine.
-// Placed after LPDWORD/INVALID_HANDLE_VALUE so the signature parses.
+// Win32 thread spawn routed through mcle_thread_create (pthread-backed
+// in iOS_Threading.cpp). CREATE_SUSPENDED is honoured by deferring the
+// pthread_create until ResumeThread fires, matching C4JThread's "build
+// then run" pattern.
 typedef DWORD (*LPTHREAD_START_ROUTINE)(void*);
-static inline HANDLE CreateThread(void*, size_t, LPTHREAD_START_ROUTINE, void*, DWORD, LPDWORD outId) {
-    if (outId) *outId = 0;
-    return INVALID_HANDLE_VALUE;
+#  ifndef CREATE_SUSPENDED
+#    define CREATE_SUSPENDED 0x00000004
+#  endif
+static inline HANDLE CreateThread(void*, size_t stackSize, LPTHREAD_START_ROUTINE startFn, void* arg, DWORD flags, LPDWORD outId) {
+    unsigned int id = 0;
+    void* h = mcle_thread_create(
+        (MCLE_ThreadStartFn)startFn,
+        arg,
+        (unsigned int)stackSize,
+        (flags & CREATE_SUSPENDED) ? 1 : 0,
+        &id);
+    if (outId) *outId = (DWORD)id;
+    if (!h) return INVALID_HANDLE_VALUE;
+    return (HANDLE)h;
 }
 static inline BOOL CreateDirectoryA(const char*, void*) { return TRUE; }
 static inline BOOL CreateDirectoryW(const wchar_t*, void*) { return TRUE; }
