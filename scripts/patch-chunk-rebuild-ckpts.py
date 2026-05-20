@@ -117,29 +117,17 @@ new10 = (
 if old10 not in src: sys.exit("t->begin anchor not found")
 src = src.replace(old10, new10, 1)
 
-# bracket Tile::tiles[tileId] access + tesselateInWorld
+# Keep the null guard for Tile::tiles[tileId] but drop the per-tile
+# log lines - they fire hundreds of times per chunk rebuild and with
+# parallel workers the volume backpressures os_log enough to freeze
+# the main thread for seconds at a time.
 old11 = "\t\tTile *tile = Tile::tiles[tileId];"
 new11 = (
-    "\t\tapp.DebugPrintf(\"CRB_CKPT before Tile::tiles[%d]\", (int)tileId);\n"
     "\t\tTile *tile = Tile::tiles[tileId];\n"
-    "\t\tapp.DebugPrintf(\"CRB_CKPT tile=%p\", tile);\n"
     "\t\tif (tile == nullptr) continue;"
 )
 if old11 not in src: sys.exit("Tile::tiles anchor not found")
 src = src.replace(old11, new11, 1)
-
-old12 = "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);"
-new12 = (
-    "\t\t\t\t\tvoid *_tileVtbl = tile ? *(void**)tile : (void*)0;\n"
-    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT pre-tess tileId=%d tile=%p vptr=%p\", (int)tileId, tile, _tileVtbl);\n"
-    "\t\t\t\t\t// TallGrass (id=31) and TopSnow (id=78) were skipped to dodge\n"
-    "\t\t\t\t\t// addr-0x8 / addr-0xe0 crashes from G5-step27. ColourTable null\n"
-    "\t\t\t\t\t// guard + getTexture null guard since landed; trying upstream path.\n"
-    "\t\t\t\t\trendered |= tileRenderer->tesselateInWorld(tile, x, y, z);\n"
-    "\t\t\t\t\tapp.DebugPrintf(\"CRB_CKPT post-tess tileId=%d rendered=%d\", (int)tileId, (int)rendered);"
-)
-if old12 not in src: sys.exit("tesselateInWorld anchor not found")
-src = src.replace(old12, new12, 1)
 
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched {TARGET}")
