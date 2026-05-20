@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -76,11 +77,11 @@ struct DisplayList {
 // Shared by every thread that compiles or replays a display list.
 // Workers spawned by LevelRenderer::staticCtor build chunk meshes into
 // here in parallel; the main thread also writes during sky/cloud list
-// capture and reads when replaying. Mutex protects insert/erase + the
-// final read in call_list_replay so the unordered_map's internal
-// rehash doesn't race a writer.
+// capture and reads when replaying. Use a shared_mutex so the render
+// thread's frequent reads run in parallel and writers only block when
+// they actually need to insert/erase.
 std::unordered_map<int, DisplayList> g_lists;
-std::mutex                            g_lists_mu;
+std::shared_mutex                     g_lists_mu;
 thread_local int                      g_recording_list = 0;
 std::atomic<int>                      g_next_list_id{1};
 
@@ -1805,7 +1806,7 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         // at replay even if other things have rebound the texture since.
         cmd.texId = g_bound_tex_id;
         {
-            std::lock_guard<std::mutex> _lk(g_lists_mu);
+            std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
             g_lists[g_recording_list].draws.push_back(std::move(cmd));
         }
         return;
@@ -1831,7 +1832,7 @@ extern "C" int mcle_glbridge_gen_lists(int range) {
 extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
     g_recording_list = id;
     {
-        std::lock_guard<std::mutex> _lk(g_lists_mu);
+        std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
         g_lists[id] = DisplayList();
     }
     g_recording_has_translate = false;
@@ -1851,7 +1852,7 @@ extern "C" void mcle_glbridge_end_list(void) {
             int id = g_recording_list;
             int draws = 0;
             {
-                std::lock_guard<std::mutex> _lk(g_lists_mu);
+                std::shared_lock<std::shared_mutex> _lk(g_lists_mu);
                 auto it = g_lists.find(id);
                 if (it != g_lists.end()) draws = (int)it->second.draws.size();
             }
@@ -1877,17 +1878,12 @@ static unsigned long g_call_list_hits_low  = 0;  // id < 4000000 (chunk range ty
 static unsigned long g_call_list_hits_high = 0;  // id >= 4000000
 
 extern "C" void mcle_glbridge_call_list(int id) {
-    // Snapshot the DisplayList under the lock so a concurrent worker's
-    // insert/rehash can't move the bucket out from under us mid-replay.
-    DisplayList copy;
-    bool found;
-    {
-        std::lock_guard<std::mutex> _lk(g_lists_mu);
-        auto it = g_lists.find(id);
-        found = (it != g_lists.end());
-        if (found) copy = it->second;
-    }
-    if (!found) {
+    // Replay in-place under a shared lock. Writers (workers calling
+    // glNewList) wait briefly while we replay; readers (other render
+    // call_list) run in parallel.
+    std::shared_lock<std::shared_mutex> _lk(g_lists_mu);
+    auto it = g_lists.find(id);
+    if (it == g_lists.end()) {
         if (g_call_list_first_miss_id == -1) g_call_list_first_miss_id = id;
         g_call_list_misses++;
         return;
@@ -1896,7 +1892,7 @@ extern "C" void mcle_glbridge_call_list(int id) {
     g_call_list_last_hit_id = id;
     g_call_list_hits++;
     if (id < 4000000) g_call_list_hits_low++; else g_call_list_hits_high++;
-    call_list_replay(copy);
+    call_list_replay(it->second);
 }
 
 // Sampled getter so the consumer logs once per second instead of per call.
@@ -1918,7 +1914,7 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
 }
 
 extern "C" void mcle_glbridge_release_lists(int id, int range) {
-    std::lock_guard<std::mutex> _lk(g_lists_mu);
+    std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
     for (int i = 0; i < range; i++) g_lists.erase(id + i);
 }
 
