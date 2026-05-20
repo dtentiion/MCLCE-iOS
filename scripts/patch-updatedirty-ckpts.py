@@ -77,7 +77,7 @@ else:
     new = (
         "bool LevelChunk::isRenderChunkEmpty(int y)\n"
         "{\n"
-        "\tif (!upperBlocks && !lowerBlocks) { return true; } /* MCLE_LCI_GUARDS */\n"
+        "\tif (!upperBlocks && !lowerBlocks) { return true; } // MCLE_LCI_GUARDS\n"
         "\tif( isEmpty() )"
     )
     if old not in src: sys.exit("LCI anchor not found")
@@ -116,7 +116,7 @@ else:
     new = (
         "bool CompressedTileStorage::isRenderChunkEmpty(int y)\t// y == 0, 16, 32... 112 (representing a 16 byte range)\n"
         "{\n"
-        "\tif (this == nullptr) return true; /* MCLE_CTSI_GUARDS */\n"
+        "\tif (this == nullptr) return true; // MCLE_CTSI_GUARDS\n"
         "\tint block;\n"
         "\tunsigned char *localIndicesAndData = indicesAndData;"
     )

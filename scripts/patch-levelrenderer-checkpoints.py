@@ -28,17 +28,17 @@ if "MCLE_LR_GUARDS" in src:
 # MultiplayerLocalPlayer is wired up; without this, render() and
 # renderChunks() (and 15 other functions) all crash on entry.
 playerIndex_old = "int playerIndex = mc->player->GetXboxPad();"
-playerIndex_new = "int playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); /* MCLE_LR_GUARDS */"
+playerIndex_new = "int playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); // MCLE_LR_GUARDS"
 src = src.replace(playerIndex_old, playerIndex_new)
 
 edits = [
     # render() entry: mc null guard.
     (
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
-        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); /* MCLE_LR_GUARDS */",
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); // MCLE_LR_GUARDS",
         "int LevelRenderer::render(shared_ptr<LivingEntity> player, int layer, double alpha, bool updateChunks)\n{\n"
         "\tif (!mc) { return 0; }\n"
-        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); /* MCLE_LR_GUARDS */",
+        "\tint playerIndex = (mc->player ? mc->player->GetXboxPad() : 0); // MCLE_LR_GUARDS",
     ),
     # viewDistance check: guard mc->options.
     (
