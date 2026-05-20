@@ -1568,3 +1568,12 @@ if [ -f "$CTRD_PY" ]; then
     python3 "$CTRD_PY"
 fi
 
+# ServerChunkCache.cpp: cap m_unloadedCache + LRU evict on iOS so
+# jetsam stops killing us after a few hundred streamed chunks. The
+# Win64 path keeps every unloaded chunk pinned in memory which is
+# a perf win there and a memory leak here.
+SCEU_PY="$REPO_ROOT/scripts/patch-serverchunkcache-evict-unloaded.py"
+if [ -f "$SCEU_PY" ]; then
+    python3 "$SCEU_PY"
+fi
+
