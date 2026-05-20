@@ -28,7 +28,9 @@
 #include <mach/mach.h>
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <memory>
+#include <typeinfo>
 #include <string>
 #include <vector>
 #include <stdint.h>
@@ -1184,6 +1186,28 @@ static void mcle_crash_handler(int sig, siginfo_t *info, void *) {
     raise(sig);
 }
 
+static void mcle_terminate_handler() {
+    // Uncaught C++ throw turns into std::terminate -> abort -> SIGABRT,
+    // which the default handler kills the process on without printing
+    // anything. Catch the in-flight exception here and log its type +
+    // what() so we know which upstream call threw.
+    auto ex = std::current_exception();
+    if (ex) {
+        try {
+            std::rethrow_exception(ex);
+        } catch (const std::exception &e) {
+            MCLE_LOG("mcle: std::terminate caught std::exception type=%{public}s what=%{public}s",
+                     typeid(e).name(), e.what());
+        } catch (...) {
+            MCLE_LOG("mcle: std::terminate caught unknown C++ exception");
+        }
+    } else {
+        MCLE_LOG("mcle: std::terminate with no current exception");
+    }
+    usleep(200000);
+    std::abort();
+}
+
 static void mcle_install_crash_handler() {
     struct sigaction sa{};
     sa.sa_sigaction = &mcle_crash_handler;
@@ -1193,6 +1217,8 @@ static void mcle_install_crash_handler() {
     sigaction(SIGBUS,  &sa, nullptr);
     sigaction(SIGILL,  &sa, nullptr);
     sigaction(SIGFPE,  &sa, nullptr);
+    sigaction(SIGABRT, &sa, nullptr);
+    std::set_terminate(&mcle_terminate_handler);
 }
 
 extern "C" void mcle_game_init(void) {
