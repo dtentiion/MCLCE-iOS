@@ -647,10 +647,11 @@ void initImpl() {
         PlayerList *pl = new PlayerList(g_server);
         MCLE_LOG("mcle_game_init: PlayerList allocated at %p, attaching...", (void*)pl);
         // Default with _LARGE_WORLDS is 16 (33x33 = 1089 chunks). Way
-        // too much on iOS - jetsam kills the process once we've streamed
-        // a few hundred chunks. Drop to 4 (9x9 = 81 chunks) until we
-        // get worker-thread meshing + unloaded-cache eviction in.
-        pl->setViewDistance(4);
+        // too much on iOS without worker-thread meshing - the main thread
+        // can't keep up. With extended-mem entitlement + unloaded-cache
+        // LRU eviction in place we can hold 8 (17x17 = 289). Bump toward
+        // 16 once worker threads land.
+        pl->setViewDistance(8);
         MCLE_LOG("mcle_game_init: PlayerList viewDistance=%d", pl->getViewDistance());
         g_server->setPlayers(pl);
         MCLE_LOG("mcle_game_init: PlayerList attached");
