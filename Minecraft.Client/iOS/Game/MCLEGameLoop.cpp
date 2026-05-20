@@ -933,6 +933,14 @@ void initImpl() {
     // milestone.
     MCLE_LOG("mcle_game_init: G2c construct LevelRenderer(shim, nullptr)...");
     try {
+        // Allocate the chunk-rebuild event arrays + spawn the 7 worker
+        // threads before the renderer ctor so the very first dispatch
+        // has them ready. Upstream Minecraft::init calls this; we
+        // bypass that path so we have to do it here.
+        MCLE_LOG("mcle_game_init: LevelRenderer::staticCtor()...");
+        LevelRenderer::staticCtor();
+        MCLE_LOG("mcle_game_init: LevelRenderer::staticCtor done");
+
         g_levelRenderer = new LevelRenderer(g_minecraftShim, nullptr);
         g_minecraftShim->levelRenderer = g_levelRenderer;
         MCLE_LOG("mcle_game_init: LevelRenderer at %p", (void*)g_levelRenderer);
