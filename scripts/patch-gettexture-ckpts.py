@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""bracket TileRenderer::getTexture(Tile*) and Tile::getTexture chain to find addr 0xe0 crash"""
+"""Null-guards inside TileRenderer::getTexture(Tile*) chain.
+
+Originally bracketed each step with GTX_CKPT / GTX2_CKPT log lines
+to pin an addr 0xe0 crash. The crash is fixed; the per-tile logs
+were firing thousands of times per chunk rebuild and stalling the
+worker threads. Keep only the structural null guards.
+"""
 import sys
 from pathlib import Path
 TR_CPP = Path(__file__).resolve().parent.parent / "upstream" / "Minecraft.Client" / "TileRenderer.cpp"
-T_CPP = Path(__file__).resolve().parent.parent / "upstream" / "Minecraft.World" / "Tile.cpp"
 
 src = TR_CPP.read_text(encoding="utf-8", errors="replace")
-if "GTX_CKPT" in src:
+if "MCLE_GTX_GUARDS" in src:
     print(f"already patched: {TR_CPP}")
 else:
     old = (
@@ -18,19 +23,13 @@ else:
     new = (
         "Icon *TileRenderer::getTexture(Tile *tile)\n"
         "{\n"
-        "\tapp.DebugPrintf(\"GTX_CKPT TR::getTexture entry tile=%p\", tile);\n"
-        "\tif (tile == nullptr) { return nullptr; }\n"
+        "\tif (tile == nullptr) return nullptr; // MCLE_GTX_GUARDS\n"
         "\tIcon *_gtxIcon = tile->getTexture(Facing::UP);\n"
-        "\tapp.DebugPrintf(\"GTX_CKPT after tile->getTexture(UP) icon=%p\", _gtxIcon);\n"
-        "\t// If tile->icon was never registered (registerIcons either bypassed\n"
-        "\t// or stitch failed to give a valid missingPosition), DON'T fall into\n"
+        "\t// If tile->icon was never registered, DON'T fall into\n"
         "\t// getTextureOrMissing - it derefs minecraft->textures->getMissingIcon\n"
-        "\t// which is the null deref crash. Return nullptr; the caller then\n"
-        "\t// crashes on ->getFlags() but our outer wrapper guards against that.\n"
-        "\tif (_gtxIcon == nullptr) {\n"
-        "\t\tapp.DebugPrintf(\"GTX_CKPT bypass getTextureOrMissing - tile->icon null\");\n"
-        "\t\treturn nullptr;\n"
-        "\t}\n"
+        "\t// which is the null deref crash. Return nullptr; the caller's\n"
+        "\t// own null guard skips this tile.\n"
+        "\tif (_gtxIcon == nullptr) return nullptr;\n"
         "\treturn getTextureOrMissing(_gtxIcon);\n"
         "}"
     )
@@ -38,45 +37,3 @@ else:
     src = src.replace(old, new, 1)
     TR_CPP.write_text(src, encoding="utf-8")
     print(f"patched {TR_CPP}")
-
-src = T_CPP.read_text(encoding="utf-8", errors="replace")
-if "GTX2_CKPT" in src:
-    print(f"already patched: {T_CPP}")
-else:
-    # Tile::getTexture(int face)
-    old = (
-        "Icon *Tile::getTexture(int face)\n"
-        "{\n"
-        "\treturn getTexture(face, 0);\n"
-        "}"
-    )
-    new = (
-        "Icon *Tile::getTexture(int face)\n"
-        "{\n"
-        "\tapp.DebugPrintf(\"GTX2_CKPT Tile::getTexture(face=%d) this=%p\", face, this);\n"
-        "\tif (this == nullptr) { app.DebugPrintf(\"GTX2_CKPT this null\"); return nullptr; }\n"
-        "\treturn getTexture(face, 0);\n"
-        "}"
-    )
-    if old not in src: sys.exit("Tile::getTexture(int) anchor not found")
-    src = src.replace(old, new, 1)
-
-    # Tile::getTexture(int face, int data)
-    old2 = (
-        "Icon *Tile::getTexture(int face, int data)\n"
-        "{\n"
-        "\treturn icon;\n"
-        "}"
-    )
-    new2 = (
-        "Icon *Tile::getTexture(int face, int data)\n"
-        "{\n"
-        "\tapp.DebugPrintf(\"GTX2_CKPT Tile::getTexture(face=%d,data=%d) this=%p icon=%p\", face, data, this, icon);\n"
-        "\treturn icon;\n"
-        "}"
-    )
-    if old2 not in src: sys.exit("Tile::getTexture(int,int) anchor not found")
-    src = src.replace(old2, new2, 1)
-
-    T_CPP.write_text(src, encoding="utf-8")
-    print(f"patched {T_CPP}")
