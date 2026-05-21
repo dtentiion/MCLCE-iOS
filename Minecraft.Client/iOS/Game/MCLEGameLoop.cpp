@@ -267,6 +267,8 @@ std::atomic<bool>             g_initStarted{ false };
 // barriers and entity ticks never block the render frame.
 std::atomic<bool>             g_simThreadStarted{ false };
 pthread_t                     g_simThread{};
+// Auto-save flag - file-scope so the detached save thread can clear it.
+std::atomic<bool>             g_autoSaveInFlight{ false };
 constexpr uint64_t            kLogEveryN     = 60; // ~1 log/sec at 60 fps
 
 // UTF-8 -> wide string conversion. Documents path comes back as char*.
@@ -1432,28 +1434,47 @@ extern "C" void mcle_game_tick(void) {
             }
         }
 
-        // Periodic chunk save. Parity with MinecraftServer::saveAllChunks
-        // (MinecraftServer.cpp:1355). Walks levels in reverse so level.dat
-        // for the overworld is the last write and isn't clobbered by the
-        // nether/end metadata. Triggered every 30 seconds on the sim
-        // thread so the render thread never sees the I/O.
+        // Periodic chunk save. Parity in spirit with
+        // MinecraftServer::saveAllChunks (MinecraftServer.cpp:1355) but
+        // dispatched onto a detached pthread so the sim thread keeps
+        // ticking while disk I/O runs. Upstream blocks the sim thread
+        // here too, but Win64's NAND finishes in milliseconds; iOS
+        // takes seconds and a blocked sim tick stops player movement.
+        // Drop new saves while a previous one is still in flight.
         {
             using sclock = std::chrono::steady_clock;
             static auto s_lastSave = sclock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(
-                    sclock::now() - s_lastSave).count() >= 30)
+                    sclock::now() - s_lastSave).count() >= 30 &&
+                !g_autoSaveInFlight.load(std::memory_order_acquire))
             {
                 s_lastSave = sclock::now();
-                MCLE_LOG("AUTO_SAVE: saving all chunks");
-                const auto saveStart = sclock::now();
-                for (int i = 2; i >= 0; --i) {
-                    if (!g_levels[i]) continue;
-                    try { g_levels[i]->save(true, nullptr); }
-                    catch (...) { MCLE_LOG("AUTO_SAVE: level[%d] threw", i); }
+                bool expected = false;
+                if (g_autoSaveInFlight.compare_exchange_strong(expected, true)) {
+                    pthread_t saveThread;
+                    if (pthread_create(&saveThread, nullptr,
+                            [](void *) -> void * {
+                                MCLE_LOG("AUTO_SAVE: saving all chunks");
+                                const auto start = std::chrono::steady_clock::now();
+                                for (int i = 2; i >= 0; --i) {
+                                    if (!g_levels[i]) continue;
+                                    try { g_levels[i]->save(true, nullptr); }
+                                    catch (...) { MCLE_LOG("AUTO_SAVE: level[%d] threw", i); }
+                                }
+                                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                    std::chrono::steady_clock::now() - start).count();
+                                MCLE_LOG("AUTO_SAVE: done took=%lldms", (long long)ms);
+                                g_autoSaveInFlight.store(false, std::memory_order_release);
+                                return nullptr;
+                            },
+                            nullptr) == 0)
+                    {
+                        pthread_detach(saveThread);
+                    } else {
+                        // Spawn failed - reset so the next interval can retry.
+                        g_autoSaveInFlight.store(false, std::memory_order_release);
+                    }
                 }
-                const auto saveMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                        sclock::now() - saveStart).count();
-                MCLE_LOG("AUTO_SAVE: done took=%lldms", (long long)saveMs);
             }
         }
     } catch (const std::exception &e) {
