@@ -77,12 +77,16 @@ struct DisplayList {
 // Shared by every thread that compiles or replays a display list.
 // Workers spawned by LevelRenderer::staticCtor build chunk meshes into
 // here in parallel; the main thread also writes during sky/cloud list
-// capture and reads when replaying. Use a shared_mutex so the render
+// capture and reads when replaying. shared_mutex so the render
 // thread's frequent reads run in parallel and writers only block when
 // they actually need to insert/erase.
 std::unordered_map<int, DisplayList> g_lists;
 std::shared_mutex                     g_lists_mu;
 thread_local int                      g_recording_list = 0;
+// Each compiling thread buffers its DrawCmds locally and splices them
+// into g_lists in one shot at glEndList. Avoids hammering g_lists_mu
+// on every per-tile draw - per-chunk locks instead of per-draw.
+thread_local DisplayList              g_recording_buffer;
 std::atomic<int>                      g_next_list_id{1};
 
 // Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
@@ -1805,10 +1809,9 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         // G5: capture currently bound texture id so chunks sample terrain.png
         // at replay even if other things have rebound the texture since.
         cmd.texId = g_bound_tex_id;
-        {
-            std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
-            g_lists[g_recording_list].draws.push_back(std::move(cmd));
-        }
+        // Push into the thread-local buffer - no lock. The whole buffer
+        // is spliced into g_lists in one shot at glEndList.
+        g_recording_buffer.draws.push_back(std::move(cmd));
         return;
     }
     immediate_dispatch(prim, count, data, fmt, shader);
@@ -1831,10 +1834,7 @@ extern "C" int mcle_glbridge_gen_lists(int range) {
 
 extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
     g_recording_list = id;
-    {
-        std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
-        g_lists[id] = DisplayList();
-    }
+    g_recording_buffer.draws.clear();
     g_recording_has_translate = false;
     g_recording_last_translate[0] = 0;
     g_recording_last_translate[1] = 0;
@@ -1842,20 +1842,27 @@ extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
 }
 
 extern "C" void mcle_glbridge_end_list(void) {
-    // Diagnostic: log every list ID + draw count captured. Used to confirm
-    // the starList capture inside LevelRenderer ctor (line 167-172 upstream)
-    // actually executes - if no LIST_END entry near the chunkLists range,
-    // upstream's renderStars() didn't fire and stars will never render.
+    const int id = g_recording_list;
+    const int draws = (int)g_recording_buffer.draws.size();
+    if (id == 0) {
+        // End-list with no matching begin-list. Drop the buffer so
+        // it doesn't carry stale draws into the next recording.
+        g_recording_buffer.draws.clear();
+        return;
+    }
+    // Splice the per-thread recording buffer into the shared map under
+    // a single exclusive lock. Hold time scales with one move-assign
+    // not with the number of DrawCmds.
+    {
+        std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
+        g_lists[id] = std::move(g_recording_buffer);
+    }
+    g_recording_buffer.draws.clear();
+    // First 50 lists logged so we can confirm the starList capture
+    // inside LevelRenderer ctor (line 167-172 upstream) executes.
     {
         static int s_count = 0;
         if (s_count < 50) {
-            int id = g_recording_list;
-            int draws = 0;
-            {
-                std::shared_lock<std::shared_mutex> _lk(g_lists_mu);
-                auto it = g_lists.find(id);
-                if (it != g_lists.end()) draws = (int)it->second.draws.size();
-            }
             extern int mcle_log_msg(const char *);
             char buf[80];
             snprintf(buf, sizeof(buf), "LIST_END id=%d draws=%d", id, draws);
