@@ -1931,6 +1931,35 @@ extern "C" unsigned long long mcle_glbridge_list_count(void) {
     return static_cast<unsigned long long>(g_lists.size());
 }
 
+// Memory accounting for the display-list cache. Each chunk mesh sits
+// here as a vector of DrawCmds; each DrawCmd carries a byte vector
+// holding the per-vertex data. If chunks get re-meshed but old lists
+// aren't released, this grows unbounded - that's a leak suspect.
+extern "C" unsigned long long mcle_glbridge_list_bytes(void) {
+    std::shared_lock<std::shared_mutex> _lk(g_lists_mu);
+    unsigned long long total = 0;
+    for (const auto &kv : g_lists) {
+        const DisplayList &dl = kv.second;
+        total += sizeof(DisplayList);
+        total += dl.draws.capacity() * sizeof(DrawCmd);
+        for (const auto &cmd : dl.draws) {
+            total += cmd.data.capacity();
+        }
+    }
+    return total;
+}
+
+// Total DrawCmd count across all display lists. Coarse measure of
+// how much geometry the renderer has compiled.
+extern "C" unsigned long long mcle_glbridge_total_draws(void) {
+    std::shared_lock<std::shared_mutex> _lk(g_lists_mu);
+    unsigned long long total = 0;
+    for (const auto &kv : g_lists) {
+        total += kv.second.draws.size();
+    }
+    return total;
+}
+
 // Set of list IDs that the auto-replay must skip. Populated from
 // MCLEGameLoop after LevelRenderer construction with the world-
 // decoration list IDs (starList, skyList, darkList, haloRingList,

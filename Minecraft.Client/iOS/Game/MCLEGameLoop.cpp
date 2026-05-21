@@ -51,6 +51,8 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 // is wired correctly. Counter version of draws climbs per frame once
 // glCallList replays start firing.
 extern "C" unsigned long long mcle_glbridge_list_count(void);
+extern "C" unsigned long long mcle_glbridge_list_bytes(void);
+extern "C" unsigned long long mcle_glbridge_total_draws(void);
 extern "C" unsigned int mcle_glbridge_get_bound_texture(void);
 extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char *path);
 extern "C" void mcle_glbridge_call_list_stats(unsigned long *hits, unsigned long *misses,
@@ -1519,10 +1521,11 @@ extern "C" void mcle_game_tick(void) {
                              g_player->lastMoveX, g_player->lastMoveZ,
                              dx * dx + dz * dz);
                 }
-                // Wall-clock-gated memory log so it stays ~5s apart no
-                // matter how slow individual sim ticks get. The previous
-                // 300-tick cadence drifted to 1+ minutes once sim ticks
-                // started spending hundreds of ms in updateDirtyChunks.
+                // Wide MEMSTATS line: one snapshot of every leak suspect
+                // in a single log message so we can correlate growth
+                // across resident memory, the display-list cache, and
+                // the live chunk + entity counts. 5-second wall-clock
+                // cadence so the rhythm isn't tied to sim tick rate.
                 {
                     using mclock = std::chrono::steady_clock;
                     static auto s_lastMem = mclock::now() - std::chrono::seconds(10);
@@ -1530,14 +1533,40 @@ extern "C" void mcle_game_tick(void) {
                             mclock::now() - s_lastMem).count() >= 5)
                     {
                         s_lastMem = mclock::now();
+                        double residentMB = 0.0, virtualMB = 0.0;
                         mach_task_basic_info info{};
-                        mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+                        mach_msg_type_number_t taskCount = MACH_TASK_BASIC_INFO_COUNT;
                         if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                                      (task_info_t)&info, &count) == KERN_SUCCESS) {
-                            MCLE_LOG("MEM_CKPT resident=%.1fMB virtual=%.1fMB",
-                                     info.resident_size / (1024.0 * 1024.0),
-                                     info.virtual_size  / (1024.0 * 1024.0));
+                                      (task_info_t)&info, &taskCount) == KERN_SUCCESS) {
+                            residentMB = info.resident_size / (1024.0 * 1024.0);
+                            virtualMB  = info.virtual_size  / (1024.0 * 1024.0);
                         }
+                        const unsigned long long listCount = mcle_glbridge_list_count();
+                        const unsigned long long listBytes = mcle_glbridge_list_bytes();
+                        const unsigned long long drawCount = mcle_glbridge_total_draws();
+                        size_t loadedChunks = 0;
+                        size_t entityCount  = 0;
+                        try {
+                            if (g_levels[0]) {
+                                ChunkSource *src = g_levels[0]->getChunkSource();
+                                auto *sc = dynamic_cast<ServerChunkCache *>(src);
+                                if (sc) {
+                                    if (auto *l = sc->getLoadedChunkList()) {
+                                        loadedChunks = l->size();
+                                    }
+                                }
+                                entityCount = g_levels[0]->entities.size();
+                            }
+                        } catch (...) {}
+                        MCLE_LOG("MEMSTATS resident=%.1fMB virtual=%.1fMB "
+                                 "lists=%llu listMB=%.2f draws=%llu "
+                                 "loadedChunks=%zu entities=%zu saveInFlight=%d",
+                                 residentMB, virtualMB,
+                                 (unsigned long long)listCount,
+                                 listBytes / (1024.0 * 1024.0),
+                                 (unsigned long long)drawCount,
+                                 loadedChunks, entityCount,
+                                 (int)g_autoSaveInFlight.load(std::memory_order_acquire));
                     }
                 }
                 const auto cmStart = hrclock::now();
