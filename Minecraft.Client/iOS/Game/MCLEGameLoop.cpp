@@ -1431,6 +1431,31 @@ extern "C" void mcle_game_tick(void) {
                 } catch (...) {}
             }
         }
+
+        // Periodic chunk save. Parity with MinecraftServer::saveAllChunks
+        // (MinecraftServer.cpp:1355). Walks levels in reverse so level.dat
+        // for the overworld is the last write and isn't clobbered by the
+        // nether/end metadata. Triggered every 30 seconds on the sim
+        // thread so the render thread never sees the I/O.
+        {
+            using sclock = std::chrono::steady_clock;
+            static auto s_lastSave = sclock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(
+                    sclock::now() - s_lastSave).count() >= 30)
+            {
+                s_lastSave = sclock::now();
+                MCLE_LOG("AUTO_SAVE: saving all chunks");
+                const auto saveStart = sclock::now();
+                for (int i = 2; i >= 0; --i) {
+                    if (!g_levels[i]) continue;
+                    try { g_levels[i]->save(true, nullptr); }
+                    catch (...) { MCLE_LOG("AUTO_SAVE: level[%d] threw", i); }
+                }
+                const auto saveMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        sclock::now() - saveStart).count();
+                MCLE_LOG("AUTO_SAVE: done took=%lldms", (long long)saveMs);
+            }
+        }
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
         g_initState = kStateFailed;
@@ -1473,16 +1498,25 @@ extern "C" void mcle_game_tick(void) {
                              g_player->lastMoveX, g_player->lastMoveZ,
                              dx * dx + dz * dz);
                 }
-                // Every ~5s log resident memory so we can see jetsam ceiling.
-                static int s_memLog = 0;
-                if ((s_memLog++ % 300) == 0) {
-                    mach_task_basic_info info{};
-                    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-                    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                                  (task_info_t)&info, &count) == KERN_SUCCESS) {
-                        MCLE_LOG("MEM_CKPT resident=%.1fMB virtual=%.1fMB",
-                                 info.resident_size / (1024.0 * 1024.0),
-                                 info.virtual_size  / (1024.0 * 1024.0));
+                // Wall-clock-gated memory log so it stays ~5s apart no
+                // matter how slow individual sim ticks get. The previous
+                // 300-tick cadence drifted to 1+ minutes once sim ticks
+                // started spending hundreds of ms in updateDirtyChunks.
+                {
+                    using mclock = std::chrono::steady_clock;
+                    static auto s_lastMem = mclock::now() - std::chrono::seconds(10);
+                    if (std::chrono::duration_cast<std::chrono::seconds>(
+                            mclock::now() - s_lastMem).count() >= 5)
+                    {
+                        s_lastMem = mclock::now();
+                        mach_task_basic_info info{};
+                        mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+                        if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                                      (task_info_t)&info, &count) == KERN_SUCCESS) {
+                            MCLE_LOG("MEM_CKPT resident=%.1fMB virtual=%.1fMB",
+                                     info.resident_size / (1024.0 * 1024.0),
+                                     info.virtual_size  / (1024.0 * 1024.0));
+                        }
                     }
                 }
                 const auto cmStart = hrclock::now();

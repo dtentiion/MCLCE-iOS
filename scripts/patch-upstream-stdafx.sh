@@ -1577,3 +1577,12 @@ if [ -f "$SCEU_PY" ]; then
     python3 "$SCEU_PY"
 fi
 
+# LevelChunk.cpp: throttle the "Wrong location!" debug print to the
+# first 16 occurrences. Upstream prints unconditionally on every
+# entity-chunk mismatch which bursts into hundreds of log lines and
+# contributes to os_log backpressure.
+WLT_PY="$REPO_ROOT/scripts/patch-wrong-location-throttle.py"
+if [ -f "$WLT_PY" ]; then
+    python3 "$WLT_PY"
+fi
+
