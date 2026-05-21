@@ -1497,6 +1497,26 @@ extern "C" void mcle_game_tick(void) {
         } catch (...) {}
     }
 
+    // Chunk-rebuild dispatch. Used to live in mcle_world_drive_renderer
+    // which runs on the iOS render thread - the WaitForAll(INFINITE)
+    // barrier waiting for the 7 worker threads stalled the render frame
+    // 200-500ms. Now on the sim thread so the render thread never blocks
+    // on chunk work; render reads finished display lists as they appear.
+    if (g_levelRenderer) {
+        Minecraft *mcShimUDC = Minecraft::GetInstance();
+        const bool texturesReadyUDC =
+            mcShimUDC != nullptr && mcShimUDC->textures != nullptr;
+        if (texturesReadyUDC) {
+            const auto udcStart = hrclock::now();
+            try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
+            const auto udcMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   hrclock::now() - udcStart).count();
+            if (udcMs > 100) {
+                MCLE_LOG("SLOW_UDC updateDirtyChunks took=%lldms", (long long)udcMs);
+            }
+        }
+    }
+
     const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                              hrclock::now() - tickStart).count();
     if (totalMs > 100) {
@@ -1686,55 +1706,11 @@ extern "C" void mcle_world_drive_renderer(void) {
         // would double-translate chunks. Sky/clouds/sun apply their own translations
         // per-pass so they're unaffected.
 
-        // G5-step3: process the dirty-chunk rebuild queue. Throttled to
-        // every 15 frames (~250ms at 60fps) because upstream's
-        // updateDirtyChunks has a 125ms cooldown - calling every 16ms
-        // keeps dirtyChunkPresent stuck at false and the search never
-        // re-enters. 250ms gives the cooldown room to expire so the
-        // search loop runs each pass.
-        //
-        // G5-step7: bracket each call with os_log so signal-killed runs
-        // still pin which upstream call took the SIGSEGV. NSLog buffers
-        // can lose lines if process dies fast; os_log via MCLE_LOG is
-        // retained by the system.
-        {
-            // Chunk build throughput. With phase 2 worker threads wired,
-            // each updateDirtyChunks call dispatches up to 8 chunks in
-            // parallel to workers and blocks at WaitForAll(INFINITE)
-            // until the slowest one finishes. Pre-workers we ran this
-            // 4x per frame because each call only built one chunk;
-            // now 4x means 4 separate WaitForAll barriers per frame
-            // which stacks into 1-2 second render frames. One call per
-            // frame still gets 7-way parallelism per call.
-            static int s_dirtyCalls = 0;
-            constexpr int kMaxBuildsPerFrame = 1;
-            int builds = 0;
-            // Skip the whole loop if textures aren't ready yet. tiles
-            // with uninit icons return null from getTexture; the
-            // TileRenderer null-guard returns null from the fallback
-            // path; the caller (tesselateBlock...) then derefs that
-            // null icon to read UV coords and faults at addr 0x0.
-            // Wait until textures->stitch has populated icons.
-            Minecraft *mcShimRT = Minecraft::GetInstance();
-            const bool texturesReady =
-                mcShimRT != nullptr && mcShimRT->textures != nullptr;
-            for (; texturesReady && builds < kMaxBuildsPerFrame; builds++) {
-                // updateDirtyChunks returns true only when it has more
-                // atomic-neighbor work to do for the chunk it just built,
-                // not "there are more dirty chunks elsewhere". So keep
-                // calling regardless - the cap kMaxBuildsPerFrame bounds
-                // the per-frame cost.
-                try { g_levelRenderer->updateDirtyChunks(); } catch (...) { break; }
-            }
-            // Log once per second so we can see throughput without
-            // spamming.
-            static int s_frameCounter = 0;
-            if ((s_frameCounter++ % 60) == 0) {
-                MCLE_LOG("WD_CKPT updateDirtyChunks call=%d builtThisFrame=%d",
-                         s_dirtyCalls, builds);
-                s_dirtyCalls++;
-            }
-        }
+        // Chunk-rebuild dispatch was here on the render thread; it
+        // internally blocks at WaitForAll(INFINITE) waiting for the 7
+        // worker threads which made the render frame stall ~200-500ms.
+        // Moved to the sim thread (mcle_game_tick body) so the render
+        // thread never blocks on chunk work.
 
         // setupFog equivalent. Mirrors upstream GameRenderer::setupFog
         // (GameRenderer.cpp:2102+) and the fog-color computation at
@@ -1878,12 +1854,19 @@ extern "C" void mcle_world_drive_renderer(void) {
         {
             static int s_renderCalls = 0;
             if (s_renderCalls < 3) MCLE_LOG("WD_CKPT before render call=%d", s_renderCalls);
+            using hrclock2 = std::chrono::steady_clock;
+            const auto renderStart = hrclock2::now();
             // Pass partial tick so renderChunks interpolates the camera
             // translate(-player) between xOld and x. Smooths motion when
             // input ticks at 20Hz but rendering is at 60Hz.
             g_levelRenderer->render(g_player, /*layer*/0,
                                     /*alpha*/(double)frame_partial_tick,
                                     /*updateChunks*/false);
+            const auto renderMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      hrclock2::now() - renderStart).count();
+            if (renderMs > 100) {
+                MCLE_LOG("SLOW_RENDER LevelRenderer::render took=%lldms", (long long)renderMs);
+            }
             if (s_renderCalls < 3) MCLE_LOG("WD_CKPT after render call=%d", s_renderCalls);
             s_renderCalls++;
         }
