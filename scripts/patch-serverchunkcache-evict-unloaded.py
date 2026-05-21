@@ -46,7 +46,7 @@ replacement = anchor + (
     "\t\t\t\t\t\t{\n"
     "\t\t\t\t\t\t\tstatic std::unordered_map<ServerChunkCache*, std::deque<int>> _evictQ;\n"
     "\t\t\t\t\t\t\tstatic std::unordered_map<ServerChunkCache*, int> _evictCount;\n"
-    "\t\t\t\t\t\t\tconstexpr size_t MCLE_UNLOADED_CACHE_MAX = 16;\n"
+    "\t\t\t\t\t\t\tconstexpr size_t MCLE_UNLOADED_CACHE_MAX = 256;\n"
     "\t\t\t\t\t\t\tauto &q = _evictQ[this];\n"
     "\t\t\t\t\t\t\tq.push_back(idx);\n"
     "\t\t\t\t\t\t\twhile (q.size() > MCLE_UNLOADED_CACHE_MAX) {\n"
