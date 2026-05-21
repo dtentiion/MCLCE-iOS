@@ -1442,12 +1442,20 @@ extern "C" void mcle_game_tick(void) {
         // ticking while disk I/O runs. Upstream blocks the sim thread
         // here too, but Win64's NAND finishes in milliseconds; iOS
         // takes seconds and a blocked sim tick stops player movement.
-        // Drop new saves while a previous one is still in flight.
+        //
+        // TEMPORARILY DISABLED: even on its own thread, save() holds
+        // m_csLoadCreate inside ServerChunkCache::save while iterating
+        // chunks. Sim thread's getChunk/move/tick all need that section
+        // so it blocks for the save's duration. On iOS NAND that has
+        // been hanging indefinitely. Real fix is on-background save
+        // via iOS lifecycle hook + a different snapshot pattern that
+        // doesn't hold the cache lock during disk I/O. For now bump
+        // the interval to 1 hour so the freeze can't bite mid-session.
         {
             using sclock = std::chrono::steady_clock;
             static auto s_lastSave = sclock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(
-                    sclock::now() - s_lastSave).count() >= 30 &&
+                    sclock::now() - s_lastSave).count() >= 3600 &&
                 !g_autoSaveInFlight.load(std::memory_order_acquire))
             {
                 s_lastSave = sclock::now();
