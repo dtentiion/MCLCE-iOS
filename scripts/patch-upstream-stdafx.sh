@@ -1586,3 +1586,11 @@ if [ -f "$WLT_PY" ]; then
     python3 "$WLT_PY"
 fi
 
+# Region.cpp + TileRenderer.cpp: bracket ctor/dtor with leak counters
+# so MEMSTATS can show live + total instance counts. Used to pin which
+# per-chunk-rebuild class is leaking.
+LK_PY="$REPO_ROOT/scripts/patch-leak-counters.py"
+if [ -f "$LK_PY" ]; then
+    python3 "$LK_PY"
+fi
+

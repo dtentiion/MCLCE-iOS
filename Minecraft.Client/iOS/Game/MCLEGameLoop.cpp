@@ -272,6 +272,27 @@ std::atomic<bool>             g_simThreadStarted{ false };
 pthread_t                     g_simThread{};
 // Auto-save flag - file-scope so the detached save thread can clear it.
 std::atomic<bool>             g_autoSaveInFlight{ false };
+
+// Leak hunt: atomic counters bracketed around ctor/dtor of suspect
+// upstream classes via patch scripts. If a counter grows unbounded
+// each chunk rebuild, that class is leaking. Tags:
+//   0 = Region
+//   1 = TileRenderer
+namespace {
+constexpr int kMaxLeakTags = 4;
+std::atomic<long> g_leak_count[kMaxLeakTags]{};
+std::atomic<long> g_leak_total[kMaxLeakTags]{};
+}
+
+extern "C" void mcle_alloc_inc(int tag) {
+    if (tag < 0 || tag >= kMaxLeakTags) return;
+    g_leak_count[tag].fetch_add(1, std::memory_order_relaxed);
+    g_leak_total[tag].fetch_add(1, std::memory_order_relaxed);
+}
+extern "C" void mcle_alloc_dec(int tag) {
+    if (tag < 0 || tag >= kMaxLeakTags) return;
+    g_leak_count[tag].fetch_sub(1, std::memory_order_relaxed);
+}
 constexpr uint64_t            kLogEveryN     = 60; // ~1 log/sec at 60 fps
 
 // UTF-8 -> wide string conversion. Documents path comes back as char*.
@@ -1590,17 +1611,24 @@ extern "C" void mcle_game_tick(void) {
                                 }
                             }
                         } catch (...) {}
+                        const long regionLive  = g_leak_count[0].load(std::memory_order_relaxed);
+                        const long regionTotal = g_leak_total[0].load(std::memory_order_relaxed);
+                        const long trLive      = g_leak_count[1].load(std::memory_order_relaxed);
+                        const long trTotal     = g_leak_total[1].load(std::memory_order_relaxed);
                         MCLE_LOG("MEMSTATS resident=%.1fMB virtual=%.1fMB "
                                  "mallocMB=%.1f mallocBlocks=%zu "
                                  "lists=%llu listMB=%.2f draws=%llu "
-                                 "loadedChunks=%zu entities=%zu saveInFlight=%d",
+                                 "loadedChunks=%zu entities=%zu saveInFlight=%d "
+                                 "Region(live=%ld total=%ld) TileRenderer(live=%ld total=%ld)",
                                  residentMB, virtualMB,
                                  mallocMB, mallocCount,
                                  (unsigned long long)listCount,
                                  listBytes / (1024.0 * 1024.0),
                                  (unsigned long long)drawCount,
                                  loadedChunks, entityCount,
-                                 (int)g_autoSaveInFlight.load(std::memory_order_acquire));
+                                 (int)g_autoSaveInFlight.load(std::memory_order_acquire),
+                                 regionLive, regionTotal,
+                                 trLive, trTotal);
                     }
                 }
                 const auto cmStart = hrclock::now();
