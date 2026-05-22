@@ -26,6 +26,7 @@
 #include <os/log.h>
 #include <pthread.h>
 #include <mach/mach.h>
+#include <malloc/malloc.h>
 #include <atomic>
 #include <chrono>
 #include <exception>
@@ -1566,10 +1567,35 @@ extern "C" void mcle_game_tick(void) {
                                 entityCount = g_levels[0]->entities.size();
                             }
                         } catch (...) {}
+                        // Heap totals across all malloc zones. mallocBytes
+                        // is the total live bytes the allocator has handed
+                        // out and not freed. If this tracks resident, the
+                        // leak is C++/upstream heap allocations. If
+                        // mallocBytes stays flat but resident grows, the
+                        // leak is non-malloc (Metal buffers, Mach VM, etc).
+                        double mallocMB = 0.0;
+                        size_t mallocCount = 0;
+                        try {
+                            vm_address_t *zones = nullptr;
+                            unsigned int zoneCount = 0;
+                            if (malloc_get_all_zones(mach_task_self(), nullptr,
+                                                      &zones, &zoneCount) == KERN_SUCCESS) {
+                                for (unsigned int z = 0; z < zoneCount; ++z) {
+                                    malloc_zone_t *zone = (malloc_zone_t *)zones[z];
+                                    if (!zone) continue;
+                                    malloc_statistics_t st{};
+                                    malloc_zone_statistics(zone, &st);
+                                    mallocMB += st.size_in_use / (1024.0 * 1024.0);
+                                    mallocCount += st.blocks_in_use;
+                                }
+                            }
+                        } catch (...) {}
                         MCLE_LOG("MEMSTATS resident=%.1fMB virtual=%.1fMB "
+                                 "mallocMB=%.1f mallocBlocks=%zu "
                                  "lists=%llu listMB=%.2f draws=%llu "
                                  "loadedChunks=%zu entities=%zu saveInFlight=%d",
                                  residentMB, virtualMB,
+                                 mallocMB, mallocCount,
                                  (unsigned long long)listCount,
                                  listBytes / (1024.0 * 1024.0),
                                  (unsigned long long)drawCount,
