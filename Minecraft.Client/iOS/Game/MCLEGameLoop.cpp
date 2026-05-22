@@ -1615,11 +1615,13 @@ extern "C" void mcle_game_tick(void) {
                         const long regionTotal = g_leak_total[0].load(std::memory_order_relaxed);
                         const long trLive      = g_leak_count[1].load(std::memory_order_relaxed);
                         const long trTotal     = g_leak_total[1].load(std::memory_order_relaxed);
+                        const long lcLive      = g_leak_count[2].load(std::memory_order_relaxed);
+                        const long lcTotal     = g_leak_total[2].load(std::memory_order_relaxed);
                         MCLE_LOG("MEMSTATS resident=%.1fMB virtual=%.1fMB "
                                  "mallocMB=%.1f mallocBlocks=%zu "
                                  "lists=%llu listMB=%.2f draws=%llu "
                                  "loadedChunks=%zu entities=%zu saveInFlight=%d "
-                                 "Region(live=%ld total=%ld) TileRenderer(live=%ld total=%ld)",
+                                 "Region(L=%ld T=%ld) TR(L=%ld T=%ld) LC(L=%ld T=%ld)",
                                  residentMB, virtualMB,
                                  mallocMB, mallocCount,
                                  (unsigned long long)listCount,
@@ -1628,7 +1630,8 @@ extern "C" void mcle_game_tick(void) {
                                  loadedChunks, entityCount,
                                  (int)g_autoSaveInFlight.load(std::memory_order_acquire),
                                  regionLive, regionTotal,
-                                 trLive, trTotal);
+                                 trLive, trTotal,
+                                 lcLive, lcTotal);
                     }
                 }
                 const auto cmStart = hrclock::now();

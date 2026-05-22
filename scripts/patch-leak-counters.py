@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent / "upstream"
 
 REGION = ROOT / "Minecraft.World" / "Region.cpp"
 TR     = ROOT / "Minecraft.Client" / "TileRenderer.cpp"
+LC     = ROOT / "Minecraft.World" / "LevelChunk.cpp"
 
 EXTERN_DECLS = (
     "#ifdef __APPLE_IOS__\n"
@@ -96,3 +97,42 @@ else:
 
     TR.write_text(src, encoding="utf-8")
     print(f"patched: {TR}")
+
+# --- LevelChunk ---
+src = LC.read_text(encoding="utf-8", errors="replace")
+if "MCLE_LEAK_LC" in src:
+    print(f"already patched: {LC}")
+else:
+    if '#include "stdafx.h"\n' in src:
+        src = src.replace('#include "stdafx.h"\n', '#include "stdafx.h"\n' + EXTERN_DECLS, 1)
+
+    # Three LevelChunk ctor variants. All increment counter 2.
+    ctor_sigs = [
+        "LevelChunk::LevelChunk(Level *level, int x, int z)\n",
+        "LevelChunk::LevelChunk(Level *level, byteArray blocks, int x, int z)\n",
+        "LevelChunk::LevelChunk(Level *level, int x, int z, LevelChunk *lc)\n",
+    ]
+    insert = "{\n#ifdef __APPLE_IOS__\n\tmcle_alloc_inc(2); // MCLE_LEAK_LC\n#endif\n"
+    found_any = False
+    for sig in ctor_sigs:
+        if sig not in src: continue
+        found_any = True
+        idx = src.find(sig)
+        open_brace = src.find("{\n", idx)
+        if open_brace == -1: continue
+        src = src[:open_brace] + insert + src[open_brace + 2:]
+    if not found_any: sys.exit(f"no LevelChunk ctor signatures matched in {LC}")
+
+    # Dtor.
+    old = "LevelChunk::~LevelChunk()\n{\n"
+    new = (
+        "LevelChunk::~LevelChunk()\n{\n"
+        "#ifdef __APPLE_IOS__\n"
+        "\tmcle_alloc_dec(2);\n"
+        "#endif\n"
+    )
+    if old not in src: sys.exit(f"LevelChunk dtor anchor not found in {LC}")
+    src = src.replace(old, new, 1)
+
+    LC.write_text(src, encoding="utf-8")
+    print(f"patched: {LC}")
