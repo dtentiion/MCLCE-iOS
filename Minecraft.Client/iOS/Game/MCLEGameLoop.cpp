@@ -1248,10 +1248,31 @@ static void mcle_terminate_handler() {
     std::abort();
 }
 
+// Install a per-thread alternate signal stack. sigaltstack is
+// per-thread on iOS, so each thread that might fault (main, sim,
+// workers) needs its own. Use thread_local so each thread gets its
+// own memory automatically. Without this, a UAF that corrupts the
+// faulting thread's stack causes the signal handler to crash on its
+// way to logging, silently turning a SIGSEGV into an apparent
+// SIGKILL with no trace.
+extern "C" void mcle_install_sig_altstack(void) {
+    static thread_local uint8_t altStack[SIGSTKSZ];
+    static thread_local bool installed = false;
+    if (installed) return;
+    stack_t ss{};
+    ss.ss_sp    = altStack;
+    ss.ss_size  = sizeof(altStack);
+    ss.ss_flags = 0;
+    sigaltstack(&ss, nullptr);
+    installed = true;
+}
+
 static void mcle_install_crash_handler() {
+    mcle_install_sig_altstack();
+
     struct sigaction sa{};
     sa.sa_sigaction = &mcle_crash_handler;
-    sa.sa_flags = SA_SIGINFO;
+    sa.sa_flags     = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGSEGV, &sa, nullptr);
     sigaction(SIGBUS,  &sa, nullptr);
@@ -1282,6 +1303,7 @@ extern "C" void mcle_game_tick(void); // forward decl for the sim loop
 // actual sim step to 20Hz; we sleep 16ms between calls so unused
 // frames don't burn CPU.
 static void *mcle_sim_thread_loop(void *) {
+    mcle_install_sig_altstack();
     MCLE_LOG("mcle_sim_thread_loop: started, beginning ticks");
     for (;;) {
         mcle_game_tick();

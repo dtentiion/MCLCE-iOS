@@ -1594,3 +1594,11 @@ if [ -f "$LK_PY" ]; then
     python3 "$LK_PY"
 fi
 
+# LevelRenderer.cpp: install a per-thread sigaltstack at the top of
+# rebuildChunkThreadProc so signal handlers can log even when a worker
+# thread's stack has been corrupted by a use-after-free.
+WAS_PY="$REPO_ROOT/scripts/patch-worker-sigaltstack.py"
+if [ -f "$WAS_PY" ]; then
+    python3 "$WAS_PY"
+fi
+
