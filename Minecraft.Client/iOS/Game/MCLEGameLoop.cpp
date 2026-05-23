@@ -1217,11 +1217,20 @@ static void mcle_open_crash_log_fd(void) {
     if (g_crash_log_fd >= 0) return;
     extern const char *ios_documents_dir(void);
     const char *root = ios_documents_dir();
-    if (!root || !*root) return;
+    if (!root || !*root) {
+        MCLE_LOG("mcle_open_crash_log_fd: ios_documents_dir returned null - "
+                 "signal handler will NOT be able to write");
+        return;
+    }
     char path[1024];
     int n = snprintf(path, sizeof(path), "%s/crash_log.txt", root);
-    if (n <= 0 || (size_t)n >= sizeof(path)) return;
+    if (n <= 0 || (size_t)n >= sizeof(path)) {
+        MCLE_LOG("mcle_open_crash_log_fd: snprintf failed for path");
+        return;
+    }
     g_crash_log_fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
+    MCLE_LOG("mcle_open_crash_log_fd: fd=%d path=%{public}s",
+             g_crash_log_fd, path);
 }
 
 // Async-signal-safe itoa using a writable buffer the caller supplies.
