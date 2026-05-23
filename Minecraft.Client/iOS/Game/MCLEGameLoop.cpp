@@ -1361,6 +1361,11 @@ static void mcle_install_crash_handler() {
 
 extern "C" void mcle_game_init(void) {
     if (g_initState != kStateUnstarted) return;
+    // Build identifier so any log we look at shows immediately which
+    // build is running. Update this string at every commit that
+    // changes crash-handling behaviour.
+    MCLE_LOG("BUILD_INFO build=%{public}s %{public}s",
+             __DATE__, __TIME__);
     mcle_install_crash_handler();
     try {
         initImpl();
