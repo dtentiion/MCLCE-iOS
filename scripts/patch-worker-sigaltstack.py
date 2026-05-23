@@ -19,6 +19,20 @@ if "MCLE_WORKER_ALTSTACK" in src:
     print(f"already patched: {TARGET}")
     sys.exit(0)
 
+# File-scope extern "C" decl - putting it inside the function body
+# is illegal C++. Hook in right after stdafx so all upstream code
+# below can see it.
+decl_anchor = '#include "stdafx.h"\n'
+decl_addition = (
+    '#include "stdafx.h"\n'
+    "#ifdef __APPLE_IOS__\n"
+    "extern \"C\" void mcle_install_sig_altstack(void); // MCLE_WORKER_ALTSTACK\n"
+    "#endif\n"
+)
+if decl_anchor not in src:
+    sys.exit("include anchor not found for sigaltstack decl")
+src = src.replace(decl_anchor, decl_addition, 1)
+
 old = (
     "int LevelRenderer::rebuildChunkThreadProc(LPVOID lpParam)\n"
     "{\n"
@@ -28,7 +42,6 @@ new = (
     "int LevelRenderer::rebuildChunkThreadProc(LPVOID lpParam)\n"
     "{\n"
     "#ifdef __APPLE_IOS__\n"
-    "\textern \"C\" void mcle_install_sig_altstack(void); // MCLE_WORKER_ALTSTACK\n"
     "\tmcle_install_sig_altstack();\n"
     "#endif\n"
     "\tVec3::CreateNewThreadStorage();\n"
