@@ -25,6 +25,8 @@
 
 #include <os/log.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <mach/mach.h>
 #include <malloc/malloc.h>
 #include <atomic>
@@ -1206,19 +1208,84 @@ void initImpl() {
 
 } // anonymous namespace
 
-// Crash logger: install handlers for SIGSEGV/SIGBUS that print the
-// faulting signal + address before re-raising the default handler so
-// the os_log capture has the information even though iOS still kills
-// the process. One-shot - resets to default after firing.
+// Pre-opened file descriptor for crash logging. Opened once at init
+// so the signal handler can write() directly without going through
+// fopen/malloc/NSLog (none of which are async-signal-safe).
+static int g_crash_log_fd = -1;
+
+static void mcle_open_crash_log_fd(void) {
+    if (g_crash_log_fd >= 0) return;
+    extern const char *ios_documents_dir(void);
+    const char *root = ios_documents_dir();
+    if (!root || !*root) return;
+    char path[1024];
+    int n = snprintf(path, sizeof(path), "%s/crash_log.txt", root);
+    if (n <= 0 || (size_t)n >= sizeof(path)) return;
+    g_crash_log_fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
+}
+
+// Async-signal-safe itoa using a writable buffer the caller supplies.
+// Returns number of bytes written. Negative values are formatted as
+// "-N". Used by mcle_crash_handler which can't call snprintf.
+static size_t mcle_safe_itoa(char *buf, size_t cap, long v) {
+    if (cap == 0) return 0;
+    if (v < 0) {
+        if (cap < 2) return 0;
+        buf[0] = '-';
+        return 1 + mcle_safe_itoa(buf + 1, cap - 1, -v);
+    }
+    char tmp[24]; size_t t = 0;
+    if (v == 0) { tmp[t++] = '0'; }
+    while (v > 0 && t < sizeof(tmp)) { tmp[t++] = '0' + (char)(v % 10); v /= 10; }
+    size_t n = 0;
+    while (t > 0 && n < cap) { buf[n++] = tmp[--t]; }
+    return n;
+}
+
+// Async-signal-safe hex write for pointers.
+static size_t mcle_safe_hex(char *buf, size_t cap, uintptr_t v) {
+    if (cap < 3) return 0;
+    buf[0] = '0'; buf[1] = 'x';
+    size_t n = 2;
+    char tmp[20]; size_t t = 0;
+    if (v == 0) { tmp[t++] = '0'; }
+    while (v > 0 && t < sizeof(tmp)) {
+        int d = (int)(v & 0xF);
+        tmp[t++] = (char)(d < 10 ? '0' + d : 'a' + (d - 10));
+        v >>= 4;
+    }
+    while (t > 0 && n < cap) { buf[n++] = tmp[--t]; }
+    return n;
+}
+
+// Crash logger: handler for SIGSEGV / SIGBUS / SIGABRT etc. CRITICAL
+// requirement - everything in here must be async-signal-safe (no
+// malloc, no NSLog, no fprintf, no objc_msgSend). Otherwise the
+// handler crashes inside itself and the process dies silently with
+// no log. We use a pre-opened fd + write() + manual int/hex format.
 static void mcle_crash_handler(int sig, siginfo_t *info, void *) {
-    MCLE_LOG("mcle: caught signal %d at addr %p (code=%d)",
-             sig,
-             info ? info->si_addr : (void *)0,
-             info ? info->si_code : 0);
-    // os_log buffers asynchronously, so any CKPT lines in flight at
-    // the moment of the SIGSEGV can be lost when the process dies.
-    // Sleep briefly to give the kernel log subsystem time to drain.
-    usleep(200000);  // 200ms
+    if (g_crash_log_fd >= 0) {
+        char buf[160]; size_t n = 0;
+        const char *prefix = "[mcle] mcle: caught signal ";
+        size_t plen = 27;
+        for (size_t i = 0; i < plen && n < sizeof(buf); ++i) buf[n++] = prefix[i];
+        n += mcle_safe_itoa(buf + n, sizeof(buf) - n, sig);
+        const char *mid = " at addr ";
+        for (size_t i = 0; i < 9 && n < sizeof(buf); ++i) buf[n++] = mid[i];
+        n += mcle_safe_hex(buf + n, sizeof(buf) - n,
+                           (uintptr_t)(info ? info->si_addr : (void *)0));
+        const char *code = " (code=";
+        for (size_t i = 0; i < 7 && n < sizeof(buf); ++i) buf[n++] = code[i];
+        n += mcle_safe_itoa(buf + n, sizeof(buf) - n, info ? info->si_code : 0);
+        if (n < sizeof(buf)) buf[n++] = ')';
+        if (n < sizeof(buf)) buf[n++] = '\n';
+        ssize_t r = write(g_crash_log_fd, buf, n);
+        (void)r;
+        fsync(g_crash_log_fd);
+    }
+    // Give the kernel a moment to flush before re-raise. usleep IS
+    // documented async-signal-safe on Darwin.
+    usleep(200000);
     struct sigaction dfl{};
     dfl.sa_handler = SIG_DFL;
     sigemptyset(&dfl.sa_mask);
@@ -1269,6 +1336,7 @@ extern "C" void mcle_install_sig_altstack(void) {
 
 static void mcle_install_crash_handler() {
     mcle_install_sig_altstack();
+    mcle_open_crash_log_fd();
 
     struct sigaction sa{};
     sa.sa_sigaction = &mcle_crash_handler;
