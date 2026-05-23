@@ -1313,6 +1313,11 @@ static void *mcle_sim_thread_loop(void *) {
 }
 
 extern "C" void mcle_game_tick(void) {
+    // Install per-thread sigaltstack on whichever thread first calls
+    // this. Idempotent. Covers main (UIKit) and sim threads; workers
+    // install at the top of rebuildChunkThreadProc via patch.
+    mcle_install_sig_altstack();
+
     // After the sim thread is up, the iOS main thread's call to
     // mcle_game_tick from MinecraftViewController is a no-op. The
     // sim thread itself bypasses this guard via pthread_equal.
