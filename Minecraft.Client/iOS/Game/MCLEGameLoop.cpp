@@ -1224,13 +1224,17 @@ static void mcle_open_crash_log_fd(void) {
         return;
     }
     char path[1024];
-    int n = snprintf(path, sizeof(path), "%s/crash_log.txt", root);
+    // Open mcle_log.txt - the dedicated mcle-only file. Ruffle does
+    // not write here, so signal-handler writes can't be overwritten
+    // by a racing non-O_APPEND writer (which was happening when we
+    // shared crash_log.txt with ruffle).
+    int n = snprintf(path, sizeof(path), "%s/mcle_log.txt", root);
     if (n <= 0 || (size_t)n >= sizeof(path)) {
         MCLE_LOG("mcle_open_crash_log_fd: snprintf failed for path");
         return;
     }
     g_crash_log_fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
-    MCLE_LOG("mcle_open_crash_log_fd: fd=%d path=%{public}s",
+    MCLE_LOG("mcle_open_crash_log_fd: fd=%d path=%s",
              g_crash_log_fd, path);
 }
 
