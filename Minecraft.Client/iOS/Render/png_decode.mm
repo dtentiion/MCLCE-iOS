@@ -79,22 +79,38 @@ extern "C" int mcle_log_msg(const char *msg) {
     if (!msg) return 0;
     NSLog(@"[MCLE/up] %s", msg);
 
-    // Also append to Documents/crash_log.txt - bypass iOS log redaction.
-    // ruffle_ios already opens crash_log.txt with truncate at startup, so
-    // our additions sit alongside ruffle's lines in the same file the user
-    // already pulls via the Files app.
-    static FILE *f = nullptr;
-    if (!f) {
+    // Write to TWO files:
+    //   1. Documents/crash_log.txt - the legacy interleaved-with-ruffle
+    //      file that 3uTools / Files app users already pull. Kept so
+    //      existing tooling keeps working.
+    //   2. Documents/mcle_log.txt  - mcle-only, dedicated. Ruffle does
+    //      NOT open this path, so our lines never get overwritten by
+    //      a non-O_APPEND writer racing on the same file. Use THIS
+    //      file for crash diagnosis - the legacy crash_log.txt loses
+    //      early-game-init log lines to the Ruffle write race.
+    static FILE *legacy = nullptr;
+    static FILE *clean  = nullptr;
+    if (!legacy || !clean) {
         const char *root = ios_documents_dir();
         if (root && *root) {
             char path[1024];
-            snprintf(path, sizeof(path), "%s/crash_log.txt", root);
-            f = fopen(path, "a");
+            if (!legacy) {
+                snprintf(path, sizeof(path), "%s/crash_log.txt", root);
+                legacy = fopen(path, "a");
+            }
+            if (!clean) {
+                snprintf(path, sizeof(path), "%s/mcle_log.txt", root);
+                clean = fopen(path, "a");
+            }
         }
     }
-    if (f) {
-        fprintf(f, "[mcle] %s\n", msg);
-        fflush(f);
+    if (legacy) {
+        fprintf(legacy, "[mcle] %s\n", msg);
+        fflush(legacy);
+    }
+    if (clean) {
+        fprintf(clean, "[mcle] %s\n", msg);
+        fflush(clean);
     }
     return 1;
 }
