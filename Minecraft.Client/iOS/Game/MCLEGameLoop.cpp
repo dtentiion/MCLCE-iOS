@@ -688,7 +688,15 @@ void initImpl() {
         // can't keep up. With extended-mem entitlement + unloaded-cache
         // LRU eviction in place we can hold 8 (17x17 = 289). Bump toward
         // 16 once worker threads land.
-        pl->setViewDistance(8);
+        //
+        // CPU-budget test: we're being killed by something that bypasses
+        // signal AND mach exception handlers - most likely proc_terminate
+        // from a foreground-app CPU/wakeup quota. Drop to 6 (13x13 = 169
+        // chunks, 41% less chunk-rebuild load on the workers) to see if
+        // sessions noticeably extend past the current 35-45s mark. If
+        // they do, CPU was the killer and we know to keep load capped
+        // until upstream chunk-data compaction lands.
+        pl->setViewDistance(6);
         MCLE_LOG("mcle_game_init: PlayerList viewDistance=%d", pl->getViewDistance());
         g_server->setPlayers(pl);
         MCLE_LOG("mcle_game_init: PlayerList attached");
