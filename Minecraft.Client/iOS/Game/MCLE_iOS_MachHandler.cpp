@@ -2,29 +2,36 @@
 // kernel converts them into POSIX signals (or skips signals entirely
 // for EXC_RESOURCE / EXC_GUARD / EXC_CRASH on iOS).
 //
-// v2: uses the system MIG-generated mach_exc_server() to decode the
+// v2: uses the system MIG-generated exc_server() to decode the
 // incoming exception message and format the reply correctly. The
 // hand-rolled message ABI in v1 caused the kernel to leave the
 // faulting thread suspended forever waiting for a reply it couldn't
 // parse, producing a "frozen player" symptom where look-around (on
 // the render thread) still worked but walking (on the sim thread)
-// died. mach_exc_server is the only safe way to do this on iOS.
+// died. exc_server is the only safe way to do this on iOS.
+//
+// We use the public <mach/exc.h> exc_server (32-bit codes) rather
+// than the private mach_exc.h variant (64-bit codes) because the
+// iOS public SDK doesn't expose mach_exc.h. Trade-off: EXC_RESOURCE
+// and EXC_CRASH codes get 32-bit-truncated, but the exception TYPE
+// (which is what we mainly need to identify the kill reason) comes
+// through cleanly.
 //
 // Forward-to-original semantics: we save the previously-installed
 // exception ports for our mask set, log the catch on our side, and
 // then forward the exception to whatever was registered before us by
-// calling mach_exception_raise on the saved port. The previous
+// calling exception_raise on the saved port. The previous
 // handler then runs (in practice this is the kernel's default which
 // delivers a signal or SIGKILLs). If no previous handler exists, we
 // return KERN_FAILURE and the kernel falls back to signal dispatch.
 //
-// The catch_mach_exception_raise_state* stubs return KERN_FAILURE
+// The catch_exception_raise_state* stubs return KERN_FAILURE
 // because we register with EXCEPTION_DEFAULT (no state included),
-// but mach_exc_server requires all three symbols to link.
+// but exc_server requires all three symbols to link.
 
 #include <mach/mach.h>
 #include <mach/exception_types.h>
-#include <mach/mach_exc.h>
+#include <mach/exc.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -99,7 +106,7 @@ const char* exc_name(int t) {
 }
 
 void write_log(const char* prefix, exception_type_t exc,
-               mach_exception_data_t code, mach_msg_type_number_t codeCnt) {
+               exception_data_t code, mach_msg_type_number_t codeCnt) {
     if (g_crash_log_fd < 0) return;
     char buf[256]; size_t n = 0;
     size_t p = strlen(prefix);
@@ -141,17 +148,17 @@ mach_port_t find_old_port_for(exception_type_t exc) {
 } // namespace
 
 // ===========================================================================
-// MIG callbacks. mach_exc_server() (from the system header
+// MIG callbacks. exc_server() (from the system header
 // mach/mach_exc.h) dispatches incoming messages to these. Symbol names
 // must match exactly or the link fails.
 // ===========================================================================
 
-extern "C" kern_return_t catch_mach_exception_raise(
+extern "C" kern_return_t catch_exception_raise(
     mach_port_t /*exception_port*/,
     mach_port_t thread,
     mach_port_t task,
     exception_type_t exception,
-    mach_exception_data_t code,
+    exception_data_t code,
     mach_msg_type_number_t codeCnt)
 {
     write_log("[mcle] MACH_EXC CAUGHT ", exception, code, codeCnt);
@@ -160,7 +167,7 @@ extern "C" kern_return_t catch_mach_exception_raise(
     // normal lifecycle continues (signal dispatch / SIGKILL / etc).
     mach_port_t old_port = find_old_port_for(exception);
     if (old_port != MACH_PORT_NULL) {
-        return mach_exception_raise(old_port, thread, task,
+        return exception_raise(old_port, thread, task,
                                     exception, code, codeCnt);
     }
     // No previous handler. Returning KERN_FAILURE makes the kernel
@@ -168,10 +175,10 @@ extern "C" kern_return_t catch_mach_exception_raise(
     return KERN_FAILURE;
 }
 
-extern "C" kern_return_t catch_mach_exception_raise_state(
+extern "C" kern_return_t catch_exception_raise_state(
     mach_port_t /*exception_port*/,
     exception_type_t /*exception*/,
-    const mach_exception_data_t /*code*/,
+    const exception_data_t /*code*/,
     mach_msg_type_number_t /*codeCnt*/,
     int * /*flavor*/,
     const thread_state_t /*old_state*/,
@@ -180,17 +187,17 @@ extern "C" kern_return_t catch_mach_exception_raise_state(
     mach_msg_type_number_t * /*new_stateCnt*/)
 {
     // We register with EXCEPTION_DEFAULT (no state). This shouldn't
-    // get called, but the symbol must exist for mach_exc_server to
+    // get called, but the symbol must exist for exc_server to
     // link.
     return KERN_FAILURE;
 }
 
-extern "C" kern_return_t catch_mach_exception_raise_state_identity(
+extern "C" kern_return_t catch_exception_raise_state_identity(
     mach_port_t /*exception_port*/,
     mach_port_t /*thread*/,
     mach_port_t /*task*/,
     exception_type_t /*exception*/,
-    mach_exception_data_t /*code*/,
+    exception_data_t /*code*/,
     mach_msg_type_number_t /*codeCnt*/,
     int * /*flavor*/,
     thread_state_t /*old_state*/,
@@ -202,9 +209,9 @@ extern "C" kern_return_t catch_mach_exception_raise_state_identity(
     return KERN_FAILURE;
 }
 
-// Forward decl. mach_exc_server is implemented by libsystem_kernel; the
-// header is mach/mach_exc.h which we've already included above.
-extern "C" boolean_t mach_exc_server(mach_msg_header_t *request,
+// Forward decl. exc_server is implemented by libsystem_kernel; the
+// header is mach/exc.h which we've already included above.
+extern "C" boolean_t exc_server(mach_msg_header_t *request,
                                        mach_msg_header_t *reply);
 
 namespace {
@@ -236,7 +243,7 @@ void* exception_thread_main(void* /*unused*/) {
 
         // Let MIG decode the message and call into our catch_*_raise
         // callback. It also formats the reply for us.
-        if (mach_exc_server(req, rep)) {
+        if (exc_server(req, rep)) {
             mach_msg(rep, MACH_SEND_MSG, rep->msgh_size, 0,
                      MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE,
                      MACH_PORT_NULL);
@@ -295,7 +302,7 @@ extern "C" void mcle_install_mach_exception_handler(void) {
         mach_task_self(),
         mask,
         g_exc_port,
-        EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES,
+        EXCEPTION_DEFAULT,
         THREAD_STATE_NONE);
     if (kr != KERN_SUCCESS) {
         // Some masks (EXC_MASK_CRASH especially) may require an
@@ -315,7 +322,7 @@ extern "C" void mcle_install_mach_exception_handler(void) {
             mach_task_self(),
             safe_mask,
             g_exc_port,
-            EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES,
+            EXCEPTION_DEFAULT,
             THREAD_STATE_NONE);
         if (kr != KERN_SUCCESS) {
             mach_port_deallocate(mach_task_self(), g_exc_port);
