@@ -9,7 +9,6 @@
 
 set(MCLE_GAME_SOURCES
   MCLEGameLoop.cpp
-  MCLE_iOS_MachHandler.cpp
 )
 
 add_library(mcle_ios_game STATIC
