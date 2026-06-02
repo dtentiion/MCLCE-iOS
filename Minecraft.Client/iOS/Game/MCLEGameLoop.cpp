@@ -1362,10 +1362,11 @@ static void mcle_install_crash_handler() {
 extern "C" void mcle_game_init(void) {
     if (g_initState != kStateUnstarted) return;
     // Build identifier so any log we look at shows immediately which
-    // build is running. Update this string at every commit that
-    // changes crash-handling behaviour.
-    MCLE_LOG("BUILD_INFO build=%{public}s %{public}s",
-             __DATE__, __TIME__);
+    // build is running. Plain %s here (not %{public}s) because the
+    // file-write path uses fprintf which doesn't understand the
+    // os_log "public" modifier - it leaks "{public}s" as literal text
+    // and eats the corresponding argument.
+    MCLE_LOG("BUILD_INFO build=%s %s", __DATE__, __TIME__);
     mcle_install_crash_handler();
     try {
         initImpl();
