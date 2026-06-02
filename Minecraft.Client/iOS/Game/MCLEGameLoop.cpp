@@ -1210,8 +1210,9 @@ void initImpl() {
 
 // Pre-opened file descriptor for crash logging. Opened once at init
 // so the signal handler can write() directly without going through
-// fopen/malloc/NSLog (none of which are async-signal-safe).
-static int g_crash_log_fd = -1;
+// fopen/malloc/NSLog (none of which are async-signal-safe). External
+// linkage so MCLE_iOS_MachHandler.cpp can share the same fd.
+extern "C" int g_crash_log_fd = -1;
 
 static void mcle_open_crash_log_fd(void) {
     if (g_crash_log_fd >= 0) return;
@@ -1343,9 +1344,16 @@ extern "C" void mcle_install_sig_altstack(void) {
     installed = true;
 }
 
+// Defined in MCLE_iOS_MachHandler.cpp. Catches kernel-level EXC_*
+// exceptions that bypass POSIX signals (EXC_RESOURCE, EXC_GUARD,
+// EXC_CRASH on iOS). Order matters: fd must be open first so the
+// Mach handler thread can write through it.
+extern "C" void mcle_install_mach_exception_handler(void);
+
 static void mcle_install_crash_handler() {
     mcle_install_sig_altstack();
     mcle_open_crash_log_fd();
+    mcle_install_mach_exception_handler();
 
     struct sigaction sa{};
     sa.sa_sigaction = &mcle_crash_handler;
