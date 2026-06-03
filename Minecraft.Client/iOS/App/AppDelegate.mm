@@ -134,17 +134,23 @@ PlayerHandle* g_ruffle_player = NULL;
 }
 
 // Persist chunk data on iOS lifecycle events. Both are defined in
-// Game/MCLEGameLoop.cpp. The blocking variant is what we want during
-// backgrounding - we have to hold the iOS background task open until
-// the save actually finishes, otherwise iOS suspends us mid-write.
+// Game/MCLEGameLoop.cpp.
 extern "C" void mcle_save_now(void);
 extern "C" void mcle_save_now_sync(void);
 
 - (void)applicationDidEnterBackground:(UIApplication*)application {
-    // Without an explicit background task, iOS marks the app suspendable
-    // as soon as this method returns and may reap us before any chunk
-    // hits disk. beginBackgroundTaskWithName extends the grace period
-    // (up to ~30s) and lets the kernel know we have real work pending.
+    // The main thread MUST return from this callback quickly. Earlier
+    // attempts called mcle_save_now_sync() inline here and the iOS
+    // watchdog reaped us mid-save (log: BG_SAVE starts, sim keeps
+    // ticking, then process dies before any per-level "done" line).
+    //
+    // The correct shape is:
+    //   1. beginBackgroundTask to tell iOS we have real work pending -
+    //      the kernel extends our background runtime to ~30 seconds.
+    //   2. Dispatch the blocking save onto a global queue so the main
+    //      thread returns immediately, keeping the watchdog happy.
+    //   3. endBackgroundTask only after the save thread actually
+    //      finishes, so iOS doesn't suspend us mid-write.
     __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
     task = [application beginBackgroundTaskWithName:@"mcle.save"
                                   expirationHandler:^{
@@ -154,15 +160,19 @@ extern "C" void mcle_save_now_sync(void);
         }
     }];
 
-    mcle_save_now_sync();
-
-    if (task != UIBackgroundTaskInvalid) {
-        [application endBackgroundTask:task];
-        task = UIBackgroundTaskInvalid;
-    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        mcle_save_now_sync();
+        if (task != UIBackgroundTaskInvalid) {
+            [application endBackgroundTask:task];
+            task = UIBackgroundTaskInvalid;
+        }
+    });
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
+    // Terminate path: iOS gives us only a few seconds and there's no
+    // beginBackgroundTask escape hatch - run the save inline and hope
+    // we finish before the kernel pulls the plug.
     mcle_save_now_sync();
     mcle_swf_shutdown();
     mcle_ios_input_shutdown();
