@@ -275,39 +275,67 @@ pthread_t                     g_simThread{};
 // Auto-save flag - file-scope so the detached save thread can clear it.
 std::atomic<bool>             g_autoSaveInFlight{ false };
 
-// Triggered from AppDelegate's applicationDidEnterBackground. Spawns
-// the same async save thread the periodic auto-save uses, except this
-// one fires on the iOS lifecycle event rather than on a timer - so it
-// doesn't deadlock sim mid-play. Save happens during the OS-allotted
-// background window (~5s typical) and doesn't fight in-flight gameplay.
+// Body of the on-demand save - runs on whichever pthread we hand it to.
+// Walks levels in reverse to mirror upstream MinecraftServer::saveAllLevels
+// and logs start/per-level/done so we can see exactly how far we got if
+// iOS reaps us mid-save.
+static void *mcle_save_now_thread(void *) {
+    MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
+    const auto start = std::chrono::steady_clock::now();
+    for (int i = 2; i >= 0; --i) {
+        if (!g_levels[i]) continue;
+        const auto t0 = std::chrono::steady_clock::now();
+        try { g_levels[i]->save(true, nullptr); }
+        catch (...) { MCLE_LOG("BG_SAVE: level[%d] threw", i); }
+        const auto dms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - t0).count();
+        MCLE_LOG("BG_SAVE: level[%d] done took=%lldms", i, (long long)dms);
+    }
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - start).count();
+    MCLE_LOG("BG_SAVE: done took=%lldms", (long long)ms);
+    g_autoSaveInFlight.store(false, std::memory_order_release);
+    return nullptr;
+}
+
+// Detached variant - fire-and-forget, used by paths that cannot block
+// (eg the periodic auto-save in the sim loop, which historically
+// deadlocked when run inline).
 extern "C" void mcle_save_now(void) {
     if (g_autoSaveInFlight.load(std::memory_order_acquire)) return;
     bool expected = false;
     if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) return;
 
     pthread_t saveThread;
-    int rc = pthread_create(&saveThread, nullptr,
-        [](void *) -> void * {
-            MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
-            const auto start = std::chrono::steady_clock::now();
-            for (int i = 2; i >= 0; --i) {
-                if (!g_levels[i]) continue;
-                try { g_levels[i]->save(true, nullptr); }
-                catch (...) { MCLE_LOG("BG_SAVE: level[%d] threw", i); }
-            }
-            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start).count();
-            MCLE_LOG("BG_SAVE: done took=%lldms", (long long)ms);
-            g_autoSaveInFlight.store(false, std::memory_order_release);
-            return nullptr;
-        },
-        nullptr);
+    int rc = pthread_create(&saveThread, nullptr, &mcle_save_now_thread, nullptr);
     if (rc == 0) {
         pthread_detach(saveThread);
     } else {
         g_autoSaveInFlight.store(false, std::memory_order_release);
         MCLE_LOG("BG_SAVE: pthread_create failed rc=%d", rc);
     }
+}
+
+// Blocking variant - applicationDidEnterBackground calls this so it
+// can hold the iOS background task open until the save actually
+// finishes. Without this, the detached pthread above raced against
+// iOS suspension and never logged a "done" line.
+extern "C" void mcle_save_now_sync(void) {
+    if (g_autoSaveInFlight.load(std::memory_order_acquire)) {
+        MCLE_LOG("BG_SAVE: sync requested but save already in flight, skipping");
+        return;
+    }
+    bool expected = false;
+    if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) return;
+
+    pthread_t saveThread;
+    int rc = pthread_create(&saveThread, nullptr, &mcle_save_now_thread, nullptr);
+    if (rc != 0) {
+        g_autoSaveInFlight.store(false, std::memory_order_release);
+        MCLE_LOG("BG_SAVE: sync pthread_create failed rc=%d", rc);
+        return;
+    }
+    pthread_join(saveThread, nullptr);
 }
 
 // Leak hunt: atomic counters bracketed around ctor/dtor of suspect
