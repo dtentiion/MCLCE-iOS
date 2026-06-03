@@ -275,6 +275,41 @@ pthread_t                     g_simThread{};
 // Auto-save flag - file-scope so the detached save thread can clear it.
 std::atomic<bool>             g_autoSaveInFlight{ false };
 
+// Triggered from AppDelegate's applicationDidEnterBackground. Spawns
+// the same async save thread the periodic auto-save uses, except this
+// one fires on the iOS lifecycle event rather than on a timer - so it
+// doesn't deadlock sim mid-play. Save happens during the OS-allotted
+// background window (~5s typical) and doesn't fight in-flight gameplay.
+extern "C" void mcle_save_now(void) {
+    if (g_autoSaveInFlight.load(std::memory_order_acquire)) return;
+    bool expected = false;
+    if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) return;
+
+    pthread_t saveThread;
+    int rc = pthread_create(&saveThread, nullptr,
+        [](void *) -> void * {
+            MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
+            const auto start = std::chrono::steady_clock::now();
+            for (int i = 2; i >= 0; --i) {
+                if (!g_levels[i]) continue;
+                try { g_levels[i]->save(true, nullptr); }
+                catch (...) { MCLE_LOG("BG_SAVE: level[%d] threw", i); }
+            }
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - start).count();
+            MCLE_LOG("BG_SAVE: done took=%lldms", (long long)ms);
+            g_autoSaveInFlight.store(false, std::memory_order_release);
+            return nullptr;
+        },
+        nullptr);
+    if (rc == 0) {
+        pthread_detach(saveThread);
+    } else {
+        g_autoSaveInFlight.store(false, std::memory_order_release);
+        MCLE_LOG("BG_SAVE: pthread_create failed rc=%d", rc);
+    }
+}
+
 // Leak hunt: atomic counters bracketed around ctor/dtor of suspect
 // upstream classes via patch scripts. If a counter grows unbounded
 // each chunk rebuild, that class is leaking. Tags:
@@ -687,16 +722,10 @@ void initImpl() {
         // too much on iOS without worker-thread meshing - the main thread
         // can't keep up. With extended-mem entitlement + unloaded-cache
         // LRU eviction in place we can hold 8 (17x17 = 289). Bump toward
-        // 16 once worker threads land.
-        //
-        // CPU-budget test: we're being killed by something that bypasses
-        // signal AND mach exception handlers - most likely proc_terminate
-        // from a foreground-app CPU/wakeup quota. Drop to 6 (13x13 = 169
-        // chunks, 41% less chunk-rebuild load on the workers) to see if
-        // sessions noticeably extend past the current 35-45s mark. If
-        // they do, CPU was the killer and we know to keep load capped
-        // until upstream chunk-data compaction lands.
-        pl->setViewDistance(6);
+        // 16 once worker threads land. (CPU-budget test at vd=6 didn't
+        // extend session length, so the kill isn't CPU-related - keep
+        // the better visual parity.)
+        pl->setViewDistance(8);
         MCLE_LOG("mcle_game_init: PlayerList viewDistance=%d", pl->getViewDistance());
         g_server->setPlayers(pl);
         MCLE_LOG("mcle_game_init: PlayerList attached");
