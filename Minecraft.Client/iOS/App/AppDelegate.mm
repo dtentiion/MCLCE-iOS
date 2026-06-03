@@ -133,23 +133,37 @@ PlayerHandle* g_ruffle_player = NULL;
     return YES;
 }
 
-// Persist chunk data when the OS backgrounds the app. iOS gives apps
-// roughly 5 seconds of background runtime to finish work before
-// suspending; the save thread we spawn here completes well within
-// that window because the chunk cache is RAM-bounded by the
-// LRU-evicted m_unloadedCache.
-//
-// Defined in Game/MCLEGameLoop.cpp. Spawns a detached thread that
-// walks levels in reverse and calls level->save(true, nullptr). No-op
-// if a save is already in flight from a prior background event.
+// Persist chunk data on iOS lifecycle events. Both are defined in
+// Game/MCLEGameLoop.cpp. The blocking variant is what we want during
+// backgrounding - we have to hold the iOS background task open until
+// the save actually finishes, otherwise iOS suspends us mid-write.
 extern "C" void mcle_save_now(void);
+extern "C" void mcle_save_now_sync(void);
 
 - (void)applicationDidEnterBackground:(UIApplication*)application {
-    mcle_save_now();
+    // Without an explicit background task, iOS marks the app suspendable
+    // as soon as this method returns and may reap us before any chunk
+    // hits disk. beginBackgroundTaskWithName extends the grace period
+    // (up to ~30s) and lets the kernel know we have real work pending.
+    __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
+    task = [application beginBackgroundTaskWithName:@"mcle.save"
+                                  expirationHandler:^{
+        if (task != UIBackgroundTaskInvalid) {
+            [application endBackgroundTask:task];
+            task = UIBackgroundTaskInvalid;
+        }
+    }];
+
+    mcle_save_now_sync();
+
+    if (task != UIBackgroundTaskInvalid) {
+        [application endBackgroundTask:task];
+        task = UIBackgroundTaskInvalid;
+    }
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
-    mcle_save_now();
+    mcle_save_now_sync();
     mcle_swf_shutdown();
     mcle_ios_input_shutdown();
 }
