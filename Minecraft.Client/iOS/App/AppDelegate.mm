@@ -133,7 +133,23 @@ PlayerHandle* g_ruffle_player = NULL;
     return YES;
 }
 
+// Persist chunk data when the OS backgrounds the app. iOS gives apps
+// roughly 5 seconds of background runtime to finish work before
+// suspending; the save thread we spawn here completes well within
+// that window because the chunk cache is RAM-bounded by the
+// LRU-evicted m_unloadedCache.
+//
+// Defined in Game/MCLEGameLoop.cpp. Spawns a detached thread that
+// walks levels in reverse and calls level->save(true, nullptr). No-op
+// if a save is already in flight from a prior background event.
+extern "C" void mcle_save_now(void);
+
+- (void)applicationDidEnterBackground:(UIApplication*)application {
+    mcle_save_now();
+}
+
 - (void)applicationWillTerminate:(UIApplication*)application {
+    mcle_save_now();
     mcle_swf_shutdown();
     mcle_ios_input_shutdown();
 }
