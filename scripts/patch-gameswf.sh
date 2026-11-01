@@ -93,6 +93,11 @@ for p in root.rglob("*"):
     new = re.sub(r'"__TIME__"',  '" __TIME__ "',  new)
     new = re.sub(r'"__DATE__\)', '" __DATE__ )',  new)
     new = re.sub(r'"__TIME__\)', '" __TIME__ )',  new)
+
+    # tu_math.h has a fallback isfinite() macro for old compilers. Newer
+    # libc++ (Xcode 16) calls __math::isfinite inside <cmath> and the macro
+    # breaks it. Nothing in gameswf uses it, so just switch it off.
+    new = re.sub(r'#ifndef isfinite\b', '#if 0 // isfinite comes from <cmath>', new)
     if new != src:
         p.write_text(new, encoding="utf-8", errors="surrogateescape")
         changed += 1
