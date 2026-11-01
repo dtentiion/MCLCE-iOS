@@ -25,9 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 1
-          token: ${{ secrets.VAULT_TOKEN }}
+
+      - name: Fetch submodules
+        env:
+          VAULT_A_KEY: ${{ secrets.VAULT_A_KEY }}
+          VAULT_B_KEY: ${{ secrets.VAULT_B_KEY }}
+        run: bash scripts/fetch-submodules.sh
 
       - name: Select Xcode
         run: |
@@ -66,9 +70,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 1
-          token: ${{ secrets.VAULT_TOKEN }}
+
+      - name: Fetch submodules
+        env:
+          VAULT_A_KEY: ${{ secrets.VAULT_A_KEY }}
+          VAULT_B_KEY: ${{ secrets.VAULT_B_KEY }}
+        run: bash scripts/fetch-submodules.sh
 
       - name: Select Xcode
         run: |
