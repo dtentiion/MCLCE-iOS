@@ -18,7 +18,7 @@ concurrency:
 jobs:
   world:
     name: world probe (expected to fail)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     continue-on-error: true
 
@@ -31,7 +31,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
+          sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s /Applications/Xcode_16.3.app || true
 
       - name: Configure with world probe enabled
         run: |
@@ -59,7 +59,7 @@ jobs:
 
   gameswf:
     name: gameswf probe (expected to fail)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     continue-on-error: true
 
@@ -72,7 +72,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.3.app || true
+          sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s /Applications/Xcode_16.3.app || true
 
       - name: Patch vendored GameSWF for libc++
         run: |
