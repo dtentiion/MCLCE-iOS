@@ -9,7 +9,7 @@ Native iOS port of TU19 Legacy Console Edition. **Code only - no Minecraft game 
 
 **Status: menus working, gameplay code linked into the .ipa, simulation hook ticking on device.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. The full Help & Options / Settings tree walks. Underneath, the upstream gameplay simulation library (Entity, Level, LevelChunk, Player, Tile, TileEntity, Mob, LivingEntity, ItemInstance, Container, ServerLevel, PlayerList, MultiPlayerLevel and ~840 supporting files) is now linked into the binary. A bootstrap entry point fires from the render loop on launch and ticks once per frame, confirmed via live device log. The next phase constructs a real `Minecraft` instance and drives the tick against a loaded save. See [STATUS.md](STATUS.md) for the full breakdown.
 
-CI builds an `.ipa` on every push. Grab the latest from the [Actions tab](https://github.com/dtentiion/MCLCE-iOS/actions).
+CI builds an `.ipa` on every push. Grab the latest from [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest).
 
 ## Distribution variants
 
@@ -19,7 +19,7 @@ This repo ports the TU19 Legacy Console Edition base. No game assets ship in thi
 - **NeoLegacy-iOS** (planned): community NeoLegacy fork once that branch is cut.
 - Other variants land as their upstream trees stabilise.
 
-Pick the repo that matches the LCE flavour you want, grab the `.ipa` from its Actions tab, sideload it.
+Pick the repo that matches the LCE flavour you want, grab the `.ipa` from its Releases page, sideload it.
 
 ## What this is
 
@@ -37,7 +37,7 @@ Controller only. Xbox, PlayStation, or any MFi gamepad. iOS 14 and up supports X
 
 ## How it's built
 
-The game is C++ with CMake, same as upstream. Since I only have a Windows machine, the actual iOS build runs on GitHub Actions macOS runners and the compiled `.ipa` gets published as a workflow artifact. See [.github/workflows/ios.yml](.github/workflows/ios.yml).
+The game is C++ with CMake, same as upstream. Since I only have a Windows machine, the actual iOS build runs on GitHub Actions macOS runners and the compiled `.ipa` gets published to Releases. See [.github/workflows/ios.yml](.github/workflows/ios.yml).
 
 If you want to build it yourself you need a Mac with Xcode 15+. On Windows you can fork the repo, push a branch, and grab the artifact from Actions.
 

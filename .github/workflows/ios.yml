@@ -24,6 +24,8 @@ jobs:
     name: build (arm64, unsigned)
     runs-on: macos-14
     timeout-minutes: 90
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -122,6 +124,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # Actions artifacts expire and need a GitHub login, so keep a rolling
+      # "latest" release around for people who just want the .ipa.
+      - name: Publish latest release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::7}"
+          gh release delete latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create latest artifacts/Minecraft.LCE.ipa \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Latest build ($SHORT_SHA)" \
+            --notes "Built from $SHORT_SHA on $(date -u +%Y-%m-%d). See INSTALL.md for how to sideload it." \
+            --latest
+
       - name: Upload .app bundle (debug, unzipped)
         if: failure() || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
@@ -143,7 +162,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 1
-          token: ${{ github.token }}
+          token: ${{ secrets.VAULT_TOKEN }}
 
       - name: Select Xcode
         run: |
