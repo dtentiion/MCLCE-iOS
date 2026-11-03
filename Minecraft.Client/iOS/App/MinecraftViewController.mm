@@ -59,6 +59,8 @@ static int  g_load_save_index = -1;
 static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
 static bool g_load_has_been_in_creative = false;
 static bool g_loading_world = false;
+
+static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 
@@ -417,6 +419,14 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             NSLog(@"[handlePress] scene=%@ list=%d item=%d (unhandled)",
                   g_current_scene_name, listId, itemId);
         }
+    } else if (strcmp(method, "handleFocusChange") == 0) {
+        // UIScene_LoadOrJoinMenu::handleFocusChange -> m_bUpdateSaveSize
+        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && (int)id == 0) {
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                MCLESelectSaveSize(child - 1);
+            });
+        }
     } else if (strcmp(method, "handleInitFocus") == 0) {
         // LCE fires this once per scene when SetFocus(-1) finds
         // the tabIndex==1 child (FJ_Document.SetFocus line 81-160,
@@ -459,6 +469,21 @@ static int MCLECallPath(NSString* path, NSString* method, NSArray* args) {
     return ruffle_ios_call_child_path(g_ruffle_player,
         (const uint8_t*)pth, strlen(pth), (const uint8_t*)m, strlen(m),
         kinds.data(), nums.data(), strs.data(), lens.data(), n);
+}
+
+// UIControl_SpaceIndicatorBar over the save list. Bar values are 0..1 of
+// MAXIMUM_SAVE_STORAGE (4GB) like upstream.
+static void MCLESelectSaveSize(int saveIndex) {
+    const double kMax = 4.0 * 1024.0 * 1024.0 * 1024.0;
+    double total = 0, offset = 0, size = 0;
+    for (int i = 0; i < mcle_saves_count(); ++i) {
+        double s = (double)mcle_saves_size(i);
+        if (i == saveIndex) { offset = total / kMax; size = s / kMax; }
+        total += s;
+    }
+    MCLECallPath(@"SaveSizeBar", @"setTotalSize", @[@(total / kMax)]);
+    MCLECallPath(@"SaveSizeBar", @"setSaveGameSize", @[@(size)]);
+    MCLECallPath(@"SaveSizeBar", @"setSaveGameOffset", @[@(offset)]);
 }
 
 static void MCLESetPathVisible(NSString* path, BOOL visible) {
@@ -1308,6 +1333,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     ];
     [self attachMenuScenery];
     [self applyMenuButtonConfig:cfg];
+    // UIScene_MainMenu::handleGainFocus
+    MCLESetPathVisible(@"Timer", NO);
 }
 
 - (void)initHelpAndOptionsButtons {
@@ -1810,6 +1837,11 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)"", 0);
     }
 
+    // m_spaceIndicatorSaves: init(L"", eControl_SpaceIndicator, 0, MAXIMUM_SAVE_STORAGE)
+    // then addSave per save, with the focused save highlighted.
+    MCLECallPath(@"SaveSizeBar", @"Init", @[@""]);
+    MCLESelectSaveSize(-1);
+
     // Auto-focus via SWF's SetFocus(-1). SavesList has tabIndex=1
     // per LoadOrJoinMenu.as __setTab_SavesList_... so FJ_Document.
     // SetFocus picks it.
@@ -1863,6 +1895,17 @@ static NSString* MCLEDifficultyLabel(int d) {
         NSString* seedLabel = (seed && seed[0])
             ? [NSString stringWithFormat:@"%@: %s", MCLEStr(IDS_SEED), seed] : @"";
         MCLECallPath(@"MainPanel.Seed", @"SetLabel", @[seedLabel]);
+
+        NSString* thumb = [NSString stringWithUTF8String:mcle_saves_thumbnail(idx)];
+        NSData* thumbData = thumb.length ? [NSData dataWithContentsOfFile:thumb] : nil;
+        if (thumbData.length) {
+            const char* tex = mcle_saves_folder(idx);
+            ruffle_ios_register_xui_bitmap(g_ruffle_player,
+                (const uint8_t*)tex, strlen(tex),
+                (const uint8_t*)thumbData.bytes, thumbData.length, 1.0f, 1.0f);
+            MCLECallPath(@"MainPanel.LevelIcon", @"SetTextureName",
+                         @[[NSString stringWithUTF8String:tex]]);
+        }
 
         unsigned int opts = 0;
         if (mcle_saves_host_options(idx, &opts)) {

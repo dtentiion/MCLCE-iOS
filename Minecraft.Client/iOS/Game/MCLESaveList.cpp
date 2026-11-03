@@ -33,6 +33,8 @@ struct SaveEntry {
     std::string msPath;
     std::string name;
     std::string seed;
+    std::string thumbPath;
+    long long size = 0;
     unsigned int hostOptions = 0;
     bool hostOptionsRead = false;
     unsigned int texturePack = 0;
@@ -239,8 +241,14 @@ extern "C" int mcle_saves_refresh(void) {
         e.name = read_level_name(folderPath, e.msPath);
         if (e.name.empty()) e.name = msName.substr(0, msName.size() - 3);
 
+        struct stat ms;
+        if (stat(e.msPath.c_str(), &ms) == 0) e.size = (long long)ms.st_size;
+
         std::vector<unsigned char> thumb;
-        if (read_file(folderPath + "/thumbnails/thumbData.png", thumb)) read_thumbnail_text(thumb, e);
+        if (read_file(folderPath + "/thumbnails/thumbData.png", thumb)) {
+            e.thumbPath = folderPath + "/thumbnails/thumbData.png";
+            read_thumbnail_text(thumb, e);
+        }
 
         g_saves.push_back(e);
     }
@@ -261,6 +269,9 @@ static const SaveEntry *entry(int i) {
 extern "C" const char *mcle_saves_folder(int i) { auto e = entry(i); return e ? e->folder.c_str() : ""; }
 extern "C" const char *mcle_saves_name(int i)   { auto e = entry(i); return e ? e->name.c_str() : ""; }
 extern "C" const char *mcle_saves_seed(int i)   { auto e = entry(i); return e ? e->seed.c_str() : ""; }
+
+extern "C" const char *mcle_saves_thumbnail(int i) { auto e = entry(i); return e ? e->thumbPath.c_str() : ""; }
+extern "C" long long mcle_saves_size(int i)        { auto e = entry(i); return e ? e->size : 0; }
 
 extern "C" int mcle_saves_host_options(int i, unsigned int *out) {
     auto e = entry(i);

@@ -127,7 +127,7 @@ fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
             let value = match &args[1] { ExtValue::Number(n) => *n, _ => return };
             (id, value)
         }
-        "handlePress" | "handleInitFocus" if args.len() >= 2 => {
+        "handlePress" | "handleInitFocus" | "handleFocusChange" if args.len() >= 2 => {
             let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
             let child = match &args[1] { ExtValue::Number(n) => *n, _ => return };
             (id, child)
