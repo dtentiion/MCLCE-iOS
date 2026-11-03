@@ -1837,6 +1837,20 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             (const uint8_t*)"", 0);
     }
 
+    // Thumbnails, keyed by save folder like the Win64 tick() does
+    for (int i = 0; i < saveCount; ++i) {
+        NSString* thumb = [NSString stringWithUTF8String:mcle_saves_thumbnail(i)];
+        NSData* png = thumb.length ? [NSData dataWithContentsOfFile:thumb] : nil;
+        const char* tex = mcle_saves_folder(i);
+        if (png.length) {
+            ruffle_ios_register_xui_bitmap(g_ruffle_player,
+                (const uint8_t*)tex, strlen(tex),
+                (const uint8_t*)png.bytes, png.length, 1.0f, 1.0f);
+        }
+        MCLECallPath(@"SavesList", @"SetTextureName",
+                     @[@(i + 1), [NSString stringWithUTF8String:tex]]);
+    }
+
     // m_spaceIndicatorSaves: init(L"", eControl_SpaceIndicator, 0, MAXIMUM_SAVE_STORAGE)
     // then addSave per save, with the focused save highlighted.
     MCLECallPath(@"SaveSizeBar", @"Init", @[@""]);
@@ -1919,11 +1933,12 @@ static NSString* MCLEDifficultyLabel(int d) {
         }
     }
 
-    // Only the default pack exists on iOS for now
+    // Only the default pack exists on iOS for now. DefaultTexturePack::loadIcon
+    // reads Graphics/TexturePackIcon.png out of the media archive.
     NSString* docs = [NSSearchPathForDirectoriesInDomains(
         NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     NSData* packIcon = [NSData dataWithContentsOfFile:
-        [docs stringByAppendingPathComponent:@"Common/res/pack.png"]];
+        [docs stringByAppendingPathComponent:@"Graphics/TexturePackIcon.png"]];
     if (packIcon.length) {
         const char* tex = "tpack00000000";
         ruffle_ios_register_xui_bitmap(g_ruffle_player,
