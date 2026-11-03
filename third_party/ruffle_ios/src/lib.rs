@@ -19,6 +19,7 @@ use ruffle_core::context::UpdateContext;
 use ruffle_core::backend::navigator::{NullExecutor, NullNavigatorBackend};
 use ruffle_core::backend::ui::FontDefinition;
 use ruffle_core::events::{GamepadButton, KeyCode, PlayerEvent};
+use ruffle_core::HostCallArg;
 use ruffle_core::font::FontFileData;
 use ruffle_core::{Player, PlayerBuilder};
 
@@ -1071,6 +1072,74 @@ pub unsafe extern "C" fn ruffle_ios_call_init_slider(
         child_name, label, id, min, max, current, status
     ));
     if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+unsafe fn utf8_arg<'a>(ptr: *const u8, len: usize) -> Option<&'a str> {
+    if ptr.is_null() || len == 0 { return Some(""); }
+    std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).ok()
+}
+
+/// method(args...) on the object at a dotted path from the root clip,
+/// e.g. "MainPanel.GameName". kinds[i]: 0 number (nums[i]), 1 bool
+/// (nums[i] != 0), 2 string (strs[i] / str_lens[i]). Returns 1 ok,
+/// 0 bad args, -1 lock fail, -2 AVM2 call err.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_child_path(
+    raw: *mut PlayerHandle,
+    path_ptr: *const u8,
+    path_len: usize,
+    method_ptr: *const u8,
+    method_len: usize,
+    kinds: *const c_int,
+    nums: *const f64,
+    strs: *const *const u8,
+    str_lens: *const usize,
+    argc: usize,
+) -> c_int {
+    if raw.is_null() || method_ptr.is_null() || method_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Some(path) = utf8_arg(path_ptr, path_len) else { return 0; };
+    let Some(method) = utf8_arg(method_ptr, method_len) else { return 0; };
+    let mut args = Vec::with_capacity(argc);
+    for i in 0..argc {
+        let kind = if kinds.is_null() { 0 } else { *kinds.add(i) };
+        let num = if nums.is_null() { 0.0 } else { *nums.add(i) };
+        args.push(match kind {
+            1 => HostCallArg::Bool(num != 0.0),
+            2 => {
+                if strs.is_null() || str_lens.is_null() { return 0; }
+                let Some(v) = utf8_arg(*strs.add(i), *str_lens.add(i)) else { return 0; };
+                HostCallArg::Str(v.to_string())
+            }
+            _ => HostCallArg::Number(num),
+        });
+    }
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_method_on_child_path(path, method, &args);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_child_path('{}', '{}', {:?}) -> {}",
+        path, method, args, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// Show/hide the object at a dotted path from the root clip.
+/// Returns 1 found, 0 not found / bad args, -1 lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_child_path_visible(
+    raw: *mut PlayerHandle,
+    path_ptr: *const u8,
+    path_len: usize,
+    visible: c_int,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Some(path) = utf8_arg(path_ptr, path_len) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let ok = p.set_child_path_visible(path, visible != 0);
+    drop(p);
+    if ok { 1 } else { 0 }
 }
 
 /// Init(id) on an FJ_ButtonList child. Wrapper around
