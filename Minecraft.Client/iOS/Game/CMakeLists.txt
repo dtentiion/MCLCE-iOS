@@ -9,6 +9,8 @@
 
 set(MCLE_GAME_SOURCES
   MCLEGameLoop.cpp
+  MCLESaveList.cpp
+  MCLEStrings.cpp
   MCLE_iOS_MachHandler.cpp
 )
 

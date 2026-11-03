@@ -271,6 +271,15 @@ std::atomic<bool>             g_initStarted{ false };
 // main thread's call becomes a no-op so chunk-rebuild WaitForAll
 // barriers and entity ticks never block the render frame.
 std::atomic<bool>             g_simThreadStarted{ false };
+
+// Save folder picked in LoadMenu. Written before the init thread starts.
+std::wstring                  g_pendingLevelId;
+// Loading screen state for the view controller: 0 initialising server,
+// 1 loading spawn area, 2 finalizing. g_renderReady flips once the
+// renderer, textures and HUD exist, so the menu stays up until then.
+std::atomic<int>              g_loadStage{ 0 };
+std::atomic<int>              g_loadPercent{ 0 };
+std::atomic<bool>             g_renderReady{ false };
 pthread_t                     g_simThread{};
 // Auto-save flag - file-scope so the detached save thread can clear it.
 std::atomic<bool>             g_autoSaveInFlight{ false };
@@ -520,8 +529,9 @@ void initImpl() {
     // Step 2: enumerate saves. Upstream's DirectoryLevelStorageSource::
     // getLevelList() body is `#if 0`'d (Xbox saves enumerated differently),
     // so we list Documents/saves/ ourselves via File::listFiles. Each
-    // subdirectory there is a candidate levelId.
-    std::wstring levelId;
+    // subdirectory there is a candidate levelId. The one picked in
+    // LoadMenu wins; the first folder is only a fallback.
+    std::wstring levelId = g_pendingLevelId;
     {
         File savesRoot(savesDir);
         std::vector<File *> *children = savesRoot.listFiles();
@@ -847,6 +857,10 @@ void initImpl() {
 
         int loaded = 0;
         int failed = 0;
+        const int total = (2 * kPreloadRadiusChunks + 1) * (2 * kPreloadRadiusChunks + 1);
+        int done = 0;
+        g_loadStage = 1;
+        g_loadPercent = 0;
         for (int dx = -kPreloadRadiusChunks; dx <= kPreloadRadiusChunks; ++dx) {
             for (int dz = -kPreloadRadiusChunks; dz <= kPreloadRadiusChunks; ++dz) {
                 int cx = spawnCx + dx;
@@ -872,6 +886,7 @@ void initImpl() {
                     failed++;
                     MCLE_LOG("mcle_game_init: chunk (%d,%d) ctor threw unknown", cx, cz);
                 }
+                g_loadPercent = (++done * 100) / total;
             }
         }
         MCLE_LOG("mcle_game_init: chunk preload done, %d loaded, %d failed", loaded, failed);
@@ -942,6 +957,8 @@ void initImpl() {
     // Otherwise the render thread tick races against the bootstrap and
     // first tick runs entities=0, second tick runs entities=1 mid-init.
     g_initState = kStateTicking;
+    g_loadStage = 2;
+    g_loadPercent = 0;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
     // G2c-shim: allocate a zero-filled Minecraft-sized buffer and cast to
@@ -1268,6 +1285,8 @@ void initImpl() {
         }
     }
 
+    g_loadPercent = 100;
+    g_renderReady = true;
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
@@ -1458,6 +1477,36 @@ extern "C" void mcle_game_init(void) {
 
 extern "C" void mcle_game_tick(void); // forward decl for the sim loop
 
+// LoadMenu calls this once a save is picked. Same spot where
+// UIScene_LoadMenu::StartGameFromSave hands RunNetworkGameThreadProc to
+// the FullscreenProgress scene. Init runs on its own thread so the
+// loading screen keeps animating.
+extern "C" int mcle_game_start(const char *levelFolder) {
+    if (g_initStarted || g_initState != kStateUnstarted) return 0;
+    g_pendingLevelId = widen(levelFolder ? levelFolder : "");
+    g_loadStage = 0;
+    g_loadPercent = 0;
+    g_initStarted = true;
+    pthread_t t;
+    if (pthread_create(&t, nullptr, [](void *) -> void * {
+            mcle_game_init();
+            return nullptr;
+        }, nullptr) != 0) {
+        g_initStarted = false;
+        return 0;
+    }
+    pthread_detach(t);
+    return 1;
+}
+
+// -1 failed, 0-2 g_loadStage, 3 ready to draw.
+extern "C" int mcle_game_load_status(int *percent) {
+    if (percent) *percent = g_loadPercent.load();
+    if (g_initState == kStateFailed || g_initState == kStateReadyIdle) return -1;
+    if (g_renderReady) return 3;
+    return g_loadStage.load();
+}
+
 // Phase 3a: sim thread runs the tick body in a loop at ~60Hz. The
 // internal 50ms simulation throttle inside mcle_game_tick gates the
 // actual sim step to 20Hz; we sleep 16ms between calls so unused
@@ -1485,20 +1534,6 @@ extern "C" void mcle_game_tick(void) {
         !pthread_equal(pthread_self(), g_simThread))
     {
         return;
-    }
-
-    // Lazy-init on the first tick so the bootstrap runs after the SWF
-    // menu has had a chance to draw at least one frame. Init runs on a
-    // pthread so a long save-load doesn't block the main-thread render
-    // loop and freeze the placeholder.
-    if (!g_initStarted && g_initState == kStateUnstarted) {
-        g_initStarted = true;
-        pthread_t t;
-        pthread_create(&t, nullptr, [](void *) -> void * {
-            mcle_game_init();
-            return nullptr;
-        }, nullptr);
-        pthread_detach(t);
     }
 
     // Once init succeeds, spawn the dedicated sim thread (once) and
@@ -2407,7 +2442,7 @@ extern "C" int mcle_world_get_player_pos(float *out_x, float *out_y, float *out_
 // simulation is alive so it can switch the clear color and stop drawing
 // the SWF menu over the world.
 extern "C" int mcle_world_is_ticking(void) {
-    return (g_initState == kStateTicking && g_levels[0] != nullptr) ? 1 : 0;
+    return (g_initState == kStateTicking && g_levels[0] != nullptr && g_renderReady) ? 1 : 0;
 }
 
 // Route through upstream Level::getSkyColor for full parity with LCE

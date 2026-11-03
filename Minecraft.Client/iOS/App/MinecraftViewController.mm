@@ -10,8 +10,96 @@
 #include "ruffle_ios.h"
 #include "MCLE_iOS_Audio.h"
 #include "MCLE_iOS_Settings.h"
+#include "../Game/MCLESaveList.h"
+#include "../Game/MCLEStrings.h"
+#include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
+
+#include <algorithm>
+#include <vector>
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
+extern "C" int  mcle_game_start(const char *levelFolder);   // MCLEGameLoop.cpp
+extern "C" int  mcle_game_load_status(int *percent);        // MCLEGameLoop.cpp
+
+// app.GetString(IDS_*)
+static NSString* MCLEStr(int ids) {
+    const char* s = mcle_string(ids);
+    return (s && *s) ? [NSString stringWithUTF8String:s] : @"";
+}
+
+// IggyPlayerCallMethodRS on a value path, e.g. "MainPanel.GameName".
+// Args: NSString -> string, @YES/@NO -> bool, other NSNumber -> number.
+static int MCLECallPath(NSString* path, NSString* method, NSArray* args) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return 0;
+    size_t n = args.count;
+    std::vector<int> kinds(n);
+    std::vector<double> nums(n);
+    std::vector<const uint8_t*> strs(n);
+    std::vector<size_t> lens(n);
+    NSMutableArray* keep = [NSMutableArray array];
+    for (size_t i = 0; i < n; ++i) {
+        NSObject* a = args[i];
+        if ([a isKindOfClass:[NSString class]]) {
+            NSData* d = [(NSString*)a dataUsingEncoding:NSUTF8StringEncoding];
+            [keep addObject:d];
+            kinds[i] = 2;
+            strs[i] = (const uint8_t*)d.bytes;
+            lens[i] = d.length;
+        } else if (CFGetTypeID((__bridge CFTypeRef)a) == CFBooleanGetTypeID()) {
+            kinds[i] = 1;
+            nums[i] = [(NSNumber*)a boolValue] ? 1.0 : 0.0;
+        } else {
+            kinds[i] = 0;
+            nums[i] = [(NSNumber*)a doubleValue];
+        }
+    }
+    const char* pth = path.UTF8String;
+    const char* m = method.UTF8String;
+    return ruffle_ios_call_child_path(g_ruffle_player,
+        (const uint8_t*)pth, strlen(pth), (const uint8_t*)m, strlen(m),
+        kinds.data(), nums.data(), strs.data(), lens.data(), n);
+}
+
+static void MCLESetPathVisible(NSString* path, BOOL visible) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    const char* pth = path.UTF8String;
+    ruffle_ios_set_child_path_visible(g_ruffle_player, (const uint8_t*)pth, strlen(pth), visible ? 1 : 0);
+}
+
+// CMinecraftApp::InitialiseTips + GetNextTip. Skin pack tip first, then
+// the game tips (first one fixed, rest shuffled) with a trivia tip every
+// third slot.
+static int MCLENextTip(void) {
+    static std::vector<int> order;
+    static size_t next = 0;
+    static bool shownSkinTip = false;
+    if (!shownSkinTip) {
+        shownSkinTip = true;
+        return IDS_TIPS_GAMETIP_SKINPACKS;
+    }
+    if (order.empty()) {
+        std::vector<int> game = { IDS_TIPS_GAMETIP_1, IDS_TIPS_GAMETIP_2, IDS_TIPS_GAMETIP_3, IDS_TIPS_GAMETIP_4, IDS_TIPS_GAMETIP_5, IDS_TIPS_GAMETIP_6, IDS_TIPS_GAMETIP_7, IDS_TIPS_GAMETIP_8, IDS_TIPS_GAMETIP_9, IDS_TIPS_GAMETIP_10, IDS_TIPS_GAMETIP_11, IDS_TIPS_GAMETIP_12, IDS_TIPS_GAMETIP_13, IDS_TIPS_GAMETIP_14, IDS_TIPS_GAMETIP_15, IDS_TIPS_GAMETIP_16, IDS_TIPS_GAMETIP_17, IDS_TIPS_GAMETIP_18, IDS_TIPS_GAMETIP_19, IDS_TIPS_GAMETIP_20, IDS_TIPS_GAMETIP_21, IDS_TIPS_GAMETIP_22, IDS_TIPS_GAMETIP_23, IDS_TIPS_GAMETIP_24, IDS_TIPS_GAMETIP_25, IDS_TIPS_GAMETIP_26, IDS_TIPS_GAMETIP_27, IDS_TIPS_GAMETIP_28, IDS_TIPS_GAMETIP_29, IDS_TIPS_GAMETIP_30, IDS_TIPS_GAMETIP_31, IDS_TIPS_GAMETIP_32, IDS_TIPS_GAMETIP_33, IDS_TIPS_GAMETIP_34, IDS_TIPS_GAMETIP_35, IDS_TIPS_GAMETIP_36, IDS_TIPS_GAMETIP_37, IDS_TIPS_GAMETIP_38, IDS_TIPS_GAMETIP_39, IDS_TIPS_GAMETIP_40, IDS_TIPS_GAMETIP_41, IDS_TIPS_GAMETIP_42, IDS_TIPS_GAMETIP_43, IDS_TIPS_GAMETIP_44, IDS_TIPS_GAMETIP_45, IDS_TIPS_GAMETIP_46, IDS_TIPS_GAMETIP_47, IDS_TIPS_GAMETIP_48, IDS_TIPS_GAMETIP_49, IDS_TIPS_GAMETIP_50 };
+        std::vector<int> trivia = { IDS_TIPS_TRIVIA_1, IDS_TIPS_TRIVIA_2, IDS_TIPS_TRIVIA_3, IDS_TIPS_TRIVIA_4, IDS_TIPS_TRIVIA_5, IDS_TIPS_TRIVIA_6, IDS_TIPS_TRIVIA_7, IDS_TIPS_TRIVIA_8, IDS_TIPS_TRIVIA_9, IDS_TIPS_TRIVIA_10, IDS_TIPS_TRIVIA_11, IDS_TIPS_TRIVIA_12, IDS_TIPS_TRIVIA_13, IDS_TIPS_TRIVIA_14, IDS_TIPS_TRIVIA_15, IDS_TIPS_TRIVIA_16, IDS_TIPS_TRIVIA_17, IDS_TIPS_TRIVIA_18, IDS_TIPS_TRIVIA_19, IDS_TIPS_TRIVIA_20 };
+        for (size_t i = game.size() - 1; i > 1; --i) std::swap(game[i], game[1 + arc4random_uniform((uint32_t)i)]);
+        for (size_t i = trivia.size() - 1; i > 0; --i) std::swap(trivia[i], trivia[arc4random_uniform((uint32_t)(i + 1))]);
+        size_t g = 0, t = 0;
+        for (size_t i = 0; i < game.size() + trivia.size(); ++i) {
+            if (i % 3 == 2 && t < trivia.size()) order.push_back(trivia[t++]);
+            else if (g < game.size()) order.push_back(game[g++]);
+            else order.push_back(trivia[t++]);
+        }
+    }
+    if (next >= order.size()) next = 0;
+    return order[next++];
+}
+
+// UIScene_LoadMenu state the bridge and the loading screen need.
+static int  g_load_save_index = -1;
+static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
+static bool g_load_has_been_in_creative = false;
+static bool g_loading_world = false;
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 
@@ -88,6 +176,9 @@ static const int kTooltipsDepth    = 201;
 @interface MinecraftViewController (MCLEBridgeEntryPoints)
 - (void)finishDialogWithResult:(MCLEDialogResult)result;
 - (void)navigateBack;
+- (void)navigateForwardTo:(NSString*)swfName;
+- (void)loadMenuPress:(int)controlId;
+- (void)loadMenuSlider:(int)sliderId value:(int)value;
 @end
 static __weak MinecraftViewController* g_active_vc = nil;
 
@@ -167,6 +258,14 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         NSLog(@"[settings] %@ checkbox id=%d -> setting=%d val=%u",
               g_current_scene_name, (int)id, setting, v);
     } else if (strcmp(method, "handleSliderMove") == 0) {
+        if ([g_current_scene_name isEqualToString:@"LoadMenu1080.swf"]) {
+            int sid = (int)id;
+            int v = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc loadMenuSlider:sid value:v];
+            });
+            return;
+        }
         unsigned char stored = 0;
         int setting = mcle_map_slider((int)id, value, &stored);
         if (setting < 0) return;
@@ -283,15 +382,18 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         int itemId = (int)value;
         if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
             if (listId == 0) {
-                // SavesList. Item 0 = "Create New World" (see
-                // UIScene_LoadOrJoinMenu.cpp JOIN_LOAD_CREATE_BUTTON_
-                // INDEX=0); anything > 0 is a save slot or level
-                // generator. Neither path is functional yet -
-                // the create-world flow needs a level-gen picker
-                // scene, and the load-save flow needs the LCE
-                // save-format reader.
-                NSLog(@"[loadorjoin] saves list press idx=%d (loading path is a follow-up)",
-                      itemId);
+                // UIScene_LoadOrJoinMenu::handlePress: item 0 is Create New
+                // World, saves start after the default buttons (just that
+                // one here, no level generators in the Win64 res set).
+                if (itemId == 0) {
+                    NSLog(@"[loadorjoin] create new world (CreateWorldMenu not wired yet)");
+                } else {
+                    int saveIdx = itemId - 1;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        g_load_save_index = saveIdx;
+                        [g_active_vc navigateForwardTo:@"LoadMenu1080.swf"];
+                    });
+                }
             } else if (listId == 1) {
                 // JoinList. iOS has no netcode yet, so this list
                 // stays empty - log in case we get here anyway
@@ -322,6 +424,11 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             // press here shouldn't fire, but log it anyway.
             NSLog(@"[leaderboard] entry press idx=%d (online service is a follow-up)",
                   itemId);
+        } else if ([g_current_scene_name isEqualToString:@"LoadMenu1080.swf"] && !g_pending_dialog) {
+            int cid = listId;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc loadMenuPress:cid];
+            });
         } else if (g_pending_dialog) {
             // MessageBox button press. Mirrors
             // UIScene_MessageBox::handlePress (UIScene_MessageBox.cpp:120):
@@ -547,6 +654,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.statusLabel.textAlignment = NSTextAlignmentLeft;
     self.statusLabel.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.statusLabel.hidden = YES;
     [self.view addSubview:self.statusLabel];
 
     // Cache splashes.txt at launch. File ships alongside the SWFs
@@ -1690,6 +1798,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         0.0,
         (const uint8_t*)"", 0);
 
+    // Saves after the default buttons, newest first, item data is the
+    // running index (UIControl_SaveList::addItem passes m_itemCount).
+    int saveCount = mcle_saves_refresh();
+    for (int i = 0; i < saveCount; ++i) {
+        const char* name = mcle_saves_name(i);
+        ruffle_ios_call_list_add_item(g_ruffle_player,
+            (const uint8_t*)saves, strlen(saves),
+            (const uint8_t*)name, strlen(name),
+            (double)(i + 1),
+            (const uint8_t*)"", 0);
+    }
+
     // Auto-focus via SWF's SetFocus(-1). SavesList has tabIndex=1
     // per LoadOrJoinMenu.as __setTab_SavesList_... so FJ_Document.
     // SetFocus picks it.
@@ -1697,6 +1817,207 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
+}
+
+static NSString* MCLEDifficultyLabel(int d) {
+    static const int kTitles[4] = {
+        IDS_DIFFICULTY_TITLE_PEACEFUL, IDS_DIFFICULTY_TITLE_EASY,
+        IDS_DIFFICULTY_TITLE_NORMAL, IDS_DIFFICULTY_TITLE_HARD,
+    };
+    d = MAX(0, MIN(d, 3));
+    return [NSString stringWithFormat:@"%@: %@", MCLEStr(IDS_SLIDER_DIFFICULTY), MCLEStr(kTitles[d])];
+}
+
+// UIScene_LoadMenu constructor (Win64 save path), plus what its tick()
+// pulls from the thumbnail metadata. Control ids follow the scene's
+// EControls: GameMode 0, Difficulty 1, MoreOptions 2, LoadWorld 3,
+// TexturePackList 4, OnlineGame 5.
+- (void)initLoadMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    [self attachMenuScenery];
+
+    int idx = g_load_save_index;
+    g_load_game_mode = 0;
+    g_load_has_been_in_creative = false;
+
+    MCLECallPath(@"MainPanel.GameName", @"Init", @[MCLEStr(IDS_WORLD_NAME)]);
+    MCLECallPath(@"MainPanel.Seed", @"Init", @[@""]);
+    MCLECallPath(@"MainPanel.CreatedMode", @"Init", @[MCLEStr(IDS_CREATED_IN_SURVIVAL)]);
+    MCLECallPath(@"MainPanel.GameModeToggle", @"Init", @[MCLEStr(IDS_GAMEMODE_SURVIVAL), @0]);
+    MCLECallPath(@"MainPanel.MoreOptions", @"Init", @[MCLEStr(IDS_MORE_OPTIONS), @2]);
+    MCLECallPath(@"MainPanel.LoadSettings", @"Init", @[MCLEStr(IDS_LOAD), @3]);
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"Init", @[MCLEStr(IDS_DLC_MENU_TEXTUREPACKS), @4]);
+
+    int diff = MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3));
+    MCLECallPath(@"MainPanel.Difficulty", @"Init", @[MCLEDifficultyLabel(diff), @1, @0, @3, @(diff)]);
+
+    // Not signed in to an online service, so the box is off and disabled
+    MCLECallPath(@"MainPanel.CheckboxOnline", @"EnableCheckBox", @[@NO]);
+    MCLECallPath(@"MainPanel.CheckboxOnline", @"Init", @[MCLEStr(IDS_ONLINE_GAME), @5, @NO]);
+
+    if (idx >= 0 && idx < mcle_saves_count()) {
+        MCLECallPath(@"MainPanel.GameName", @"SetLabel",
+                     @[[NSString stringWithUTF8String:mcle_saves_name(idx)]]);
+        const char* seed = mcle_saves_seed(idx);
+        NSString* seedLabel = (seed && seed[0])
+            ? [NSString stringWithFormat:@"%@: %s", MCLEStr(IDS_SEED), seed] : @"";
+        MCLECallPath(@"MainPanel.Seed", @"SetLabel", @[seedLabel]);
+
+        unsigned int opts = 0;
+        if (mcle_saves_host_options(idx, &opts)) {
+            g_load_has_been_in_creative = (opts & 0x200) != 0;   // GAME_HOST_OPTION_BITMASK_BEENINCREATIVE
+            MCLECallPath(@"MainPanel.CreatedMode", @"SetLabel",
+                         @[MCLEStr(g_load_has_been_in_creative ? IDS_CREATED_IN_CREATIVE : IDS_CREATED_IN_SURVIVAL)]);
+            g_load_game_mode = (opts & 0x30) >> 4;               // GAME_HOST_OPTION_BITMASK_GAMETYPE
+            if (g_load_game_mode != 1) g_load_game_mode = 0;
+            MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel",
+                         @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
+        }
+    }
+
+    // Only the default pack exists on iOS for now
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSData* packIcon = [NSData dataWithContentsOfFile:
+        [docs stringByAppendingPathComponent:@"Common/res/pack.png"]];
+    if (packIcon.length) {
+        const char* tex = "tpack00000000";
+        ruffle_ios_register_xui_bitmap(g_ruffle_player,
+            (const uint8_t*)tex, strlen(tex),
+            (const uint8_t*)packIcon.bytes, packIcon.length, 1.0f, 1.0f);
+        MCLECallPath(@"MainPanel.TexturePackSelector", @"addPack", @[@0, @"tpack00000000"]);
+    }
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"SelectSlot", @[@0]);
+
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+- (void)loadMenuSlider:(int)sliderId value:(int)value {
+    if (sliderId != 1) return;   // eControl_Difficulty
+    mcle_settings_set(MCLE_SETTING_Difficulty, (unsigned char)MAX(0, MIN(value, 3)));
+    MCLECallPath(@"MainPanel.Difficulty", @"SetLabel", @[MCLEDifficultyLabel(value)]);
+}
+
+- (void)loadMenuPress:(int)controlId {
+    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+    switch (controlId) {
+        case 0: {   // eControl_GameMode
+            g_load_game_mode = (g_load_game_mode == 0) ? 1 : 0;
+            MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel",
+                         @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
+            break;
+        }
+        case 2:     // eControl_MoreOptions
+            NSLog(@"[loadmenu] more options (LaunchMoreOptionsMenu not wired yet)");
+            break;
+        case 3:     // eControl_LoadWorld
+            [self loadMenuLaunchGame];
+            break;
+        default:
+            break;
+    }
+}
+
+// UIScene_LoadMenu::LaunchGame: creative confirm prompts, then load.
+- (void)loadMenuLaunchGame {
+    BOOL creative = (g_load_game_mode == 1);
+    if (creative || g_load_has_been_in_creative) {
+        int textId = 0;
+        if (!creative) textId = IDS_CONFIRM_START_SAVEDINCREATIVE;
+        else if (!g_load_has_been_in_creative) textId = IDS_CONFIRM_START_CREATIVE;
+        if (textId) {
+            __weak MinecraftViewController* weakSelf = self;
+            [self presentDialogWithTitle:MCLEStr(IDS_TITLE_START_GAME)
+                                 content:MCLEStr(textId)
+                                 buttons:@[MCLEStr(IDS_CONFIRM_OK), MCLEStr(IDS_CONFIRM_CANCEL)]
+                              focusIndex:0
+                                callback:^(MCLEDialogResult r) {
+                if (r == MCLEDialogResultAccept) [weakSelf startLoadingSelectedSave];
+            }];
+            return;
+        }
+    }
+    [self startLoadingSelectedSave];
+}
+
+// StartGameFromSave -> NavigateToScene(eUIScene_FullscreenProgress)
+- (void)startLoadingSelectedSave {
+    int idx = g_load_save_index;
+    if (idx < 0 || idx >= mcle_saves_count() || g_loading_world) return;
+    NSString* folder = [NSString stringWithUTF8String:mcle_saves_folder(idx)];
+    [self navigateForwardTo:@"FullscreenProgress1080.swf"];
+    if (mcle_game_start(folder.UTF8String)) {
+        g_loading_world = true;
+    } else {
+        NSLog(@"[loadmenu] mcle_game_start refused for %@", folder);
+    }
+}
+
+static int g_progress_stage = -2;
+static int g_progress_pct = -1;
+static CFTimeInterval g_progress_tip_time = 0;
+
+static NSString* MCLETipHTML(void) {
+    // FullscreenProgress wraps each tip like this (eHTMLColor_White)
+    return [NSString stringWithFormat:@"<font color=\"#ffffffff\"><p align=center>%@</p>",
+            MCLEStr(MCLENextTip())];
+}
+
+// UIScene_FullscreenProgress constructor
+- (void)initFullscreenProgress {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    [self attachMenuScenery];
+    MCLECallPath(@"Confirm", @"Init", @[MCLEStr(IDS_CONFIRM_OK), @0]);
+    MCLESetPathVisible(@"Confirm", NO);
+    MCLECallPath(@"ProgressBar", @"Init", @[@""]);
+    MCLECallPath(@"Tip", @"Init", @[MCLETipHTML()]);
+    MCLECallPath(@"Title", @"Init", @[@""]);
+    MCLESetPathVisible(@"Tip", YES);
+    g_progress_stage = -2;
+    g_progress_pct = -1;
+    g_progress_tip_time = CACurrentMediaTime();
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// UIScene_FullscreenProgress::tick, fed from the iOS init stages instead
+// of Minecraft::progressRenderer.
+- (void)pollWorldLoad {
+    int pct = 0;
+    int st = mcle_game_load_status(&pct);
+    if (st < 0) {
+        g_loading_world = false;
+        __weak MinecraftViewController* weakSelf = self;
+        [self presentDialogWithTitle:MCLEStr(IDS_CORRUPT_OR_DAMAGED_SAVE_TITLE)
+                             content:@""
+                             buttons:@[MCLEStr(IDS_CONFIRM_OK)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r) {
+            [weakSelf navigateBack];
+        }];
+        return;
+    }
+    if (st != g_progress_stage) {
+        if (g_progress_stage == -2)
+            MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_PROGRESS_INITIALISING_SERVER)]);
+        g_progress_stage = st;
+        int statusId = (st == 1) ? IDS_PROGRESS_LOADING_SPAWN_AREA
+                     : (st >= 2) ? IDS_PROGRESS_SAVING_TO_DISC : 0;
+        MCLECallPath(@"ProgressBar", @"SetLabel", @[statusId ? MCLEStr(statusId) : @""]);
+    }
+    if (pct != g_progress_pct) {
+        g_progress_pct = pct;
+        MCLECallPath(@"ProgressBar", @"setProgress", @[@(pct)]);
+    }
+    CFTimeInterval now = CACurrentMediaTime();
+    if (now - g_progress_tip_time >= 7.0) {   // TIMER_FULLSCREEN_TIPS_TIME
+        g_progress_tip_time = now;
+        MCLECallPath(@"Tip", @"SetLabel", @[MCLETipHTML()]);
+    }
 }
 
 // Ports UIScene_HowToPlayMenu constructor
@@ -2270,6 +2591,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             [self initSettingsUIMenu];
         } else if ([swfName isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
             [self initLoadOrJoinMenu];
+        } else if ([swfName isEqualToString:@"LoadMenu1080.swf"]) {
+            [self initLoadMenu];
+        } else if ([swfName isEqualToString:@"FullscreenProgress1080.swf"]) {
+            [self initFullscreenProgress];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
@@ -2338,9 +2663,15 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // doesn't keep drawing on top of the world output.
     if (mcle_world_is_ticking()) {
         if (self.splashLabel) self.splashLabel.hidden = YES;
+        if (g_loading_world) {
+            g_loading_world = false;
+            NSLog(@"[MinecraftVC] world ready, leaving FullscreenProgress");
+        }
         mcle_render_frame();
         return;
     }
+
+    if (g_loading_world) [self pollWorldLoad];
 
     // Splash text pulse + position. Mirrors CXuiCtrlSplashPulser::
     // OnRender (Common/XUI/XUI_Ctrl_SplashPulser.cpp): pulses with

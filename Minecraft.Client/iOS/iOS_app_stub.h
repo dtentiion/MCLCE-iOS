@@ -175,7 +175,9 @@ struct McleAppStub {
     template<class... A> int            CreateImageTextData(A...)     { return 0; }
     template<class... A> void           processSchematics(A...)       {}
     template<class... A> void           processSchematicsLighting(A...) {}
-    template<class... A> int            getLocale(A...)               { return 1; }
+    // English only for now: the tail of CMinecraftApp::getLocale, which
+    // always ends with en-US then en-EN.
+    void getLocale(std::vector<std::wstring> &out) { out.push_back(L"en-US"); out.push_back(L"en-EN"); }
     template<class... A> bool           isXuidDeadmau5(A...)          { return false; }
     template<class... A> void*          getArchiveFile(A...)          { return nullptr; }
     template<class... A> int            GetLocalPlayerCount(A...)     { return 1; }
