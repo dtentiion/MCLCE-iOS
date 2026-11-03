@@ -131,7 +131,7 @@ jobs:
       # Actions artifacts expire and need a GitHub login, so keep a rolling
       # "latest" release around for people who just want the .ipa.
       - name: Publish latest release
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
