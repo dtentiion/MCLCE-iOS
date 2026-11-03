@@ -27,47 +27,6 @@ static NSString* MCLEStr(int ids) {
     return (s && *s) ? [NSString stringWithUTF8String:s] : @"";
 }
 
-// IggyPlayerCallMethodRS on a value path, e.g. "MainPanel.GameName".
-// Args: NSString -> string, @YES/@NO -> bool, other NSNumber -> number.
-static int MCLECallPath(NSString* path, NSString* method, NSArray* args) {
-    extern PlayerHandle* g_ruffle_player;
-    if (!g_ruffle_player) return 0;
-    size_t n = args.count;
-    std::vector<int> kinds(n);
-    std::vector<double> nums(n);
-    std::vector<const uint8_t*> strs(n);
-    std::vector<size_t> lens(n);
-    NSMutableArray* keep = [NSMutableArray array];
-    for (size_t i = 0; i < n; ++i) {
-        NSObject* a = args[i];
-        if ([a isKindOfClass:[NSString class]]) {
-            NSData* d = [(NSString*)a dataUsingEncoding:NSUTF8StringEncoding];
-            [keep addObject:d];
-            kinds[i] = 2;
-            strs[i] = (const uint8_t*)d.bytes;
-            lens[i] = d.length;
-        } else if (CFGetTypeID((__bridge CFTypeRef)a) == CFBooleanGetTypeID()) {
-            kinds[i] = 1;
-            nums[i] = [(NSNumber*)a boolValue] ? 1.0 : 0.0;
-        } else {
-            kinds[i] = 0;
-            nums[i] = [(NSNumber*)a doubleValue];
-        }
-    }
-    const char* pth = path.UTF8String;
-    const char* m = method.UTF8String;
-    return ruffle_ios_call_child_path(g_ruffle_player,
-        (const uint8_t*)pth, strlen(pth), (const uint8_t*)m, strlen(m),
-        kinds.data(), nums.data(), strs.data(), lens.data(), n);
-}
-
-static void MCLESetPathVisible(NSString* path, BOOL visible) {
-    extern PlayerHandle* g_ruffle_player;
-    if (!g_ruffle_player) return;
-    const char* pth = path.UTF8String;
-    ruffle_ios_set_child_path_visible(g_ruffle_player, (const uint8_t*)pth, strlen(pth), visible ? 1 : 0);
-}
-
 // CMinecraftApp::InitialiseTips + GetNextTip. Skin pack tip first, then
 // the game tips (first one fixed, rest shuffled) with a trivia tip every
 // third slot.
@@ -468,6 +427,47 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
               g_current_scene_name, (int)id, (int)value);
     }
 }
+// IggyPlayerCallMethodRS on a value path, e.g. "MainPanel.GameName".
+// Args: NSString -> string, @YES/@NO -> bool, other NSNumber -> number.
+static int MCLECallPath(NSString* path, NSString* method, NSArray* args) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return 0;
+    size_t n = args.count;
+    std::vector<int> kinds(n);
+    std::vector<double> nums(n);
+    std::vector<const uint8_t*> strs(n);
+    std::vector<size_t> lens(n);
+    NSMutableArray* keep = [NSMutableArray array];
+    for (size_t i = 0; i < n; ++i) {
+        NSObject* a = args[i];
+        if ([a isKindOfClass:[NSString class]]) {
+            NSData* d = [(NSString*)a dataUsingEncoding:NSUTF8StringEncoding];
+            [keep addObject:d];
+            kinds[i] = 2;
+            strs[i] = (const uint8_t*)d.bytes;
+            lens[i] = d.length;
+        } else if (CFGetTypeID((__bridge CFTypeRef)a) == CFBooleanGetTypeID()) {
+            kinds[i] = 1;
+            nums[i] = [(NSNumber*)a boolValue] ? 1.0 : 0.0;
+        } else {
+            kinds[i] = 0;
+            nums[i] = [(NSNumber*)a doubleValue];
+        }
+    }
+    const char* pth = path.UTF8String;
+    const char* m = method.UTF8String;
+    return ruffle_ios_call_child_path(g_ruffle_player,
+        (const uint8_t*)pth, strlen(pth), (const uint8_t*)m, strlen(m),
+        kinds.data(), nums.data(), strs.data(), lens.data(), n);
+}
+
+static void MCLESetPathVisible(NSString* path, BOOL visible) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    const char* pth = path.UTF8String;
+    ruffle_ios_set_child_path_visible(g_ruffle_player, (const uint8_t*)pth, strlen(pth), visible ? 1 : 0);
+}
+
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
 extern "C" unsigned long long mcle_swf_total_triangles(void);
 extern "C" unsigned long long mcle_swf_total_frames(void);
@@ -2941,7 +2941,9 @@ static NSString* MCLETipHTML(void) {
                 if (g_pending_dialog) {
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
-                } else if (![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"]) {
+                } else if (![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"] &&
+                           ![self.currentMenuSwf isEqualToString:@"FullscreenProgress1080.swf"]) {
+                    // FullscreenProgress has no cancel func for a save load
                     NSLog(@"[MinecraftVC] back from %@ (stack depth %lu)",
                           self.currentMenuSwf,
                           (unsigned long)self.menuStack.count);
