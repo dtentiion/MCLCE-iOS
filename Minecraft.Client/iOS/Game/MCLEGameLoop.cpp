@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <mach/mach.h>
 #include <malloc/malloc.h>
+#include <os/proc.h>
 #include <atomic>
 #include <chrono>
 #include <exception>
@@ -1793,6 +1794,15 @@ extern "C" void mcle_game_tick(void) {
                             residentMB = info.resident_size / (1024.0 * 1024.0);
                             virtualMB  = info.virtual_size  / (1024.0 * 1024.0);
                         }
+                        // phys_footprint is what jetsam compares against the limit
+                        double footprintMB = 0.0;
+                        task_vm_info_data_t vmInfo{};
+                        mach_msg_type_number_t vmCount = TASK_VM_INFO_COUNT;
+                        if (task_info(mach_task_self(), TASK_VM_INFO,
+                                      (task_info_t)&vmInfo, &vmCount) == KERN_SUCCESS) {
+                            footprintMB = vmInfo.phys_footprint / (1024.0 * 1024.0);
+                        }
+                        const double availMB = os_proc_available_memory() / (1024.0 * 1024.0);
                         const unsigned long long listCount = mcle_glbridge_list_count();
                         const unsigned long long listBytes = mcle_glbridge_list_bytes();
                         const unsigned long long drawCount = mcle_glbridge_total_draws();
@@ -1839,12 +1849,12 @@ extern "C" void mcle_game_tick(void) {
                         const long trTotal     = g_leak_total[1].load(std::memory_order_relaxed);
                         const long lcLive      = g_leak_count[2].load(std::memory_order_relaxed);
                         const long lcTotal     = g_leak_total[2].load(std::memory_order_relaxed);
-                        MCLE_LOG("MEMSTATS resident=%.1fMB virtual=%.1fMB "
+                        MCLE_LOG("MEMSTATS footprint=%.1fMB avail=%.1fMB resident=%.1fMB virtual=%.1fMB "
                                  "mallocMB=%.1f mallocBlocks=%zu "
                                  "lists=%llu listMB=%.2f draws=%llu "
                                  "loadedChunks=%zu entities=%zu saveInFlight=%d "
                                  "Region(L=%ld T=%ld) TR(L=%ld T=%ld) LC(L=%ld T=%ld)",
-                                 residentMB, virtualMB,
+                                 footprintMB, availMB, residentMB, virtualMB,
                                  mallocMB, mallocCount,
                                  (unsigned long long)listCount,
                                  listBytes / (1024.0 * 1024.0),
