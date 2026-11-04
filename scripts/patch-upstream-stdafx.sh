@@ -1669,3 +1669,9 @@ CE_PY="$REPO_ROOT/scripts/patch-client-effects.py"
 if [ -f "$CE_PY" ]; then
     python3 "$CE_PY"
 fi
+
+# MinecraftServer::getInstance for the server the iOS game loop makes
+MSI_PY="$REPO_ROOT/scripts/patch-minecraftserver-instance-public.py"
+if [ -f "$MSI_PY" ]; then
+    python3 "$MSI_PY"
+fi

@@ -941,6 +941,8 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: constructing MinecraftServer...");
     try {
         g_server = new MinecraftServer();
+        // MinecraftServer::main keeps it for getInstance
+        MinecraftServer::server = g_server;
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: MinecraftServer ctor threw: %{public}s", e.what());
         g_initState = kStateFailed;
@@ -3624,6 +3626,7 @@ extern "C" void mcle_game_shutdown(void) {
     if (g_server) {
         try { delete g_server; } catch (...) {}
         g_server = nullptr;
+        MinecraftServer::server = nullptr;
     }
     g_levelStorage.reset();
     if (g_saveFile) {
