@@ -158,6 +158,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/TileEntityRenderDispatcher.h"
 #include "../../../upstream/Minecraft.Client/User.h"
 #include "../../../upstream/Minecraft.Client/Font.h"
+#include "../../../upstream/Minecraft.Client/ResourceLocation.h"
 #include "../../../upstream/Minecraft.Client/Lighting.h"
 #include "../../../upstream/Minecraft.Client/FrustumCuller.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
@@ -1270,12 +1271,15 @@ void initImpl() {
             g_minecraftShim->textures = textures;
             MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
             // Minecraft::init makes the fonts right after Textures. Signs
-            // and name tags draw with them.
+            // and name tags draw with them. Same locations as
+            // Minecraft::DEFAULT_FONT_LOCATION / ALT_FONT_LOCATION.
+            static ResourceLocation s_defaultFontLocation(TN_DEFAULT_FONT);
+            static ResourceLocation s_altFontLocation(TN_ALT_FONT);
             g_minecraftShim->font = new Font(options, L"font/Default.png", textures, false,
-                                             &Minecraft::DEFAULT_FONT_LOCATION, 23, 20, 8, 8,
+                                             &s_defaultFontLocation, 23, 20, 8, 8,
                                              SFontData::Codepoints);
             g_minecraftShim->altFont = new Font(options, L"font/alternate.png", textures, false,
-                                                &Minecraft::ALT_FONT_LOCATION, 16, 16, 8, 8);
+                                                &s_altFontLocation, 16, 16, 8, 8);
             try {
                 textures->stitch();
                 MCLE_LOG("mcle_game_init: textures->stitch done");

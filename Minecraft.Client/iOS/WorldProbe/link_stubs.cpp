@@ -682,9 +682,6 @@ void GameRenderer::setupGuiScreen(int forceScale) {
 #include "MultiPlayerGameMode.h"
 bool MultiPlayerGameMode::isCutScene() { return false; }
 
-// Same as Minecraft.cpp, used for the fonts made in mcle_game_init
-ResourceLocation Minecraft::DEFAULT_FONT_LOCATION = ResourceLocation(TN_DEFAULT_FONT);
-ResourceLocation Minecraft::ALT_FONT_LOCATION = ResourceLocation(TN_ALT_FONT);
 
 // Gui::render's debug overlay reads these stat strings - empty is fine.
 std::wstring Minecraft::gatherStats1() { return std::wstring(); }
