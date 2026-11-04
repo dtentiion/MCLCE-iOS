@@ -81,6 +81,8 @@ struct McleAppStub {
         return n;
     }
     int DebugPrintf(const wchar_t *, ...) { return 0; }
+    // The per-user variant only prints for the developer whose id matches
+    int DebugPrintf(int, const char *, ...) { return 0; }
     template<class... A> void           FatalLoadError(A...)    {}
     template<class... A> int            GetGameSetting(A...)    { return 0; }
     // Real upstream has two overloads:
