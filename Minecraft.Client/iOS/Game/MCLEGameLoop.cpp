@@ -2629,16 +2629,77 @@ extern "C" void mcle_world_drive_renderer(void) {
         mcle_bob_hurt(a);
         if (mcle_view_bob_on()) mcle_bob_view(a);
 
-        // moveCameraToPlayer, first person. Rotation interpolates between
+        // GameRenderer::moveCameraToPlayer. Rotation interpolates between
         // ticks like everything else, the look turns once a tick in
-        // mcle_player_move_tick. yaw + 180 because Minecraft yaw 0 faces
-        // south and the camera looks down -Z.
-        mcle_glbridge_translate(0.0f, 0.0f, -0.1f);
-        mcle_glbridge_rotate(g_player->xRotO + (g_player->xRot - g_player->xRotO) * a, 1.0f, 0.0f, 0.0f);
-        mcle_glbridge_rotate(g_player->yRotO + (g_player->yRot - g_player->yRotO) * a + 180.0f, 0.0f, 1.0f, 0.0f);
-        // ServerPlayer's heightOffset is 0 (4J, ServerPlayer.cpp:119), so
-        // this lifts the camera to eye level
-        mcle_glbridge_translate(0.0f, (float)g_player->heightOffset - 1.62f, 0.0f);
+        // mcle_player_move_tick. No camera roll outside cut scenes.
+        {
+            const int thirdPersonView = mcle_third_person_view();
+            // ServerPlayer's heightOffset is 0 (4J, ServerPlayer.cpp:119), so
+            // this lifts the camera to eye level
+            float heightOffset = g_player->heightOffset - 1.62f;
+            double x = g_player->xo + (g_player->x - g_player->xo) * a;
+            double y = g_player->yo + (g_player->y - g_player->yo) * a - heightOffset;
+            double z = g_player->zo + (g_player->z - g_player->zo) * a;
+
+            if (g_player->isSleeping()) {
+                heightOffset += 1.0;
+                mcle_glbridge_translate(0.0f, 0.3f, 0);
+                int t = g_levels[0]->getTile(Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
+                if (t == Tile::bed_Id) {
+                    int data = g_levels[0]->getData(Mth::floor(g_player->x), Mth::floor(g_player->y),
+                                                    Mth::floor(g_player->z));
+                    int direction = data & 3;
+                    mcle_glbridge_rotate(static_cast<float>(direction) * 90, 0.0f, 1.0f, 0.0f);
+                }
+                mcle_glbridge_rotate(g_player->yRotO + (g_player->yRot - g_player->yRotO) * a + 180, 0, -1, 0);
+                mcle_glbridge_rotate(g_player->xRotO + (g_player->xRot - g_player->xRotO) * a, -1, 0, 0);
+            } else if (thirdPersonView) {
+                // thirdDistance and thirdDistanceO stay at 4
+                double cameraDist = 4;
+                float yRot = g_player->yRotO + (g_player->yRot - g_player->yRotO) * a;
+                float xRot = g_player->xRotO + (g_player->xRot - g_player->xRotO) * a;
+
+                // Reverse y rotation - only used for the collision that works
+                // out the view distance, the rotation itself is below
+                if (thirdPersonView == 2) yRot += 180.0f;
+
+                double xd = -Mth::sin(yRot / 180 * PI) * Mth::cos(xRot / 180 * PI) * cameraDist;
+                double zd = Mth::cos(yRot / 180 * PI) * Mth::cos(xRot / 180 * PI) * cameraDist;
+                double yd = -Mth::sin(xRot / 180 * PI) * cameraDist;
+                if (thirdPersonView == 2) yd = Mth::sin(xRot / 180 * PI) * cameraDist;
+
+                for (int i = 0; i < 8; i++) {
+                    float xo = static_cast<float>((i & 1) * 2 - 1);
+                    float yo = static_cast<float>(((i >> 1) & 1) * 2 - 1);
+                    float zo = static_cast<float>(((i >> 2) & 1) * 2 - 1);
+                    xo *= 0.1f;
+                    yo *= 0.1f;
+                    zo *= 0.1f;
+                    HitResult *hr = g_levels[0]->clip(Vec3::newTemp(x + xo, y + yo, z + zo),
+                                                      Vec3::newTemp(x - xd + xo, y - yd + yo, z - zd + zo));
+                    if (hr != nullptr) {
+                        double dist = hr->pos->distanceTo(Vec3::newTemp(x, y, z));
+                        if (dist < cameraDist) cameraDist = dist;
+                        delete hr;
+                    }
+                }
+                mcle_glbridge_translate(0, 0, static_cast<float>(-cameraDist));
+            } else {
+                mcle_glbridge_translate(0.0f, 0.0f, -0.1f);
+            }
+
+            // yaw + 180 because Minecraft yaw 0 faces south and the camera
+            // looks down -Z, the front view looks back at the player
+            float pitch = g_player->xRotO + (g_player->xRot - g_player->xRotO) * a;
+            if (thirdPersonView == 2) pitch = -pitch;
+            mcle_glbridge_rotate(pitch, 1.0f, 0.0f, 0.0f);
+            if (thirdPersonView == 2) {
+                mcle_glbridge_rotate(g_player->yRotO + (g_player->yRot - g_player->yRotO) * a, 0.0f, 1.0f, 0.0f);
+            } else {
+                mcle_glbridge_rotate(g_player->yRotO + (g_player->yRot - g_player->yRotO) * a + 180.0f, 0.0f, 1.0f, 0.0f);
+            }
+            mcle_glbridge_translate(0.0f, heightOffset, 0.0f);
+        }
         // Player translation is applied INSIDE upstream LevelRenderer::renderChunks
         // via glPushMatrix; glTranslatef(-xOff, -yOff, -zOff). Adding it here too
         // would double-translate chunks. Sky/clouds/sun apply their own translations
@@ -3111,11 +3172,11 @@ extern "C" void mcle_world_drive_renderer(void) {
                 glPushMatrix();
                 mcle_bob_hurt(a);
                 if (mcle_view_bob_on()) mcle_bob_view(a);
-                if (renderHand && !g_player->isSleeping()) {
+                if (renderHand && mcle_third_person_view() == 0 && !g_player->isSleeping()) {
                     g_itemInHand->render(a);
                 }
                 glPopMatrix();
-                if (!g_player->isSleeping()) {
+                if (mcle_third_person_view() == 0 && !g_player->isSleeping()) {
                     g_itemInHand->renderScreenEffect(a);
                     mcle_bob_hurt(a);
                 }

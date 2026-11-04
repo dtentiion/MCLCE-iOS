@@ -18,6 +18,9 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
                            float lookX, float lookY, unsigned int buttons, float sensitivity,
                            bool invertLook);
 
+// LocalPlayer::ThirdPersonView, cycled with the left stick click
+int mcle_third_person_view();
+
 // LocalPlayer's xBob / yBob at partial tick a, for ItemInHandRenderer's sway
 void mcle_player_bob(float a, float *xBob, float *yBob);
 

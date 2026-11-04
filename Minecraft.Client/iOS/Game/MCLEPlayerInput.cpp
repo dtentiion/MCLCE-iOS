@@ -11,6 +11,7 @@
 #include "MCLEPlayerInput.h"
 #include "MCLEHud.h"
 
+#include <atomic>
 #include <cmath>
 #include <mutex>
 
@@ -39,6 +40,13 @@
 #include "../../../upstream/Minecraft.World/AttributeInstance.h"
 #include "../../../upstream/Minecraft.World/BowItem.h"
 
+// LocalPlayer::m_iThirdPersonView: 0 first person, 1 behind, 2 in front
+std::atomic<int> g_thirdPersonView{0};
+
+int mcle_third_person_view() {
+    return g_thirdPersonView.load(std::memory_order_relaxed);
+}
+
 // MCLEGameLoop.cpp: the client level's destroyTileProgress, and the lock
 // for the particle engine the render thread draws from
 void mcle_client_destroy_progress(int id, int x, int y, int z, int progress);
@@ -54,6 +62,7 @@ const unsigned int kButtonB = 0x00000002;
 const unsigned int kButtonRB = 0x00000040;
 const unsigned int kButtonLB = 0x00000080;
 const unsigned int kButtonRThumb = 0x00000100;
+const unsigned int kButtonLThumb = 0x00000200;
 const unsigned int kButtonRT = 0x00400000;
 const unsigned int kButtonLT = 0x00800000;
 const unsigned int kButtonDpadLeft = 0x00001000;
@@ -644,6 +653,11 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     if (wheel != 0) P->inventory->swapPaint(wheel);
     // the opacity timer
     if (wheel != 0) mcle_hud_scrolled();
+
+    // RENDER_THIRD_PERSON is the left stick click
+    if (pressed & kButtonLThumb) {
+        g_thirdPersonView.store((g_thirdPersonView.load(std::memory_order_relaxed) + 1) % 3, std::memory_order_relaxed);
+    }
 
     // DROP is B. The client's inventory still has the item while the drop
     // packet is on its way, so the label is worked out before dropping.
