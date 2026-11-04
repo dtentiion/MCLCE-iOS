@@ -958,8 +958,12 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }];
     [nc addObserverForName:UIApplicationDidBecomeActiveNotification object:nil
                      queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
+        UIApplication.sharedApplication.idleTimerDisabled = YES;
         weakSelf.displayLink.paused = NO;
     }];
+    // Launched while locked or in the background: same rule, wait for active.
+    if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive)
+        self.displayLink.paused = YES;
 
     // Start menu music if the user has a supported audio file in
     // Documents. Silent no-op otherwise.
