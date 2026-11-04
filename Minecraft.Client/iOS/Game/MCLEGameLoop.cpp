@@ -119,6 +119,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Enchantment.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/SparseLightStorage.h"
+#include "../../../upstream/Minecraft.Client/ParticleEngine.h"
 #include "../../../upstream/Minecraft.World/CompressedTileStorage.h"
 #include "../../../upstream/Minecraft.World/SparseDataStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionChunkStorage.h"
@@ -1148,6 +1149,12 @@ void initImpl() {
     if (g_levelRenderer && g_levels[0]) {
         MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(g_levels[0]);
         g_minecraftShim->level = lvl;
+        // Minecraft::init builds this before any level is set. LevelRenderer
+        // routes block break / crack events into it as soon as it listens to
+        // the level, so it has to exist first. Textures are only used when
+        // particles get drawn, which iOS doesn't do yet.
+        if (!g_minecraftShim->particleEngine)
+            g_minecraftShim->particleEngine = new ParticleEngine(lvl, nullptr);
         MCLE_LOG("mcle_game_init: G5 calling LR->setLevel(0, %p)", (void*)lvl);
         try {
             g_levelRenderer->setLevel(0, lvl);
@@ -1657,6 +1664,13 @@ extern "C" void mcle_game_tick(void) {
             (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
                 now.time_since_epoch()).count(),
             std::memory_order_relaxed);
+    }
+
+    // Minecraft::tick: if (!pause) particleEngine->tick();
+    if (Minecraft *mcPE = Minecraft::GetInstance()) {
+        if (mcPE->particleEngine) {
+            try { mcPE->particleEngine->tick(); } catch (...) {}
+        }
     }
 
     // Minecraft::tick runs these once per frame so storage queued for
