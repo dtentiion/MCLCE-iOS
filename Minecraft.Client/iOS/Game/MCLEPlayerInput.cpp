@@ -727,6 +727,11 @@ struct MoveState {
 
 MoveState m;
 
+// LocalPlayer's xBob / yBob: the hand lags behind the view. Ticked here,
+// read by ItemInHandRenderer on the render thread.
+float g_xBob = 0, g_yBob = 0, g_xBobO = 0, g_yBobO = 0;
+std::mutex g_bobMutex;
+
 const int SPRINT_DURATION = 20 * 30;
 
 // LocalPlayer::setSprinting, plus the server's START/STOP_SPRINTING
@@ -862,6 +867,18 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     P->xxa = m.xa;
     P->yya = m.ya;
     P->setJumping(m.jumping);
+
+    std::lock_guard<std::mutex> lock(g_bobMutex);
+    g_yBobO = g_yBob;
+    g_xBobO = g_xBob;
+    g_xBob += (P->xRot - g_xBob) * 0.5;
+    g_yBob += (P->yRot - g_yBob) * 0.5;
+}
+
+void mcle_player_bob(float a, float *xBob, float *yBob) {
+    std::lock_guard<std::mutex> lock(g_bobMutex);
+    *xBob = g_xBobO + (g_xBob - g_xBobO) * a;
+    *yBob = g_yBobO + (g_yBob - g_yBobO) * a;
 }
 
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {

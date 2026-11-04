@@ -18,6 +18,9 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
                            float lookX, float lookY, unsigned int buttons, float sensitivity,
                            bool invertLook);
 
+// LocalPlayer's xBob / yBob at partial tick a, for ItemInHandRenderer's sway
+void mcle_player_bob(float a, float *xBob, float *yBob);
+
 // GameRenderer::tickFov once a tick, and the smoothed factor getFov uses
 void mcle_player_fov_tick(const std::shared_ptr<ServerPlayer> &player);
 float mcle_player_fov_factor(float a);

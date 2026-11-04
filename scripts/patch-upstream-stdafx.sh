@@ -1645,3 +1645,9 @@ LLS_PY="$REPO_ROOT/scripts/patch-level-local-sound.py"
 if [ -f "$LLS_PY" ]; then
     python3 "$LLS_PY"
 fi
+
+# LocalPlayer.cpp isn't built, so there's nothing to dynamic_pointer_cast to
+LPC_PY="$REPO_ROOT/scripts/patch-localplayer-casts.py"
+if [ -f "$LPC_PY" ]; then
+    python3 "$LPC_PY"
+fi
