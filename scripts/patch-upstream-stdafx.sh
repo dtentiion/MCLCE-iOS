@@ -1610,3 +1610,10 @@ BMS_PY="$REPO_ROOT/scripts/patch-basemobspawner-virtual-dtor.py"
 if [ -f "$BMS_PY" ]; then
     python3 "$BMS_PY"
 fi
+
+# The other abstract bases clang flags with -Wdelete-abstract-non-virtual-dtor.
+# Same trap as BaseMobSpawner whenever one of those deletes runs.
+AVD_PY="$REPO_ROOT/scripts/patch-abstract-virtual-dtors.py"
+if [ -f "$AVD_PY" ]; then
+    python3 "$AVD_PY"
+fi
