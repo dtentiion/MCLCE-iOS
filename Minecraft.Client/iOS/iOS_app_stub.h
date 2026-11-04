@@ -97,18 +97,117 @@ struct McleAppStub {
         return 100;
     }
     template<class... A> int            GetGameSettingsDebugMask(A...) { return 0; }
-    // GameRules::getBoolean(RULE_DAYLIGHT) routes through
-    // GetGameHostOption(eGameHostOption_DoDaylightCycle=31). All call sites
-    // pass a single enum/int. Use a single-arg template so this wins over
-    // the variadic catch-all and handles the enum without conversion rank
-    // penalties. Special-case daylight=on; defaults stay 0 for the rest.
-    template<class T>
-    int GetGameHostOption(T option) {
-        const int v = static_cast<int>(option);
-        if (v == 31 /*eGameHostOption_DoDaylightCycle*/) return 1;
-        return 0;
+    // Host options, as in CMinecraftApp (Consoles_App.cpp). Difficulty, game
+    // type and the game rules (mob spawning, tile drops, regen, fire...)
+    // all read through these. LoadMenu sets them before a world starts.
+    unsigned int m_uiGameHostSettings = 0;
+
+    unsigned int GetGameHostOption(eGameHostOption eVal) {
+        return GetGameHostOption(m_uiGameHostSettings, eVal);
     }
-    template<class... A> void           SetGameHostOption(A...) {}
+
+    unsigned int GetGameHostOption(unsigned int uiHostSettings, eGameHostOption eVal) {
+        switch (eVal) {
+        case eGameHostOption_FriendsOfFriends: return (uiHostSettings & GAME_HOST_OPTION_BITMASK_FRIENDSOFFRIENDS);
+        case eGameHostOption_Difficulty:       return (uiHostSettings & GAME_HOST_OPTION_BITMASK_DIFFICULTY);
+        case eGameHostOption_Gamertags:        return (uiHostSettings & GAME_HOST_OPTION_BITMASK_GAMERTAGS);
+        case eGameHostOption_GameType:         return (uiHostSettings & GAME_HOST_OPTION_BITMASK_GAMETYPE) >> 4;
+        case eGameHostOption_All:              return (uiHostSettings & GAME_HOST_OPTION_BITMASK_ALL);
+        case eGameHostOption_Tutorial:
+            // tutorial is offline, but keeps the gamertag option, Easy, structures, fire, tnt, pvp, trust
+            return ((uiHostSettings & GAME_HOST_OPTION_BITMASK_GAMERTAGS) |
+                    GAME_HOST_OPTION_BITMASK_TRUSTPLAYERS | GAME_HOST_OPTION_BITMASK_FIRESPREADS |
+                    GAME_HOST_OPTION_BITMASK_TNT | GAME_HOST_OPTION_BITMASK_PVP |
+                    GAME_HOST_OPTION_BITMASK_STRUCTURES | 1);
+        case eGameHostOption_LevelType:          return (uiHostSettings & GAME_HOST_OPTION_BITMASK_LEVELTYPE);
+        case eGameHostOption_Structures:         return (uiHostSettings & GAME_HOST_OPTION_BITMASK_STRUCTURES);
+        case eGameHostOption_BonusChest:         return (uiHostSettings & GAME_HOST_OPTION_BITMASK_BONUSCHEST);
+        case eGameHostOption_HasBeenInCreative:  return (uiHostSettings & GAME_HOST_OPTION_BITMASK_BEENINCREATIVE);
+        case eGameHostOption_PvP:                return (uiHostSettings & GAME_HOST_OPTION_BITMASK_PVP);
+        case eGameHostOption_TrustPlayers:       return (uiHostSettings & GAME_HOST_OPTION_BITMASK_TRUSTPLAYERS);
+        case eGameHostOption_TNT:                return (uiHostSettings & GAME_HOST_OPTION_BITMASK_TNT);
+        case eGameHostOption_FireSpreads:        return (uiHostSettings & GAME_HOST_OPTION_BITMASK_FIRESPREADS);
+        case eGameHostOption_CheatsEnabled:
+            return (uiHostSettings & (GAME_HOST_OPTION_BITMASK_HOSTFLY | GAME_HOST_OPTION_BITMASK_HOSTHUNGER |
+                                      GAME_HOST_OPTION_BITMASK_HOSTINVISIBLE));
+        case eGameHostOption_HostCanFly:          return (uiHostSettings & GAME_HOST_OPTION_BITMASK_HOSTFLY);
+        case eGameHostOption_HostCanChangeHunger: return (uiHostSettings & GAME_HOST_OPTION_BITMASK_HOSTHUNGER);
+        case eGameHostOption_HostCanBeInvisible:  return (uiHostSettings & GAME_HOST_OPTION_BITMASK_HOSTINVISIBLE);
+        case eGameHostOption_BedrockFog:          return (uiHostSettings & GAME_HOST_OPTION_BITMASK_BEDROCKFOG);
+        case eGameHostOption_DisableSaving:       return (uiHostSettings & GAME_HOST_OPTION_BITMASK_DISABLESAVE);
+        case eGameHostOption_WasntSaveOwner:      return (uiHostSettings & GAME_HOST_OPTION_BITMASK_NOTOWNER);
+        case eGameHostOption_WorldSize:
+            return (uiHostSettings & GAME_HOST_OPTION_BITMASK_WORLDSIZE) >> GAME_HOST_OPTION_BITMASK_WORLDSIZE_BITSHIFT;
+        case eGameHostOption_MobGriefing:         return !(uiHostSettings & GAME_HOST_OPTION_BITMASK_MOBGRIEFING);
+        case eGameHostOption_KeepInventory:       return (uiHostSettings & GAME_HOST_OPTION_BITMASK_KEEPINVENTORY);
+        case eGameHostOption_DoMobSpawning:       return !(uiHostSettings & GAME_HOST_OPTION_BITMASK_DOMOBSPAWNING);
+        case eGameHostOption_DoMobLoot:           return !(uiHostSettings & GAME_HOST_OPTION_BITMASK_DOMOBLOOT);
+        case eGameHostOption_DoTileDrops:         return !(uiHostSettings & GAME_HOST_OPTION_BITMASK_DOTILEDROPS);
+        case eGameHostOption_NaturalRegeneration: return !(uiHostSettings & GAME_HOST_OPTION_BITMASK_NATURALREGEN);
+        case eGameHostOption_DoDaylightCycle:     return !(uiHostSettings & GAME_HOST_OPTION_BITMASK_DODAYLIGHTCYCLE);
+        default: break;
+        }
+        return false;
+    }
+
+    void SetGameHostOption(eGameHostOption eVal, unsigned int uiVal) {
+        SetGameHostOption(m_uiGameHostSettings, eVal, uiVal);
+    }
+
+    void SetGameHostOption(unsigned int &uiHostSettings, eGameHostOption eVal, unsigned int uiVal) {
+        // Plain on/off bits
+        auto setBit = [&](unsigned int mask, bool on) {
+            if (on) uiHostSettings |= mask;
+            else uiHostSettings &= ~mask;
+        };
+        switch (eVal) {
+        case eGameHostOption_FriendsOfFriends:  setBit(GAME_HOST_OPTION_BITMASK_FRIENDSOFFRIENDS, uiVal != 0); break;
+        case eGameHostOption_Difficulty:
+            uiHostSettings &= ~GAME_HOST_OPTION_BITMASK_DIFFICULTY;
+            uiHostSettings |= (GAME_HOST_OPTION_BITMASK_DIFFICULTY & uiVal);
+            break;
+        case eGameHostOption_Gamertags:         setBit(GAME_HOST_OPTION_BITMASK_GAMERTAGS, uiVal != 0); break;
+        case eGameHostOption_GameType:
+            uiHostSettings &= ~GAME_HOST_OPTION_BITMASK_GAMETYPE;
+            uiHostSettings |= (GAME_HOST_OPTION_BITMASK_GAMETYPE & (uiVal << 4));
+            break;
+        case eGameHostOption_LevelType:         setBit(GAME_HOST_OPTION_BITMASK_LEVELTYPE, uiVal != 0); break;
+        case eGameHostOption_Structures:        setBit(GAME_HOST_OPTION_BITMASK_STRUCTURES, uiVal != 0); break;
+        case eGameHostOption_BonusChest:        setBit(GAME_HOST_OPTION_BITMASK_BONUSCHEST, uiVal != 0); break;
+        case eGameHostOption_HasBeenInCreative: setBit(GAME_HOST_OPTION_BITMASK_BEENINCREATIVE, uiVal != 0); break;
+        case eGameHostOption_PvP:               setBit(GAME_HOST_OPTION_BITMASK_PVP, uiVal != 0); break;
+        case eGameHostOption_TrustPlayers:      setBit(GAME_HOST_OPTION_BITMASK_TRUSTPLAYERS, uiVal != 0); break;
+        case eGameHostOption_TNT:               setBit(GAME_HOST_OPTION_BITMASK_TNT, uiVal != 0); break;
+        case eGameHostOption_FireSpreads:       setBit(GAME_HOST_OPTION_BITMASK_FIRESPREADS, uiVal != 0); break;
+        case eGameHostOption_CheatsEnabled:
+            setBit(GAME_HOST_OPTION_BITMASK_HOSTFLY, uiVal != 0);
+            setBit(GAME_HOST_OPTION_BITMASK_HOSTHUNGER, uiVal != 0);
+            setBit(GAME_HOST_OPTION_BITMASK_HOSTINVISIBLE, uiVal != 0);
+            break;
+        case eGameHostOption_HostCanFly:          setBit(GAME_HOST_OPTION_BITMASK_HOSTFLY, uiVal != 0); break;
+        case eGameHostOption_HostCanChangeHunger: setBit(GAME_HOST_OPTION_BITMASK_HOSTHUNGER, uiVal != 0); break;
+        case eGameHostOption_HostCanBeInvisible:  setBit(GAME_HOST_OPTION_BITMASK_HOSTINVISIBLE, uiVal != 0); break;
+        case eGameHostOption_BedrockFog:          setBit(GAME_HOST_OPTION_BITMASK_BEDROCKFOG, uiVal != 0); break;
+        case eGameHostOption_DisableSaving:       setBit(GAME_HOST_OPTION_BITMASK_DISABLESAVE, uiVal != 0); break;
+        case eGameHostOption_WasntSaveOwner:      setBit(GAME_HOST_OPTION_BITMASK_NOTOWNER, uiVal != 0); break;
+        // These are stored inverted, a set bit means off
+        case eGameHostOption_MobGriefing:         setBit(GAME_HOST_OPTION_BITMASK_MOBGRIEFING, uiVal != 1); break;
+        case eGameHostOption_KeepInventory:       setBit(GAME_HOST_OPTION_BITMASK_KEEPINVENTORY, uiVal != 0); break;
+        case eGameHostOption_DoMobSpawning:       setBit(GAME_HOST_OPTION_BITMASK_DOMOBSPAWNING, uiVal != 1); break;
+        case eGameHostOption_DoMobLoot:           setBit(GAME_HOST_OPTION_BITMASK_DOMOBLOOT, uiVal != 1); break;
+        case eGameHostOption_DoTileDrops:         setBit(GAME_HOST_OPTION_BITMASK_DOTILEDROPS, uiVal != 1); break;
+        case eGameHostOption_NaturalRegeneration: setBit(GAME_HOST_OPTION_BITMASK_NATURALREGEN, uiVal != 1); break;
+        case eGameHostOption_DoDaylightCycle:     setBit(GAME_HOST_OPTION_BITMASK_DODAYLIGHTCYCLE, uiVal != 1); break;
+        case eGameHostOption_WorldSize:
+            uiHostSettings &= ~GAME_HOST_OPTION_BITMASK_WORLDSIZE;
+            uiHostSettings |= (GAME_HOST_OPTION_BITMASK_WORLDSIZE & (uiVal << GAME_HOST_OPTION_BITMASK_WORLDSIZE_BITSHIFT));
+            break;
+        case eGameHostOption_All:
+            uiHostSettings = uiVal;
+            break;
+        default: break;
+        }
+    }
     template<class... A> int            GetGameNewHellScale(A...) { return 1; }
     template<class... A> int            GetGameNewWorldSize(A...) { return 0; }
     template<class... A> bool           GetGameNewWorldSizeUseMoat(A...) { return false; }
