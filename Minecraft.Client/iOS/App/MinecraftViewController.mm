@@ -62,11 +62,15 @@ static int  g_load_save_index = -1;
 static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
 static bool g_load_has_been_in_creative = false;
 static bool g_loading_world = false;
+// UIScene_PauseMenu is up and the single player game is paused under it
+static bool g_world_paused = false;
 
 static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 extern "C" void mcle_metal_set_gamma(float gamma); // MetalContext.mm
+extern "C" void mcle_game_set_paused(int paused);   // MCLEGameLoop.cpp
+extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
 
 // Name of the currently loaded menu SWF, set whenever we enter a
 // new scene. The settings-event bridge reads this to decide which
@@ -2212,6 +2216,40 @@ static NSString* MCLETipHTML(void) {
 // FullscreenProgress completes with e_ProgressCompletion_CloseAllPlayersUIScenes,
 // and the panorama, logo and menu background components hide once the game
 // has started.
+// UIScene_PauseMenu. Opening it pauses the single player game.
+- (void)openPauseMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    g_world_paused = true;
+    mcle_game_set_paused(1);
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"PauseMenu1080.swf"];
+}
+
+- (void)initPauseMenu {
+    extern PlayerHandle* g_ruffle_player;
+    NSArray<NSDictionary*>* cfg = @[
+        @{ @"name": @"Button1", @"label": MCLEStr(IDS_RESUME_GAME),      @"id": @(0) },
+        @{ @"name": @"Button2", @"label": MCLEStr(IDS_HELP_AND_OPTIONS), @"id": @(1) },
+        @{ @"name": @"Button3", @"label": MCLEStr(IDS_LEADERBOARDS),     @"id": @(2) },
+        @{ @"name": @"Button4", @"label": MCLEStr(IDS_ACHIEVEMENTS),     @"id": @(3) },
+        @{ @"name": @"Button5", @"label": MCLEStr(IDS_SAVE_GAME),        @"id": @(4) },
+        @{ @"name": @"Button6", @"label": MCLEStr(IDS_EXIT_GAME),        @"id": @(5) },
+    ];
+    [self applyMenuButtonConfig:cfg];
+    // updateComponents: no panorama, menu background and logo on
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kDimDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kLogoDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+}
+
+- (void)resumeFromPause {
+    g_world_paused = false;
+    mcle_game_set_paused(0);
+    [self enterWorldUI];
+}
+
 - (void)enterWorldUI {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -2837,6 +2875,8 @@ static NSString* MCLETipHTML(void) {
             [self initLoadMenu];
         } else if ([swfName isEqualToString:@"FullscreenProgress1080.swf"]) {
             [self initFullscreenProgress];
+        } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
+            [self initPauseMenu];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
@@ -2919,12 +2959,26 @@ static NSString* MCLETipHTML(void) {
                                          : 1.0f - (50.0f - slider) / 50.0f * 0.4f;
             mcle_metal_set_gamma(gamma);
         }
+        // Minecraft::tick: Start opens the pause menu
+        if (!g_world_paused) {
+            mcle_ios_pad_state pad;
+            if (mcle_ios_input_poll(0, &pad)) {
+                bool startNow = (pad.buttons & 0x00000010u) != 0;
+                bool startBefore = (self.lastPadButtons & 0x00000010u) != 0;
+                self.lastPadButtons = pad.buttons;
+                if (startNow && !startBefore) [self openPauseMenu];
+            }
+        }
         mcle_render_frame();
-        MCLEHudPump();
-        // Keep the SWF layer presenting over the world (transparent stage)
-        extern PlayerHandle* g_ruffle_player;
-        if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
-        return;
+        if (!g_world_paused) {
+            MCLEHudPump();
+            // Keep the SWF layer presenting over the world (transparent stage)
+            extern PlayerHandle* g_ruffle_player;
+            if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+            return;
+        }
+        // Paused: the pause menu takes input below like any other menu,
+        // drawn over the frozen world
     }
 
     if (g_loading_world) [self pollWorldLoad];
@@ -3118,6 +3172,19 @@ static NSString* MCLETipHTML(void) {
                                     });
                             }];
                         }
+                    } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
+                        // UIScene_PauseMenu::handlePress
+                        switch (id) {
+                            case 0: [self resumeFromPause]; break;
+                            case 1: [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"]; break;
+                            case 2: [self navigateForwardTo:@"LeaderboardMenu1080.swf"]; break;
+                            case 4: mcle_save_now(); break;
+                            // Achievements is the platform overlay. Exit
+                            // needs the world torn down first, not yet.
+                            default:
+                                NSLog(@"[pause] button %d not wired yet", id);
+                                break;
+                        }
                     } else if ([self.currentMenuSwf isEqualToString:
                                 @"HelpAndOptionsMenu1080.swf"]) {
                         // Mirrors UIScene_HelpAndOptionsMenu::handlePress
@@ -3197,6 +3264,10 @@ static NSString* MCLETipHTML(void) {
                 if (g_pending_dialog) {
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
+                } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
+                    // UIScene_PauseMenu::handleInput: B goes back to the game
+                    mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
+                    [self resumeFromPause];
                 } else if (![self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"] &&
                            ![self.currentMenuSwf isEqualToString:@"FullscreenProgress1080.swf"]) {
                     // FullscreenProgress has no cancel func for a save load
