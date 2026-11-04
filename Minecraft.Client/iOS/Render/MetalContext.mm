@@ -1816,6 +1816,27 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     return 0;
 }
 
+// glClear(GL_DEPTH_BUFFER_BIT) mid frame, renderLevel does it before the
+// hand. Metal can only clear at the start of a pass, so start a new one that
+// keeps the colour.
+extern "C" void mcle_metal_clear_depth(void) {
+    if (!g.inFrame || !g.enc) return;
+    [g.enc endEncoding];
+    MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+    rpd.colorAttachments[0].texture     = g.gammaThisFrame ? g.sceneTex : g.drawable.texture;
+    rpd.colorAttachments[0].loadAction  = MTLLoadActionLoad;
+    rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+    rpd.depthAttachment.texture         = g.depthTex;
+    rpd.depthAttachment.loadAction      = MTLLoadActionClear;
+    rpd.depthAttachment.storeAction     = MTLStoreActionDontCare;
+    rpd.depthAttachment.clearDepth      = 1.0;
+    g.enc = [g.cmd renderCommandEncoderWithDescriptor:rpd];
+    g_lastCullMode   = MTLCullModeNone;
+    g_lastWinding    = MTLWindingClockwise;
+    g_lastDepthState = nil;
+    g_lastWorldPso   = nil;
+}
+
 extern "C" void* mcle_metal_current_encoder(void) {
     return g.inFrame ? (__bridge void*)g.enc : NULL;
 }
