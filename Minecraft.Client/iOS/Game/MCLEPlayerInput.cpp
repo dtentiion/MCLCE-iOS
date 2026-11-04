@@ -260,7 +260,7 @@ void startDestroyBlock(int x, int y, int z, int face) {
     }
 
     if (isCreative()) {
-        // Skip if we just broke a block, prevents double-break on single clicks
+        // Skip right after breaking a block so one click breaks one block
         if (s.destroyDelay > 0) return;
         sendAction(START_DESTROY_BLOCK, x, y, z, face);
         s.destroyDelay = 5;

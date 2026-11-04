@@ -91,7 +91,7 @@ float slotAlpha(int opacityTimer) {
     unsigned char ucAlpha = mcle_settings_get(kSettingInterfaceOpacity);
     float fVal;
     if (ucAlpha < 80) {
-        // check if we have the timer running for the opacity
+        // is the opacity timer running
         if (opacityTimer != 0) {
             if (opacityTimer < 10) {
                 float fStep = (80.0f - static_cast<float>(ucAlpha)) / 10.0f;
