@@ -163,6 +163,13 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/FrustumCuller.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
+#include "../../../upstream/Minecraft.Client/BossMobGuiInfo.h"
+#include "../../../upstream/Minecraft.World/JavaMath.h"
+#include "../../../upstream/Minecraft.World/MobEffect.h"
+#include "../../../upstream/Minecraft.World/MobEffectInstance.h"
+#include "../../../upstream/Minecraft.World/SharedConstants.h"
+#include "../../../upstream/Minecraft.World/Dimension.h"
+#include "../../../upstream/Minecraft.World/Mth.h"
 #include "MCLEPlayerInput.h"
 
 namespace {
@@ -290,6 +297,11 @@ std::shared_ptr<LevelStorage> g_levelStorage;
 // is a ServerLevel; levels[1] and levels[2] are DerivedServerLevel that
 // share state with levels[0]. Mirrors MinecraftServer.cpp:956-1007.
 ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
+// GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
+// when the render thread builds the light texture
+std::atomic<float> g_lightBlr{0.0f};
+std::atomic<float> g_darkenWorldAmount{0.0f};
+std::atomic<float> g_darkenWorldAmountO{0.0f};
 std::shared_ptr<ServerPlayer> g_player;
 ServerPlayerGameMode         *g_playerGameMode = nullptr;
 LevelRenderer                *g_levelRenderer  = nullptr;
@@ -1697,6 +1709,28 @@ extern "C" void mcle_game_tick(void) {
             std::memory_order_relaxed);
     }
 
+    // GameRenderer::tick: torch flicker for the light texture
+    // (tickLightTexture) and the wither boss darkening the world
+    {
+        static float s_blrt = 0.0f;
+        s_blrt += static_cast<float>((Math::random() - Math::random()) * Math::random() * Math::random());
+        s_blrt *= 0.9;
+        float blr = g_lightBlr.load(std::memory_order_relaxed);
+        blr += (s_blrt - blr) * 1;
+        g_lightBlr.store(blr, std::memory_order_relaxed);
+
+        float darken = g_darkenWorldAmount.load(std::memory_order_relaxed);
+        g_darkenWorldAmountO.store(darken, std::memory_order_relaxed);
+        if (BossMobGuiInfo::darkenWorld) {
+            darken += 1.0f / (static_cast<float>(SharedConstants::TICKS_PER_SECOND) * 1);
+            if (darken > 1) darken = 1;
+            BossMobGuiInfo::darkenWorld = false;
+        } else if (darken > 0) {
+            darken -= 1.0f / (static_cast<float>(SharedConstants::TICKS_PER_SECOND) * 4);
+        }
+        g_darkenWorldAmount.store(darken, std::memory_order_relaxed);
+    }
+
     // Minecraft::tick: if (!pause) particleEngine->tick();
     if (Minecraft *mcPE = Minecraft::GetInstance()) {
         if (mcPE->particleEngine) {
@@ -2257,46 +2291,76 @@ extern "C" void mcle_world_drive_renderer(void) {
             mcle_glbridge_set_fog_enabled(1);
         }
 
-        // Per-frame lightmap rebuild. Mirrors upstream
-        // GameRenderer::updateLightTexture (GameRenderer.cpp:849-946):
-        // 256 entries indexed by (skyLevel << 4) | blockLevel. Sky
-        // component is dimmed by Level::getSkyDarken so terrain
-        // darkens at night; block component is constant so torches
-        // stay bright. Rain and thunder slightly brighten the block
-        // contribution.
-        //
-        // brightnessRamp would normally come from dimension->brightnessRamp[16]
-        // populated by Dimension::updateLightRamp (Dimension.cpp:28-36).
-        // Compute it inline with the same formula so this works whether
-        // or not the upstream Dimension ctor fully ran in our build.
-        if (g_initState == kStateTicking && g_levels[0]) {
+        // GameRenderer::updateLightTexture. 256 entries indexed by
+        // (skyLevel << 4) | blockLevel, built from the player's dimension.
+        if (g_initState == kStateTicking && g_player && g_player->level) {
             try {
-                Level *lv = g_levels[0];
-                float skyDarken = lv->getSkyDarken(frame_partial_tick);
-                float darken    = skyDarken * 0.95f + 0.05f;
-                float rainLevel    = lv->getRainLevel(frame_partial_tick);
-                float thunderLevel = lv->getThunderLevel(frame_partial_tick);
-                float blr = rainLevel + thunderLevel;
-                // Compute brightnessRamp[0..15] inline, parity with
-                // upstream Dimension::updateLightRamp at ambientLight=0.
-                float brightnessRamp[16];
-                const float MAX_BRIGHTNESS = 15.0f;
-                for (int i = 0; i <= 15; i++) {
-                    float v = 1.0f - (float)i / MAX_BRIGHTNESS;
-                    brightnessRamp[i] = (1.0f - v) / (v * 3.0f + 1.0f);
-                }
+                Level *level = g_player->level;
+                const float skyDarken1 = level->getSkyDarken(1.0f);
+                const float blr = g_lightBlr.load(std::memory_order_relaxed);
+                const float darkenWorldAmount = g_darkenWorldAmount.load(std::memory_order_relaxed);
+                const float darkenWorldAmountO = g_darkenWorldAmountO.load(std::memory_order_relaxed);
                 for (int i = 0; i < 256; i++) {
-                    int skyLevel   = i >> 4;
-                    int blockLevel = i & 0xF;
-                    float sky   = brightnessRamp[skyLevel]   * darken;
-                    float block = brightnessRamp[blockLevel] * (blr * 0.1f + 1.5f);
-                    float r = sky * (skyDarken * 0.65f + 0.35f) + block;
-                    float g = sky * (skyDarken * 0.65f + 0.35f) + block * ((block * 0.6f + 0.4f) * 0.6f + 0.4f);
-                    float b = sky                                + block * ((block * block) * 0.6f + 0.4f);
-                    if (r > 1.0f) r = 1.0f; if (r < 0.0f) r = 0.0f;
-                    if (g > 1.0f) g = 1.0f; if (g < 0.0f) g = 0.0f;
-                    if (b > 1.0f) b = 1.0f; if (b < 0.0f) b = 0.0f;
-                    mcle_lightmap_set_entry(i, r, g, b);
+                    const float darken = skyDarken1 * 0.95f + 0.05f;
+                    float sky = level->dimension->brightnessRamp[i / 16] * darken;
+                    const float block = level->dimension->brightnessRamp[i % 16] * (blr * 0.1f + 1.5f);
+
+                    if (level->skyFlashTime < 0) {
+                        sky = level->dimension->brightnessRamp[i / 16];
+                    }
+
+                    const float rs = sky * (skyDarken1 * 0.65f + 0.35f);
+                    const float gs = sky * (skyDarken1 * 0.65f + 0.35f);
+                    const float bs = sky;
+
+                    const float rb = block;
+                    const float gb = block * ((block * 0.6f + 0.4f) * 0.6f + 0.4f);
+                    const float bb = block * ((block * block) * 0.6f + 0.4f);
+
+                    float _r = (rs + rb);
+                    float _g = (gs + gb);
+                    float _b = (bs + bb);
+
+                    _r = _r * 0.96f + 0.03f;
+                    _g = _g * 0.96f + 0.03f;
+                    _b = _b * 0.96f + 0.03f;
+
+                    if (darkenWorldAmount > 0) {
+                        const float amount = darkenWorldAmountO + (darkenWorldAmount - darkenWorldAmountO) * frame_partial_tick;
+                        _r = _r * (1.0f - amount) + (_r * 0.7f) * amount;
+                        _g = _g * (1.0f - amount) + (_g * 0.6f) * amount;
+                        _b = _b * (1.0f - amount) + (_b * 0.6f) * amount;
+                    }
+
+                    if (level->dimension->id == 1) {
+                        _r = (0.22f + rb * 0.75f);
+                        _g = (0.28f + gb * 0.75f);
+                        _b = (0.25f + bb * 0.75f);
+                    }
+
+                    if (g_player->hasEffect(MobEffect::nightVision)) {
+                        // GameRenderer::getNightVisionScale
+                        int duration = g_player->getEffect(MobEffect::nightVision)->getDuration();
+                        float scale = 1.0f;
+                        if (duration <= (SharedConstants::TICKS_PER_SECOND * 10)) {
+                            float flash = std::max(0.0f, (float)duration - frame_partial_tick);
+                            scale = .7f + Mth::sin(flash * PI * .05f) * .3f;
+                        }
+                        float dist = 1.0f / _r;
+                        if (dist > (1.0f / _g)) dist = (1.0f / _g);
+                        if (dist > (1.0f / _b)) dist = (1.0f / _b);
+                        _r = _r * (1.0f - scale) + (_r * dist) * scale;
+                        _g = _g * (1.0f - scale) + (_g * dist) * scale;
+                        _b = _b * (1.0f - scale) + (_b * dist) * scale;
+                    }
+
+                    if (_r > 1.0f) _r = 1.0f;
+                    if (_r < 0.0f) _r = 0.0f;
+                    if (_g > 1.0f) _g = 1.0f;
+                    if (_g < 0.0f) _g = 0.0f;
+                    if (_b > 1.0f) _b = 1.0f;
+                    if (_b < 0.0f) _b = 0.0f;
+                    mcle_lightmap_set_entry(i, _r, _g, _b);
                 }
                 mcle_lightmap_upload();
             } catch (...) {
