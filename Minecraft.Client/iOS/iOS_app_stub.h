@@ -28,6 +28,7 @@ class CGameSettingsManager;
 class FileNameMap;
 
 extern "C" int mcle_log_msg(const char *msg);
+extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 
 struct McleAppStub {
     // Heavyweight returning ptr to opaque object; nullptr is fine
@@ -91,12 +92,12 @@ struct McleAppStub {
     // Our stub now provides both so static_cast<float>(GetGameSettings(p,s))
     // resolves to int->float instead of pointer->float.
     GAME_SETTINGS *GetGameSettings(int /*pad*/)               { return nullptr; }
+    // The iOS settings store (MCLE_iOS_Settings.mm) keeps the eGameSetting
+    // order, so the player's settings reach the upstream code that reads
+    // them (clouds, Display HUD / Hand, skin animation)
     int            GetGameSettings(int /*pad*/, int setting) {
-        // eGameSetting_UISize=171 / UISizeSplitscreen=172: Gui::render adds 2
-        // to get guiScale (so 1 -> 3 = default fullscreen). Default 100 made
-        // guiScale 102, shrinking the HUD to a single-pixel corner blob.
-        if (setting == 171 || setting == 172) return 1;
-        return 100;
+        if (setting >= 0 && setting < 32) return mcle_settings_get(setting);
+        return 0;
     }
     template<class... A> int            GetGameSettingsDebugMask(A...) { return 0; }
     // Host options, as in CMinecraftApp (Consoles_App.cpp). Difficulty, game
