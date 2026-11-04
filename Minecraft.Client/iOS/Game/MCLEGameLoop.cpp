@@ -311,6 +311,8 @@ ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
 // render thread, so the two take turns.
 ItemInHandRenderer *g_itemInHand = nullptr;
 std::mutex g_itemInHandMutex;
+// Single player pause (UIScene_PauseMenu): the server stops ticking
+std::atomic<bool> g_gamePaused{false};
 std::atomic<float> g_lightBlr{0.0f};
 std::atomic<float> g_darkenWorldAmount{0.0f};
 std::atomic<float> g_darkenWorldAmountO{0.0f};
@@ -1721,6 +1723,10 @@ extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int uiH
              difficulty, gameModeId);
 }
 
+extern "C" void mcle_game_set_paused(int paused) {
+    g_gamePaused.store(paused != 0, std::memory_order_relaxed);
+}
+
 extern "C" int mcle_game_start(const char *levelFolder) {
     if (g_initStarted || g_initState != kStateUnstarted) return 0;
     g_pendingLevelId = widen(levelFolder ? levelFolder : "");
@@ -1853,6 +1859,8 @@ extern "C" void mcle_game_tick(void) {
                 now.time_since_epoch()).count(),
             std::memory_order_relaxed);
     }
+
+    if (g_gamePaused.load(std::memory_order_relaxed)) return;
 
     // GameRenderer::tick: torch flicker for the light texture
     // (tickLightTexture) and the wither boss darkening the world
