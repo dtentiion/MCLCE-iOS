@@ -222,8 +222,6 @@ public:
         if (readWhole(base + "/Common/res/TitleUpdate/res/colours.col", col)) {
             delete m_colourTable;
             m_colourTable = new ColourTable(col.data(), (DWORD)col.size());
-        } else {
-            MCLE_LOG("loadColourTable: colours.col missing");
         }
         std::vector<unsigned char> html;
         if (m_colourTable && readWhole(base + "/HTMLColours.col", html))
