@@ -1514,6 +1514,10 @@ void initImpl() {
                 // GameRenderer's constructor makes the item in hand renderer
                 g_itemInHand = new ItemInHandRenderer(g_minecraftShim);
                 g_minecraftShim->localitemInHandRenderers[0] = g_itemInHand;
+                // Minecraft::init: the one mobs and players hold items with
+                if (EntityRenderDispatcher::instance) {
+                    EntityRenderDispatcher::instance->itemInHandRenderer = new ItemInHandRenderer(g_minecraftShim, false);
+                }
                 // Diagnostic: confirm grass / dirt icons resolved to distinct
                 // atlas slots. If grass-DOWN icon == grass-UP icon, the bug
                 // isn't in tessellation - it's in icon registration / lookup.
