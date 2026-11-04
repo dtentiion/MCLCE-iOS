@@ -173,6 +173,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/HitResult.h"
 #include "MCLEPlayerInput.h"
 #include "MCLESound.h"
+#include "../../../upstream/Minecraft.World/PlayerIO.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 
@@ -353,6 +354,11 @@ std::atomic<bool>             g_autoSaveInFlight{ false };
 static void *mcle_save_now_thread(void *) {
     MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
     const auto start = std::chrono::steady_clock::now();
+    // MinecraftServer::saveAllChunks saves the players first
+    if (g_player && g_levelStorage) {
+        try { g_levelStorage->getPlayerIO()->save(g_player); }
+        catch (...) { MCLE_LOG("BG_SAVE: player save threw"); }
+    }
     for (int i = 2; i >= 0; --i) {
         if (!g_levels[i]) continue;
         const auto t0 = std::chrono::steady_clock::now();
@@ -1009,6 +1015,29 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
         } catch (...) {
             MCLE_LOG("mcle_game_init: ServerPlayer ctor threw unknown");
+        }
+    }
+
+    // Minecraft.cpp: on Windows64 the world host keeps the legacy embedded
+    // host XUID, which its player file in the save is named by. Then
+    // PlayerList::placeNewPlayer loads that player's saved data.
+    if (g_player && g_levelStorage) {
+        g_player->setXuid((PlayerUID)0xe000d45248242f2eULL); // Win64Xuid::GetLegacyEmbeddedHostXuid
+        try {
+            CompoundTag *playerTag = g_levelStorage->getPlayerIO()->load(g_player);
+            MCLE_LOG("mcle_game_init: player data %s, pos %.1f %.1f %.1f dim %d",
+                     playerTag ? "loaded" : "new", g_player->x, g_player->y, g_player->z, g_player->dimension);
+            // Only the overworld is wired up to render, so a player saved in
+            // another dimension starts at the overworld spawn for now
+            if (playerTag && g_player->dimension != 0) {
+                Pos *spawn = g_levels[0]->getSharedSpawnPos();
+                g_player->dimension = 0;
+                g_player->moveTo(spawn->x + 0.5, spawn->y, spawn->z + 0.5, 0, 0);
+                delete spawn;
+            }
+            delete playerTag;
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: player data load threw");
         }
     }
 
