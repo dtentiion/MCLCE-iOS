@@ -140,12 +140,15 @@ extern "C" void mcle_glbridge_set_blend_enabled(int enabled);
 extern "C" void mcle_glbridge_set_alpha_test(int enabled);
 extern "C" void mcle_glbridge_set_fog_enabled(int enabled);
 extern "C" void mcle_glbridge_set_texture_2d(int enabled);
+extern "C" void mcle_glbridge_set_polygon_offset_fill(int enabled);
+extern "C" void mcle_glbridge_set_polygon_offset(float factor, float units);
 void glEnable(unsigned int cap) {
     if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(1);
     else if (cap == 0x0BE2 /*GL_BLEND*/)      mcle_glbridge_set_blend_enabled(1);
     else if (cap == 0x0BC0 /*GL_ALPHA_TEST*/) mcle_glbridge_set_alpha_test(1);
     else if (cap == 0x0B60 /*GL_FOG*/)        mcle_glbridge_set_fog_enabled(1);
     else if (cap == 0x0DE1 /*GL_TEXTURE_2D*/) mcle_glbridge_set_texture_2d(1);
+    else if (cap == 0x8037 /*GL_POLYGON_OFFSET_FILL*/) mcle_glbridge_set_polygon_offset_fill(1);
 }
 void glDisable(unsigned int cap) {
     if (cap == 0x0B71 /*GL_DEPTH_TEST*/) mcle_glbridge_set_depth_test(0);
@@ -153,6 +156,7 @@ void glDisable(unsigned int cap) {
     else if (cap == 0x0BC0 /*GL_ALPHA_TEST*/) mcle_glbridge_set_alpha_test(0);
     else if (cap == 0x0B60 /*GL_FOG*/)        mcle_glbridge_set_fog_enabled(0);
     else if (cap == 0x0DE1 /*GL_TEXTURE_2D*/) mcle_glbridge_set_texture_2d(0);
+    else if (cap == 0x8037 /*GL_POLYGON_OFFSET_FILL*/) mcle_glbridge_set_polygon_offset_fill(0);
 }
 void glClear(unsigned int)                                 {}
 void glClearColor(float, float, float, float)              {}
@@ -211,7 +215,7 @@ void glCullFace(unsigned int)                              {}
 void glPointSize(float)                                    {}
 void glLineWidth(float)                                    {}
 void glHint(unsigned int, unsigned int)                    {}
-void glPolygonOffset(float, float)                         {}
+void glPolygonOffset(float factor, float units)            { mcle_glbridge_set_polygon_offset(factor, units); }
 void glScissor(int, int, int, int)                         {}
 void glOrtho(double, double, double, double, double, double) {}
 void glFrustum(double, double, double, double, double, double) {}

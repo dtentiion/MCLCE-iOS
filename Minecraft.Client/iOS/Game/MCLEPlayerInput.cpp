@@ -39,6 +39,9 @@
 #include "../../../upstream/Minecraft.World/AttributeInstance.h"
 #include "../../../upstream/Minecraft.World/BowItem.h"
 
+// MCLEGameLoop.cpp: the client level's destroyTileProgress
+void mcle_client_destroy_progress(int id, int x, int y, int z, int progress);
+
 namespace {
 
 // _360_JOY_BUTTON_* from the Win64 4J_Input.h, which the iOS pad reader uses.
@@ -264,6 +267,8 @@ void startDestroyBlock(int x, int y, int z, int face) {
             s.destroyingItem = P->getCarriedItem();
             s.destroyProgress = 0;
             s.destroyTicks = 0;
+            mcle_client_destroy_progress(P->entityId, s.xDestroyBlock, s.yDestroyBlock, s.zDestroyBlock,
+                                         static_cast<int>(s.destroyProgress * 10) - 1);
         }
     }
 }
@@ -275,6 +280,7 @@ void stopDestroyBlock() {
     s.isDestroying = false;
     s.destroyProgress = 0;
     s.destroyDelay = 0;
+    mcle_client_destroy_progress(P->entityId, s.xDestroyBlock, s.yDestroyBlock, s.zDestroyBlock, -1);
 }
 
 void continueDestroyBlock(int x, int y, int z, int face) {
@@ -301,8 +307,14 @@ void continueDestroyBlock(int x, int y, int z, int face) {
 
         s.destroyProgress += tile->getDestroyProgress(P, P->level, x, y, z);
 
-        // Upstream plays the tile's step sound here every 4 ticks through
-        // minecraft->soundEngine, which doesn't exist on iOS yet.
+        if (s.destroyTicks % 4 == 0) {
+            if (tile != nullptr) {
+                int iStepSound = tile->soundType->getStepSound();
+                Minecraft::GetInstance()->soundEngine->play(iStepSound, x + 0.5f, y + 0.5f, z + 0.5f,
+                                                            (tile->soundType->getVolume() + 1) / 8,
+                                                            tile->soundType->getPitch() * 0.5f);
+            }
+        }
 
         s.destroyTicks++;
 
@@ -313,6 +325,9 @@ void continueDestroyBlock(int x, int y, int z, int face) {
             s.destroyTicks = 0;
             s.destroyDelay = 5;
         }
+
+        mcle_client_destroy_progress(P->entityId, s.xDestroyBlock, s.yDestroyBlock, s.zDestroyBlock,
+                                     static_cast<int>(s.destroyProgress * 10) - 1);
     } else {
         startDestroyBlock(x, y, z, face);
     }

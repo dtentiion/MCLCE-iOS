@@ -153,6 +153,17 @@ id<MTLRenderPipelineState> g_world_pso_additive_nocut = nil;
 id<MTLRenderPipelineState> g_world_pso_depth_only         = nil;
 id<MTLRenderPipelineState> g_world_pso_compact_depth_only = nil;
 
+// glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR), the block crack overlay:
+// 2 * src * dst, so mid grey leaves the block as it was
+id<MTLRenderPipelineState> g_world_pso_modulate         = nil;
+id<MTLRenderPipelineState> g_world_pso_compact_modulate = nil;
+
+// glPolygonOffset and GL_POLYGON_OFFSET_FILL
+bool  g_polygon_offset_fill   = false;
+float g_polygon_offset_factor = 0.0f;
+float g_polygon_offset_units  = 0.0f;
+float g_lastDepthBias = 0.0f, g_lastDepthSlope = 0.0f;
+
 // Cached encoder state. Reset to "unknown" at frame begin so the first
 // dispatch issues the actual setCullMode / setFrontFacingWinding call.
 MTLCullMode g_lastCullMode = (MTLCullMode)-1;
@@ -205,7 +216,8 @@ float g_fog_end   = 1.0f;
 bool g_blend_enabled  = false;
 // Blend func tracking: 0 = srcAlpha/oneMinusSrcAlpha (default over),
 // 1 = srcAlpha/ONE (additive, used by sun + stars),
-// 2 = GL_ZERO/GL_ONE (depth-only, cloud pass 0). Set by glBlendFunc.
+// 2 = GL_ZERO/GL_ONE (depth-only, cloud pass 0),
+// 3 = GL_DST_COLOR/GL_SRC_COLOR (crack overlay). Set by glBlendFunc.
 int  g_blend_func_mode = 0;
 id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
@@ -281,6 +293,15 @@ extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
     g_blend_enabled = (enabled != 0);
 }
 
+extern "C" void mcle_glbridge_set_polygon_offset_fill(int enabled) {
+    g_polygon_offset_fill = (enabled != 0);
+}
+
+extern "C" void mcle_glbridge_set_polygon_offset(float factor, float units) {
+    g_polygon_offset_factor = factor;
+    g_polygon_offset_units  = units;
+}
+
 // (Diagnostic getter mcle_glbridge_get_modelview lives below the
 // anonymous-namespace block where g_modelview_stack is declared.)
 
@@ -292,6 +313,8 @@ extern "C" void mcle_glbridge_set_blend_func(int src, int dst) {
         g_blend_func_mode = 1; // additive (sun, stars)
     } else if (src == 0x0000 /*GL_ZERO*/ && dst == 0x0001 /*GL_ONE*/) {
         g_blend_func_mode = 2; // depth-only (renderAdvancedClouds pass 0)
+    } else if (src == 0x0306 /*GL_DST_COLOR*/ && dst == 0x0300 /*GL_SRC_COLOR*/) {
+        g_blend_func_mode = 3; // renderDestroyAnimation
     } else {
         g_blend_func_mode = 0; // over (clouds, vignette, default)
     }
@@ -593,6 +616,16 @@ bool ensure_world_pipeline_compact() {
     }
     desc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
 
+    desc.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorDestinationColor;
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorSourceColor;
+    desc.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorDestinationAlpha;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    g_world_pso_compact_modulate = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_compact_modulate) {
+        NSLog(@"[mcle_metal G5c] compact modulate pso build failed: %@", err);
+        return false;
+    }
+
     NSLog(@"[mcle_metal G5c] compact pipelines ready (no-blend + blend + additive + depth-only)");
     return true;
 }
@@ -699,6 +732,16 @@ bool ensure_world_pipeline() {
         return false;
     }
     desc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+
+    desc.colorAttachments[0].sourceRGBBlendFactor        = MTLBlendFactorDestinationColor;
+    desc.colorAttachments[0].destinationRGBBlendFactor   = MTLBlendFactorSourceColor;
+    desc.colorAttachments[0].sourceAlphaBlendFactor      = MTLBlendFactorDestinationAlpha;
+    desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    g_world_pso_modulate = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!g_world_pso_modulate) {
+        NSLog(@"[mcle_metal G3c] modulate pso build failed: %@", err);
+        return false;
+    }
 
     // G4: build the 1x1 white default texture + linear sampler.
     if (!g_default_texture) {
@@ -1281,6 +1324,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         if (!g_blend_enabled)            pso = g_world_pso_compact;
         else if (g_blend_func_mode == 1) pso = g_world_pso_compact_additive;
         else if (g_blend_func_mode == 2) pso = g_world_pso_compact_depth_only;
+        else if (g_blend_func_mode == 3) pso = g_world_pso_compact_modulate;
         else                             pso = g_world_pso_compact_blend;
     } else {
         // fmt=1 path. When alpha test is disabled (sun/moon/sunrise pass)
@@ -1292,6 +1336,8 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             pso = g_alpha_test_enabled ? g_world_pso_additive : g_world_pso_additive_nocut;
         } else if (g_blend_func_mode == 2) {
             pso = g_world_pso_depth_only;
+        } else if (g_blend_func_mode == 3) {
+            pso = g_world_pso_modulate;
         } else {
             pso = g_alpha_test_enabled ? g_world_pso_blend : g_world_pso_blend_nocut;
         }
@@ -1344,6 +1390,17 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         if (ds && ds != g_lastDepthState) {
             [g.enc setDepthStencilState:ds];
             g_lastDepthState = ds;
+        }
+    }
+    // glPolygonOffset: GL moves filled polygons by factor * slope plus
+    // units * the smallest depth step, the same pair Metal takes
+    {
+        float bias  = g_polygon_offset_fill ? g_polygon_offset_units  : 0.0f;
+        float slope = g_polygon_offset_fill ? g_polygon_offset_factor : 0.0f;
+        if (bias != g_lastDepthBias || slope != g_lastDepthSlope) {
+            [g.enc setDepthBias:bias slopeScale:slope clamp:0.0f];
+            g_lastDepthBias  = bias;
+            g_lastDepthSlope = slope;
         }
     }
     // Parity with upstream chunks: glEnable(GL_CULL_FACE) with default
@@ -1772,6 +1829,8 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_lastWinding  = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
+    g_lastDepthBias  = 0.0f;
+    g_lastDepthSlope = 0.0f;
     // Each frame starts with depth test/write enabled, alpha test on
     // (chunks need cutout for foliage), blend disabled, fog disabled
     // (matches upstream default GL state). renderSky/renderClouds
@@ -1835,6 +1894,8 @@ extern "C" void mcle_metal_clear_depth(void) {
     g_lastWinding    = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
+    g_lastDepthBias  = 0.0f;
+    g_lastDepthSlope = 0.0f;
 }
 
 extern "C" void* mcle_metal_current_encoder(void) {

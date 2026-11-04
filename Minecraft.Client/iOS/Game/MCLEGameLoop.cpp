@@ -305,14 +305,17 @@ std::shared_ptr<LevelStorage> g_levelStorage;
 // is a ServerLevel; levels[1] and levels[2] are DerivedServerLevel that
 // share state with levels[0]. Mirrors MinecraftServer.cpp:956-1007.
 ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
-// GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
-// when the render thread builds the light texture
 // GameRenderer's itemInHandRenderer. Ticked on the sim thread, drawn on the
 // render thread, so the two take turns.
 ItemInHandRenderer *g_itemInHand = nullptr;
 std::mutex g_itemInHandMutex;
+// LevelRenderer::destroyingBlocks, changed on the sim thread and drawn by
+// renderDestroyAnimation on the render thread
+std::mutex g_destroyingBlocksMutex;
 // Single player pause (UIScene_PauseMenu): the server stops ticking
 std::atomic<bool> g_gamePaused{false};
+// GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
+// when the render thread builds the light texture
 std::atomic<float> g_lightBlr{0.0f};
 std::atomic<float> g_darkenWorldAmount{0.0f};
 std::atomic<float> g_darkenWorldAmountO{0.0f};
@@ -320,6 +323,50 @@ std::shared_ptr<ServerPlayer> g_player;
 ServerPlayerGameMode         *g_playerGameMode = nullptr;
 LevelRenderer                *g_levelRenderer  = nullptr;
 std::wstring                  g_levelName;
+
+// The LevelRenderer listens to the server level here, not a client one.
+// ServerLevelListener never sends a player its own crack progress, its
+// client draws its own guess (MultiPlayerGameMode), so the server's calls
+// for the local player stop here and mcle_client_destroy_progress makes
+// the client ones.
+class ClientLevelListener : public LevelListener {
+public:
+    explicit ClientLevelListener(LevelListener *renderer) : r(renderer) {}
+    void tileChanged(int x, int y, int z) override { r->tileChanged(x, y, z); }
+    void tileLightChanged(int x, int y, int z) override { r->tileLightChanged(x, y, z); }
+    void setTilesDirty(int x0, int y0, int z0, int x1, int y1, int z1, Level *level) override {
+        r->setTilesDirty(x0, y0, z0, x1, y1, z1, level);
+    }
+    void allChanged() override { r->allChanged(); }
+    void playSound(int iSound, double x, double y, double z, float volume, float pitch, float clip) override {
+        r->playSound(iSound, x, y, z, volume, pitch, clip);
+    }
+    void playSoundExceptPlayer(shared_ptr<Player> player, int iSound, double x, double y, double z, float volume,
+                               float pitch, float clip) override {
+        r->playSoundExceptPlayer(player, iSound, x, y, z, volume, pitch, clip);
+    }
+    void addParticle(ePARTICLE_TYPE name, double x, double y, double z, double xa, double ya, double za) override {
+        r->addParticle(name, x, y, z, xa, ya, za);
+    }
+    void entityAdded(shared_ptr<Entity> entity) override { r->entityAdded(entity); }
+    void entityRemoved(shared_ptr<Entity> entity) override { r->entityRemoved(entity); }
+    void playerRemoved(shared_ptr<Entity> entity) override { r->playerRemoved(entity); }
+    void skyColorChanged() override { r->skyColorChanged(); }
+    void playStreamingMusic(const wstring &name, int x, int y, int z) override { r->playStreamingMusic(name, x, y, z); }
+    void globalLevelEvent(int type, int x, int y, int z, int data) override { r->globalLevelEvent(type, x, y, z, data); }
+    void levelEvent(shared_ptr<Player> source, int type, int x, int y, int z, int data) override {
+        r->levelEvent(source, type, x, y, z, data);
+    }
+    void destroyTileProgress(int id, int x, int y, int z, int progress) override {
+        if (g_player && id == g_player->entityId) return;
+        std::lock_guard<std::mutex> lock(g_destroyingBlocksMutex);
+        r->destroyTileProgress(id, x, y, z, progress);
+    }
+
+private:
+    LevelListener *r;
+};
+
 // std::atomic so the main-thread tick reliably reads progress from the
 // background init thread. On arm64 plain int loads/stores are atomic
 // but the compiler can still reorder them with surrounding writes
@@ -1263,9 +1310,14 @@ void initImpl() {
         // particles get drawn, which iOS doesn't do yet.
         if (!g_minecraftShim->particleEngine)
             g_minecraftShim->particleEngine = new ParticleEngine(lvl, nullptr);
+        // Its calls go to Game/MCLESound.cpp
+        if (!g_minecraftShim->soundEngine)
+            g_minecraftShim->soundEngine = new SoundEngine();
         MCLE_LOG("mcle_game_init: G5 calling LR->setLevel(0, %p)", (void*)lvl);
         try {
             g_levelRenderer->setLevel(0, lvl);
+            lvl->removeListener(g_levelRenderer);
+            lvl->addListener(new ClientLevelListener(g_levelRenderer));
             MCLE_LOG("mcle_game_init: G5 setLevel returned, chunks[0].length=%u",
                      (unsigned)g_levelRenderer->chunks[0].length);
         } catch (const std::exception &e) {
@@ -1463,6 +1515,13 @@ void initImpl() {
 }
 
 } // anonymous namespace
+
+// minecraft->level->destroyTileProgress from MultiPlayerGameMode
+void mcle_client_destroy_progress(int id, int x, int y, int z, int progress) {
+    if (!g_levelRenderer) return;
+    std::lock_guard<std::mutex> lock(g_destroyingBlocksMutex);
+    g_levelRenderer->destroyTileProgress(id, x, y, z, progress);
+}
 
 // Pre-opened file descriptor for crash logging. Opened once at init
 // so the signal handler can write() directly without going through
@@ -1951,6 +2010,7 @@ extern "C" void mcle_game_tick(void) {
         if (g_levelRenderer) {
             static int s_lrTickLog = 0;
             try {
+                std::lock_guard<std::mutex> lock(g_destroyingBlocksMutex);
                 g_levelRenderer->tick();
                 if (s_lrTickLog < 3) {
                     MCLE_LOG("LR_TICK_OK call=%d", s_lrTickLog);
@@ -2821,6 +2881,19 @@ extern "C" void mcle_world_drive_renderer(void) {
         }
 
         mcle_glbridge_replay_all_lists();
+
+        // renderLevel: the cracks on blocks being broken. The chunks are only
+        // drawn by the replay above, so this has to come after it.
+        try {
+            std::lock_guard<std::mutex> lock(g_destroyingBlocksMutex);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            g_levelRenderer->renderDestroyAnimation(Tesselator::getInstance(), g_player, frame_partial_tick);
+            glDisable(GL_BLEND);
+        } catch (...) {
+            static int s_crackErr = 0;
+            if (s_crackErr++ < 3) MCLE_LOG("renderDestroyAnimation threw");
+        }
 
         // renderLevel ends with glClear(GL_DEPTH_BUFFER_BIT) and
         // renderItemInHand, so the hand is never inside a wall
