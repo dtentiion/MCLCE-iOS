@@ -526,6 +526,7 @@ static struct {
     float expProgress;
     bool healthBlink, healthPoison, healthWither, foodPoison, regen, visible;
     bool showHealth, showFood, showAir, showArmour, showExpBar;
+    int labelCalls, hideLabelCalls;
 } g_hud;
 
 static void MCLEHudReset(void) {
@@ -546,6 +547,11 @@ static void MCLEHudReset(void) {
     g_hud.saturation = 0;
     g_hud.healthAbsorb = -1;
     g_hud.visible = true;
+    // Label calls from before this scene don't carry over
+    MCLEHudState st;
+    mcle_hud_get_state(&st);
+    g_hud.labelCalls = st.labelCalls;
+    g_hud.hideLabelCalls = st.hideLabelCalls;
 }
 
 static void MCLEHudShow(NSString* fn, bool show, bool& last) {
@@ -571,6 +577,18 @@ static void MCLEHudPump(void) {
     // SetHudSize -> LoadHud
     MCLEHudNumber(@"LoadHud", mcle_settings_get(MCLE_SETTING_UISize), g_hud.guiScale);
     MCLEHudNumber(@"SetActiveSlot", st.activeSlot, g_hud.activeSlot);
+
+    // A hide comes two seconds after its label, so when both are new the
+    // hide is the older one
+    if (st.hideLabelCalls != g_hud.hideLabelCalls) {
+        g_hud.hideLabelCalls = st.hideLabelCalls;
+        MCLECallPath(@"", @"HideSelectedLabel", @[]);
+    }
+    if (st.labelCalls != g_hud.labelCalls) {
+        g_hud.labelCalls = st.labelCalls;
+        NSString* label = [NSString stringWithUTF8String:st.label];
+        MCLECallPath(@"", @"SetSelectedLabel", @[label ? label : @""]);
+    }
 
     if (st.canHurtPlayer) {
         MCLEHudShow(@"ShowHealth", true, g_hud.showHealth);
@@ -2895,6 +2913,10 @@ static NSString* MCLETipHTML(void) {
             [self initFullscreenProgress];
         } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
             [self initPauseMenu];
+        } else if ([swfName isEqualToString:@"HUD1080.swf"]) {
+            // UIScene_HUD constructor
+            MCLECallPath(@"", @"SetDragonLabel", @[MCLEStr(IDS_BOSS_ENDERDRAGON_HEALTH)]);
+            MCLECallPath(@"", @"SetSelectedLabel", @[@""]);
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {

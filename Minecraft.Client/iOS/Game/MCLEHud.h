@@ -21,11 +21,17 @@ typedef struct {
     int hasExperience;
     float expProgress;
     int expLevel, xpNeeded;
+    // SetSelectedLabel / HideSelectedLabel, counted so the scene can tell
+    // a new call happened
+    int labelCalls, hideLabelCalls;
+    char label[128];
 } MCLEHudState;
 
 void mcle_hud_get_state(MCLEHudState *out);
 
 #ifdef __cplusplus
 }
+#include <string>
 void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player);
+void mcle_hud_set_selected_label(const std::wstring &label);
 #endif

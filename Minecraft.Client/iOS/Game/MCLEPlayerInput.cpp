@@ -9,6 +9,7 @@
 // handles it on the server, against the same ServerPlayerGameMode.
 
 #include "MCLEPlayerInput.h"
+#include "MCLEHud.h"
 
 #include <cmath>
 #include <mutex>
@@ -44,6 +45,7 @@ namespace {
 // Windows64_Minecraft.cpp maps ACTION to RT, USE to LT, scroll to LB / RB.
 // JUMP is A and SNEAK_TOGGLE is the right stick click.
 const unsigned int kButtonA = 0x00000001;
+const unsigned int kButtonB = 0x00000002;
 const unsigned int kButtonRB = 0x00000040;
 const unsigned int kButtonLB = 0x00000080;
 const unsigned int kButtonRThumb = 0x00000100;
@@ -620,6 +622,25 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     if (pressed & kButtonLB) wheel = 1;
     else if (pressed & kButtonRB) wheel = -1;
     if (wheel != 0) P->inventory->swapPaint(wheel);
+
+    // DROP is B. The client's inventory still has the item while the drop
+    // packet is on its way, so the label is worked out before dropping.
+    const bool dropPressed = (pressed & kButtonB) != 0;
+    if (wheel != 0 || dropPressed) {
+        std::wstring itemName = L"";
+        std::shared_ptr<ItemInstance> selectedItem = P->getSelectedItem();
+        if (selectedItem != nullptr && !(dropPressed && selectedItem->GetCount() == 1)) {
+            itemName = selectedItem->getHoverName();
+        }
+        if (!dropPressed || (selectedItem != nullptr && selectedItem->GetCount() <= 1)) {
+            mcle_hud_set_selected_label(itemName);
+        }
+    }
+    // PlayerConnection::handlePlayerAction(DROP_ITEM)
+    if (dropPressed) {
+        P->resetLastActionTime();
+        P->drop(false);
+    }
 
     // ullButtonsPressed and ButtonPressed both fire on the same press
     if (pressed & kButtonRT) {
