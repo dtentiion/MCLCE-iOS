@@ -3329,7 +3329,18 @@ static NSString* MCLETipHTML(void) {
                             case 0: [self resumeFromPause]; break;
                             case 1: [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"]; break;
                             case 2: [self navigateForwardTo:@"LeaderboardMenu1080.swf"]; break;
-                            case 4: mcle_save_now(); break;
+                            case 4:
+                                // PerformActionSaveGame: the save is there, so
+                                // ask before overwriting it. SaveGameDialogReturned
+                                // saves on the second button.
+                                [self presentDialogWithTitle:MCLEStr(IDS_TITLE_SAVE_GAME)
+                                                     content:MCLEStr(IDS_CONFIRM_SAVE_GAME)
+                                                     buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
+                                                  focusIndex:0
+                                                    callback:^(MCLEDialogResult r) {
+                                    if (r == MCLEDialogResultDecline) mcle_save_now();
+                                }];
+                                break;
                             // Achievements is the platform overlay. Exit
                             // needs the world torn down first, not yet.
                             default:
