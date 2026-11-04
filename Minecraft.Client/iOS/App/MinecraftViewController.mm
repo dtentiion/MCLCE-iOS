@@ -702,49 +702,37 @@ static void MCLEHudPump(void) {
     }
 }
 
-// UIComponent_Tooltips in game. What Minecraft::tick last set per slot,
-// each one only sent on a change like _SetTooltip, then one relayout.
-// Slots go A, B, X, Y, LT, RT, LB, RB, LS, RS, Back.
+// UIComponent_Tooltips, the one strip the menus and the HUD share. What
+// each slot shows, sent only when it changes like _SetTooltip, then one
+// relayout. Slots go A, B, X, Y, LT, RT, LB, RB, LS, RS, Back. It starts
+// out unknown so the first call sends every slot.
 static struct {
     int ids[11];
     bool shown[11];
-    int enabled; // -1 until the first pump
-} g_gameTooltips;
+    int enabled; // in game: the In-Game Tooltips setting last applied, -1 unknown
+    bool known;
+} g_tooltips;
 
-// The strip still has whatever the last menu put on it, so everything
-// counts as showing and the first pump hides what the game doesn't use
-static void MCLEGameTooltipsReset(void) {
-    for (int i = 0; i < 11; i++) {
-        g_gameTooltips.ids[i] = -3;
-        g_gameTooltips.shown[i] = true;
-    }
-    g_gameTooltips.enabled = -1;
-}
-
-static void MCLEGameTooltipsPump(void) {
+static void MCLESetTooltips(const int in[11]) {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
-
-    // UIScene_HUD::SetTooltipsEnabled, from the In-Game Tooltips setting
-    int enabled = mcle_settings_get(MCLE_SETTING_Tooltips) != 0 ? 1 : 0;
-    if (enabled != g_gameTooltips.enabled) {
-        g_gameTooltips.enabled = enabled;
-        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, enabled);
+    if (!g_tooltips.known) {
+        for (int i = 0; i < 11; i++) {
+            g_tooltips.ids[i] = -3;
+            g_tooltips.shown[i] = true;
+        }
+        g_tooltips.known = true;
     }
-
-    int ids[11];
-    mcle_tooltips_get(ids);
-    ids[10] = -1;
     bool relayout = false;
     for (int i = 0; i < 11; i++) {
-        int id = ids[i];
-        if (id == g_gameTooltips.ids[i] && !(id > -1 && !g_gameTooltips.shown[i])) continue;
-        g_gameTooltips.ids[i] = id;
+        int id = in[i];
+        if (id == g_tooltips.ids[i] && !(id > -1 && !g_tooltips.shown[i])) continue;
+        g_tooltips.ids[i] = id;
         relayout = true;
         bool show = id > -1 || id == -2;
         // _SetTooltip skips hiding one that isn't showing
-        if (!show && !g_gameTooltips.shown[i]) continue;
-        g_gameTooltips.shown[i] = show;
+        if (!show && !g_tooltips.shown[i]) continue;
+        g_tooltips.shown[i] = show;
         const char* label = id > -1 ? mcle_string(id) : "";
         ruffle_ios_call_set_tooltip(g_ruffle_player, kTooltipsDepth, i, (const uint8_t*)label, strlen(label),
                                     show ? 1 : 0);
@@ -754,6 +742,29 @@ static void MCLEGameTooltipsPump(void) {
         ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth, (const uint8_t*)updateName,
                                                strlen(updateName), NULL, 0);
     }
+}
+
+// enterWorldUI hides the strip, the next pump puts it back per the setting
+static void MCLEGameTooltipsReset(void) {
+    g_tooltips.enabled = -1;
+}
+
+// In game: Minecraft::tick's tooltips
+static void MCLEGameTooltipsPump(void) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    // UIScene_HUD::SetTooltipsEnabled, from the In-Game Tooltips setting
+    int enabled = mcle_settings_get(MCLE_SETTING_Tooltips) != 0 ? 1 : 0;
+    if (enabled != g_tooltips.enabled) {
+        g_tooltips.enabled = enabled;
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, enabled);
+    }
+
+    int ids[11];
+    mcle_tooltips_get(ids);
+    ids[10] = -1;
+    MCLESetTooltips(ids);
 }
 
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -1555,75 +1566,32 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
-    // Per-scene tooltip parity. Each console UIScene::updateTooltips
-    // sets a different (A, B) pair via ui.SetTooltips(pad, iA, iB).
-    // -1 means hide that slot. Match those exact pairs here.
-    NSString* aLabel = @"Select";
-    NSString* bLabel = @"Back";
-    BOOL showA = YES;
-    BOOL showB = YES;
-
-    if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
-        // UIScene_MainMenu::updateTooltips
-        // (UIScene_MainMenu.cpp:124-142): SetTooltips(pad, iA=Select,
-        // iB=-1, iX=-1) - main menu only shows Select. No Back since
-        // there's nowhere to back out to.
-        showB = NO;
-        bLabel = @"";
-    } else if ([swfName isEqualToString:@"MessageBox1080.swf"]) {
-        // UIScene_MessageBox::updateTooltips
-        // (UIScene_MessageBox.cpp:74-77): SetTooltips(..., iA=Select,
-        // iB=Cancel). Dialog cancels rather than backs.
-        bLabel = @"Cancel";
-    }
-    // Every other scene (HelpAndOptions / Settings / LoadOrJoin /
-    // HowToPlay / Leaderboard / DLCMain / SkinSelect) inherits the
-    // default A=Select / B=Back pair, matching their respective
-    // updateTooltips overrides on console.
-
-    // SetToolTip signature: (int buttonId, String label, Boolean show)
-    // Index 0..10 per ToolTips.as TOOLTIP_BUTTON_* constants.
-    // Empty label + show=false collapses that slot in UpdateLayout.
-    struct Slot { int id; const char* label; BOOL show; };
-    Slot slots[] = {
-        { 0,  aLabel.UTF8String, showA },   // A
-        { 1,  bLabel.UTF8String, showB },   // B
-        { 2,  "",                NO },      // X
-        { 3,  "",                NO },      // Y
-        { 4,  "",                NO },      // LT
-        { 5,  "",                NO },      // RT
-        { 6,  "",                NO },      // LB
-        { 7,  "",                NO },      // RB
-        { 8,  "",                NO },      // LS
-        { 9,  "",                NO },      // RS
-        { 10, "",                NO },      // SELECT
-    };
-    for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i) {
-        ruffle_ios_call_set_tooltip(
-            g_ruffle_player, kTooltipsDepth,
-            slots[i].id,
-            (const uint8_t*)slots[i].label, strlen(slots[i].label),
-            slots[i].show ? 1 : 0);
-    }
-
     // Push the strip in from the screen edge. Console drives this
     // via UIScene::updateSafeZone calling FJ_Document.SetSafeZone(
-    // top, bottom, left, right) at UIScene.cpp:200-232. Defaults
-    // give a generous bottom-left inset so the strip doesn't sit
-    // flush against the edge.
+    // top, bottom, left, right) at UIScene.cpp:200-232.
     const char* setSafe = "SetSafeZone";
     double safe[4] = { 0.0, 60.0, 60.0, 0.0 }; // top, bottom, left, right
     ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
         (const uint8_t*)setSafe, strlen(setSafe),
         safe, 4);
 
-    // Reposition visible tooltips along the bottom; collapsed
-    // (show=false) slots end up off-screen so they don't take
-    // up space in the strip.
-    const char* updateName = "UpdateLayout";
-    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
-        (const uint8_t*)updateName, strlen(updateName),
-        NULL, 0);
+    // In game Minecraft::tick sets them, see MCLEGameTooltipsPump
+    if ([swfName isEqualToString:@"HUD1080.swf"]) return;
+
+    // Each scene's UIScene::updateTooltips. Most are
+    // SetTooltips(pad, IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK).
+    int ids[11] = { IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
+        // UIScene_MainMenu: Select only, there's nothing to back out to
+        ids[1] = -1;
+    } else if ([swfName isEqualToString:@"MessageBox1080.swf"]) {
+        // UIScene_MessageBox: the dialog cancels
+        ids[1] = IDS_TOOLTIPS_CANCEL;
+    } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
+        // UIScene_DeathMenu: Select only, B does nothing there
+        ids[1] = -1;
+    }
+    MCLESetTooltips(ids);
 }
 
 - (void)initMainMenuButtons {
