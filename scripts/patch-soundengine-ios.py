@@ -10,6 +10,8 @@ Windows64 code is already miniaudio + stb_vorbis, so this only:
   which compiles the same miniaudio version
 - adds iOS sound/music paths, filled with the Documents path at startup
 - skips the DLC mash-up pack audio branch, there are no DLC packs on iOS
+- names ScheduledSound through ConsoleSoundEngine, everywhere but
+  MCLESound.cpp SoundEngine is the stub
 
 Idempotent.
 """
@@ -20,6 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 AUDIO = REPO / "upstream" / "Minecraft.Client" / "Common" / "Audio"
 CPP = AUDIO / "SoundEngine.cpp"
 HDR = AUDIO / "SoundEngine.h"
+CONSOLE_CPP = AUDIO / "Consoles_SoundEngine.cpp"
 MARK = "MCLE_iOS_SOUNDENGINE"
 
 
@@ -71,3 +74,14 @@ patch(CPP, [
      '#ifdef __APPLE_IOS__\n\t\t\tif(false)\n#else\n'
      '\t\t\tif(Minecraft::GetInstance()->skins->getSelected()->hasAudio())\n#endif\n'),
 ])
+
+# ScheduledSound is ConsoleSoundEngine's, the derived name only resolves
+# when the real SoundEngine is in scope
+src = CONSOLE_CPP.read_text(encoding="utf-8", errors="replace")
+if "new SoundEngine::ScheduledSound" in src or "	SoundEngine::ScheduledSound" in src:
+    src = src.replace("SoundEngine::ScheduledSound", "ConsoleSoundEngine::ScheduledSound")
+    src = src.replace("ConsoleConsoleSoundEngine::", "ConsoleSoundEngine::")
+    CONSOLE_CPP.write_text(src, encoding="utf-8", errors="replace", newline="")
+    print(f"patched: {CONSOLE_CPP}")
+else:
+    print(f"already patched: {CONSOLE_CPP}")
