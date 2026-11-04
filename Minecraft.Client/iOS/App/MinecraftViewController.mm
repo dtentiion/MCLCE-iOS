@@ -532,6 +532,7 @@ static struct {
     bool healthBlink, healthPoison, healthWither, foodPoison, regen, visible;
     bool showHealth, showFood, showAir, showArmour, showExpBar;
     int labelCalls, hideLabelCalls;
+    float opacity;
 } g_hud;
 
 static void MCLEHudReset(void) {
@@ -557,6 +558,8 @@ static void MCLEHudReset(void) {
     mcle_hud_get_state(&st);
     g_hud.labelCalls = st.labelCalls;
     g_hud.hideLabelCalls = st.hideLabelCalls;
+    // UIScene sends the opacity once a scene has loaded
+    g_hud.opacity = -1.0f;
 }
 
 static void MCLEHudShow(NSString* fn, bool show, bool& last) {
@@ -662,6 +665,32 @@ static void MCLEHudPump(void) {
     } else {
         MCLEHudShow(@"ShowExpBar", false, g_hud.showExpBar);
         MCLEHudNumber(@"SetPlayerLevel", 0, g_hud.expLevel);
+    }
+
+    // Interface Opacity, back at the default 80% for a while after the
+    // hotbar is scrolled. No menu is up while this runs.
+    {
+        unsigned char ucAlpha = mcle_settings_get(MCLE_SETTING_InterfaceOpacity);
+        float fVal;
+        if (ucAlpha < 80) {
+            if (st.opacityTimer != 0) {
+                if (st.opacityTimer < 10) {
+                    float fStep = (80.0f - static_cast<float>(ucAlpha)) / 10.0f;
+                    fVal = 0.01f * (80.0f - ((10.0f - static_cast<float>(st.opacityTimer)) * fStep));
+                } else {
+                    fVal = 0.01f * 80.0f;
+                }
+            } else {
+                fVal = 0.01f * static_cast<float>(ucAlpha);
+            }
+        } else {
+            fVal = 0.01f * static_cast<float>(ucAlpha);
+        }
+        // UIScene::setOpacity
+        if (fVal != g_hud.opacity) {
+            g_hud.opacity = fVal;
+            MCLECallPath(@"", @"SetAlpha", @[@(fVal)]);
+        }
     }
 
     // SetVisible: shown while playing with Display HUD on

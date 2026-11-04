@@ -24,6 +24,13 @@ MCLEHudState g_state = {};
 unsigned int g_selectedItemOpacityCountDown = 0;
 int g_labelCalls = 0, g_hideLabelCalls = 0;
 char g_label[128] = "";
+// CMinecraftApp::m_uiOpacityCountDown
+unsigned int g_opacityCountDown = 0;
+}
+
+void mcle_hud_scrolled() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_opacityCountDown = 120; // 6 seconds
 }
 
 static std::string to_utf8(const std::wstring &w) {
@@ -95,6 +102,9 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
     st.xpNeeded = player->getXpNeededForNextLevel();
 
     std::lock_guard<std::mutex> lock(g_mutex);
+    // Minecraft::tick: TickOpacityTimer
+    if (g_opacityCountDown > 0) g_opacityCountDown--;
+    st.opacityTimer = static_cast<int>(g_opacityCountDown);
     // updateFrameTick: the label fades out in the movie a second before the
     // countdown would end
     if (g_selectedItemOpacityCountDown > 0) {

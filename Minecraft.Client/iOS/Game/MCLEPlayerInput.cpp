@@ -642,6 +642,8 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     if (pressed & kButtonLB) wheel = 1;
     else if (pressed & kButtonRB) wheel = -1;
     if (wheel != 0) P->inventory->swapPaint(wheel);
+    // the opacity timer
+    if (wheel != 0) mcle_hud_scrolled();
 
     // DROP is B. The client's inventory still has the item while the drop
     // packet is on its way, so the label is worked out before dropping.

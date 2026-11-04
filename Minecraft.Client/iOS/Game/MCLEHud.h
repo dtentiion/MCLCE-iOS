@@ -25,6 +25,8 @@ typedef struct {
     // a new call happened
     int labelCalls, hideLabelCalls;
     char label[128];
+    // CMinecraftApp's opacity timer, ticks left at full opacity
+    int opacityTimer;
 } MCLEHudState;
 
 void mcle_hud_get_state(MCLEHudState *out);
@@ -34,4 +36,6 @@ void mcle_hud_get_state(MCLEHudState *out);
 #include <string>
 void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player);
 void mcle_hud_set_selected_label(const std::wstring &label);
+// CMinecraftApp::SetOpacityTimer, when the hotbar is scrolled
+void mcle_hud_scrolled();
 #endif
