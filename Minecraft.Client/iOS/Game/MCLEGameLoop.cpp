@@ -1490,6 +1490,7 @@ extern "C" void mcle_game_init(void) {
 }
 
 extern "C" void mcle_game_tick(void); // forward decl for the sim loop
+extern "C" void mcle_delete_reassigned_storage(void); // link_stubs.cpp
 
 // LoadMenu calls this once a save is picked. Same spot where
 // UIScene_LoadMenu::StartGameFromSave hands RunNetworkGameThreadProc to
@@ -1914,6 +1915,12 @@ extern "C" void mcle_game_tick(void) {
             if (udcMs > 100) {
                 MCLE_LOG("SLOW_UDC updateDirtyChunks took=%lldms", (long long)udcMs);
             }
+            // Rest of GameRenderer::runUpdate's loop body
+            try { g_levelRenderer->fullyFlagRenderableTileEntitiesToBeRemoved(); } catch (...) {}
+            mcle_delete_reassigned_storage();
+            AABB::resetPool();
+            Vec3::resetPool();
+            IntCache::Reset();
         }
     }
 

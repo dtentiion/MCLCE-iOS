@@ -19,6 +19,8 @@
 
 #include "iOS_stdafx.h"
 
+#include <mutex>
+
 #include "AddEntityPacket.h"
 #include "AddPlayerPacket.h"
 #include "AnimatePacket.h"
@@ -363,14 +365,31 @@ int  PlayerConnection::countDelayedPackets() { return 0; }
 // ServerPlayer: real upstream now compiles, all methods come from the .cpp.
 
 // ---------------------------------------------------------------------------
-// GameRenderer overload set. The renderer is an iOS-shimmed shell, so the
-// "delete this storage object on the next render frame" calls become no-ops
-// (and the storage objects leak harmlessly until process exit).
+// GameRenderer delete stacks. GameRenderer.cpp isn't built for iOS, so these
+// mirror its m_deleteStack* vectors: storage swapped out of a LevelChunk is
+// parked here and freed after updateDirtyChunks, the same point
+// GameRenderer::runUpdate frees it. AddForDelete takes the lock and
+// FinishedReassigning drops it, like m_csDeleteStack.
 // ---------------------------------------------------------------------------
-void GameRenderer::AddForDelete(SparseDataStorage     * /*p*/) {}
-void GameRenderer::AddForDelete(SparseLightStorage    * /*p*/) {}
-void GameRenderer::AddForDelete(CompressedTileStorage * /*p*/) {}
-void GameRenderer::FinishedReassigning() {}
+static std::recursive_mutex s_deleteStackMu;
+static std::vector<SparseLightStorage *>    s_deleteSparseLight;
+static std::vector<CompressedTileStorage *> s_deleteCompressedTile;
+static std::vector<SparseDataStorage *>     s_deleteSparseData;
+
+void GameRenderer::AddForDelete(SparseDataStorage *p)     { s_deleteStackMu.lock(); s_deleteSparseData.push_back(p); }
+void GameRenderer::AddForDelete(SparseLightStorage *p)    { s_deleteStackMu.lock(); s_deleteSparseLight.push_back(p); }
+void GameRenderer::AddForDelete(CompressedTileStorage *p) { s_deleteStackMu.lock(); s_deleteCompressedTile.push_back(p); }
+void GameRenderer::FinishedReassigning() { s_deleteStackMu.unlock(); }
+
+extern "C" void mcle_delete_reassigned_storage(void) {
+    std::lock_guard<std::recursive_mutex> lk(s_deleteStackMu);
+    for (auto *p : s_deleteSparseLight) delete p;
+    s_deleteSparseLight.clear();
+    for (auto *p : s_deleteCompressedTile) delete p;
+    s_deleteCompressedTile.clear();
+    for (auto *p : s_deleteSparseData) delete p;
+    s_deleteSparseData.clear();
+}
 
 // File: real upstream File.cpp now compiles in via the POSIX file API
 // shims in iOS_WinFileShim.h plus the StringHelpers iOS path-separator
