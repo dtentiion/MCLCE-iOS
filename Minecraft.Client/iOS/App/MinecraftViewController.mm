@@ -12,6 +12,7 @@
 #include "MCLE_iOS_Settings.h"
 #include "../Game/MCLESaveList.h"
 #include "../Game/MCLEStrings.h"
+#include "../Game/MCLEHud.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 
 #include <algorithm>
@@ -494,6 +495,136 @@ static void MCLESetPathVisible(NSString* path, BOOL visible) {
     if (!g_ruffle_player) return;
     const char* pth = path.UTF8String;
     ruffle_ios_set_child_path_visible(g_ruffle_player, (const uint8_t*)pth, strlen(pth), visible ? 1 : 0);
+}
+
+// UIScene_HUD. What was last sent to the movie, starting from the values
+// IUIScene_HUD's constructor sets, so each setter only calls in on a change.
+static struct {
+    int activeSlot, guiScale, expLevel, maxHealth, food, air, armour, saturation, healthAbsorb;
+    float expProgress;
+    bool healthBlink, healthPoison, healthWither, foodPoison, regen, visible;
+    bool showHealth, showFood, showAir, showArmour, showExpBar;
+} g_hud;
+
+static void MCLEHudReset(void) {
+    g_hud.activeSlot = -1;
+    g_hud.guiScale = -1;
+    g_hud.expProgress = 0.0f;
+    g_hud.expLevel = 0;
+    g_hud.maxHealth = 20;
+    g_hud.healthBlink = false;
+    g_hud.healthPoison = false;
+    g_hud.healthWither = true;
+    g_hud.food = -1;
+    g_hud.foodPoison = false;
+    g_hud.air = 10;
+    g_hud.armour = 0;
+    g_hud.showHealth = g_hud.showFood = g_hud.showAir = g_hud.showArmour = g_hud.showExpBar = true;
+    g_hud.regen = false;
+    g_hud.saturation = 0;
+    g_hud.healthAbsorb = -1;
+    g_hud.visible = true;
+}
+
+static void MCLEHudShow(NSString* fn, bool show, bool& last) {
+    if (show != last) {
+        last = show;
+        MCLECallPath(@"", fn, @[show ? @YES : @NO]);
+    }
+}
+
+static void MCLEHudNumber(NSString* fn, int value, int& last) {
+    if (value != last) {
+        last = value;
+        MCLECallPath(@"", fn, @[@(value)]);
+    }
+}
+
+// IUIScene_HUD::updateFrameTick / renderPlayerHealth, called every frame in game
+static void MCLEHudPump(void) {
+    MCLEHudState st;
+    mcle_hud_get_state(&st);
+    if (!st.valid) return;
+
+    // SetHudSize -> LoadHud
+    MCLEHudNumber(@"LoadHud", mcle_settings_get(MCLE_SETTING_UISize), g_hud.guiScale);
+    MCLEHudNumber(@"SetActiveSlot", st.activeSlot, g_hud.activeSlot);
+
+    if (st.canHurtPlayer) {
+        MCLEHudShow(@"ShowHealth", true, g_hud.showHealth);
+        MCLEHudShow(@"SetRegenerationEffect", st.regen != 0, g_hud.regen);
+
+        // SetHealth: the bigger of now and last, so a hit flashes the lost hearts
+        int maxHealth = std::max(st.health, st.lastHealth);
+        bool blink = st.blink != 0, poison = st.poison || st.wither, wither = st.wither != 0;
+        if (maxHealth != g_hud.maxHealth || blink != g_hud.healthBlink ||
+            poison != g_hud.healthPoison || wither != g_hud.healthWither) {
+            g_hud.maxHealth = maxHealth;
+            g_hud.healthBlink = blink;
+            g_hud.healthPoison = poison;
+            g_hud.healthWither = wither;
+            MCLECallPath(@"", @"SetHealth", @[@(maxHealth), blink ? @YES : @NO, poison ? @YES : @NO,
+                                              wither ? @YES : @NO]);
+        }
+        int absorb = (int)st.absorption;
+        if (absorb != g_hud.healthAbsorb) {
+            g_hud.healthAbsorb = absorb;
+            MCLECallPath(@"", @"SetHealthAbsorb", @[absorb > 0 ? @YES : @NO, @(absorb)]);
+        }
+
+        if (st.armour > 0) {
+            MCLEHudShow(@"ShowArmour", true, g_hud.showArmour);
+            MCLEHudNumber(@"SetArmour", st.armour, g_hud.armour);
+        } else {
+            MCLEHudShow(@"ShowArmour", false, g_hud.showArmour);
+        }
+
+        MCLEHudShow(@"ShowFood", true, g_hud.showFood);
+        // Food doesn't flash, so only the current level counts
+        bool hunger = st.hunger != 0;
+        if (st.food != g_hud.food || hunger != g_hud.foodPoison) {
+            g_hud.food = st.food;
+            g_hud.foodPoison = hunger;
+            MCLECallPath(@"", @"SetFood", @[@(st.food), hunger ? @YES : @NO]);
+        }
+        MCLEHudNumber(@"SetFoodSaturationLevel", st.saturation, g_hud.saturation);
+
+        if (st.underWater) {
+            MCLEHudShow(@"ShowAir", true, g_hud.showAir);
+            MCLEHudNumber(@"SetAir", st.air, g_hud.air);
+        } else {
+            MCLEHudShow(@"ShowAir", false, g_hud.showAir);
+        }
+    } else {
+        MCLEHudShow(@"ShowHealth", false, g_hud.showHealth);
+        MCLEHudShow(@"ShowFood", false, g_hud.showFood);
+        MCLEHudShow(@"ShowAir", false, g_hud.showAir);
+        MCLEHudShow(@"ShowArmour", false, g_hud.showArmour);
+        MCLEHudShow(@"ShowExpBar", false, g_hud.showExpBar);
+        if (g_hud.healthAbsorb != 0) {
+            g_hud.healthAbsorb = 0;
+            MCLECallPath(@"", @"SetHealthAbsorb", @[@NO, @0]);
+        }
+    }
+
+    if (st.hasExperience) {
+        MCLEHudShow(@"ShowExpBar", true, g_hud.showExpBar);
+        if (st.expProgress != g_hud.expProgress) {
+            g_hud.expProgress = st.expProgress;
+            MCLECallPath(@"", @"SetExpBarProgress", @[@(st.expProgress)]);
+        }
+        MCLEHudNumber(@"SetPlayerLevel", st.expLevel, g_hud.expLevel);
+    } else {
+        MCLEHudShow(@"ShowExpBar", false, g_hud.showExpBar);
+        MCLEHudNumber(@"SetPlayerLevel", 0, g_hud.expLevel);
+    }
+
+    // SetVisible: shown while playing with Display HUD on
+    bool visible = mcle_settings_get(MCLE_SETTING_DisplayHUD) != 0;
+    if (visible != g_hud.visible) {
+        g_hud.visible = visible;
+        MCLESetPathVisible(@"", visible);
+    }
 }
 
 extern "C" unsigned long long mcle_swf_total_mesh_strips(void);
@@ -2084,7 +2215,10 @@ static NSString* MCLETipHTML(void) {
 - (void)enterWorldUI {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
-    MCLESetPathVisible(@"", NO);
+    // The menus are gone once the game starts, UIScene_HUD takes over
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"HUD1080.swf"];
+    MCLEHudReset();
     const int depths[] = { -2, kLogoDepth, kDimDepth, kTooltipsDepth };
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
     if (self.splashLabel) self.splashLabel.hidden = YES;
@@ -2786,6 +2920,7 @@ static NSString* MCLETipHTML(void) {
             mcle_metal_set_gamma(gamma);
         }
         mcle_render_frame();
+        MCLEHudPump();
         // Keep the SWF layer presenting over the world (transparent stage)
         extern PlayerHandle* g_ruffle_player;
         if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
