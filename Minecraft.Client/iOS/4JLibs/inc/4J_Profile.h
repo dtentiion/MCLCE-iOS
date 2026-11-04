@@ -12,6 +12,7 @@
 #include "iOS_WinCompat.h"
 #include <string>
 #include <istream>
+#include <cwchar>
 
 // Opaque player identity stub. Other platforms back this with platform-
 // specific identity (Sony NP, Xbox Live, etc). For iOS we have no online
@@ -37,29 +38,29 @@ struct PlayerUID {
         return true;
     }
     bool operator!=(const PlayerUID& o) const { return !(*this == o); }
-    // 4J Stu: Sony platforms expose toString for debug-print paths
-    // (DirectoryLevelStorage prints player UIDs while clearing old data).
-    // Render as a 32-char hex string so the log line is human-readable.
+    // DirectoryLevelStorage names player files with this. Windows64's
+    // PlayerUID is a ULONGLONG named with std::to_wstring, so the same
+    // decimal of the leading 8 bytes keeps Win64 saves' players/*.dat.
     std::wstring toString() const {
-        wchar_t buf[33];
-        const wchar_t *hex = L"0123456789abcdef";
-        for (int i = 0; i < 16; ++i) {
-            buf[2*i]     = hex[(bytes[i] >> 4) & 0xF];
-            buf[2*i + 1] = hex[bytes[i] & 0xF];
-        }
-        buf[32] = 0;
-        return std::wstring(buf);
+        uint64_t v = 0;
+        for (int i = 0; i < 8; ++i) v |= (uint64_t)bytes[i] << (i * 8);
+        return std::to_wstring((unsigned long long)v);
     }
 };
 typedef PlayerUID* PPlayerUID;
 
-// Stream-extract for the StringHelpers.h _fromString<PlayerUID> path. Reads
-// the same 32-char hex form that toString() emits; tolerates the empty
-// string case by leaving the UID zeroed.
+// Stream-extract for the StringHelpers.h _fromString<PlayerUID> path, which
+// reads the player file names back. Leaves the UID zeroed on an empty string.
 inline std::wistream& operator>>(std::wistream& in, PlayerUID& out) {
     std::wstring s;
     in >> s;
     for (int i = 0; i < 16; ++i) out.bytes[i] = 0;
+    // The decimal toString() writes
+    if (!s.empty() && s.find_first_not_of(L"0123456789") == std::wstring::npos) {
+        out = PlayerUID((uint64_t)std::wcstoull(s.c_str(), nullptr, 10));
+        return in;
+    }
+    // 32 hex digits, from older iOS builds
     auto hex = [](wchar_t c) -> int {
         if (c >= L'0' && c <= L'9') return c - L'0';
         if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
