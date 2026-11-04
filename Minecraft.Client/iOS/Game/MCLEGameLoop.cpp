@@ -1922,7 +1922,9 @@ static void mcle_do_respawn() {
     if (g_player->getHealth() > 0) return;
     struct alignas(PlayerConnection) ConnectionBuf { char bytes[sizeof(PlayerConnection)]; };
     static ConnectionBuf s_connection = {};
-    g_player->connection = reinterpret_cast<PlayerConnection *>(&s_connection);
+    // connection is a shared_ptr; this one doesn't own the buffer
+    g_player->connection = std::shared_ptr<PlayerConnection>(reinterpret_cast<PlayerConnection *>(&s_connection),
+                                                             [](PlayerConnection *) {});
     std::shared_ptr<ServerPlayer> fresh;
     try {
         fresh = g_server->getPlayers()->respawn(g_player, 0, false);
