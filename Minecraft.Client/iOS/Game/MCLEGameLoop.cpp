@@ -119,6 +119,11 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Enchantment.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/SparseLightStorage.h"
+#include "../../../upstream/Minecraft.World/CompressedTileStorage.h"
+#include "../../../upstream/Minecraft.World/SparseDataStorage.h"
+#include "../../../upstream/Minecraft.World/McRegionChunkStorage.h"
+#include "../../../upstream/Minecraft.World/Villager.h"
+#include "../../../upstream/Minecraft.World/BeaconTileEntity.h"
 #include "../../../upstream/Minecraft.World/LevelStorage.h"
 #include "../../../upstream/Minecraft.World/LevelSummary.h"
 #include "../../../upstream/Minecraft.World/McRegionLevelStorage.h"
@@ -498,6 +503,14 @@ void initImpl() {
     MCLE_STATIC("SharedConstants::staticCtor", SharedConstants::staticCtor());
     MCLE_STATIC("ServerLevel::staticCtor",     ServerLevel::staticCtor());
     MCLE_STATIC("SparseLightStorage::staticCtor", SparseLightStorage::staticCtor());
+    // Rest of MinecraftWorld_RunStaticCtors. McRegionChunkStorage starts the
+    // save threads that drain s_chunkDataQueue; without them every saved
+    // chunk's buffers pile up forever.
+    MCLE_STATIC("CompressedTileStorage::staticCtor", CompressedTileStorage::staticCtor());
+    MCLE_STATIC("SparseDataStorage::staticCtor", SparseDataStorage::staticCtor());
+    MCLE_STATIC("McRegionChunkStorage::staticCtor", McRegionChunkStorage::staticCtor());
+    MCLE_STATIC("Villager::staticCtor",        Villager::staticCtor());
+    MCLE_STATIC("BeaconTileEntity::staticCtor", BeaconTileEntity::staticCtor());
 
     #undef MCLE_STATIC
 
@@ -1614,6 +1627,12 @@ extern "C" void mcle_game_tick(void) {
                 now.time_since_epoch()).count(),
             std::memory_order_relaxed);
     }
+
+    // Minecraft::tick runs these once per frame so storage queued for
+    // delete actually gets freed
+    SparseLightStorage::tick();
+    CompressedTileStorage::tick();
+    SparseDataStorage::tick();
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.
