@@ -31,6 +31,17 @@ typedef struct {
 
 void mcle_hud_get_state(MCLEHudState *out);
 
+// An Iggy custom draw region (an object named iggy_<name>), in pixels of
+// the UI layer. Same layout as RuffleIosCustomDrawRegion.
+typedef struct {
+    char name[32];
+    float x0, y0, x1, y1;
+} MCLECustomDrawRegion;
+
+// UIScene_HUD::customDraw for each region, drawn on the UI layer over the
+// Ruffle HUD. Call once a frame in game, with no regions to clear it.
+void mcle_hud_custom_draw(const MCLECustomDrawRegion *regions, int count);
+
 #ifdef __cplusplus
 }
 #include <string>
@@ -38,4 +49,7 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player);
 void mcle_hud_set_selected_label(const std::wstring &label);
 // CMinecraftApp::SetOpacityTimer, when the hotbar is scrolled
 void mcle_hud_scrolled();
+// Copies of the hotbar items from the last tick, for drawing them
+class ItemInstance;
+void mcle_hud_hotbar(std::shared_ptr<ItemInstance> out[9]);
 #endif

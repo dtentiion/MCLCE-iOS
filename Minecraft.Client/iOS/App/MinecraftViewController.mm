@@ -72,6 +72,7 @@ static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 extern "C" void mcle_metal_set_gamma(float gamma); // MetalContext.mm
+extern "C" void mcle_metal_attach_ui_layer(void* ca_metal_layer, int width, int height); // MetalContext.mm
 extern "C" void mcle_game_set_paused(int paused);   // MCLEGameLoop.cpp
 extern "C" int  mcle_player_is_dead(void);           // MCLEGameLoop.cpp
 extern "C" void mcle_game_respawn(void);             // MCLEGameLoop.cpp
@@ -769,6 +770,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) MetalView* metalView;
 // Ruffle draws here, transparent, above the world in metalView
 @property (strong, nonatomic) MetalView* overlayView;
+// Above Ruffle: what Iggy's custom draw callbacks draw (hotbar items)
+@property (strong, nonatomic) MetalView* customDrawView;
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
 @property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
@@ -939,6 +942,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.overlayView.userInteractionEnabled = NO;
     [self.view addSubview:self.overlayView];
 
+    // Iggy draws items into slots in the middle of drawing the movie. Here
+    // they go on a layer of their own above it.
+    self.customDrawView = [[MetalView alloc] initWithFrame:frame];
+    self.customDrawView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.customDrawView.opaque = NO;
+    self.customDrawView.backgroundColor = UIColor.clearColor;
+    self.customDrawView.layer.opaque = NO;
+    self.customDrawView.userInteractionEnabled = NO;
+    [self.view addSubview:self.customDrawView];
+
     // Overlay label with build info + live controller state. Sits inside the
     // safe area so the Dynamic Island does not chew it up on newer iPhones.
     CGRect safeFrame = CGRectInset(frame, 24, 24);
@@ -1067,6 +1081,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int ph = (int)(sz.height * scale);
     self.metalView.layer.contentsScale = scale;
     self.overlayView.layer.contentsScale = scale;
+    self.customDrawView.layer.contentsScale = scale;
 
     // Try to stand up a Ruffle wgpu player that owns this CAMetalLayer.
     // If it succeeds, every frame is driven by Ruffle. If it fails, we
@@ -1206,6 +1221,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // The world renders into metalView's layer. Ruffle has the overlay
     // layer above it, so both can draw every frame.
     mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
+    mcle_metal_attach_ui_layer((__bridge void*)self.customDrawView.layer, pw, ph);
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
@@ -1275,6 +1291,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     CGSize sz = self.metalView.bounds.size;
     CGFloat scale = self.view.window.screen.nativeScale ?: UIScreen.mainScreen.nativeScale;
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
+    mcle_metal_attach_ui_layer(NULL, (int)(sz.width * scale), (int)(sz.height * scale));
 }
 
 - (void)applyMenuButtonConfig:(NSArray<NSDictionary*>*)config {
@@ -3138,9 +3155,20 @@ static NSString* MCLETipHTML(void) {
             MCLEGameTooltipsPump();
             // Keep the SWF layer presenting over the world (transparent stage)
             extern PlayerHandle* g_ruffle_player;
-            if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+            if (g_ruffle_player) {
+                ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+                // The custom draw callbacks for what the movie just drew
+                static_assert(sizeof(RuffleIosCustomDrawRegion) == sizeof(MCLECustomDrawRegion),
+                              "region layouts differ");
+                RuffleIosCustomDrawRegion regions[32];
+                int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 32);
+                n = std::max(0, std::min(n, 32));
+                mcle_hud_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
+            }
             return;
         }
+        // The HUD isn't up, nothing to draw over it
+        mcle_hud_custom_draw(NULL, 0);
         // Paused: the pause menu takes input below like any other menu,
         // drawn over the frozen world
     }

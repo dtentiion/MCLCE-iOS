@@ -1948,6 +1948,92 @@ extern "C" void mcle_metal_frame_end(void) {
     }
 }
 
+// The layer over the Ruffle UI where Iggy's custom draw regions get drawn
+// (items in hotbar and container slots), with the same pipelines as the
+// world. Cleared to transparent each frame.
+static CAMetalLayer* g_uiLayer = nil;
+static int g_uiW = 0, g_uiH = 0;
+static id<MTLTexture> g_uiDepthTex = nil;
+static int g_uiDepthW = 0, g_uiDepthH = 0;
+
+extern "C" void mcle_metal_attach_ui_layer(void* ca_metal_layer, int width, int height) {
+    if (mcle_metal_ensure_device() != 0) return;
+    CAMetalLayer* layer = (__bridge CAMetalLayer*)ca_metal_layer;
+    if (layer) {
+        g_uiLayer = layer;
+        layer.device = g.device;
+        layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+        layer.framebufferOnly = YES;
+        layer.opaque = NO;
+    }
+    g_uiW = width;
+    g_uiH = height;
+    if (g_uiLayer) g_uiLayer.drawableSize = CGSizeMake(width, height);
+}
+
+extern "C" void mcle_metal_ui_size(int* out_width, int* out_height) {
+    if (out_width)  *out_width  = g_uiW;
+    if (out_height) *out_height = g_uiH;
+}
+
+// 0 when the UI layer is ready to draw into
+extern "C" int mcle_metal_ui_frame_begin(void) {
+    if (!g.device || !g_uiLayer || g.inFrame || g_uiW <= 0 || g_uiH <= 0) return 1;
+    // The depth states come from the first world frame
+    if (!g.depthState || !g.depthStateNoTest || !g.depthStateNoWrite) return 3;
+    g.drawable = [g_uiLayer nextDrawable];
+    if (!g.drawable) return 2;
+    if (!g_uiDepthTex || g_uiDepthW != g_uiW || g_uiDepthH != g_uiH) {
+        MTLTextureDescriptor* dd = [MTLTextureDescriptor
+            texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
+                                          width:(NSUInteger)g_uiW
+                                         height:(NSUInteger)g_uiH
+                                      mipmapped:NO];
+        dd.storageMode = MTLStorageModePrivate;
+        dd.usage       = MTLTextureUsageRenderTarget;
+        g_uiDepthTex   = [g.device newTextureWithDescriptor:dd];
+        g_uiDepthW     = g_uiW;
+        g_uiDepthH     = g_uiH;
+    }
+    MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+    rpd.colorAttachments[0].texture     = g.drawable.texture;
+    rpd.colorAttachments[0].loadAction  = MTLLoadActionClear;
+    rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+    rpd.colorAttachments[0].clearColor  = MTLClearColorMake(0, 0, 0, 0);
+    rpd.depthAttachment.texture         = g_uiDepthTex;
+    rpd.depthAttachment.loadAction      = MTLLoadActionClear;
+    rpd.depthAttachment.storeAction     = MTLStoreActionDontCare;
+    rpd.depthAttachment.clearDepth      = 1.0;
+    g.cmd = [g.queue commandBuffer];
+    g.enc = [g.cmd renderCommandEncoderWithDescriptor:rpd];
+    g.inFrame = true;
+    g.gammaThisFrame = false;
+    g_lastCullMode   = MTLCullModeNone;
+    g_lastWinding    = MTLWindingClockwise;
+    g_lastDepthState = nil;
+    g_lastWorldPso   = nil;
+    g_lastDepthBias  = 0.0f;
+    g_lastDepthSlope = 0.0f;
+    g_depth_test_enabled  = true;
+    g_depth_write_enabled = true;
+    g_alpha_test_enabled  = true;
+    g_blend_enabled       = false;
+    g_blend_func_mode     = 0;
+    g_fog_enabled         = false;
+    return 0;
+}
+
+extern "C" void mcle_metal_ui_frame_end(void) {
+    if (!g.inFrame) return;
+    [g.enc endEncoding];
+    [g.cmd presentDrawable:g.drawable];
+    [g.cmd commit];
+    g.enc = nil;
+    g.cmd = nil;
+    g.drawable = nil;
+    g.inFrame = false;
+}
+
 // G2a: Tesselator -> Metal hook. G3a: routes into the display-list
 // recorder when glNewList is active; otherwise dispatches immediately.
 // Counter bumps only on the immediate path so per-frame tick logs reflect

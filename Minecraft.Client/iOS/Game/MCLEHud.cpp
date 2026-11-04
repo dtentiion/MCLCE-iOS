@@ -15,6 +15,7 @@
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/FoodData.h"
 #include "../../../upstream/Minecraft.World/Inventory.h"
+#include "../../../upstream/Minecraft.World/ItemInstance.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 
 namespace {
@@ -26,6 +27,14 @@ int g_labelCalls = 0, g_hideLabelCalls = 0;
 char g_label[128] = "";
 // CMinecraftApp::m_uiOpacityCountDown
 unsigned int g_opacityCountDown = 0;
+// The hotbar the render thread draws, copied so it never touches the
+// inventory the sim thread changes
+std::shared_ptr<ItemInstance> g_hotbar[9];
+}
+
+void mcle_hud_hotbar(std::shared_ptr<ItemInstance> out[9]) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (int i = 0; i < 9; i++) out[i] = g_hotbar[i];
 }
 
 void mcle_hud_scrolled() {
@@ -97,6 +106,16 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
         st.airExtra = extra;
     }
 
+    // InventoryMenu::USE_ROW_SLOT_START + slot is inventory slot `slot`
+    std::shared_ptr<ItemInstance> hotbar[9];
+    for (int i = 0; i < 9; i++) {
+        std::shared_ptr<ItemInstance> item = player->inventory->items[i];
+        if (item != nullptr) {
+            hotbar[i] = item->copy();
+            hotbar[i]->popTime = item->popTime;
+        }
+    }
+
     st.expProgress = player->experienceProgress;
     st.expLevel = player->experienceLevel;
     st.xpNeeded = player->getXpNeededForNextLevel();
@@ -105,6 +124,7 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
     // Minecraft::tick: TickOpacityTimer
     if (g_opacityCountDown > 0) g_opacityCountDown--;
     st.opacityTimer = static_cast<int>(g_opacityCountDown);
+    for (int i = 0; i < 9; i++) g_hotbar[i] = hotbar[i];
     // updateFrameTick: the label fades out in the movie a second before the
     // countdown would end
     if (g_selectedItemOpacityCountDown > 0) {
