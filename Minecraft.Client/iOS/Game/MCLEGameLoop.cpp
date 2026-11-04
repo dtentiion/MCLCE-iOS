@@ -172,6 +172,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/Mth.h"
+#include "../../../upstream/Minecraft.World/Random.h"
+#include "../../../upstream/Minecraft.World/ChunkSource.h"
 #include "../../../upstream/Minecraft.World/HitResult.h"
 #include "../../../upstream/Minecraft.Client/ItemInHandRenderer.h"
 #include "MCLEPlayerInput.h"
@@ -373,6 +375,57 @@ public:
 private:
     LevelListener *r;
 };
+
+// MultiPlayerLevel::animateTick then animateTickDoWork, for the one local
+// player: random tiles in the 3x3x3 block of 8x8x8 chunks round the player
+// get Tile::animateTick (torch smoke, dripping water, lava pops, portal
+// sounds...). The client level has its own Random, so the server level's
+// isn't used for picking the tiles.
+void animateTick(Level *level, int xt, int yt, int zt) {
+    static Random s_random;
+    std::vector<unsigned int> chunksToAnimate;
+    int cx = xt >> 3;
+    int cy = yt >> 3;
+    int cz = zt >> 3;
+
+    for (int xx = -1; xx <= 1; xx++)
+        for (int yy = -1; yy <= 1; yy++)
+            for (int zz = -1; zz <= 1; zz++) {
+                if ((cy + yy) < 0) continue;
+                if ((cy + yy) > 15) continue;
+                if ((cx + xx) >= LEVEL_MAX_WIDTH) continue;
+                if ((cx + xx) < -LEVEL_MAX_WIDTH) continue;
+                if ((cz + zz) >= LEVEL_MAX_WIDTH) continue;
+                if ((cz + zz) < -LEVEL_MAX_WIDTH) continue;
+                chunksToAnimate.push_back((((cx + xx) & 0xff) << 16) | (((cy + yy) & 0xff) << 8) | (((cz + zz) & 0xff)));
+            }
+
+    const int ticksPerChunk = 16;
+    Minecraft::GetInstance()->animateTickLevel = level;
+    Random *animateRandom = new Random();
+
+    for (int i = 0; i < ticksPerChunk; i++) {
+        for (unsigned int packedBits : chunksToAnimate) {
+            int packed = static_cast<int>(packedBits);
+            int px = ((packed << 8) >> 24) << 3;
+            int py = ((packed << 16) >> 24) << 3;
+            int pz = ((packed << 24) >> 24) << 3;
+            int x = px + s_random.nextInt(8);
+            int y = py + s_random.nextInt(8);
+            int z = pz + s_random.nextInt(8);
+            int t = level->getTile(x, y, z);
+            if (s_random.nextInt(8) > y && t == 0 && level->dimension->hasBedrockFog()) {
+                level->addParticle(eParticleType_depthsuspend, x + s_random.nextFloat(), y + s_random.nextFloat(),
+                                   z + s_random.nextFloat(), 0, 0, 0);
+            } else if (t > 0) {
+                Tile::tiles[t]->animateTick(level, x, y, z, animateRandom);
+            }
+        }
+    }
+
+    Minecraft::GetInstance()->animateTickLevel = nullptr;
+    delete animateRandom;
+}
 
 // std::atomic so the main-thread tick reliably reads progress from the
 // background init thread. On arm64 plain int loads/stores are atomic
@@ -2156,6 +2209,7 @@ extern "C" void mcle_game_tick(void) {
             mcle_sound_tick(g_player, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
                             mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
             mcle_hud_update(g_player);
+            animateTick(g_player->level, Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
         } catch (...) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
