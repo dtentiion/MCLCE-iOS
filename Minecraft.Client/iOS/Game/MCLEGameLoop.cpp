@@ -153,6 +153,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 #include "../../../upstream/Minecraft.Client/TextureManager.h"
 #include "../../../upstream/Minecraft.Client/TextureAtlas.h"
+#include "../../../upstream/Minecraft.Client/Font.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
@@ -1249,6 +1251,13 @@ void initImpl() {
             g_levelRenderer->textures = textures;
             g_minecraftShim->textures = textures;
             MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
+            // Minecraft::init makes the fonts right after Textures. Signs
+            // and name tags draw with them.
+            g_minecraftShim->font = new Font(options, L"font/Default.png", textures, false,
+                                             &Minecraft::DEFAULT_FONT_LOCATION, 23, 20, 8, 8,
+                                             SFontData::Codepoints);
+            g_minecraftShim->altFont = new Font(options, L"font/alternate.png", textures, false,
+                                                &Minecraft::ALT_FONT_LOCATION, 16, 16, 8, 8);
             try {
                 textures->stitch();
                 MCLE_LOG("mcle_game_init: textures->stitch done");
@@ -2312,6 +2321,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (s_renderCalls < 3) MCLE_LOG("WD_CKPT after render call=%d", s_renderCalls);
             s_renderCalls++;
         }
+
 
         // G3e-step5: re-enable renderSky/renderClouds with line-by-line
         // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
