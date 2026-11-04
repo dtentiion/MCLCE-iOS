@@ -1631,3 +1631,10 @@ LLP_PY="$REPO_ROOT/scripts/patch-levelrenderer-local-pad.py"
 if [ -f "$LLP_PY" ]; then
     python3 "$LLP_PY"
 fi
+
+# The Windows64 miniaudio SoundEngine builds for iOS through
+# Game/MCLESound.cpp.
+SND_PY="$REPO_ROOT/scripts/patch-soundengine-ios.py"
+if [ -f "$SND_PY" ]; then
+    python3 "$SND_PY"
+fi
