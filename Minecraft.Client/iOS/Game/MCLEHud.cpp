@@ -30,8 +30,10 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
 
     // renderPlayerHealth
     st.regen = player->hasEffect(MobEffect::regeneration);
-    bool blink = player->invulnerableTime / 3 % 2 == 1;
-    if (player->invulnerableTime < 10) blink = false;
+    // Entity's, the hit flash. ServerPlayer has its own for spawn protection.
+    int invulnerableTime = player->Entity::invulnerableTime;
+    bool blink = invulnerableTime / 3 % 2 == 1;
+    if (invulnerableTime < 10) blink = false;
     st.blink = blink;
     st.health = static_cast<int>(ceil(player->getHealth()));
     st.lastHealth = static_cast<int>(ceil(player->lastHealth));
