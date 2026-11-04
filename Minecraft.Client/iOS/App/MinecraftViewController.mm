@@ -2088,6 +2088,8 @@ static NSString* MCLETipHTML(void) {
     const int depths[] = { -2, kLogoDepth, kDimDepth, kTooltipsDepth };
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
     if (self.splashLabel) self.splashLabel.hidden = YES;
+    // In game the upstream SoundEngine plays the music
+    mcle_audio_stop_menu_music();
 }
 
 // UIScene_FullscreenProgress::tick, fed from the iOS init stages instead

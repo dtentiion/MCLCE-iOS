@@ -172,6 +172,9 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Mth.h"
 #include "../../../upstream/Minecraft.World/HitResult.h"
 #include "MCLEPlayerInput.h"
+#include "MCLESound.h"
+
+extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
@@ -1044,6 +1047,19 @@ void initImpl() {
             g_player->gameMode->updateGameMode(g_levels[0]->getLevelData()->getGameType());
         } catch (...) {
             MCLE_LOG("mcle_game_init: updateGameMode threw");
+        }
+    }
+
+    // Minecraft::init starts the sound engine. The levels' sounds reach the
+    // player the way LevelSoundPackets reach a client.
+    if (g_player) {
+        try {
+            mcle_sound_init(StorageManager.GetSaveRootPath());
+            for (int i = 0; i < 3; ++i) {
+                if (g_levels[i]) mcle_sound_listen(g_player, g_levels[i]);
+            }
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: sound engine init threw");
         }
     }
 
@@ -1984,6 +2000,10 @@ extern "C" void mcle_game_tick(void) {
                                   -mcle_ios_input_poll_ly(0) / 1000.0f,
                                   (unsigned int)mcle_ios_input_poll_buttons(0));
             g_player->doTick(false);
+            // Minecraft::run's soundEngine->tick and the main loop's
+            // playMusicTick, volumes from the settings like ActionGameSettings
+            mcle_sound_tick(g_player, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
+                            mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
