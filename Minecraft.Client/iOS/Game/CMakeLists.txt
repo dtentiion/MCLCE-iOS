@@ -16,6 +16,7 @@ set(MCLE_GAME_SOURCES
   MCLEHud.cpp
   MCLECamera.cpp
   MCLETooltips.cpp
+  MCLEWeather.cpp
   MCLE_iOS_MachHandler.cpp
 )
 

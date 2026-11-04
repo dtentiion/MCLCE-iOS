@@ -180,6 +180,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLESound.h"
 #include "MCLEHud.h"
 #include "MCLETooltips.h"
+#include "MCLEWeather.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 
@@ -2268,6 +2269,7 @@ extern "C" void mcle_game_tick(void) {
                             mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
             mcle_hud_update(g_player);
             animateTick(g_player->level, Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
+            mcle_weather_tick(g_player, g_player->level);
             g_playerDead.store(g_player->getHealth() <= 0, std::memory_order_relaxed);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: doTick threw");
@@ -3047,6 +3049,16 @@ extern "C" void mcle_world_drive_renderer(void) {
         } catch (...) {
             static int s_crackErr = 0;
             if (s_crackErr++ < 3) MCLE_LOG("renderDestroyAnimation threw");
+        }
+
+        // renderLevel: rain and snow after the clouds, with the fog on
+        try {
+            glEnable(GL_FOG);
+            mcle_weather_render(g_player, g_player->level, frame_partial_tick);
+            glDisable(GL_FOG);
+        } catch (...) {
+            static int s_rainErr = 0;
+            if (s_rainErr++ < 3) MCLE_LOG("renderSnowAndRain threw");
         }
 
         // renderLevel ends with glClear(GL_DEPTH_BUFFER_BIT) and
