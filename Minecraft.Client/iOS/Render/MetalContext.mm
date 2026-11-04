@@ -1523,6 +1523,8 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 
     MTLPrimitiveType mtlPrim = MTLPrimitiveTypeTriangle;
     if (prim == 5) mtlPrim = MTLPrimitiveTypeTriangleStrip;
+    else if (prim == 1 /*GL_LINES*/) mtlPrim = MTLPrimitiveTypeLine;
+    else if (prim == 3 /*GL_LINE_STRIP*/) mtlPrim = MTLPrimitiveTypeLineStrip;
 
     [g.enc drawPrimitives:mtlPrim vertexStart:0 vertexCount:(NSUInteger)count];
 }
