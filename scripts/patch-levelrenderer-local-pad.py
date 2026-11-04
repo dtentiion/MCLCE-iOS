@@ -17,12 +17,11 @@ TARGET = REPO / "upstream" / "Minecraft.Client" / "LevelRenderer.cpp"
 
 src = TARGET.read_text(encoding="utf-8", errors="replace")
 OLD = "mc->player->GetXboxPad()"
-NEW = "0 /* MCLE_iOS_LOCAL_PAD */"
+# Plain 0, no comment: some of these sit inside /* */ blocks
+NEW = "0"
 count = src.count(OLD)
 if count == 0:
-    if NEW in src:
-        print(f"already patched: {TARGET}")
-        sys.exit(0)
-    sys.exit("no GetXboxPad calls found")
+    print(f"already patched: {TARGET}")
+    sys.exit(0)
 TARGET.write_text(src.replace(OLD, NEW), encoding="utf-8", errors="replace", newline="")
 print(f"patched {count} sites: {TARGET}")
