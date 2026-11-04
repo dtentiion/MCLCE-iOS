@@ -153,8 +153,12 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 #include "../../../upstream/Minecraft.Client/TextureManager.h"
 #include "../../../upstream/Minecraft.Client/TextureAtlas.h"
+#include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
+#include "../../../upstream/Minecraft.Client/TileEntityRenderDispatcher.h"
+#include "../../../upstream/Minecraft.Client/User.h"
 #include "../../../upstream/Minecraft.Client/Font.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
+#include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
@@ -542,6 +546,13 @@ void initImpl() {
     MCLE_STATIC("McRegionChunkStorage::staticCtor", McRegionChunkStorage::staticCtor());
     MCLE_STATIC("Villager::staticCtor",        Villager::staticCtor());
     MCLE_STATIC("BeaconTileEntity::staticCtor", BeaconTileEntity::staticCtor());
+
+    // Minecraft::main runs these right after the world ones. ColourTable's
+    // fills the name map colours.col is read through.
+    MCLE_STATIC("EntityRenderDispatcher::staticCtor", EntityRenderDispatcher::staticCtor());
+    MCLE_STATIC("TileEntityRenderDispatcher::staticCtor", TileEntityRenderDispatcher::staticCtor());
+    MCLE_STATIC("User::staticCtor",            User::staticCtor());
+    MCLE_STATIC("ColourTable::staticCtor",     ColourTable::staticCtor());
 
     #undef MCLE_STATIC
 
