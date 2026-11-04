@@ -1142,6 +1142,44 @@ pub unsafe extern "C" fn ruffle_ios_set_child_path_visible(
     if ok { 1 } else { 0 }
 }
 
+#[repr(C)]
+pub struct RuffleIosCustomDrawRegion {
+    pub name: [u8; 32],
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+}
+
+/// The objects Iggy would hand to UIScene::customDraw, see
+/// Player::custom_draw_regions. Fills up to `max`, returns the count found.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_custom_draw_regions(
+    raw: *mut PlayerHandle,
+    out: *mut RuffleIosCustomDrawRegion,
+    max: usize,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let regions = p.custom_draw_regions();
+    drop(p);
+    if !out.is_null() {
+        for (i, (name, rect)) in regions.iter().take(max).enumerate() {
+            let slot = &mut *out.add(i);
+            slot.name = [0; 32];
+            let bytes = name.as_bytes();
+            let n = bytes.len().min(31);
+            slot.name[..n].copy_from_slice(&bytes[..n]);
+            slot.x0 = rect[0];
+            slot.y0 = rect[1];
+            slot.x1 = rect[2];
+            slot.y1 = rect[3];
+        }
+    }
+    regions.len() as c_int
+}
+
 /// Init(id) on an FJ_ButtonList child. Wrapper around
 /// Player::call_list_init. Mirrors UIControl_ButtonList::init
 /// (UIControl_ButtonList.cpp:28-50) on console.

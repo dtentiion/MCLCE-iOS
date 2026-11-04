@@ -296,6 +296,17 @@ int           ruffle_ios_set_child_path_visible(PlayerHandle* h,
                                                 const uint8_t* path, size_t path_len,
                                                 int visible);
 
+// Iggy custom draw regions: visible objects named iggy_<name>. name is
+// <name>, NUL terminated, and the rectangle is in viewport pixels.
+typedef struct {
+    char  name[32];
+    float x0, y0, x1, y1;
+} RuffleIosCustomDrawRegion;
+
+// Fills up to max regions, returns how many there are (can be more than max)
+int           ruffle_ios_custom_draw_regions(PlayerHandle* h,
+                                             RuffleIosCustomDrawRegion* out, size_t max);
+
 // Clear AS3 stage focus. Call on scene exit so the focus highlight
 // from the previous scene doesn't bleed into the next.
 void          ruffle_ios_clear_focus(PlayerHandle* h);
