@@ -4,8 +4,8 @@
 
 #include <cmath>
 
-#include "../../../upstream/Minecraft.Client/Camera.h"
 #include "../../../upstream/Minecraft.World/Player.h"
+#include "../../../upstream/Minecraft.Client/Camera.h"
 #include "../../../upstream/Minecraft.World/Level.h"
 #include "../../../upstream/Minecraft.World/Tile.h"
 #include "../../../upstream/Minecraft.World/LiquidTile.h"

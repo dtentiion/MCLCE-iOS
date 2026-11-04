@@ -12,6 +12,7 @@
 #include "../../../upstream/Minecraft.Client/Common/Potion_Macros.h"
 #include "../../../upstream/Minecraft.World/Abilities.h"
 #include "../../../upstream/Minecraft.World/Animal.h"
+#include "../../../upstream/Minecraft.World/ChestTile.h"
 #include "../../../upstream/Minecraft.World/ColoredTile.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/DyePowderItem.h"
@@ -128,7 +129,7 @@ struct TooltipGameMode {
 
 // Windows64_Minecraft.cpp's MAP_STYLE_0, the only layout iOS has
 struct TooltipInput {
-    int GetJoypadMapVal(int) { return MAP_STYLE_0; }
+    int GetJoypadMapVal(int) { return 0; }
     unsigned int GetGameJoypadMaps(int, int action) {
         switch (action) {
         case MINECRAFT_ACTION_JUMP: return _360_JOY_BUTTON_A;

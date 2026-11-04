@@ -25,6 +25,7 @@
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/Mth.h"
 #include "../../../upstream/Minecraft.World/Random.h"
+#include "../../../upstream/Minecraft.World/SoundTypes.h"
 #include "../../../upstream/Minecraft.World/Tile.h"
 
 // MCLEGameLoop.cpp
