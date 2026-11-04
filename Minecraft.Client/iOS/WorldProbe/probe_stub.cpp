@@ -93,6 +93,9 @@ const int ZonedChunkStorage::CHUNKS_PER_ZONE = 1 << ZonedChunkStorage::CHUNKS_PE
 // DLC/ in a later phase.
 DLCManager::DLCManager() {}
 DLCManager::~DLCManager() {}
+// Player::GetAdditionalModelParts asks for DLC skin files. There are no
+// DLC packs on iOS, so the search over m_packs never finds one.
+DLCSkinFile *DLCManager::getSkinFile(const wstring &) { return nullptr; }
 
 // Stubs for upstream gameplay-host class methods whose .cpp files are
 // blocked on the UI / render chain (Minecraft.cpp, MinecraftServer.cpp,
@@ -304,6 +307,7 @@ void glGetFloat(int param, FloatBuffer *buf) {
 }
 void glTexGeni(unsigned int, unsigned int, int)            {} // TheEndPortalRenderer.cpp
 void glTexGenfv(unsigned int, unsigned int, const float*)  {} // TheEndPortalRenderer.cpp
+void glTexGen(int, int, FloatBuffer *)                     {} // TheEndPortalRenderer.cpp
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
 // Fog parameter shim. Upstream GameRenderer::setupFog issues:
 //   glFog(GL_FOG_COLOR, vec4)        - via glFogfv

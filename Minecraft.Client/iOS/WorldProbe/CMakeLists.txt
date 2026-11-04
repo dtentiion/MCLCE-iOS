@@ -1066,6 +1066,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/ChestModel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ChickenModel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/EnderCrystalModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/DragonModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/WitchModel.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EnderCrystalRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/EnderDragonRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/WitchRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TheEndPortalRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/GhastModel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/HumanoidModel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ModelHorse.cpp

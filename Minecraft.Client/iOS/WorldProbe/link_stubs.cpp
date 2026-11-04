@@ -638,6 +638,19 @@ int64_t Minecraft::currentTimeMillis() {
                std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+#include "Options.h"
+// Minecraft.cpp's, LivingEntityRenderer asks them before drawing name tags
+bool Minecraft::renderNames() {
+    if (m_instance == nullptr || !m_instance->options->hideGui) {
+        return true;
+    }
+    return false;
+}
+
+bool Minecraft::renderDebug() {
+    return (m_instance != nullptr && m_instance->options->renderDebug);
+}
+
 // HUD-pulled symbols. Once Gui.cpp / GuiComponent.cpp / Lighting.cpp went
 // into the build their references became live; the owning .cpps for these
 // don't compile yet. Stubs return safe defaults / no-ops.

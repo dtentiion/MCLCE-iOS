@@ -803,6 +803,8 @@ static inline void glGetFloat(unsigned int pname, float *out) { glGetFloatv(pnam
 // glWrapper.cpp). Forward-declare and stub so the call resolves.
 class FloatBuffer;
 void glGetFloat(int type, FloatBuffer *buff);
+// stubs.h's, TheEndPortalRenderer sets its texture planes with it
+void glTexGen(int coord, int pname, FloatBuffer *params);
 void glColorMaterial(unsigned int face, unsigned int mode);
 void glLightModelfv(unsigned int pname, const float *params);
 void glMultiTexCoord2f(unsigned int, float, float);
@@ -1070,6 +1072,12 @@ void         glCallLists(IntBuffer *);                                   // Offs
 #endif
 #ifndef GL_TEXTURE_GEN_T
 #  define GL_TEXTURE_GEN_T           0x0C61
+#endif
+#ifndef GL_TEXTURE_GEN_R
+#  define GL_TEXTURE_GEN_R           0x0C62
+#endif
+#ifndef GL_TEXTURE_GEN_Q
+#  define GL_TEXTURE_GEN_Q           0x0C63
 #endif
 
 // Win32 thread-exit query. Returns the exit code of a finished thread;
