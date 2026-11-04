@@ -2504,6 +2504,8 @@ extern "C" void mcle_game_tick(void) {
 // m_instance null chain (Biome::getSkyColor etc) may bite here. If so
 // the signal handler logs the address, we patch the next null deref.
 extern "C" void mcle_glbridge_replay_all_lists(void);
+extern "C" void mcle_glbridge_metal_ortho(float left, float right, float bottom, float top, float zNear,
+                                          float zFar);
 extern "C" void mcle_glbridge_metal_perspective(float fov_y_deg, float aspect,
                                                  float near_z, float far_z);
 extern "C" void mcle_glbridge_matrix_mode(int mode);
@@ -2750,6 +2752,116 @@ static void mcle_setup_fog(int i, float alpha) {
             mcle_glbridge_set_fog_start(distance * 0.05f);
             mcle_glbridge_set_fog_end(std::min(distance, 16 * 16 * .75f) * .5f);
         }
+    }
+}
+
+// GuiComponent::fill, a flat colour over the given gui rectangle
+static void mcle_gui_fill(int x0, int y0, int x1, int y1, int col) {
+    if (x0 < x1) {
+        int tmp = x0;
+        x0 = x1;
+        x1 = tmp;
+    }
+    if (y0 < y1) {
+        int tmp = y0;
+        y0 = y1;
+        y1 = tmp;
+    }
+    float a = ((col >> 24) & 0xff) / 255.0f;
+    float r = ((col >> 16) & 0xff) / 255.0f;
+    float g = ((col >> 8) & 0xff) / 255.0f;
+    float b = ((col) & 0xff) / 255.0f;
+    Tesselator *t = Tesselator::getInstance();
+    glEnable(GL_BLEND);
+    glDisable(GL_TEXTURE_2D);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(r, g, b, a);
+    t->begin();
+    t->vertex(static_cast<float>(x0), static_cast<float>(y1), static_cast<float>(0));
+    t->vertex(static_cast<float>(x1), static_cast<float>(y1), static_cast<float>(0));
+    t->vertex(static_cast<float>(x1), static_cast<float>(y0), static_cast<float>(0));
+    t->vertex(static_cast<float>(x0), static_cast<float>(y0), static_cast<float>(0));
+    t->end();
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_BLEND);
+}
+
+// The parts of Gui::render still drawn natively next to the SWF HUD: the
+// pumpkin blur, falling asleep and the red death fade. Gui works in gui
+// units over the whole screen, here that's 0..w and 0..h of the drawable.
+static void mcle_gui_overlays(float a) {
+    std::shared_ptr<ItemInstance> headGear = g_player->inventory->getArmor(3);
+    const bool pumpkin = mcle_third_person_view() == 0 && headGear != nullptr && headGear->id == Tile::pumpkin_Id;
+    if (!pumpkin && g_player->getSleepTimer() <= 0 && g_player->isAlive()) return;
+
+    int w = 0, h = 0;
+    mcle_metal_current_size(&w, &h);
+    if (w <= 0 || h <= 0) return;
+
+    // GameRenderer::setupGuiScreen. Nothing here depth tests, so the depth
+    // clear it does isn't needed.
+    mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
+    mcle_glbridge_load_identity();
+    mcle_glbridge_metal_ortho(0, static_cast<float>(w), static_cast<float>(h), 0, 1000, 3000);
+    mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
+    mcle_glbridge_load_identity();
+    mcle_glbridge_translate(0, 0, -2000);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Gui::renderPumpkin
+    if (pumpkin) {
+        static ResourceLocation s_pumpkinBlur(TN__BLUR__MISC_PUMPKINBLUR);
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(false);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glColor4f(1, 1, 1, 1);
+        glDisable(GL_ALPHA_TEST);
+        Minecraft::GetInstance()->textures->bindTexture(&s_pumpkinBlur);
+        Tesselator *t = Tesselator::getInstance();
+        t->begin();
+        t->vertexUV(static_cast<float>(0), static_cast<float>(h), static_cast<float>(-90), static_cast<float>(0), static_cast<float>(1));
+        t->vertexUV(static_cast<float>(w), static_cast<float>(h), static_cast<float>(-90), static_cast<float>(1), static_cast<float>(1));
+        t->vertexUV(static_cast<float>(w), static_cast<float>(0), static_cast<float>(-90), static_cast<float>(1), static_cast<float>(0));
+        t->vertexUV(static_cast<float>(0), static_cast<float>(0), static_cast<float>(-90), static_cast<float>(0), static_cast<float>(0));
+        t->end();
+        glDepthMask(true);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_ALPHA_TEST);
+        glColor4f(1, 1, 1, 1);
+    }
+
+    glDisable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // if the player is falling asleep we render a dark overlay
+    if (g_player->getSleepTimer() > 0) {
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_ALPHA_TEST);
+        int timer = g_player->getSleepTimer();
+        float amount = static_cast<float>(timer) / static_cast<float>(Player::SLEEP_DURATION);
+        if (amount > 1) {
+            // waking up
+            amount = 1.0f - (static_cast<float>(timer - Player::SLEEP_DURATION) /
+                             static_cast<float>(Player::WAKE_UP_DURATION));
+        }
+        int color = static_cast<int>(220.0f * amount) << 24 | (0x101020);
+        mcle_gui_fill(0, 0, w, h, color);
+        glEnable(GL_ALPHA_TEST);
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    // 4J-PB - Request from Mojang to have a red death screen
+    if (!g_player->isAlive()) {
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_ALPHA_TEST);
+        int timer = g_player->getDeathFadeTimer();
+        float amount = static_cast<float>(timer) / static_cast<float>(Player::DEATHFADE_DURATION);
+        int color = static_cast<int>(220.0f * amount) << 24 | (0x200000);
+        mcle_gui_fill(0, 0, w, h, color);
+        glEnable(GL_ALPHA_TEST);
+        glEnable(GL_DEPTH_TEST);
     }
 }
 
@@ -3358,6 +3470,14 @@ extern "C" void mcle_world_drive_renderer(void) {
                 static int s_handErr = 0;
                 if (s_handErr++ < 3) MCLE_LOG("renderItemInHand threw");
             }
+        }
+
+        // GameRenderer::render: then the Gui over the world
+        try {
+            mcle_gui_overlays(a);
+        } catch (...) {
+            static int s_guiErr = 0;
+            if (s_guiErr++ < 3) MCLE_LOG("gui overlays threw");
         }
 
         // G5: every ~120 frames, log the call_list stats so we know whether
