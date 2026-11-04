@@ -54,6 +54,7 @@ static bool FileExists(const char *path) {
 #define SoundEngine MCLEUpstreamSoundEngine
 #include "../../../upstream/Minecraft.World/SoundTypes.h"
 #include "../../../upstream/Minecraft.Client/Common/Audio/miniaudio.h"
+#include "../../../upstream/Minecraft.Client/Common/Audio/Consoles_SoundEngine.h"
 #define private public
 #include "../../../upstream/Minecraft.Client/Common/Audio/SoundEngine.h"
 #undef private
