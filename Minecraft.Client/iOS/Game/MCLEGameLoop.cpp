@@ -162,6 +162,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/FrustumCuller.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
+#include "MCLEPlayerInput.h"
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
@@ -1704,6 +1705,18 @@ extern "C" void mcle_game_tick(void) {
     SparseLightStorage::tick();
     CompressedTileStorage::tick();
     SparseDataStorage::tick();
+
+    // Minecraft::tick's player input: mining, placing, attacking, hotbar.
+    // Before the levels tick, like the client's packets being handled at
+    // the start of the server tick.
+    if (g_player && g_levels[0]) {
+        try {
+            mcle_player_input_tick(g_player, g_levels[0],
+                                   (unsigned int)mcle_ios_input_poll_buttons(0));
+        } catch (...) {
+            MCLE_LOG("mcle_game_tick: player input threw");
+        }
+    }
 
     // Tick all three dimensions in order. Parity with how the upstream
     // server's runUpdate iterates levels[] each frame.

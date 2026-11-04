@@ -11,6 +11,7 @@ set(MCLE_GAME_SOURCES
   MCLEGameLoop.cpp
   MCLESaveList.cpp
   MCLEStrings.cpp
+  MCLEPlayerInput.cpp
   MCLE_iOS_MachHandler.cpp
 )
 
