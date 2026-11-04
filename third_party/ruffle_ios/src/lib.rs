@@ -1787,12 +1787,16 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     // even with our FFI plumbing working.
     let mut gamepad_map: std::collections::HashMap<GamepadButton, KeyCode> =
         std::collections::HashMap::new();
+    // Same keys as UIScene::convertGameActionToIggyKeycode. Start and Back
+    // have no menu keycode there.
     gamepad_map.insert(GamepadButton::South, KeyCode::ENTER);
     gamepad_map.insert(GamepadButton::East, KeyCode::ESCAPE);
-    gamepad_map.insert(GamepadButton::North, KeyCode::SPACE);
-    gamepad_map.insert(GamepadButton::West, KeyCode::SPACE);
-    gamepad_map.insert(GamepadButton::Start, KeyCode::ENTER);
-    gamepad_map.insert(GamepadButton::Select, KeyCode::ESCAPE);
+    gamepad_map.insert(GamepadButton::West, KeyCode::F1);
+    gamepad_map.insert(GamepadButton::North, KeyCode::F2);
+    gamepad_map.insert(GamepadButton::RightTrigger, KeyCode::F3);
+    gamepad_map.insert(GamepadButton::LeftTrigger, KeyCode::F4);
+    gamepad_map.insert(GamepadButton::LeftTrigger2, KeyCode::PAGE_UP);
+    gamepad_map.insert(GamepadButton::RightTrigger2, KeyCode::PAGE_DOWN);
     gamepad_map.insert(GamepadButton::DPadUp, KeyCode::UP);
     gamepad_map.insert(GamepadButton::DPadDown, KeyCode::DOWN);
     gamepad_map.insert(GamepadButton::DPadLeft, KeyCode::LEFT);
