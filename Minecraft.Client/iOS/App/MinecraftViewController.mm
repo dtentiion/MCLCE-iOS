@@ -505,6 +505,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) CADisplayLink* displayLink;
 @property (strong, nonatomic) UILabel* statusLabel;
 @property (strong, nonatomic) MetalView* metalView;
+// Ruffle draws here, transparent, above the world in metalView
+@property (strong, nonatomic) MetalView* overlayView;
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
 @property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
@@ -664,6 +666,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.metalView.backgroundColor = UIColor.blackColor;
     [self.view addSubview:self.metalView];
 
+    // SWF layer on top. Iggy composites the UI over the game the same way:
+    // the HUD and pause menu draw over the live world.
+    self.overlayView = [[MetalView alloc] initWithFrame:frame];
+    self.overlayView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.overlayView.opaque = NO;
+    self.overlayView.backgroundColor = UIColor.clearColor;
+    self.overlayView.layer.opaque = NO;
+    self.overlayView.userInteractionEnabled = NO;
+    [self.view addSubview:self.overlayView];
+
     // Overlay label with build info + live controller state. Sits inside the
     // safe area so the Dynamic Island does not chew it up on newer iPhones.
     CGRect safeFrame = CGRectInset(frame, 24, 24);
@@ -791,6 +804,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int pw = (int)(sz.width  * scale);
     int ph = (int)(sz.height * scale);
     self.metalView.layer.contentsScale = scale;
+    self.overlayView.layer.contentsScale = scale;
 
     // Try to stand up a Ruffle wgpu player that owns this CAMetalLayer.
     // If it succeeds, every frame is driven by Ruffle. If it fails, we
@@ -799,7 +813,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern int g_ruffle_surface_probe;
 
     g_ruffle_surface_probe =
-        ruffle_ios_surface_probe((__bridge void*)self.metalView.layer);
+        ruffle_ios_surface_probe((__bridge void*)self.overlayView.layer);
 
     NSString* swfPath = [self resolveSwfPath];
     if (swfPath.length && g_ruffle_surface_probe == 1) {
@@ -878,7 +892,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             // preload loop, so text fields find the device font on their
             // first glyph layout.
             g_ruffle_player = ruffle_ios_player_create_wgpu(
-                (__bridge void*)self.metalView.layer,
+                (__bridge void*)self.overlayView.layer,
                 pw, ph,
                 (const uint8_t*)data.bytes, data.length,
                 docsPath.UTF8String);
@@ -927,11 +941,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     }
     if (!self.loadedSwfName) self.loadedSwfName = @"<none>";
 
-    // Always init the legacy Metal renderer too. Ruffle drives the SWF
-    // panorama frame-by-frame, but once the world goes to ticking state
-    // the tick handler routes to mcle_render_frame() instead. Both
-    // pipelines share the same CAMetalLayer; only one renders per
-    // frame so the drawable contention is naturally serialised.
+    // The world renders into metalView's layer. Ruffle has the overlay
+    // layer above it, so both can draw every frame.
     mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
@@ -2055,6 +2066,18 @@ static NSString* MCLETipHTML(void) {
     self.menuFocusIndex = 0;
 }
 
+// FullscreenProgress completes with e_ProgressCompletion_CloseAllPlayersUIScenes,
+// and the panorama, logo and menu background components hide once the game
+// has started.
+- (void)enterWorldUI {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    MCLESetPathVisible(@"", NO);
+    const int depths[] = { -2, kLogoDepth, kDimDepth, kTooltipsDepth };
+    for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
+    if (self.splashLabel) self.splashLabel.hidden = YES;
+}
+
 // UIScene_FullscreenProgress::tick, fed from the iOS init stages instead
 // of Minecraft::progressRenderer.
 - (void)pollWorldLoad {
@@ -2737,8 +2760,11 @@ static NSString* MCLETipHTML(void) {
         if (g_loading_world) {
             g_loading_world = false;
             NSLog(@"[MinecraftVC] world ready, leaving FullscreenProgress");
+            [self enterWorldUI];
         }
         mcle_render_frame();
+        // Keep the SWF layer presenting over the world (transparent stage)
+        if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
         return;
     }
 

@@ -1810,6 +1810,12 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         .with_gamepad_button_mapping(gamepad_map)
         .build();
 
+    // Transparent stage: wherever the SWF draws nothing, the game world in
+    // the layer underneath shows through (HUD, pause menu).
+    if let Ok(mut p) = player.lock() {
+        p.set_window_mode("transparent");
+    }
+
     // Drive preload and executor alternately. `preload(limit)` advances all
     // the synchronous bytes-into-frames work; `executor.run()` polls any
     // futures Ruffle's internals spawn via the navigator (root Loader
