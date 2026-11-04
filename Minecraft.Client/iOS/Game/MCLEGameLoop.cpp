@@ -181,6 +181,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLEHud.h"
 #include "MCLETooltips.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
+#include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 
@@ -322,6 +323,12 @@ std::mutex g_destroyingBlocksMutex;
 std::recursive_mutex g_particleMutex;
 // Single player pause (UIScene_PauseMenu): the server stops ticking
 std::atomic<bool> g_gamePaused{false};
+// Death menu: whether the player is dead, and its Respawn press waiting for
+// the next tick. The render driver holds g_frameMutex for a frame, the
+// respawn swaps the player under it.
+std::atomic<bool> g_playerDead{false};
+std::atomic<bool> g_respawnRequested{false};
+std::mutex g_frameMutex;
 // GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
 // when the render thread builds the light texture
 std::atomic<float> g_lightBlr{0.0f};
@@ -1865,6 +1872,49 @@ extern "C" int mcle_world_game_time(long long *gameTime, int *dimension) {
     return 1;
 }
 
+extern "C" int mcle_player_is_dead(void) {
+    return g_playerDead.load(std::memory_order_relaxed) ? 1 : 0;
+}
+
+// UIScene_DeathMenu's Respawn
+extern "C" void mcle_game_respawn(void) {
+    g_respawnRequested.store(true, std::memory_order_relaxed);
+}
+
+// PlayerConnection::handleClientCommand(PERFORM_RESPAWN): PlayerList::respawn
+// makes a new player at the spawn. The player has no network connection,
+// and respawn stores the new player in it and sends packets through it, so
+// a zeroed one stands in for the call (send / teleport are the link_stubs
+// ones, which don't touch it).
+static void mcle_do_respawn() {
+    if (!g_player || !g_server || !g_server->getPlayers()) return;
+    if (g_player->getHealth() > 0) return;
+    struct alignas(PlayerConnection) ConnectionBuf { char bytes[sizeof(PlayerConnection)]; };
+    static ConnectionBuf s_connection = {};
+    g_player->connection = reinterpret_cast<PlayerConnection *>(&s_connection);
+    std::shared_ptr<ServerPlayer> fresh;
+    try {
+        fresh = g_server->getPlayers()->respawn(g_player, 0, false);
+    } catch (...) {
+        MCLE_LOG("respawn threw");
+    }
+    g_player->connection = nullptr;
+    if (!fresh) return;
+    fresh->connection = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_frameMutex);
+        Minecraft *mc = Minecraft::GetInstance();
+        std::shared_ptr<MultiplayerLocalPlayer> alias = std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(fresh);
+        mc->player = alias;
+        mc->localplayers[0] = alias;
+        mc->cameraTargetPlayer = fresh;
+        g_playerGameMode = fresh->gameMode;
+        g_player = fresh;
+    }
+    mcle_sound_listen(fresh, nullptr);
+    MCLE_LOG("respawned at %.1f %.1f %.1f", fresh->x, fresh->y, fresh->z);
+}
+
 extern "C" void mcle_game_set_paused(int paused) {
     g_gamePaused.store(paused != 0, std::memory_order_relaxed);
 }
@@ -2003,6 +2053,8 @@ extern "C" void mcle_game_tick(void) {
     }
 
     if (g_gamePaused.load(std::memory_order_relaxed)) return;
+
+    if (g_respawnRequested.exchange(false)) mcle_do_respawn();
 
     // GameRenderer::tick: torch flicker for the light texture
     // (tickLightTexture) and the wither boss darkening the world
@@ -2216,6 +2268,7 @@ extern "C" void mcle_game_tick(void) {
                             mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
             mcle_hud_update(g_player);
             animateTick(g_player->level, Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
+            g_playerDead.store(g_player->getHealth() <= 0, std::memory_order_relaxed);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
@@ -2466,6 +2519,7 @@ static bool mcle_view_bob_on() {
 }
 
 extern "C" void mcle_world_drive_renderer(void) {
+    std::lock_guard<std::mutex> frameLock(g_frameMutex);
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
 
     // Render-thread TLS init - mirrors the bootstrap + tick threads.

@@ -65,12 +65,16 @@ static bool g_load_has_been_in_creative = false;
 static bool g_loading_world = false;
 // UIScene_PauseMenu is up and the single player game is paused under it
 static bool g_world_paused = false;
+// UIScene_DeathMenu is up
+static bool g_world_dead = false;
 
 static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 extern "C" void mcle_metal_set_gamma(float gamma); // MetalContext.mm
 extern "C" void mcle_game_set_paused(int paused);   // MCLEGameLoop.cpp
+extern "C" int  mcle_player_is_dead(void);           // MCLEGameLoop.cpp
+extern "C" void mcle_game_respawn(void);             // MCLEGameLoop.cpp
 extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MCLEGameLoop.cpp
 extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
 
@@ -2335,6 +2339,28 @@ static NSString* MCLETipHTML(void) {
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
+// UIScene_DeathMenu: Respawn and Exit Game under "You died!"
+- (void)openDeathMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    g_world_dead = true;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"DeathMenu1080.swf"];
+}
+
+- (void)initDeathMenu {
+    extern PlayerHandle* g_ruffle_player;
+    NSArray<NSDictionary*>* cfg = @[
+        @{ @"name": @"Respawn",  @"label": MCLEStr(IDS_RESPAWN),   @"id": @(0) },
+        @{ @"name": @"ExitGame", @"label": MCLEStr(IDS_EXIT_GAME), @"id": @(1) },
+    ];
+    [self applyMenuButtonConfig:cfg];
+    MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_YOU_DIED)]);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kDimDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+}
+
 - (void)resumeFromPause {
     g_world_paused = false;
     mcle_game_set_paused(0);
@@ -2973,6 +2999,8 @@ static NSString* MCLETipHTML(void) {
             // UIScene_HUD constructor
             MCLECallPath(@"", @"SetDragonLabel", @[MCLEStr(IDS_BOSS_ENDERDRAGON_HEALTH)]);
             MCLECallPath(@"", @"SetSelectedLabel", @[@""]);
+        } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
+            [self initDeathMenu];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
@@ -3057,8 +3085,16 @@ static NSString* MCLETipHTML(void) {
                                          : 1.0f - (50.0f - slider) / 50.0f * 0.4f;
             mcle_metal_set_gamma(gamma);
         }
+        // Minecraft::tick shows the death menu once the player has died, and
+        // goes back to the game when the respawned player is alive
+        if (!g_world_dead && !g_world_paused && mcle_player_is_dead()) {
+            [self openDeathMenu];
+        } else if (g_world_dead && !mcle_player_is_dead()) {
+            g_world_dead = false;
+            [self enterWorldUI];
+        }
         // Minecraft::tick: Start opens the pause menu
-        if (!g_world_paused) {
+        if (!g_world_paused && !g_world_dead) {
             mcle_ios_pad_state pad;
             if (mcle_ios_input_poll(0, &pad)) {
                 bool startNow = (pad.buttons & 0x00000010u) != 0;
@@ -3068,7 +3104,7 @@ static NSString* MCLETipHTML(void) {
             }
         }
         mcle_render_frame();
-        if (!g_world_paused) {
+        if (!g_world_paused && !g_world_dead) {
             MCLEHudPump();
             MCLEGameTooltipsPump();
             // Keep the SWF layer presenting over the world (transparent stage)
@@ -3271,6 +3307,10 @@ static NSString* MCLETipHTML(void) {
                                     });
                             }];
                         }
+                    } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
+                        // UIScene_DeathMenu::handlePress
+                        if (id == 0) mcle_game_respawn();
+                        else NSLog(@"[death] exit not wired yet");
                     } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
                         // UIScene_PauseMenu::handlePress
                         switch (id) {
@@ -3363,6 +3403,8 @@ static NSString* MCLETipHTML(void) {
                 if (g_pending_dialog) {
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
+                } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
+                    // UIScene_DeathMenu::handleInput swallows B
                 } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
                     // UIScene_PauseMenu::handleInput: B goes back to the game
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
