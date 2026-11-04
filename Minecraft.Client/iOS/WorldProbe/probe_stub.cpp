@@ -319,11 +319,17 @@ void glMaterialfv(unsigned int, unsigned int, const float*) {}
 extern "C" void mcle_glbridge_set_fog_color(float r, float g, float b, float a);
 extern "C" void mcle_glbridge_set_fog_start(float v);
 extern "C" void mcle_glbridge_set_fog_end(float v);
+extern "C" void mcle_glbridge_set_fog_mode(int exp_mode);
+extern "C" void mcle_glbridge_set_fog_density(float v);
 void glFogf(unsigned int pname, float param) {
     if (pname == 0x0B63 /*GL_FOG_START*/) mcle_glbridge_set_fog_start(param);
     else if (pname == 0x0B64 /*GL_FOG_END*/) mcle_glbridge_set_fog_end(param);
+    else if (pname == 0x0B62 /*GL_FOG_DENSITY*/) mcle_glbridge_set_fog_density(param);
 }
-void glFogi(unsigned int, int) {}  // mode/distance hint - we always do linear
+// GL_FOG_MODE: GL_EXP (0x0800) or GL_LINEAR
+void glFogi(unsigned int pname, int param) {
+    if (pname == 0x0B65 /*GL_FOG_MODE*/) mcle_glbridge_set_fog_mode(param == 0x0800 ? 1 : 0);
+}
 void glFogfv(unsigned int pname, const float *params) {
     if (pname == 0x0B66 /*GL_FOG_COLOR*/ && params) {
         mcle_glbridge_set_fog_color(params[0], params[1], params[2], params[3]);

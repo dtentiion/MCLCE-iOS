@@ -207,6 +207,9 @@ bool  g_fog_enabled = false;
 float g_fog_r = 0.0f, g_fog_g = 0.0f, g_fog_b = 0.0f;
 float g_fog_start = 0.0f;
 float g_fog_end   = 1.0f;
+// GL_FOG_MODE: 0 GL_LINEAR, 1 GL_EXP with g_fog_density
+int   g_fog_mode    = 0;
+float g_fog_density = 1.0f;
 
 // glEnable/glDisable(GL_BLEND) tracking. Default off (matches upstream
 // initial GL state). When on, immediate_dispatch picks the blending
@@ -241,6 +244,8 @@ extern "C" void mcle_glbridge_set_fog_color(float r, float gr, float b, float /*
 }
 extern "C" void mcle_glbridge_set_fog_start(float v) { g_fog_start = v; }
 extern "C" void mcle_glbridge_set_fog_end(float v)   { g_fog_end   = v; }
+extern "C" void mcle_glbridge_set_fog_mode(int exp_mode) { g_fog_mode = exp_mode ? 1 : 0; }
+extern "C" void mcle_glbridge_set_fog_density(float v)   { g_fog_density = v; }
 
 // Lightmap bridge. MCLEGameLoop computes each of the 256 entries from
 // upstream Level::getSkyDarken + dimension->brightnessRamp and writes
@@ -425,9 +430,15 @@ NSString* const kWorldShaderSrc = @R"(
     // Apply linear distance fog. factor goes 0 at fogStart to 1 at
     // fogEnd, then mixes output toward fog color. fogColor.w gates the
     // effect off entirely when GL_FOG is disabled.
+    // fogRange.z set means GL_EXP: exp(-density * distance), density in w.
     float3 apply_fog(float3 rgb, float fogDist, constant FogParams& f) {
-        float t = clamp((fogDist - f.fogRange.x) /
-                        (f.fogRange.y - f.fogRange.x), 0.0, 1.0);
+        float t;
+        if (f.fogRange.z > 0.5) {
+            t = 1.0 - clamp(exp(-f.fogRange.w * fogDist), 0.0, 1.0);
+        } else {
+            t = clamp((fogDist - f.fogRange.x) /
+                      (f.fogRange.y - f.fogRange.x), 0.0, 1.0);
+        }
         return mix(rgb, f.fogColor.rgb, t * f.fogColor.w);
     }
 
@@ -1467,7 +1478,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         // Row 2 of a column-major 4x4 = elements [2, 6, 10, 14].
         float fogBuf[12] = {
             g_fog_r, g_fog_g, g_fog_b, g_fog_enabled ? 1.0f : 0.0f,
-            g_fog_start, g_fog_end, 0.0f, 0.0f,
+            g_fog_start, g_fog_end, g_fog_mode ? 1.0f : 0.0f, g_fog_density,
             modelview[2], modelview[6], modelview[10], modelview[14]
         };
         [g.enc setVertexBytes:fogBuf   length:sizeof(fogBuf) atIndex:3];

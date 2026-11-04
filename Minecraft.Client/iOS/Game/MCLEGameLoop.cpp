@@ -30,7 +30,9 @@
 #include <mach/mach.h>
 #include <malloc/malloc.h>
 #include <os/proc.h>
+#include <algorithm>
 #include <atomic>
+#include <cfloat>
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -123,6 +125,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/SparseLightStorage.h"
 #include "../../../upstream/Minecraft.Client/ParticleEngine.h"
 #include "../../../upstream/Minecraft.Client/Camera.h"
+#include "../../../upstream/Minecraft.World/EnchantmentHelper.h"
 #include "../../../upstream/Minecraft.Client/CritParticle.h"
 #include "../../../upstream/Minecraft.Client/TakeAnimationParticle.h"
 #include "../../../upstream/Minecraft.World/CompressedTileStorage.h"
@@ -337,6 +340,10 @@ std::mutex g_frameMutex;
 std::atomic<float> g_lightBlr{0.0f};
 std::atomic<float> g_darkenWorldAmount{0.0f};
 std::atomic<float> g_darkenWorldAmountO{0.0f};
+// GameRenderer's fogBr / fogBrO: the fog follows the light where the
+// player stands
+std::atomic<float> g_fogBr{0.0f};
+std::atomic<float> g_fogBrO{0.0f};
 std::shared_ptr<ServerPlayer> g_player;
 ServerPlayerGameMode         *g_playerGameMode = nullptr;
 LevelRenderer                *g_levelRenderer  = nullptr;
@@ -2100,6 +2107,17 @@ extern "C" void mcle_game_tick(void) {
             darken -= 1.0f / (static_cast<float>(SharedConstants::TICKS_PER_SECOND) * 4);
         }
         g_darkenWorldAmount.store(darken, std::memory_order_relaxed);
+
+        if (g_player && g_player->level) {
+            float fogBr = g_fogBr.load(std::memory_order_relaxed);
+            g_fogBrO.store(fogBr, std::memory_order_relaxed);
+            float brr = g_player->level->getBrightness(Mth::floor(g_player->x), Mth::floor(g_player->y),
+                                                       Mth::floor(g_player->z));
+            float whiteness = (3 - Minecraft::GetInstance()->options->viewDistance) / 3.0f;
+            float fogBrT = brr * (1 - whiteness) + whiteness;
+            fogBr += (fogBrT - fogBr) * 0.1f;
+            g_fogBr.store(fogBr, std::memory_order_relaxed);
+        }
     }
 
     // Minecraft::tick: if (!pause) particleEngine->tick();
@@ -2496,6 +2514,8 @@ extern "C" void mcle_glbridge_set_fog_enabled(int enabled);
 extern "C" void mcle_glbridge_set_fog_color(float r, float g, float b, float a);
 extern "C" void mcle_glbridge_set_fog_start(float v);
 extern "C" void mcle_glbridge_set_fog_end(float v);
+extern "C" void mcle_glbridge_set_fog_mode(int exp_mode);
+extern "C" void mcle_glbridge_set_fog_density(float v);
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
 extern "C" void mcle_lightmap_set_entry(int idx, float r, float g, float b);
 extern "C" void mcle_lightmap_upload(void);
@@ -2509,6 +2529,229 @@ extern "C" void mcle_hud_draw_textured_quad(int x, int y, int w, int h,
                                              float u0, float v0,
                                              float u1, float v1,
                                              unsigned int tex_id);
+
+// GameRenderer's fr / fg / fb from setupClearColor. Also what the next
+// frame clears to, like its glClearColor.
+static float g_fr = 0.0f, g_fg = 0.0f, g_fb = 0.0f;
+static std::atomic<bool> g_haveClearColor{false};
+// GameRenderer::isInClouds, set by moveCameraToPlayer
+static bool g_isInClouds = false;
+// GameRenderer::renderDistance, 256 >> viewDistance
+static const float kRenderDistance = 256.0f;
+
+// GameRenderer::getNightVisionScale
+static float mcle_night_vision_scale(float a) {
+    int duration = g_player->getEffect(MobEffect::nightVision)->getDuration();
+    if (duration > (SharedConstants::TICKS_PER_SECOND * 10)) {
+        return 1.0f;
+    }
+    float flash = std::max(0.0f, (float)duration - a);
+    return .7f + Mth::sin(flash * PI * .05f) * .3f;
+}
+
+// GameRenderer::setupClearColor
+static void mcle_setup_clear_color(float a) {
+    Level *level = g_player->level;
+    std::shared_ptr<ServerPlayer> player = g_player;
+    Minecraft *mc = Minecraft::GetInstance();
+
+    float whiteness = 1.0f / (4 - mc->options->viewDistance);
+    whiteness = 1 - static_cast<float>(pow(static_cast<double>(whiteness), 0.25));
+
+    Vec3 *skyColor = level->getSkyColor(player, a);
+    float sr = static_cast<float>(skyColor->x);
+    float sg = static_cast<float>(skyColor->y);
+    float sb = static_cast<float>(skyColor->z);
+
+    Vec3 *fogColor = level->getFogColor(a);
+    float fr = static_cast<float>(fogColor->x);
+    float fg = static_cast<float>(fogColor->y);
+    float fb = static_cast<float>(fogColor->z);
+
+    if (mc->options->viewDistance < 2) {
+        Vec3 *sunAngle = Mth::sin(level->getSunAngle(a)) > 0 ? Vec3::newTemp(-1, 0, 0) : Vec3::newTemp(1, 0, 0);
+        float d = static_cast<float>(player->getViewVector(a)->dot(sunAngle));
+        if (d < 0) d = 0;
+        if (d > 0) {
+            float *c = level->dimension->getSunriseColor(level->getTimeOfDay(a), a);
+            if (c != nullptr) {
+                d *= c[3];
+                fr = fr * (1 - d) + c[0] * d;
+                fg = fg * (1 - d) + c[1] * d;
+                fb = fb * (1 - d) + c[2] * d;
+            }
+        }
+    }
+
+    fr += (sr - fr) * whiteness;
+    fg += (sg - fg) * whiteness;
+    fb += (sb - fb) * whiteness;
+
+    float rainLevel = level->getRainLevel(a);
+    if (rainLevel > 0) {
+        float ba = 1 - rainLevel * 0.5f;
+        float bb = 1 - rainLevel * 0.4f;
+        fr *= ba;
+        fg *= ba;
+        fb *= bb;
+    }
+    float thunderLevel = level->getThunderLevel(a);
+    if (thunderLevel > 0) {
+        float ba = 1 - thunderLevel * 0.5f;
+        fr *= ba;
+        fg *= ba;
+        fb *= ba;
+    }
+
+    int t = Camera::getBlockAt(level, player, a);
+    if (g_isInClouds) {
+        Vec3 *cc = level->getCloudColor(a);
+        fr = static_cast<float>(cc->x);
+        fg = static_cast<float>(cc->y);
+        fb = static_cast<float>(cc->z);
+    } else if (t != 0 && Tile::tiles[t]->material == Material::water) {
+        float clearness = EnchantmentHelper::getOxygenBonus(player) * 0.2f;
+
+        unsigned int colour = mc->getColourTable()->getColor(eMinecraftColour_Under_Water_Clear_Colour);
+        byte redComponent = ((colour >> 16) & 0xFF);
+        byte greenComponent = ((colour >> 8) & 0xFF);
+        byte blueComponent = ((colour) & 0xFF);
+
+        fr = static_cast<float>(redComponent) / 256 + clearness;
+        fg = static_cast<float>(greenComponent) / 256 + clearness;
+        fb = static_cast<float>(blueComponent) / 256 + clearness;
+    } else if (t != 0 && Tile::tiles[t]->material == Material::lava) {
+        unsigned int colour = mc->getColourTable()->getColor(eMinecraftColour_Under_Lava_Clear_Colour);
+        byte redComponent = ((colour >> 16) & 0xFF);
+        byte greenComponent = ((colour >> 8) & 0xFF);
+        byte blueComponent = ((colour) & 0xFF);
+
+        fr = static_cast<float>(redComponent) / 256;
+        fg = static_cast<float>(greenComponent) / 256;
+        fb = static_cast<float>(blueComponent) / 256;
+    }
+
+    float fogBrO = g_fogBrO.load(std::memory_order_relaxed);
+    float brr = fogBrO + (g_fogBr.load(std::memory_order_relaxed) - fogBrO) * a;
+    fr *= brr;
+    fg *= brr;
+    fb *= brr;
+
+    double yy = (player->yOld + (player->y - player->yOld) * a) * level->dimension->getClearColorScale();
+
+    if (player->hasEffect(MobEffect::blindness)) {
+        int duration = player->getEffect(MobEffect::blindness)->getDuration();
+        if (duration < 20) {
+            yy = yy * (1.0f - static_cast<float>(duration) / 20.0f);
+        } else {
+            yy = 0;
+        }
+    }
+
+    if (yy < 1) {
+        if (yy < 0) yy = 0;
+        yy = yy * yy;
+        fr *= yy;
+        fg *= yy;
+        fb *= yy;
+    }
+
+    float darkenWorldAmount = g_darkenWorldAmount.load(std::memory_order_relaxed);
+    if (darkenWorldAmount > 0) {
+        float darkenWorldAmountO = g_darkenWorldAmountO.load(std::memory_order_relaxed);
+        float amount = darkenWorldAmountO + (darkenWorldAmount - darkenWorldAmountO) * a;
+        fr = fr * (1.0f - amount) + (fr * .7f) * amount;
+        fg = fg * (1.0f - amount) + (fg * .6f) * amount;
+        fb = fb * (1.0f - amount) + (fb * .6f) * amount;
+    }
+
+    if (player->hasEffect(MobEffect::nightVision)) {
+        float scale = mcle_night_vision_scale(a);
+        float dist = FLT_MAX; // MGH - changed this to avoid divide by zero
+        if ((fr > 0) && (dist > (1.0f / fr))) dist = (1.0f / fr);
+        if ((fg > 0) && (dist > (1.0f / fg))) dist = (1.0f / fg);
+        if ((fb > 0) && (dist > (1.0f / fb))) dist = (1.0f / fb);
+        fr = fr * (1.0f - scale) + (fr * dist) * scale;
+        fg = fg * (1.0f - scale) + (fg * dist) * scale;
+        fb = fb * (1.0f - scale) + (fb * dist) * scale;
+    }
+
+    g_fr = fr;
+    g_fg = fg;
+    g_fb = fb;
+    g_haveClearColor.store(true, std::memory_order_release);
+}
+
+// GameRenderer::setupFog. i is -1 for the sky, 0 for the terrain.
+static void mcle_setup_fog(int i, float alpha) {
+    std::shared_ptr<ServerPlayer> player = g_player;
+    Level *level = player->level;
+    bool creative = player->abilities.instabuild;
+
+    mcle_glbridge_set_fog_color(g_fr, g_fg, g_fb, 1);
+
+    int t = Camera::getBlockAt(level, player, alpha);
+
+    if (player->hasEffect(MobEffect::blindness)) {
+        float distance = 5.0f;
+        int duration = player->getEffect(MobEffect::blindness)->getDuration();
+        if (duration < 20) {
+            distance = 5.0f + (kRenderDistance - 5.0f) * (1.0f - static_cast<float>(duration) / 20.0f);
+        }
+
+        mcle_glbridge_set_fog_mode(0);
+        if (i < 0) {
+            mcle_glbridge_set_fog_start(0);
+            mcle_glbridge_set_fog_end(distance * 0.8f);
+        } else {
+            mcle_glbridge_set_fog_start(distance * 0.25f);
+            mcle_glbridge_set_fog_end(distance);
+        }
+    } else if (g_isInClouds) {
+        mcle_glbridge_set_fog_mode(1);
+        mcle_glbridge_set_fog_density(0.1f);
+    } else if (t > 0 && Tile::tiles[t]->material == Material::water) {
+        mcle_glbridge_set_fog_mode(1);
+        if (player->hasEffect(MobEffect::waterBreathing)) {
+            mcle_glbridge_set_fog_density(0.05f);
+        } else {
+            mcle_glbridge_set_fog_density(0.1f - (EnchantmentHelper::getOxygenBonus(player) * 0.03f));
+        }
+    } else if (t > 0 && Tile::tiles[t]->material == Material::lava) {
+        mcle_glbridge_set_fog_mode(1);
+        mcle_glbridge_set_fog_density(2.0f);
+    } else {
+        float distance = kRenderDistance;
+        if (!level->dimension->hasCeiling) {
+            // 4J - test for doing bedrockfog brought forward from 1.2.3
+            if (level->dimension->hasBedrockFog() && !creative) {
+                double yy = ((player->getLightColor(alpha) & 0xf00000) >> 20) / 16.0 +
+                            (player->yOld + (player->y - player->yOld) * alpha + 4) / 32;
+                if (yy < 1) {
+                    if (yy < 0) yy = 0;
+                    yy = yy * yy;
+                    float dist = 100 * static_cast<float>(yy);
+                    if (dist < 5) dist = 5;
+                    if (distance > dist) distance = dist;
+                }
+            }
+        }
+
+        mcle_glbridge_set_fog_mode(0);
+        if (i < 0) {
+            mcle_glbridge_set_fog_start(0);
+            mcle_glbridge_set_fog_end(distance * 0.8f);
+        } else {
+            mcle_glbridge_set_fog_start(distance * 0.25f);
+            mcle_glbridge_set_fog_end(distance);
+        }
+
+        if (level->dimension->isFoggyAt(static_cast<int>(player->x), static_cast<int>(player->z))) {
+            mcle_glbridge_set_fog_start(distance * 0.05f);
+            mcle_glbridge_set_fog_end(std::min(distance, 16 * 16 * .75f) * .5f);
+        }
+    }
+}
 
 // GameRenderer::bobHurt: tilt when hit, roll over when dead
 static void mcle_bob_hurt(float a) {
@@ -2699,6 +2942,11 @@ extern "C" void mcle_world_drive_renderer(void) {
                 mcle_glbridge_rotate(g_player->yRotO + (g_player->yRot - g_player->yRotO) * a + 180.0f, 0.0f, 1.0f, 0.0f);
             }
             mcle_glbridge_translate(0.0f, heightOffset, 0.0f);
+
+            x = g_player->xo + (g_player->x - g_player->xo) * a;
+            y = g_player->yo + (g_player->y - g_player->yo) * a - heightOffset;
+            z = g_player->zo + (g_player->z - g_player->zo) * a;
+            g_isInClouds = g_levelRenderer->isInCloud(x, y, z, a);
         }
         // Player translation is applied INSIDE upstream LevelRenderer::renderChunks
         // via glPushMatrix; glTranslatef(-xOff, -yOff, -zOff). Adding it here too
@@ -2711,73 +2959,16 @@ extern "C" void mcle_world_drive_renderer(void) {
         // Moved to the sim thread (mcle_game_tick body) so the render
         // thread never blocks on chunk work.
 
-        // setupFog equivalent. Mirrors upstream GameRenderer::setupFog
-        // (GameRenderer.cpp:2102+) and the fog-color computation at
-        // GameRenderer.cpp:1944-1968. Fog color = Level::getFogColor (muted
-        // blue tones from the colour table, modulated by time-of-day
-        // brightness). Then at low view distance, blend toward the
-        // sunrise-color palette in proportion to how much the view vector
-        // points toward the sun. That blend creates the "warm horizon
-        // toward the sun at dawn/dusk" effect.
-        //
-        // Upstream renderSky toggles GL_FOG via glEnable/glDisable around
-        // sun/moon/stars so they don't fade; our shim tracks those.
-        {
-            float fr = 0.47f, fg = 0.65f, fb = 1.0f;
-            if (g_initState == kStateTicking && g_levels[0] && g_player) {
-                try {
-                    Vec3 *fc = g_levels[0]->getFogColor(frame_partial_tick);
-                    if (fc) { fr = (float)fc->x; fg = (float)fc->y; fb = (float)fc->z; }
-
-                    float td = g_levels[0]->getTimeOfDay(frame_partial_tick);
-                    float sunAngle = g_levels[0]->getSunAngle(frame_partial_tick);
-                    float sunDirX = (std::sin(sunAngle) > 0.0f) ? -1.0f : 1.0f;
-                    Vec3 *vv = g_player->getViewVector(frame_partial_tick);
-                    float d_raw = 0.0f, d_blend = 0.0f;
-                    int sunrise_ok = 0;
-                    float c0 = 0, c1 = 0, c2 = 0, c3 = 0;
-                    if (vv) {
-                        d_raw = (float)vv->x * sunDirX;
-                        float d = d_raw;
-                        if (d < 0.0f) d = 0.0f;
-                        if (d > 0.0f) {
-                            Dimension *dim = g_levels[0]->dimension;
-                            if (dim) {
-                                float *c = dim->getSunriseColor(td, frame_partial_tick);
-                                if (c) {
-                                    sunrise_ok = 1;
-                                    c0 = c[0]; c1 = c[1]; c2 = c[2]; c3 = c[3];
-                                    d *= c[3];
-                                    d_blend = d;
-                                    fr = fr * (1.0f - d) + c[0] * d;
-                                    fg = fg * (1.0f - d) + c[1] * d;
-                                    fb = fb * (1.0f - d) + c[2] * d;
-                                }
-                            }
-                        }
-                    }
-                    // Every 30 frames, dump the blend inputs so we can
-                    // see why the sunrise tint isn't showing visually.
-                    {
-                        static int s_fb = 0;
-                        if ((s_fb++ % 30) == 0) {
-                            MCLE_LOG("FOG_BLEND td=%.3f sunAngle=%.3f sunDirX=%.1f vv_x=%.3f d_raw=%.3f sunriseOk=%d sunrise=(%.2f,%.2f,%.2f,%.2f) d_blend=%.3f fog=(%.3f,%.3f,%.3f)",
-                                     td, sunAngle, sunDirX,
-                                     vv ? (float)vv->x : 0.0f, d_raw,
-                                     sunrise_ok, c0, c1, c2, c3,
-                                     d_blend, fr, fg, fb);
-                        }
-                    }
-                } catch (...) {
-                    MCLE_LOG("FOG_BLEND threw");
-                }
-            }
-            const float renderDistance = 256.0f;  // viewDistance=0 in our build
-            mcle_glbridge_set_fog_color(fr, fg, fb, 1.0f);
-            mcle_glbridge_set_fog_start(renderDistance * 0.25f);
-            mcle_glbridge_set_fog_end(renderDistance);
-            mcle_glbridge_set_fog_enabled(1);
+        // GameRenderer::setupClearColor, then setupFog(0, a) and GL_FOG on
+        // for the terrain
+        try {
+            mcle_setup_clear_color(frame_partial_tick);
+            mcle_setup_fog(0, frame_partial_tick);
+        } catch (...) {
+            static int s_fogErr = 0;
+            if (s_fogErr++ < 3) MCLE_LOG("setupFog threw");
         }
+        mcle_glbridge_set_fog_enabled(1);
 
         // GameRenderer::updateLightTexture. 256 entries indexed by
         // (skyLevel << 4) | blockLevel, built from the player's dimension.
@@ -3007,28 +3198,10 @@ extern "C" void mcle_world_drive_renderer(void) {
                 } catch (...) {}
             }
         }
-        // Upstream's GameRenderer::setupFog(-1, a) called right before
-        // renderSky uses different start/end values than the chunk pass:
-        // FOG_START=0, FOG_END=renderDistance*0.8 (GameRenderer.cpp:2209-
-        // 2213). This pulls the entire sky dome toward the fog color
-        // (warm tones near the sun at sunset) even close to the camera,
-        // which is what produces the smooth blue-to-orange gradient at
-        // the horizon. With only the chunk-pass values (start=64,
-        // end=256) the dome stays nearly full sky color and never blends
-        // to fog - that's the "blue layer covering the orange horizon"
-        // visible at sunset. Swap start/end here, then restore the
-        // chunk values right after renderSky for the later passes.
-        {
-            const float renderDistance = 256.0f;
-            mcle_glbridge_set_fog_start(0.0f);
-            mcle_glbridge_set_fog_end(renderDistance * 0.8f);
-        }
+        // renderLevel: setupFog(-1, a) for the sky, then back to the terrain's
+        try { mcle_setup_fog(-1, frame_partial_tick); } catch (...) {}
         try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
-        {
-            const float renderDistance = 256.0f;
-            mcle_glbridge_set_fog_start(renderDistance * 0.25f);
-            mcle_glbridge_set_fog_end(renderDistance);
-        }
+        try { mcle_setup_fog(0, frame_partial_tick); } catch (...) {}
         // Modelview at this point should match what entered renderSky.
         // Upstream renderClouds expects: rotations + eye-height translate,
         // no XZ player translate. Log every 60 frames so we can confirm
@@ -3238,6 +3411,13 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
     float fg = 167.0f / 255.0f;
     float fb = 255.0f / 255.0f;
 
+    // setupClearColor's colour, from the last frame
+    if (g_haveClearColor.load(std::memory_order_acquire) && g_initState == kStateTicking) {
+        if (r) *r = g_fr;
+        if (g) *g = g_fg;
+        if (b) *b = g_fb;
+        return;
+    }
     if (g_initState == kStateTicking && g_levels[0] && g_player) {
         try {
             Vec3 *sky = g_levels[0]->getSkyColor(g_player, /*alpha*/1.0f);
