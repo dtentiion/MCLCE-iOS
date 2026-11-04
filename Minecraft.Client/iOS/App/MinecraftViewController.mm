@@ -20,6 +20,8 @@
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 extern "C" int  mcle_game_start(const char *levelFolder);   // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_status(int *percent);        // MCLEGameLoop.cpp
+extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int hostOptions,
+                                           int difficulty, int gameModeId); // MCLEGameLoop.cpp
 
 // app.GetString(IDS_*)
 static NSString* MCLEStr(int ids) {
@@ -2035,6 +2037,11 @@ static NSString* MCLEDifficultyLabel(int d) {
     int idx = g_load_save_index;
     if (idx < 0 || idx >= mcle_saves_count() || g_loading_world) return;
     NSString* folder = [NSString stringWithUTF8String:mcle_saves_folder(idx)];
+    unsigned int hostOptions = 0;
+    int hostOptionsRead = mcle_saves_host_options(idx, &hostOptions);
+    mcle_game_set_load_options(hostOptionsRead, hostOptions,
+                               MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3)),
+                               g_load_game_mode);
     [self navigateForwardTo:@"FullscreenProgress1080.swf"];
     if (mcle_game_start(folder.UTF8String)) {
         g_loading_world = true;

@@ -906,6 +906,17 @@ void initImpl() {
         return;
     }
 
+    // MinecraftServer::loadLevel: difficulty, spawning and the game type all
+    // come from the host options LoadMenu set
+    {
+        GameType *gameType = LevelSettings::validateGameType(app.GetGameHostOption(eGameHostOption_GameType));
+        for (int i = 0; i < 3; ++i) {
+            g_levels[i]->difficulty = app.GetGameHostOption(eGameHostOption_Difficulty);
+            g_levels[i]->setSpawnSettings(true, true);
+            g_levels[i]->getLevelData()->setGameType(gameType);
+        }
+    }
+
     // Step 7: preload chunks around spawn for the overworld. Parity with
     // MinecraftServer::run lines 1115-1146. Iterates a 13x13 chunk grid
     // (208-block radius) calling ServerChunkCache::create which loads
@@ -1023,6 +1034,15 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: chunkMap->add threw: %{public}s", e.what());
         } catch (...) {
             MCLE_LOG("mcle_game_init: chunkMap->add threw unknown");
+        }
+    }
+
+    // PlayerList::updatePlayerGameMode: a new player takes the level's game type
+    if (g_player && g_player->gameMode) {
+        try {
+            g_player->gameMode->updateGameMode(g_levels[0]->getLevelData()->getGameType());
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: updateGameMode threw");
         }
     }
 
@@ -1576,6 +1596,75 @@ extern "C" void mcle_delete_reassigned_storage(void); // link_stubs.cpp
 // UIScene_LoadMenu::StartGameFromSave hands RunNetworkGameThreadProc to
 // the FullscreenProgress scene. Init runs on its own thread so the
 // loading screen keeps animating.
+// UIScene_LoadMenu: the save's host options fill the More Options params
+// (or their defaults), then StartGameFromSave sets the app's host options
+// from them, the difficulty slider and the game mode toggle.
+extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int uiHostOptions,
+                                           int difficulty, int gameModeId) {
+    bool bPVP = true, bTrust = true, bFireSpreads = true, bTNT = true, bHostPrivileges = false;
+    bool bMobGriefing = true, bKeepInventory = false, bDoMobSpawning = true, bDoMobLoot = true;
+    bool bDoTileDrops = true, bNaturalRegeneration = true, bDoDaylightCycle = true;
+    const int worldSize = 3;
+    bool bIsSaveOwner = true;
+
+    if (hostOptionsRead) {
+        bPVP = app.GetGameHostOption(uiHostOptions, eGameHostOption_PvP) > 0;
+        bTrust = app.GetGameHostOption(uiHostOptions, eGameHostOption_TrustPlayers) > 0;
+        bFireSpreads = app.GetGameHostOption(uiHostOptions, eGameHostOption_FireSpreads) > 0;
+        bTNT = app.GetGameHostOption(uiHostOptions, eGameHostOption_TNT) > 0;
+        bHostPrivileges = app.GetGameHostOption(uiHostOptions, eGameHostOption_CheatsEnabled) > 0;
+
+        bMobGriefing = app.GetGameHostOption(uiHostOptions, eGameHostOption_MobGriefing);
+        bKeepInventory = app.GetGameHostOption(uiHostOptions, eGameHostOption_KeepInventory);
+        bDoMobSpawning = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoMobSpawning);
+        bDoMobLoot = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoMobLoot);
+        bDoTileDrops = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoTileDrops);
+        bNaturalRegeneration = app.GetGameHostOption(uiHostOptions, eGameHostOption_NaturalRegeneration);
+        bDoDaylightCycle = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoDaylightCycle);
+
+        if (!bHostPrivileges) {
+            // Set defaults
+            bMobGriefing = true;
+            bKeepInventory = false;
+            bDoMobSpawning = true;
+            bDoDaylightCycle = true;
+        }
+
+        if (app.GetGameHostOption(uiHostOptions, eGameHostOption_WasntSaveOwner) > 0) bIsSaveOwner = false;
+    }
+
+    app.SetGameHostOption(eGameHostOption_WasntSaveOwner, (!bIsSaveOwner));
+
+    const int pad = 0;
+    app.SetGameHostOption(eGameHostOption_Difficulty, difficulty);
+    app.SetGameHostOption(eGameHostOption_FriendsOfFriends, app.GetGameSettings(pad, eGameSetting_FriendsOfFriends));
+    app.SetGameHostOption(eGameHostOption_Gamertags, app.GetGameSettings(pad, eGameSetting_GamertagsVisible));
+    app.SetGameHostOption(eGameHostOption_BedrockFog, app.GetGameSettings(pad, eGameSetting_BedrockFog) ? 1 : 0);
+
+    app.SetGameHostOption(eGameHostOption_PvP, bPVP);
+    app.SetGameHostOption(eGameHostOption_TrustPlayers, bTrust);
+    app.SetGameHostOption(eGameHostOption_FireSpreads, bFireSpreads);
+    app.SetGameHostOption(eGameHostOption_TNT, bTNT);
+    app.SetGameHostOption(eGameHostOption_HostCanFly, bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_HostCanChangeHunger, bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_HostCanBeInvisible, bHostPrivileges);
+
+    app.SetGameHostOption(eGameHostOption_MobGriefing, bMobGriefing);
+    app.SetGameHostOption(eGameHostOption_KeepInventory, bKeepInventory);
+    app.SetGameHostOption(eGameHostOption_DoMobSpawning, bDoMobSpawning);
+    app.SetGameHostOption(eGameHostOption_DoMobLoot, bDoMobLoot);
+    app.SetGameHostOption(eGameHostOption_DoTileDrops, bDoTileDrops);
+    app.SetGameHostOption(eGameHostOption_NaturalRegeneration, bNaturalRegeneration);
+    app.SetGameHostOption(eGameHostOption_DoDaylightCycle, bDoDaylightCycle);
+
+    app.SetGameHostOption(eGameHostOption_WorldSize, worldSize + 1); // 0 is GAME_HOST_OPTION_WORLDSIZE_UNKNOWN
+
+    app.SetGameHostOption(eGameHostOption_GameType, gameModeId);
+
+    MCLE_LOG("load options: host=%08x difficulty=%d gameType=%d", app.GetGameHostOption(eGameHostOption_All),
+             difficulty, gameModeId);
+}
+
 extern "C" int mcle_game_start(const char *levelFolder) {
     if (g_initStarted || g_initState != kStateUnstarted) return 0;
     g_pendingLevelId = widen(levelFolder ? levelFolder : "");
@@ -1754,6 +1843,14 @@ extern "C" void mcle_game_tick(void) {
         } catch (...) {
             MCLE_LOG("mcle_game_tick: player input threw");
         }
+    }
+
+    // MinecraftServer::tick: difficulty and spawning follow the host options.
+    // spawn-animals defaults to true.
+    for (int i = 0; i < 3; ++i) {
+        if (!g_levels[i]) continue;
+        g_levels[i]->difficulty = app.GetGameHostOption(eGameHostOption_Difficulty);
+        g_levels[i]->setSpawnSettings(g_levels[i]->difficulty > 0 && !Minecraft::GetInstance()->isTutorial(), true);
     }
 
     // Tick all three dimensions in order. Parity with how the upstream
