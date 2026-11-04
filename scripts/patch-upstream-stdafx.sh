@@ -1675,3 +1675,9 @@ MSI_PY="$REPO_ROOT/scripts/patch-minecraftserver-instance-public.py"
 if [ -f "$MSI_PY" ]; then
     python3 "$MSI_PY"
 fi
+
+# Entities that don't save leaked their empty tag every incremental save
+SEL_PY="$REPO_ROOT/scripts/patch-savedentities-leak.py"
+if [ -f "$SEL_PY" ]; then
+    python3 "$SEL_PY"
+fi
