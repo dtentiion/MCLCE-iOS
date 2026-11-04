@@ -63,6 +63,7 @@ static bool g_loading_world = false;
 static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
+extern "C" void mcle_metal_set_gamma(float gamma); // MetalContext.mm
 
 // Name of the currently loaded menu SWF, set whenever we enter a
 // new scene. The settings-event bridge reads this to decide which
@@ -2765,6 +2766,15 @@ static NSString* MCLETipHTML(void) {
             g_loading_world = false;
             NSLog(@"[MinecraftVC] world ready, leaving FullscreenProgress");
             [self enterWorldUI];
+        }
+        // GameRenderer::CachePlayerGammas / ComputeGammaFromSlider
+        {
+            float slider = (float)mcle_settings_get(MCLE_SETTING_Gamma);
+            slider = std::max(slider, 0.0f);
+            slider = std::min(slider, 100.0f);
+            float gamma = slider > 50.0f ? 1.0f + (slider - 50.0f) / 50.0f * 1.2f
+                                         : 1.0f - (50.0f - slider) / 50.0f * 0.4f;
+            mcle_metal_set_gamma(gamma);
         }
         mcle_render_frame();
         // Keep the SWF layer presenting over the world (transparent stage)
