@@ -1982,8 +1982,19 @@ extern "C" void mcle_glbridge_skip_autoreplay(int id) {
 // decoration lists registered via mcle_glbridge_skip_autoreplay get
 // filtered out so they're only drawn once - from upstream's explicit
 // glCallList sites.
+// Only the chunk lists need that. Everything else (mob model parts, items)
+// is drawn by its own glCallList with the right matrix already.
+static int g_autoreplay_first = 0, g_autoreplay_end = 0;
+
+extern "C" void mcle_glbridge_set_autoreplay_range(int first, int count) {
+    g_autoreplay_first = first;
+    g_autoreplay_end = first + count;
+}
+
 extern "C" void mcle_glbridge_replay_all_lists(void) {
+    const bool ranged = g_autoreplay_end > g_autoreplay_first;
     for (const auto& kv : g_lists) {
+        if (ranged && (kv.first < g_autoreplay_first || kv.first >= g_autoreplay_end)) continue;
         if (g_skip_autoreplay_lists.count(kv.first)) continue;
         call_list_replay(kv.second);
     }

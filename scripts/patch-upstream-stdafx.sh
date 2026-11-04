@@ -1617,3 +1617,10 @@ AVD_PY="$REPO_ROOT/scripts/patch-abstract-virtual-dtors.py"
 if [ -f "$AVD_PY" ]; then
     python3 "$AVD_PY"
 fi
+
+# The camera player is a ServerPlayer, so renderEntities' LocalPlayer
+# first person check never skipped it.
+LCP_PY="$REPO_ROOT/scripts/patch-levelrenderer-camera-player.py"
+if [ -f "$LCP_PY" ]; then
+    python3 "$LCP_PY"
+fi

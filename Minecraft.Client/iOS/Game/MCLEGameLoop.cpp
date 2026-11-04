@@ -66,6 +66,7 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
                                                     int *last_hit);
 extern "C" void mcle_glbridge_fmt_stats(unsigned long *out, int max_count);
 extern "C" void mcle_glbridge_skip_autoreplay(int id);
+extern "C" void mcle_glbridge_set_autoreplay_range(int first, int count);
 
 // G1B-probe: defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
@@ -157,6 +158,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/TileEntityRenderDispatcher.h"
 #include "../../../upstream/Minecraft.Client/User.h"
 #include "../../../upstream/Minecraft.Client/Font.h"
+#include "../../../upstream/Minecraft.Client/Lighting.h"
+#include "../../../upstream/Minecraft.Client/FrustumCuller.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
 
@@ -1139,6 +1142,9 @@ void initImpl() {
         for (int i = 0; i < 7; i++) {
             mcle_glbridge_skip_autoreplay(haloRingList + 1 + i);
         }
+        // The ctor allocates chunkLists (2 per chunk) right before starList
+        const int chunkListCount = LevelRenderer::getGlobalChunkCount() * 2;
+        mcle_glbridge_set_autoreplay_range(starList - chunkListCount, chunkListCount);
         MCLE_LOG("mcle_game_init: registered %d world-decoration lists "
                  "for autoreplay skip (starList=%d, haloRingList=%d, "
                  "cloudList=%d..%d)",
@@ -2333,6 +2339,26 @@ extern "C" void mcle_world_drive_renderer(void) {
             s_renderCalls++;
         }
 
+        // GameRenderer::renderLevel: entities and tile entities go right
+        // after the opaque chunk pass, culled against the camera frustum.
+        if (EntityRenderDispatcher::instance && TileEntityRenderDispatcher::instance) {
+            static Vec3 *s_cameraPos = Vec3::newPermanent(0, 0, 0);
+            try {
+                Lighting::turnOn();
+                FrustumCuller frustObj;
+                Culler *frustum = &frustObj;
+                frustum->prepare(g_player->x, g_player->y, g_player->z);
+                Vec3 *cameraPosTemp = g_player->getPos(frame_partial_tick);
+                s_cameraPos->x = cameraPosTemp->x;
+                s_cameraPos->y = cameraPosTemp->y;
+                s_cameraPos->z = cameraPosTemp->z;
+                g_levelRenderer->renderEntities(s_cameraPos, frustum, frame_partial_tick);
+                Lighting::turnOff();
+            } catch (...) {
+                static int s_entErr = 0;
+                if (s_entErr++ < 3) MCLE_LOG("renderEntities threw");
+            }
+        }
 
         // G3e-step5: re-enable renderSky/renderClouds with line-by-line
         // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
