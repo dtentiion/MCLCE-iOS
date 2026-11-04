@@ -16,3 +16,6 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
 // y forward. Call once per game tick before the player's doTick.
 void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float stickX, float stickY,
                            unsigned int buttons);
+
+// The block the player was targeting at the last tick, if any.
+bool mcle_player_hit_tile(int *x, int *y, int *z, int *f);

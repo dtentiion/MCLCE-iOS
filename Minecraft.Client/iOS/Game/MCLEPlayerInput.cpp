@@ -11,6 +11,7 @@
 #include "MCLEPlayerInput.h"
 
 #include <cmath>
+#include <mutex>
 
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayerGameMode.h"
@@ -182,9 +183,23 @@ HitResult *pickFrom(const std::shared_ptr<ServerPlayer> &player, ServerLevel *le
     return hitResult;
 }
 
+// Last tick's targeted block, for the render thread's selection box
+std::mutex g_hitMutex;
+bool g_hitTile = false;
+int g_hitX = 0, g_hitY = 0, g_hitZ = 0, g_hitF = 0;
+
 void pick(float a) {
     delete s.hitResult;
     s.hitResult = pickFrom(P, L, P->x, P->y, P->z, a);
+
+    std::lock_guard<std::mutex> lock(g_hitMutex);
+    g_hitTile = s.hitResult != nullptr && s.hitResult->type == HitResult::TILE;
+    if (g_hitTile) {
+        g_hitX = s.hitResult->x;
+        g_hitY = s.hitResult->y;
+        g_hitZ = s.hitResult->z;
+        g_hitF = s.hitResult->f;
+    }
 }
 
 // PlayerConnection::handlePlayerAction for the three mining actions
@@ -779,4 +794,14 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     P->xxa = m.xa;
     P->yya = m.ya;
     P->setJumping(m.jumping);
+}
+
+bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {
+    std::lock_guard<std::mutex> lock(g_hitMutex);
+    if (!g_hitTile) return false;
+    *x = g_hitX;
+    *y = g_hitY;
+    *z = g_hitZ;
+    *f = g_hitF;
+    return true;
 }

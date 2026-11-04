@@ -170,6 +170,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/Mth.h"
+#include "../../../upstream/Minecraft.World/HitResult.h"
 #include "MCLEPlayerInput.h"
 
 namespace {
@@ -2527,6 +2528,23 @@ extern "C" void mcle_world_drive_renderer(void) {
             } catch (...) {
                 static int s_entErr = 0;
                 if (s_entErr++ < 3) MCLE_LOG("renderEntities threw");
+            }
+        }
+
+        // renderLevel: the selection box round the targeted block, picked
+        // on the sim thread this tick
+        {
+            int hx, hy, hz, hf;
+            if (mcle_player_hit_tile(&hx, &hy, &hz, &hf) && !g_player->isUnderLiquid(Material::water)) {
+                try {
+                    HitResult hit(hx, hy, hz, hf, Vec3::newTemp(hx, hy, hz));
+                    glDisable(GL_ALPHA_TEST);
+                    g_levelRenderer->renderHitOutline(g_player, &hit, 0, frame_partial_tick);
+                    glEnable(GL_ALPHA_TEST);
+                } catch (...) {
+                    static int s_hitErr = 0;
+                    if (s_hitErr++ < 3) MCLE_LOG("renderHitOutline threw");
+                }
             }
         }
 
