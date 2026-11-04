@@ -1602,3 +1602,11 @@ if [ -f "$WAS_PY" ]; then
     python3 "$WAS_PY"
 fi
 
+
+# BaseMobSpawner.h: virtual dtor. Deleting an abstract base through a
+# non-virtual dtor traps under clang, which killed the game whenever a
+# chunk holding a dungeon spawner unloaded.
+BMS_PY="$REPO_ROOT/scripts/patch-basemobspawner-virtual-dtor.py"
+if [ -f "$BMS_PY" ]; then
+    python3 "$BMS_PY"
+fi
