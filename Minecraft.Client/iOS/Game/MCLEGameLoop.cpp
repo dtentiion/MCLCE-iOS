@@ -1723,6 +1723,16 @@ extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int uiH
              difficulty, gameModeId);
 }
 
+// UIComponent_Panorama::tick reads the loaded level's game time and the
+// player's dimension. Returns 0 when no level is loaded.
+extern "C" int mcle_world_game_time(long long *gameTime, int *dimension) {
+    ServerLevel *level = g_levels[0];
+    if (!level) return 0;
+    *gameTime = level->getLevelData()->getGameTime();
+    *dimension = g_player ? g_player->dimension : 0;
+    return 1;
+}
+
 extern "C" void mcle_game_set_paused(int paused) {
     g_gamePaused.store(paused != 0, std::memory_order_relaxed);
 }

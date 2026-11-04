@@ -70,6 +70,7 @@ extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 extern "C" void mcle_metal_set_gamma(float gamma); // MetalContext.mm
 extern "C" void mcle_game_set_paused(int paused);   // MCLEGameLoop.cpp
+extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MCLEGameLoop.cpp
 extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
 
 // Name of the currently loaded menu SWF, set whenever we enter a
@@ -499,6 +500,23 @@ static void MCLESetPathVisible(NSString* path, BOOL visible) {
     if (!g_ruffle_player) return;
     const char* pth = path.UTF8String;
     ruffle_ios_set_child_path_visible(g_ruffle_player, (const uint8_t*)pth, strlen(pth), visible ? 1 : 0);
+}
+
+// UIComponent_Panorama::tick: night once the loaded overworld is past 14000
+// in its day, day otherwise (no level, or the Nether / End)
+static void MCLEPanoramaTick(void) {
+    extern PlayerHandle* g_ruffle_player;
+    static bool s_showingDay = true;
+    long long gameTime = 0;
+    int dimension = 0;
+    long long timeOfDay = 0;
+    if (mcle_world_game_time(&gameTime, &dimension) && dimension == 0) timeOfDay = gameTime % 24000;
+    bool day = timeOfDay <= 14000;
+    if (day != s_showingDay && g_ruffle_player) {
+        s_showingDay = day;
+        double arg = day ? 1.0 : 0.0;
+        ruffle_ios_call_method_on_sibling_root(g_ruffle_player, -2, (const uint8_t*)"ShowPanoramaDay", 15, &arg, 1);
+    }
 }
 
 // UIScene_HUD. What was last sent to the movie, starting from the values
@@ -2943,6 +2961,8 @@ static NSString* MCLETipHTML(void) {
     // the screen with the legacy Metal path (sky-color clear via
     // mcle_render_frame). Bypasses Ruffle entirely so the SWF menu
     // doesn't keep drawing on top of the world output.
+    MCLEPanoramaTick();
+
     if (mcle_world_is_ticking()) {
         if (self.splashLabel) self.splashLabel.hidden = YES;
         if (g_loading_world) {
