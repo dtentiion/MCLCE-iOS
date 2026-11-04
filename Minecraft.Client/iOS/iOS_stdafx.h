@@ -714,14 +714,28 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // when our stub is in scope first.
 #ifndef _SOUNDENGINE_H_DEFINED
 #define _SOUNDENGINE_H_DEFINED
+// The real upstream SoundEngine lives in Game/MCLESound.cpp. These are
+// what the stub's sound calls go to.
+void mcle_sound_play(int iSound, float x, float y, float z, float volume, float pitch);
+void mcle_sound_schedule(int iSound, float x, float y, float z, float volume, float pitch, int delayTicks);
+void mcle_sound_play_ui(int iSound, float volume, float pitch);
+void mcle_sound_play_streaming(const std::wstring &name, float x, float y, float z, float volume, float pitch,
+                               bool bMusicDelay);
+bool mcle_sound_is_playing_game_music();
+void mcle_sound_update_music_volume(float v);
+void mcle_sound_update_sfx_volume(float v);
 class SoundEngine {
 public:
     SoundEngine() {}
     template<class... A> void init(A...)     {}
     template<class... A> void destroy(A...)  {}
     template<class... A> void shutdown(A...) {}
-    template<class... A> void play(A...)     {}
-    template<class... A> void schedule(A...) {}
+    void play(int iSound, float x, float y, float z, float volume, float pitch) {
+        mcle_sound_play(iSound, x, y, z, volume, pitch);
+    }
+    void schedule(int iSound, float x, float y, float z, float volume, float pitch, int delayTicks) {
+        mcle_sound_schedule(iSound, x, y, z, volume, pitch, delayTicks);
+    }
     template<class... A> void stop(A...)     {}
     template<class... A> void stopAll(A...)  {}
     template<class... A> void pauseAll(A...) {}
@@ -733,19 +747,22 @@ public:
     template<class... A> int  getMusicTrackCount(A...) { return 0; }
     template<class... A> void playMusic(A...) {}
     template<class... A> void stopMusic(A...) {}
-    template<class... A> int  playStreaming(A...) { return 0; }
+    void playStreaming(const std::wstring &name, float x, float y, float z, float volume, float pitch,
+                       bool bMusicDelay = true) {
+        mcle_sound_play_streaming(name, x, y, z, volume, pitch, bMusicDelay);
+    }
     template<class... A> int  playStreamed(A...)  { return 0; }
-    template<class... A> int  playUI(A...)        { return 0; }
-    template<class... A> bool GetIsPlayingStreamingGameMusic(A...) { return false; }
+    void playUI(int iSound, float volume, float pitch) { mcle_sound_play_ui(iSound, volume, pitch); }
+    bool GetIsPlayingStreamingGameMusic() { return mcle_sound_is_playing_game_music(); }
     template<class... A> bool IsPlayingMusic(A...) { return false; }
     template<class... A> bool IsPlayingStreaming(A...) { return false; }
     template<class... A> void StopAllStreaming(A...) {}
     template<class... A> void StopAllSounds(A...)    {}
     template<class... A> void SetMusicVolume(A...)   {}
     template<class... A> void SetSFXVolume(A...)     {}
-    template<class... A> void updateMusicVolume(A...) {}
+    void updateMusicVolume(float fVal) { mcle_sound_update_music_volume(fVal); }
     template<class... A> void updateSFXVolume(A...)   {}
-    template<class... A> void updateSoundEffectVolume(A...) {}
+    void updateSoundEffectVolume(float fVal) { mcle_sound_update_sfx_volume(fVal); }
 };
 #endif // _SOUNDENGINE_H_DEFINED
 // Real MultiPlayerGameMode - PlayerList chains through

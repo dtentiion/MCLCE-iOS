@@ -1,0 +1,177 @@
+// Upstream's miniaudio SoundEngine (Common/Audio/SoundEngine.cpp, the
+// Windows64 one, patched by scripts/patch-soundengine-ios.py) built for
+// iOS. Every other file sees the SoundEngine stub in iOS_stdafx.h, whose
+// methods call the mcle_sound_* functions here. The real class is renamed
+// in this file so the two don't clash.
+
+#include <cerrno>
+#include <cfloat>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <strings.h>
+
+#include "MCLESound.h"
+
+// Windows CRT calls SoundEngine.cpp makes
+#undef sprintf_s
+template <size_t N>
+static int sprintf_s(char (&buf)[N], const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vsnprintf(buf, N, fmt, ap);
+    va_end(ap);
+    return r;
+}
+static int sprintf_s(char *buf, size_t size, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vsnprintf(buf, size, fmt, ap);
+    va_end(ap);
+    return r;
+}
+static int strcpy_s(char *dst, size_t size, const char *src) {
+    snprintf(dst, size, "%s", src);
+    return 0;
+}
+static int fopen_s(FILE **f, const char *name, const char *mode) {
+    *f = fopen(name, mode);
+    return *f ? 0 : errno;
+}
+static int _stricmp(const char *a, const char *b) { return strcasecmp(a, b); }
+
+// lce_filesystem's FileExists
+static bool FileExists(const char *path) {
+    DWORD attribs = GetFileAttributesA(path);
+    return (attribs != INVALID_FILE_ATTRIBUTES && !(attribs & FILE_ATTRIBUTE_DIRECTORY));
+}
+
+// The stub set this so the real header body is skipped everywhere else.
+// The sound paths are private statics, so the class is opened up for this
+// file only (its two includes go in first, unaffected).
+#undef _SOUNDENGINE_H_DEFINED
+#define SoundEngine MCLEUpstreamSoundEngine
+#include "../../../upstream/Minecraft.World/SoundTypes.h"
+#include "../../../upstream/Minecraft.Client/Common/Audio/miniaudio.h"
+#define private public
+#include "../../../upstream/Minecraft.Client/Common/Audio/SoundEngine.h"
+#undef private
+#include "../../../upstream/Minecraft.Client/Common/Audio/SoundEngine.cpp"
+#undef SoundEngine
+
+#include "../../../upstream/Minecraft.World/LevelListener.h"
+#include "../../../upstream/Minecraft.Client/ServerPlayer.h"
+
+namespace {
+
+MCLEUpstreamSoundEngine *g_engine = nullptr;
+// Sounds come from the sim thread, settings from the main thread
+std::recursive_mutex g_mutex;
+std::shared_ptr<ServerPlayer> g_listenerPlayer;
+
+// MultiPlayerLevel::playLocalSound, the way a client plays a LevelSoundPacket
+void playLocalSound(double x, double y, double z, int iSound, float volume, float pitch,
+                    float fClipSoundDist = 16.0f) {
+    if (volume > 1) fClipSoundDist *= volume;
+    float minDistSq = FLT_MAX;
+    if (g_listenerPlayer) minDistSq = g_listenerPlayer->distanceToSqr(x, y, z);
+    if (minDistSq < fClipSoundDist * fClipSoundDist) {
+        mcle_sound_play(iSound, static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), volume, pitch);
+    }
+}
+
+// There's no client level, so instead of ServerLevelListener's packets
+// reaching ClientConnection::handleSoundEvent, the level's sounds come
+// straight here. Sounds that skip their source player were already played
+// by that player's own client, which here is this one, so they play too.
+class ClientSoundListener : public LevelListener {
+public:
+    void tileChanged(int, int, int) override {}
+    void tileLightChanged(int, int, int) override {}
+    void setTilesDirty(int, int, int, int, int, int, Level *) override {}
+    void allChanged() override {}
+    void playSound(int iSound, double x, double y, double z, float volume, float pitch, float) override {
+        playLocalSound(x, y, z, iSound, volume, pitch);
+    }
+    void playSoundExceptPlayer(shared_ptr<Player>, int iSound, double x, double y, double z, float volume,
+                               float pitch, float) override {
+        playLocalSound(x, y, z, iSound, volume, pitch);
+    }
+    void addParticle(ePARTICLE_TYPE, double, double, double, double, double, double) override {}
+    void entityAdded(shared_ptr<Entity>) override {}
+    void entityRemoved(shared_ptr<Entity>) override {}
+    void playerRemoved(shared_ptr<Entity>) override {}
+    void skyColorChanged() override {}
+    void playStreamingMusic(const wstring &, int, int, int) override {}
+    void globalLevelEvent(int, int, int, int, int) override {}
+    void levelEvent(shared_ptr<Player>, int, int, int, int, int) override {}
+    void destroyTileProgress(int, int, int, int, int) override {}
+};
+
+} // namespace
+
+void mcle_sound_init(const char *documentsPath) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) return;
+    snprintf(MCLEUpstreamSoundEngine::m_szSoundPath, sizeof(MCLEUpstreamSoundEngine::m_szSoundPath),
+             "%s/Windows64Media/Sound/", documentsPath);
+    snprintf(MCLEUpstreamSoundEngine::m_szMusicPath, sizeof(MCLEUpstreamSoundEngine::m_szMusicPath),
+             "%s/music/", documentsPath);
+    g_engine = new MCLEUpstreamSoundEngine();
+    g_engine->init(nullptr);
+}
+
+void mcle_sound_listen(const std::shared_ptr<ServerPlayer> &player, Level *level) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    g_listenerPlayer = player;
+    if (level) level->addListener(new ClientSoundListener());
+}
+
+void mcle_sound_tick(const std::shared_ptr<ServerPlayer> &player, float a, float musicVolume, float sfxVolume) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (!g_engine) return;
+    // ActionGameSettings -> Options::set(MUSIC / SOUND)
+    g_engine->updateMusicVolume(musicVolume);
+    g_engine->updateSoundEffectVolume(sfxVolume);
+    shared_ptr<Mob> players[MAX_LOCAL_PLAYERS];
+    players[0] = player;
+    g_engine->tick(players, a);
+    g_engine->playMusicTick();
+}
+
+void mcle_sound_play(int iSound, float x, float y, float z, float volume, float pitch) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) g_engine->play(iSound, x, y, z, volume, pitch);
+}
+
+void mcle_sound_schedule(int iSound, float x, float y, float z, float volume, float pitch, int delayTicks) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) g_engine->schedule(iSound, x, y, z, volume, pitch, delayTicks);
+}
+
+void mcle_sound_play_ui(int iSound, float volume, float pitch) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) g_engine->playUI(iSound, volume, pitch);
+}
+
+void mcle_sound_play_streaming(const std::wstring &name, float x, float y, float z, float volume, float pitch,
+                               bool bMusicDelay) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) g_engine->playStreaming(name, x, y, z, volume, pitch, bMusicDelay);
+}
+
+bool mcle_sound_is_playing_game_music() {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    return g_engine ? g_engine->GetIsPlayingStreamingGameMusic() : false;
+}
+
+void mcle_sound_update_music_volume(float v) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) g_engine->updateMusicVolume(v);
+}
+
+void mcle_sound_update_sfx_volume(float v) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (g_engine) g_engine->updateSoundEffectVolume(v);
+}
