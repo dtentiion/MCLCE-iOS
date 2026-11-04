@@ -1624,3 +1624,10 @@ LCP_PY="$REPO_ROOT/scripts/patch-levelrenderer-camera-player.py"
 if [ -f "$LCP_PY" ]; then
     python3 "$LCP_PY"
 fi
+
+# Every other mc->player->GetXboxPad() in LevelRenderer reads a garbage pad
+# through the aliased ServerPlayer. Pin them to pad 0.
+LLP_PY="$REPO_ROOT/scripts/patch-levelrenderer-local-pad.py"
+if [ -f "$LLP_PY" ]; then
+    python3 "$LLP_PY"
+fi
