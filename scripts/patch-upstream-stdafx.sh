@@ -1658,8 +1658,8 @@ if [ -f "$TT_PY" ]; then
     python3 "$TT_PY"
 fi
 
-# Witch renderer / model includes the PC precompiled header gave them
-WI_PY="$REPO_ROOT/scripts/patch-witch-includes.py"
+# Renderer / model includes the PC precompiled header gave them
+WI_PY="$REPO_ROOT/scripts/patch-renderer-includes.py"
 if [ -f "$WI_PY" ]; then
     python3 "$WI_PY"
 fi
