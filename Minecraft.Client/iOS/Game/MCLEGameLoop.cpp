@@ -173,6 +173,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/HitResult.h"
 #include "MCLEPlayerInput.h"
 #include "MCLESound.h"
+#include "MCLEHud.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
@@ -2033,6 +2034,7 @@ extern "C" void mcle_game_tick(void) {
             // playMusicTick, volumes from the settings like ActionGameSettings
             mcle_sound_tick(g_player, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
                             mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
+            mcle_hud_update(g_player);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
