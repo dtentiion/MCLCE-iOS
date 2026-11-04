@@ -1107,6 +1107,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/HumanoidMobRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ItemFrameRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ItemInHandRenderer.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Minimap.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ItemRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/ItemSpriteRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/LavaSlimeRenderer.cpp

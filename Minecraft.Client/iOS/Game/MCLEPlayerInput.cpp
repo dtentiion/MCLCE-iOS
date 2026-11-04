@@ -18,6 +18,7 @@
 #include "../../../upstream/Minecraft.Client/ServerLevel.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/ParticleEngine.h"
+#include "../../../upstream/Minecraft.Client/ItemInHandRenderer.h"
 #include "../../../upstream/Minecraft.World/HitResult.h"
 #include "../../../upstream/Minecraft.World/Vec3.h"
 #include "../../../upstream/Minecraft.World/AABB.h"
@@ -395,6 +396,12 @@ bool interact(const std::shared_ptr<Entity> &entity) {
     return P->interact(entity);
 }
 
+// minecraft->gameRenderer->itemInHandRenderer
+ItemInHandRenderer *handRenderer() {
+    Minecraft *mc = Minecraft::GetInstance();
+    return mc ? mc->localitemInHandRenderers[0] : nullptr;
+}
+
 // LocalPlayer::handleMouseDown
 void handleMouseDown(int button, bool down) {
     if (P->isSleeping()) return;
@@ -463,6 +470,7 @@ bool handleMouseClick(int button) {
             }
         } else {
             std::shared_ptr<ItemInstance> item = oldItem;
+            int oldCount = item != nullptr ? item->count : 0;
             bool usedItem = false;
             if (useItemOn(item, x, y, z, face, s.hitResult->pos, &usedItem)) {
                 if (usedItem) returnItemPlaced = true;
@@ -470,13 +478,19 @@ bool handleMouseClick(int button) {
                 P->swing();
             }
             if (item == nullptr) return false;
-            if (item->count == 0) P->inventory->items[P->inventory->selected] = nullptr;
+            if (item->count == 0) {
+                P->inventory->items[P->inventory->selected] = nullptr;
+            } else if (item->count != oldCount || isCreative()) {
+                if (ItemInHandRenderer *hand = handRenderer()) hand->itemPlaced();
+            }
         }
     }
 
     if (mayUse && button == 1) {
         std::shared_ptr<ItemInstance> item = P->inventory->getSelected();
-        if (item != nullptr) useItem(item);
+        if (item != nullptr && useItem(item)) {
+            if (ItemInHandRenderer *hand = handRenderer()) hand->itemUsed();
+        }
     }
     return returnItemPlaced;
 }

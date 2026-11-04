@@ -67,6 +67,7 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
 extern "C" void mcle_glbridge_fmt_stats(unsigned long *out, int max_count);
 extern "C" void mcle_glbridge_skip_autoreplay(int id);
 extern "C" void mcle_glbridge_set_autoreplay_range(int first, int count);
+extern "C" void mcle_metal_clear_depth(void);
 
 // G1B-probe: defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
@@ -171,6 +172,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/Mth.h"
 #include "../../../upstream/Minecraft.World/HitResult.h"
+#include "../../../upstream/Minecraft.Client/ItemInHandRenderer.h"
 #include "MCLEPlayerInput.h"
 #include "MCLESound.h"
 #include "MCLEHud.h"
@@ -305,6 +307,10 @@ std::shared_ptr<LevelStorage> g_levelStorage;
 ServerLevel                  *g_levels[3]    = { nullptr, nullptr, nullptr };
 // GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
 // when the render thread builds the light texture
+// GameRenderer's itemInHandRenderer. Ticked on the sim thread, drawn on the
+// render thread, so the two take turns.
+ItemInHandRenderer *g_itemInHand = nullptr;
+std::mutex g_itemInHandMutex;
 std::atomic<float> g_lightBlr{0.0f};
 std::atomic<float> g_darkenWorldAmount{0.0f};
 std::atomic<float> g_darkenWorldAmountO{0.0f};
@@ -1362,6 +1368,9 @@ void initImpl() {
             try {
                 textures->stitch();
                 MCLE_LOG("mcle_game_init: textures->stitch done");
+                // GameRenderer's constructor makes the item in hand renderer
+                g_itemInHand = new ItemInHandRenderer(g_minecraftShim);
+                g_minecraftShim->localitemInHandRenderers[0] = g_itemInHand;
                 // Diagnostic: confirm grass / dirt icons resolved to distinct
                 // atlas slots. If grass-DOWN icon == grass-UP icon, the bug
                 // isn't in tessellation - it's in icon registration / lookup.
@@ -2040,6 +2049,10 @@ extern "C" void mcle_game_tick(void) {
             g_player->xRotO = xRotBefore;
             g_player->yRotO = yRotBefore;
             mcle_player_fov_tick(g_player);
+            if (g_itemInHand) {
+                std::lock_guard<std::mutex> lock(g_itemInHandMutex);
+                g_itemInHand->tick();
+            }
             // Minecraft::run's soundEngine->tick and the main loop's
             // playMusicTick, volumes from the settings like ActionGameSettings
             mcle_sound_tick(g_player, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
@@ -2261,6 +2274,39 @@ extern "C" void mcle_hud_draw_textured_quad(int x, int y, int w, int h,
                                              float u1, float v1,
                                              unsigned int tex_id);
 
+// GameRenderer::bobHurt: tilt when hit, roll over when dead
+static void mcle_bob_hurt(float a) {
+    float hurt = g_player->hurtTime - a;
+    if (g_player->getHealth() <= 0) {
+        float duration = g_player->deathTime + a;
+        mcle_glbridge_rotate(40 - (40 * 200) / (duration + 200), 0, 0, 1);
+    }
+    if (hurt < 0 || g_player->hurtDuration <= 0) return;
+    hurt /= g_player->hurtDuration;
+    hurt = (float)Mth::sin(hurt * hurt * hurt * hurt * PI);
+    float rr = g_player->hurtDir;
+    mcle_glbridge_rotate(-rr, 0, 1, 0);
+    mcle_glbridge_rotate(-hurt * 14, 0, 0, 1);
+    mcle_glbridge_rotate(+rr, 0, 1, 0);
+}
+
+// GameRenderer::bobView, the walking bob
+static void mcle_bob_view(float a) {
+    float wda = g_player->walkDist - g_player->walkDistO;
+    float b = -(g_player->walkDist + wda * a);
+    float bob = g_player->oBob + (g_player->bob - g_player->oBob) * a;
+    float tilt = g_player->oTilt + (g_player->tilt - g_player->oTilt) * a;
+    mcle_glbridge_translate((float)Mth::sin(b * PI) * bob * 0.5f, -fabsf((float)Mth::cos(b * PI) * bob), 0);
+    mcle_glbridge_rotate((float)Mth::sin(b * PI) * bob * 3, 0, 0, 1);
+    mcle_glbridge_rotate(fabsf((float)Mth::cos(b * PI - 0.2f) * bob) * 5, 1, 0, 0);
+    mcle_glbridge_rotate(tilt, 1, 0, 0);
+}
+
+// The view bob runs with the setting on and not flying
+static bool mcle_view_bob_on() {
+    return mcle_settings_get(8 /*ViewBob*/) && !g_player->abilities.flying;
+}
+
 extern "C" void mcle_world_drive_renderer(void) {
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
 
@@ -2343,34 +2389,8 @@ extern "C" void mcle_world_drive_renderer(void) {
         mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
         mcle_glbridge_load_identity();
 
-        // bobHurt: tilt when hit, roll over when dead
-        {
-            float hurt = g_player->hurtTime - a;
-            if (g_player->getHealth() <= 0) {
-                float duration = g_player->deathTime + a;
-                mcle_glbridge_rotate(40 - (40 * 200) / (duration + 200), 0, 0, 1);
-            }
-            if (hurt >= 0 && g_player->hurtDuration > 0) {
-                hurt /= g_player->hurtDuration;
-                hurt = (float)Mth::sin(hurt * hurt * hurt * hurt * PI);
-                float rr = g_player->hurtDir;
-                mcle_glbridge_rotate(-rr, 0, 1, 0);
-                mcle_glbridge_rotate(-hurt * 14, 0, 0, 1);
-                mcle_glbridge_rotate(+rr, 0, 1, 0);
-            }
-        }
-
-        // bobView, with View Bobbing on and not flying
-        if (mcle_settings_get(8 /*ViewBob*/) && !g_player->abilities.flying) {
-            float wda = g_player->walkDist - g_player->walkDistO;
-            float b = -(g_player->walkDist + wda * a);
-            float bob = g_player->oBob + (g_player->bob - g_player->oBob) * a;
-            float tilt = g_player->oTilt + (g_player->tilt - g_player->oTilt) * a;
-            mcle_glbridge_translate((float)Mth::sin(b * PI) * bob * 0.5f, -fabsf((float)Mth::cos(b * PI) * bob), 0);
-            mcle_glbridge_rotate((float)Mth::sin(b * PI) * bob * 3, 0, 0, 1);
-            mcle_glbridge_rotate(fabsf((float)Mth::cos(b * PI - 0.2f) * bob) * 5, 1, 0, 0);
-            mcle_glbridge_rotate(tilt, 1, 0, 0);
-        }
+        mcle_bob_hurt(a);
+        if (mcle_view_bob_on()) mcle_bob_view(a);
 
         // moveCameraToPlayer, first person. Rotation interpolates between
         // ticks like everything else, the look turns once a tick in
@@ -2783,6 +2803,48 @@ extern "C" void mcle_world_drive_renderer(void) {
         }
 
         mcle_glbridge_replay_all_lists();
+
+        // renderLevel ends with glClear(GL_DEPTH_BUFFER_BIT) and
+        // renderItemInHand, so the hand is never inside a wall
+        if (g_itemInHand) {
+            mcle_metal_clear_depth();
+            bool renderHand = true;
+            std::shared_ptr<ItemInstance> item = g_player->inventory->getSelected();
+            if (!(item && item->getItem()->id == Item::map_Id) && mcle_settings_get(26 /*DisplayHand*/) == 0) {
+                renderHand = false;
+            }
+
+            // getFov(a, false): no FOV setting or sprint factor for the hand
+            float handFov = 70.0f;
+            if (g_player->getHealth() <= 0) {
+                float duration = g_player->deathTime + a;
+                handFov /= ((1 - 500 / (duration + 500)) * 2.0f + 1);
+            }
+            mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
+            mcle_glbridge_load_identity();
+            mcle_glbridge_metal_perspective(handFov, aspect, 0.05f, 1024.0f);
+            mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
+            mcle_glbridge_load_identity();
+
+            try {
+                std::lock_guard<std::mutex> lock(g_itemInHandMutex);
+                glPushMatrix();
+                mcle_bob_hurt(a);
+                if (mcle_view_bob_on()) mcle_bob_view(a);
+                if (renderHand && !g_player->isSleeping()) {
+                    g_itemInHand->render(a);
+                }
+                glPopMatrix();
+                if (!g_player->isSleeping()) {
+                    g_itemInHand->renderScreenEffect(a);
+                    mcle_bob_hurt(a);
+                }
+                if (mcle_view_bob_on()) mcle_bob_view(a);
+            } catch (...) {
+                static int s_handErr = 0;
+                if (s_handErr++ < 3) MCLE_LOG("renderItemInHand threw");
+            }
+        }
 
         // G5: every ~120 frames, log the call_list stats so we know whether
         // the chunk display lists are actually being replayed.
