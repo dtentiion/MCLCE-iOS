@@ -29,15 +29,23 @@
 #include "../../../upstream/Minecraft.World/Facing.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/ChunkSource.h"
+#include "../../../upstream/Minecraft.World/FoodData.h"
+#include "../../../upstream/Minecraft.World/FoodConstants.h"
+#include "../../../upstream/Minecraft.World/MobEffect.h"
 
 namespace {
 
 // _360_JOY_BUTTON_* from the Win64 4J_Input.h, which the iOS pad reader uses.
 // Windows64_Minecraft.cpp maps ACTION to RT, USE to LT, scroll to LB / RB.
+// JUMP is A and SNEAK_TOGGLE is the right stick click.
+const unsigned int kButtonA = 0x00000001;
 const unsigned int kButtonRB = 0x00000040;
 const unsigned int kButtonLB = 0x00000080;
+const unsigned int kButtonRThumb = 0x00000100;
 const unsigned int kButtonRT = 0x00400000;
 const unsigned int kButtonLT = 0x00800000;
+const unsigned int kButtonDpadLeft = 0x00001000;
+const unsigned int kButtonDpadRight = 0x00002000;
 
 // PlayerActionPacket actions the client sends while mining
 enum Action { START_DESTROY_BLOCK, ABORT_DESTROY_BLOCK, STOP_DESTROY_BLOCK };
@@ -627,4 +635,148 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     }
 
     if (s.missTime > 0) s.missTime--;
+}
+
+namespace {
+
+// Input and the parts of LocalPlayer::aiStep that run before Player::aiStep
+struct MoveState {
+    float xa = 0, ya = 0;
+    bool jumping = false;
+    bool sneaking = false;
+    unsigned int prevButtons = 0;
+    int sprintTime = 0;
+    int sprintTriggerTime = 0;
+    bool sprintTriggerRegisteredReturn = false;
+    int jumpTriggerTime = 0;
+    bool twoJumpsRegistered = false;
+};
+
+MoveState m;
+
+const int SPRINT_DURATION = 20 * 30;
+
+// LocalPlayer::setSprinting, plus the server's START/STOP_SPRINTING
+void setSprinting(bool value) {
+    P->setSprinting(value);
+    m.sprintTime = value ? SPRINT_DURATION : 0;
+}
+
+} // namespace
+
+void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float stickX, float stickY,
+                           unsigned int buttons) {
+    if (!player) return;
+    P = player;
+
+    const unsigned int pressed = buttons & ~m.prevButtons;
+    m.prevButtons = buttons;
+
+    if (m.sprintTime > 0) {
+        m.sprintTime--;
+        if (m.sprintTime == 0) setSprinting(false);
+    }
+    if (m.sprintTriggerTime > 0) m.sprintTriggerTime--;
+
+    bool wasJumping = m.jumping;
+    float runTreshold = 0.8f;
+    bool wasRunning = m.ya >= runTreshold;
+
+    // Input::tick. Minecraft movement is the wrong way round, so x is inverted.
+    m.xa = -stickX;
+    m.ya = stickY;
+
+    // In flying mode don't toggle sneaking, unless riding (sneak dismounts)
+    if (!P->abilities.flying || P->riding != nullptr) {
+        if (pressed & kButtonRThumb) m.sneaking = !m.sneaking;
+    }
+    if (m.sneaking) {
+        m.xa *= 0.3f;
+        m.ya *= 0.3f;
+    }
+    m.jumping = (buttons & kButtonA) != 0;
+
+    // Back in LocalPlayer::aiStep
+    if (P->isUsingItem() && !P->isRiding()) {
+        m.xa *= 0.2f;
+        m.ya *= 0.2f;
+        m.sprintTriggerTime = 0;
+    }
+    if (m.sneaking) {
+        if (P->ySlideOffset < 0.2f) P->ySlideOffset = 0.2f;
+    }
+
+    // PlayerCommandPacket START/STOP_SNEAKING
+    if (P->isSneaking() != m.sneaking) P->setSneaking(m.sneaking);
+
+    bool enoughFoodToSprint = P->getFoodData()->getFoodLevel() > FoodConstants::MAX_FOOD * FoodConstants::FOOD_SATURATION_LOW;
+    // Flyers can sprint without food, for survival saves reloaded in creative
+    if (P->abilities.mayfly || P->isAllowedToFly()) enoughFoodToSprint = true;
+
+    bool forwardEnoughToTriggerSprint = m.ya >= runTreshold;
+    bool forwardReturnedToDeadzone = m.ya == 0.0f;
+    bool forwardEnoughToContinueSprint = m.ya >= runTreshold;
+
+    // Sprint is two pushes forward within 7 ticks, back to the deadzone in between
+    if (P->onGround && !P->isSprinting() && enoughFoodToSprint && !P->isUsingItem() && !P->hasEffect(MobEffect::blindness)) {
+        if (!wasRunning && forwardEnoughToTriggerSprint) {
+            if (m.sprintTriggerTime == 0) {
+                m.sprintTriggerTime = 7;
+                m.sprintTriggerRegisteredReturn = false;
+            } else if (m.sprintTriggerRegisteredReturn) {
+                setSprinting(true);
+                m.sprintTriggerTime = 0;
+                m.sprintTriggerRegisteredReturn = false;
+            }
+        } else if ((m.sprintTriggerTime > 0) && forwardReturnedToDeadzone) {
+            m.sprintTriggerRegisteredReturn = true;
+        }
+    }
+    if (P->isSneaking()) m.sprintTriggerTime = 0;
+    if (P->isSprinting() && (!forwardEnoughToContinueSprint || !enoughFoodToSprint || P->isSneaking() || P->isUsingItem())) {
+        setSprinting(false);
+    }
+
+    // Creative flying toggles on two jump taps, released in between
+    if (!P->isSleeping() && (P->abilities.mayfly || P->isAllowedToFly())) {
+        if (!wasJumping && m.jumping) {
+            if (m.jumpTriggerTime == 0) {
+                m.jumpTriggerTime = 7;
+                m.twoJumpsRegistered = false;
+            } else {
+                m.twoJumpsRegistered = true;
+            }
+        } else if (m.jumpTriggerTime > 0 && m.twoJumpsRegistered) {
+            P->abilities.flying = !P->abilities.flying;
+            m.jumpTriggerTime = 0;
+            m.twoJumpsRegistered = false;
+            if (P->abilities.flying) m.sneaking = false;
+        }
+    } else if (P->abilities.flying) {
+        P->abilities.flying = false;
+    }
+    // Player::aiStep counts this down right after
+    if (m.jumpTriggerTime > 0) m.jumpTriggerTime--;
+
+    if (P->abilities.flying) {
+        // While flying the sneak button just means it's held: go down. The
+        // 0.42 matches what a jump adds in jumpFromGround.
+        if (buttons & kButtonRThumb) P->yd -= (0.15 + 0.42);
+        if (m.jumping) P->yd += 0.15;
+
+        // D-pad strafes along the nearest axis
+        float yRotSnapped = floorf((P->yRot / 90.0f) + 0.5f) * 90.0f;
+        if (buttons & kButtonDpadRight) {
+            P->xd = -0.15 * cos(yRotSnapped * PI / 180);
+            P->zd = -0.15 * sin(yRotSnapped * PI / 180);
+        } else if (buttons & kButtonDpadLeft) {
+            P->xd = 0.15 * cos(yRotSnapped * PI / 180);
+            P->zd = 0.15 * sin(yRotSnapped * PI / 180);
+        }
+    }
+
+    // LocalPlayer::serverAiStep
+    P->xxa = m.xa;
+    P->yya = m.ya;
+    P->setJumping(m.jumping);
 }

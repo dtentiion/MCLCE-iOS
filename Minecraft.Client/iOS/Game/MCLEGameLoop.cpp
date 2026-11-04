@@ -1847,7 +1847,12 @@ extern "C" void mcle_game_tick(void) {
     // tickEntities above already saved xOld via Level::tick, so the camera
     // interp anchor is still right.
     if (g_player) {
-        try { g_player->doTick(false); } catch (...) {
+        try {
+            mcle_player_move_tick(g_player, mcle_ios_input_poll_lx(0) / 1000.0f,
+                                  -mcle_ios_input_poll_ly(0) / 1000.0f,
+                                  (unsigned int)mcle_ios_input_poll_buttons(0));
+            g_player->doTick(false);
+        } catch (...) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
     }
@@ -2139,22 +2144,8 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (g_player->xRot > 90.0f)  g_player->xRot = 90.0f;
             if (g_player->xRot < -90.0f) g_player->xRot = -90.0f;
 
-            // Walk input fed into the player's xxa/yya fields - LivingEntity::aiStep
-            // (called from game tick after tickEntities) reads these and runs
-            // travel() -> moveRelative() -> move() with collision against the
-            // level's block AABBs. xxa = strafe, yya = forward (upstream sign).
-            // Stick poll returns -1000..1000; LivingEntity expects ~[-1, 1].
-            // getSpeed() inside travel() applies the actual walking speed.
-            const float kStickToInput = 1.0f / 1000.0f;
-            // Stick lx>0 = right; xxa>0 = strafe-right in moveRelative. User
-            // reported inverted - flipping sign to match upstream convention.
-            g_player->xxa = -(float)mcle_ios_input_poll_lx(0) * kStickToInput;
-            g_player->yya = -(float)mcle_ios_input_poll_ly(0) * kStickToInput;
-
-            // Jump = A button (bit 0 = _360_JOY_BUTTON_A). LivingEntity::aiStep
-            // reads `jumping` and applies jumpFromGround() when onGround.
-            const int buttons = mcle_ios_input_poll_buttons(0);
-            g_player->setJumping((buttons & 0x1) != 0);
+            // Walking, jumping, sneak and sprint are set at tick rate in
+            // mcle_player_move_tick, like Input::tick in LocalPlayer::aiStep.
 
             // Partial-tick alpha for camera position interp. Sim ticks at 20Hz
             // (50ms) but rendering at 60Hz - without interp the camera judders
