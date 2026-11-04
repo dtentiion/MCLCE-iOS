@@ -162,7 +162,7 @@ HitResult *pickFrom(const std::shared_ptr<ServerPlayer> &player, ServerLevel *le
                 }
             } else if (p != nullptr) {
                 double dd = from->distanceTo(p->pos);
-                auto const riding = p->riding;
+                auto const riding = player->riding;
                 if (riding != nullptr && e == riding) {
                     if (nearest == 0) hovered = e;
                 } else {
