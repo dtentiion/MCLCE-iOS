@@ -135,8 +135,9 @@ void mcle_sound_tick(const std::shared_ptr<ServerPlayer> &player, float a, float
     // ActionGameSettings -> Options::set(MUSIC / SOUND)
     g_engine->updateMusicVolume(musicVolume);
     g_engine->updateSoundEffectVolume(sfxVolume);
+    // Minecraft passes localplayers cast to shared_ptr<Mob>*, the same here
     shared_ptr<Mob> players[MAX_LOCAL_PLAYERS];
-    players[0] = player;
+    if (player) players[0] = shared_ptr<Mob>(player, reinterpret_cast<Mob *>(player.get()));
     g_engine->tick(players, a);
     g_engine->playMusicTick();
 }
