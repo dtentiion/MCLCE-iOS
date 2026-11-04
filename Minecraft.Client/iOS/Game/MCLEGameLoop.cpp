@@ -1823,14 +1823,15 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
-    // Player physics: run aiStep so xxa/yya/jumping (set per-frame from the
-    // controller in mcle_world_drive_renderer) drive travel() -> move() with
-    // collision against level block AABBs and gravity. tickEntities above
-    // already saved xOld via Level::tick before calling ServerPlayer::tick
-    // (which does no physics), so the camera-interp anchor is correct.
+    // PlayerConnection::handleMovePlayer runs doTick(false) on the server
+    // player every tick. Player::tick in there does the aiStep movement
+    // (xxa/yya/jumping are set per frame from the controller in
+    // mcle_world_drive_renderer) plus food, item use, sleeping and the rest.
+    // tickEntities above already saved xOld via Level::tick, so the camera
+    // interp anchor is still right.
     if (g_player) {
-        try { g_player->aiStep(); } catch (...) {
-            MCLE_LOG("mcle_game_tick: aiStep threw");
+        try { g_player->doTick(false); } catch (...) {
+            MCLE_LOG("mcle_game_tick: doTick threw");
         }
     }
 
