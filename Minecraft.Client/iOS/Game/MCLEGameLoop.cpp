@@ -2074,6 +2074,11 @@ extern "C" void mcle_game_tick(void) {
         return;
     }
 
+    // Minecraft::init has the LevelRenderer long before a level ticks. Here
+    // ticking is switched on while init is still setting rendering up, and
+    // level code (Level::getCubes) reaches into the renderer.
+    if (!g_renderReady.load(std::memory_order_acquire)) return;
+
     // Throttle simulation to 20Hz (50ms per tick) to match upstream parity.
     // CADisplayLink calls us at 60Hz; without this, aiStep + tickEntities run
     // 3x too fast and walking / gravity / friction all feel sped up.
