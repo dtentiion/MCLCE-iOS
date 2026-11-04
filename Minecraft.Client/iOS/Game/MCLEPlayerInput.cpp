@@ -33,6 +33,9 @@
 #include "../../../upstream/Minecraft.World/FoodData.h"
 #include "../../../upstream/Minecraft.World/FoodConstants.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
+#include "../../../upstream/Minecraft.World/SharedMonsterAttributes.h"
+#include "../../../upstream/Minecraft.World/AttributeInstance.h"
+#include "../../../upstream/Minecraft.World/BowItem.h"
 
 namespace {
 
@@ -680,7 +683,7 @@ void setSprinting(bool value) {
 } // namespace
 
 void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float stickX, float stickY,
-                           unsigned int buttons) {
+                           float lookX, float lookY, unsigned int buttons, float sensitivity, bool invertLook) {
     if (!player) return;
     P = player;
 
@@ -710,6 +713,16 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
         m.ya *= 0.3f;
     }
     m.jumping = (buttons & kButtonA) != 0;
+
+    // Look: squared so small pushes aim finely, scaled by the in-game
+    // sensitivity, applied once a tick
+    float turnSpeed = 50.0f;
+    float tx = lookX * sensitivity;
+    float ty = lookY * sensitivity;
+    if (invertLook) ty = -ty;
+    float turnX = tx * fabsf(tx) * turnSpeed;
+    float turnY = ty * fabsf(ty) * turnSpeed;
+    P->interpolateTurn(turnX, turnY);
 
     // Back in LocalPlayer::aiStep
     if (P->isUsingItem() && !P->isRiding()) {
@@ -804,4 +817,38 @@ bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {
     *z = g_hitZ;
     *f = g_hitF;
     return true;
+}
+
+namespace {
+// GameRenderer's fov / oFov for the one local player
+float g_fov = 1.0f, g_oFov = 1.0f;
+std::mutex g_fovMutex;
+}
+
+void mcle_player_fov_tick(const std::shared_ptr<ServerPlayer> &player) {
+    if (!player) return;
+    // LocalPlayer::getFieldOfViewModifier
+    float targetFov = 1.0f;
+    if (player->abilities.flying) targetFov *= 1.1f;
+    AttributeInstance *speed = player->getAttribute(SharedMonsterAttributes::MOVEMENT_SPEED);
+    targetFov *= (speed->getValue() / player->abilities.getWalkingSpeed() + 1) / 2;
+    if (player->isUsingItem() && player->getUseItem()->id == Item::bow->id) {
+        int ticksHeld = player->getTicksUsingItem();
+        float scale = static_cast<float>(ticksHeld) / BowItem::MAX_DRAW_DURATION;
+        if (scale > 1) scale = 1;
+        else scale *= scale;
+        targetFov *= 1.0f - scale * .15f;
+    }
+
+    // GameRenderer::tickFov
+    std::lock_guard<std::mutex> lock(g_fovMutex);
+    g_oFov = g_fov;
+    g_fov += (targetFov - g_fov) * 0.5f;
+    if (g_fov > 1.5f) g_fov = 1.5f;
+    if (g_fov < 0.1f) g_fov = 0.1f;
+}
+
+float mcle_player_fov_factor(float a) {
+    std::lock_guard<std::mutex> lock(g_fovMutex);
+    return g_oFov + (g_fov - g_oFov) * a;
 }

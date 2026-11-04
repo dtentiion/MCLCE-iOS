@@ -2026,10 +2026,20 @@ extern "C" void mcle_game_tick(void) {
     // interp anchor is still right.
     if (g_player) {
         try {
+            const float xRotBefore = g_player->xRot, yRotBefore = g_player->yRot;
             mcle_player_move_tick(g_player, mcle_ios_input_poll_lx(0) / 1000.0f,
                                   -mcle_ios_input_poll_ly(0) / 1000.0f,
-                                  (unsigned int)mcle_ios_input_poll_buttons(0));
+                                  mcle_ios_input_poll_rx(0) / 1000.0f,
+                                  -mcle_ios_input_poll_ry(0) / 1000.0f,
+                                  (unsigned int)mcle_ios_input_poll_buttons(0),
+                                  mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
+                                  mcle_settings_get(10 /*ControlInvertLook*/) != 0);
             g_player->doTick(false);
+            // LocalPlayer turns inside aiStep, after baseTick saved the old
+            // rotation, so that's what the camera interpolates from
+            g_player->xRotO = xRotBefore;
+            g_player->yRotO = yRotBefore;
+            mcle_player_fov_tick(g_player);
             // Minecraft::run's soundEngine->tick and the main loop's
             // playMusicTick, volumes from the settings like ActionGameSettings
             mcle_sound_tick(g_player, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
@@ -2291,50 +2301,10 @@ extern "C" void mcle_world_drive_renderer(void) {
         mcle_metal_current_size(&vw, &vh);
         const float aspect = (vh > 0) ? ((float)vw / (float)vh) : 1.0f;
 
-        mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
-        mcle_glbridge_load_identity();
-        mcle_glbridge_metal_perspective(70.0f, aspect, 0.05f, 1024.0f);
-
-        mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
-        mcle_glbridge_load_identity();
-
-        // G5-step8 TEMP non-parity: drive g_player->xRot/yRot/x/y/z
-        // directly from the controller sticks so look-around + walk work
-        // without a real LocalPlayer + Input::tick path. Upstream's
-        // parity flow is LocalPlayer::tickInput -> Input::tick ->
-        // InputManager.GetJoypadStick_* -> player. We can't run that
-        // chain because LocalPlayer.cpp doesn't compile yet (UI/render
-        // deps), and Input::tick crashes on Minecraft::localgameModes
-        // which our shim doesn't have. Until LocalPlayer is wired,
-        // this short-circuit makes the controller drive the camera +
-        // position. No collision, no gravity - we float through the
-        // world freely.
-        // Match upstream: simulation ticks at 20Hz (50ms), camera renders
-        // at frame rate using xOld + (x - xOld) * partialTick. Movement
-        // speeds match Minecraft: ~4.317 blocks/sec walking, ~140 deg/sec
-        // look at full deflection.
+        // Partial tick. The sim runs at 20Hz and rendering interpolates
+        // between its last two ticks, alpha = (now - lastTick) / 50ms.
         float frame_partial_tick = 1.0f;
         {
-            // Look stays per-frame for responsiveness (matches upstream
-            // GameRenderer doing rotation outside the tick).
-            // Stick polls return -1000..1000. 140 deg/sec at 60fps full deflection
-            // = 2.33 deg/frame, so kLook = 140 / 60 / 1000 = 0.00233.
-            const float kLook = 140.0f / 60.0f / 1000.0f;
-            const float rx = (float)mcle_ios_input_poll_rx(0) * kLook;
-            const float ry = (float)mcle_ios_input_poll_ry(0) * kLook;
-            g_player->yRot += rx;
-            g_player->xRot += ry;
-            if (g_player->xRot > 90.0f)  g_player->xRot = 90.0f;
-            if (g_player->xRot < -90.0f) g_player->xRot = -90.0f;
-
-            // Walking, jumping, sneak and sprint are set at tick rate in
-            // mcle_player_move_tick, like Input::tick in LocalPlayer::aiStep.
-
-            // Partial-tick alpha for camera position interp. Sim ticks at 20Hz
-            // (50ms) but rendering at 60Hz - without interp the camera judders
-            // every tick. renderChunks already does
-            //   xOff = xOld + (x - xOld) * alpha
-            // so we just need to feed alpha = (now - lastTick) / 50ms.
             const uint64_t lastTickNs = g_lastSimTickNs.load(std::memory_order_relaxed);
             if (lastTickNs > 0) {
                 using clock = std::chrono::steady_clock;
@@ -2347,19 +2317,70 @@ extern "C" void mcle_world_drive_renderer(void) {
                 frame_partial_tick = a;
             }
         }
+        const float a = frame_partial_tick;
 
-        // Apply player rotation (xRot=pitch, yRot=yaw) so the camera
-        // looks where the player is facing. Order matches upstream
-        // GameRenderer: pitch first, then yaw. yaw + 180 because Minecraft
-        // yaw=0 looks south but our default camera looks down -Z (north).
-        mcle_glbridge_rotate((float)g_player->xRot, 1.0f, 0.0f, 0.0f);
-        mcle_glbridge_rotate((float)g_player->yRot + 180.0f, 0.0f, 1.0f, 0.0f);
-        // Eye-height offset. Parity with GameRenderer.cpp:463+576:
-        //   float heightOffset = player->heightOffset - 1.62f;
-        //   glTranslatef(0, heightOffset, 0);
-        // ServerPlayer sets heightOffset=0 (4J fix - see ServerPlayer.cpp:119)
-        // so this resolves to glTranslate(0, -1.62, 0). Lifts the camera to
-        // standing eye level instead of leaving it at foot level.
+        // GameRenderer::getFov: the FOV setting, the sprint / fly / bow
+        // factor from tickFov, the death zoom and narrower under water
+        float fov = 70.0f + mcle_settings_get(4 /*FOV*/) * 40.0f / 100.0f;
+        fov *= mcle_player_fov_factor(a);
+        if (g_player->getHealth() <= 0) {
+            float duration = g_player->deathTime + a;
+            fov /= ((1 - 500 / (duration + 500)) * 2.0f + 1);
+        }
+        {
+            double cx = g_player->xo + (g_player->x - g_player->xo) * a;
+            double cy = g_player->yo + (g_player->y - g_player->yo) * a + 1.62 - g_player->heightOffset;
+            double cz = g_player->zo + (g_player->z - g_player->zo) * a;
+            int t = g_levels[0]->getTile(Mth::floor(cx), Mth::floor(cy), Mth::floor(cz));
+            if (t != 0 && Tile::tiles[t] && Tile::tiles[t]->material == Material::water) fov = fov * 60 / 70;
+        }
+
+        // GameRenderer::setupCamera, first person
+        mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
+        mcle_glbridge_load_identity();
+        mcle_glbridge_metal_perspective(fov, aspect, 0.05f, 1024.0f);
+
+        mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
+        mcle_glbridge_load_identity();
+
+        // bobHurt: tilt when hit, roll over when dead
+        {
+            float hurt = g_player->hurtTime - a;
+            if (g_player->getHealth() <= 0) {
+                float duration = g_player->deathTime + a;
+                mcle_glbridge_rotate(40 - (40 * 200) / (duration + 200), 0, 0, 1);
+            }
+            if (hurt >= 0 && g_player->hurtDuration > 0) {
+                hurt /= g_player->hurtDuration;
+                hurt = (float)Mth::sin(hurt * hurt * hurt * hurt * PI);
+                float rr = g_player->hurtDir;
+                mcle_glbridge_rotate(-rr, 0, 1, 0);
+                mcle_glbridge_rotate(-hurt * 14, 0, 0, 1);
+                mcle_glbridge_rotate(+rr, 0, 1, 0);
+            }
+        }
+
+        // bobView, with View Bobbing on and not flying
+        if (mcle_settings_get(8 /*ViewBob*/) && !g_player->abilities.flying) {
+            float wda = g_player->walkDist - g_player->walkDistO;
+            float b = -(g_player->walkDist + wda * a);
+            float bob = g_player->oBob + (g_player->bob - g_player->oBob) * a;
+            float tilt = g_player->oTilt + (g_player->tilt - g_player->oTilt) * a;
+            mcle_glbridge_translate((float)Mth::sin(b * PI) * bob * 0.5f, -fabsf((float)Mth::cos(b * PI) * bob), 0);
+            mcle_glbridge_rotate((float)Mth::sin(b * PI) * bob * 3, 0, 0, 1);
+            mcle_glbridge_rotate(fabsf((float)Mth::cos(b * PI - 0.2f) * bob) * 5, 1, 0, 0);
+            mcle_glbridge_rotate(tilt, 1, 0, 0);
+        }
+
+        // moveCameraToPlayer, first person. Rotation interpolates between
+        // ticks like everything else, the look turns once a tick in
+        // mcle_player_move_tick. yaw + 180 because Minecraft yaw 0 faces
+        // south and the camera looks down -Z.
+        mcle_glbridge_translate(0.0f, 0.0f, -0.1f);
+        mcle_glbridge_rotate(g_player->xRotO + (g_player->xRot - g_player->xRotO) * a, 1.0f, 0.0f, 0.0f);
+        mcle_glbridge_rotate(g_player->yRotO + (g_player->yRot - g_player->yRotO) * a + 180.0f, 0.0f, 1.0f, 0.0f);
+        // ServerPlayer's heightOffset is 0 (4J, ServerPlayer.cpp:119), so
+        // this lifts the camera to eye level
         mcle_glbridge_translate(0.0f, (float)g_player->heightOffset - 1.62f, 0.0f);
         // Player translation is applied INSIDE upstream LevelRenderer::renderChunks
         // via glPushMatrix; glTranslatef(-xOff, -yOff, -zOff). Adding it here too

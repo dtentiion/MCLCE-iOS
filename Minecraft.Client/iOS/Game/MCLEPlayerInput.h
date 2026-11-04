@@ -11,11 +11,16 @@ class ServerLevel;
 void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerLevel *level,
                             unsigned int buttons);
 
-// Input::tick plus the start of LocalPlayer::aiStep: walking input, sneak
-// toggle, sprint and creative flying. Stick values are -1..1, x right and
-// y forward. Call once per game tick before the player's doTick.
+// Input::tick plus the start of LocalPlayer::aiStep: walking and looking,
+// sneak toggle, sprint and creative flying. Stick values are -1..1, x right
+// and y forward / up. Call once per game tick before the player's doTick.
 void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float stickX, float stickY,
-                           unsigned int buttons);
+                           float lookX, float lookY, unsigned int buttons, float sensitivity,
+                           bool invertLook);
+
+// GameRenderer::tickFov once a tick, and the smoothed factor getFov uses
+void mcle_player_fov_tick(const std::shared_ptr<ServerPlayer> &player);
+float mcle_player_fov_factor(float a);
 
 // The block the player was targeting at the last tick, if any.
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f);
