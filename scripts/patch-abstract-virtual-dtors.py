@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Give the abstract base classes clang warns about a virtual destructor.
+"""Give the abstract base classes clang traps on a virtual destructor.
 
-clang flags every `delete` on these as -Wdelete-abstract-non-virtual-dtor,
-and at runtime the deleting destructor it emits is a trap (brk #1), same as
-the BaseMobSpawner crash. MSVC just calls the base dtor, so it never showed
-on Windows.
+Deleting through a pointer to an abstract class with a non-virtual,
+non-trivial destructor is UB, and clang turns the inlined destructor into
+a trap (brk #1), same as the BaseMobSpawner crash. MSVC just calls the base
+dtor, so it never showed on Windows.
+
+Only classes whose destructor does something are listed. A trivial one
+(Icon, Position, EntitySelector, MemTextureProcessor) compiles to a plain
+free on clang too, which is what MSVC does. Making those virtual would run
+derived dtors upstream never runs, e.g. ~StitchedTexture walks a null
+frames list when loadUVs deletes the old clock/compass icons.
 
 Idempotent.
 """
@@ -16,11 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 UP = REPO / "upstream"
 
 TARGETS = [
-    ("Minecraft.World/Icon.h", "Icon"),
-    ("Minecraft.World/EntitySelector.h", "EntitySelector"),
-    ("Minecraft.World/Position.h", "Position"),
     ("Minecraft.World/StructureStart.h", "StructureStart"),
-    ("Minecraft.Client/MemTextureProcessor.h", "MemTextureProcessor"),
     ("Minecraft.Client/Common/GameRules/GameRuleDefinition.h", "GameRuleDefinition"),
 ]
 
