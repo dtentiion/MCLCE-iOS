@@ -122,6 +122,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/SparseLightStorage.h"
 #include "../../../upstream/Minecraft.Client/ParticleEngine.h"
+#include "../../../upstream/Minecraft.Client/Camera.h"
 #include "../../../upstream/Minecraft.World/CompressedTileStorage.h"
 #include "../../../upstream/Minecraft.World/SparseDataStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionChunkStorage.h"
@@ -312,6 +313,10 @@ std::mutex g_itemInHandMutex;
 // LevelRenderer::destroyingBlocks, changed on the sim thread and drawn by
 // renderDestroyAnimation on the render thread
 std::mutex g_destroyingBlocksMutex;
+// ParticleEngine: particles get added and ticked on the sim thread and
+// drawn on the render thread. Recursive since a level event can add more
+// than one.
+std::recursive_mutex g_particleMutex;
 // Single player pause (UIScene_PauseMenu): the server stops ticking
 std::atomic<bool> g_gamePaused{false};
 // GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
@@ -346,6 +351,7 @@ public:
         r->playSoundExceptPlayer(player, iSound, x, y, z, volume, pitch, clip);
     }
     void addParticle(ePARTICLE_TYPE name, double x, double y, double z, double xa, double ya, double za) override {
+        std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
         r->addParticle(name, x, y, z, xa, ya, za);
     }
     void entityAdded(shared_ptr<Entity> entity) override { r->entityAdded(entity); }
@@ -355,6 +361,7 @@ public:
     void playStreamingMusic(const wstring &name, int x, int y, int z) override { r->playStreamingMusic(name, x, y, z); }
     void globalLevelEvent(int type, int x, int y, int z, int data) override { r->globalLevelEvent(type, x, y, z, data); }
     void levelEvent(shared_ptr<Player> source, int type, int x, int y, int z, int data) override {
+        std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
         r->levelEvent(source, type, x, y, z, data);
     }
     void destroyTileProgress(int id, int x, int y, int z, int progress) override {
@@ -1306,8 +1313,8 @@ void initImpl() {
         g_minecraftShim->level = lvl;
         // Minecraft::init builds this before any level is set. LevelRenderer
         // routes block break / crack events into it as soon as it listens to
-        // the level, so it has to exist first. Textures are only used when
-        // particles get drawn, which iOS doesn't do yet.
+        // the level, so it has to exist first. It's made again with the
+        // textures once they exist.
         if (!g_minecraftShim->particleEngine)
             g_minecraftShim->particleEngine = new ParticleEngine(lvl, nullptr);
         // Its calls go to Game/MCLESound.cpp
@@ -1408,6 +1415,13 @@ void initImpl() {
             Textures *textures = new Textures(skins, options);
             g_levelRenderer->textures = textures;
             g_minecraftShim->textures = textures;
+            // Minecraft::init makes the particle engine with the textures.
+            // The one from before only had to catch events and has none.
+            {
+                ParticleEngine *early = g_minecraftShim->particleEngine;
+                g_minecraftShim->particleEngine = new ParticleEngine(g_levels[0], textures);
+                delete early;
+            }
             MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
             // Minecraft::init makes the fonts right after Textures. Signs
             // and name tags draw with them. Same locations as
@@ -1515,6 +1529,11 @@ void initImpl() {
 }
 
 } // anonymous namespace
+
+// Held while anything outside this file touches the particle engine
+std::recursive_mutex &mcle_particle_mutex() {
+    return g_particleMutex;
+}
 
 // minecraft->level->destroyTileProgress from MultiPlayerGameMode
 void mcle_client_destroy_progress(int id, int x, int y, int z, int progress) {
@@ -1956,6 +1975,7 @@ extern "C" void mcle_game_tick(void) {
     // Minecraft::tick: if (!pause) particleEngine->tick();
     if (Minecraft *mcPE = Minecraft::GetInstance()) {
         if (mcPE->particleEngine) {
+            std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
             try { mcPE->particleEngine->tick(); } catch (...) {}
         }
     }
@@ -2882,8 +2902,28 @@ extern "C" void mcle_world_drive_renderer(void) {
 
         mcle_glbridge_replay_all_lists();
 
-        // renderLevel: the cracks on blocks being broken. The chunks are only
-        // drawn by the replay above, so this has to come after it.
+        // renderLevel: the opaque particles, then the translucent ones that
+        // upstream draws after the water. The chunks are only drawn by the
+        // replay above, so these come after it.
+        if (ParticleEngine *particles = Minecraft::GetInstance()->particleEngine) {
+            try {
+                std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+                Camera::prepare(g_player, false);
+                Lighting::turnOn();
+                particles->renderLit(g_player, frame_partial_tick, ParticleEngine::OPAQUE_LIST);
+                Lighting::turnOff();
+                particles->render(g_player, frame_partial_tick, ParticleEngine::OPAQUE_LIST);
+                Lighting::turnOn();
+                particles->renderLit(g_player, frame_partial_tick, ParticleEngine::TRANSLUCENT_LIST);
+                Lighting::turnOff();
+                particles->render(g_player, frame_partial_tick, ParticleEngine::TRANSLUCENT_LIST);
+            } catch (...) {
+                static int s_particleErr = 0;
+                if (s_particleErr++ < 3) MCLE_LOG("particle render threw");
+            }
+        }
+
+        // renderLevel: the cracks on blocks being broken
         try {
             std::lock_guard<std::mutex> lock(g_destroyingBlocksMutex);
             glEnable(GL_BLEND);

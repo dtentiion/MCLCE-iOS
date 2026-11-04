@@ -14,6 +14,7 @@ set(MCLE_GAME_SOURCES
   MCLEPlayerInput.cpp
   MCLESound.cpp
   MCLEHud.cpp
+  MCLECamera.cpp
   MCLE_iOS_MachHandler.cpp
 )
 

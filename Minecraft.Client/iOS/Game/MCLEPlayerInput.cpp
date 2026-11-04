@@ -39,8 +39,10 @@
 #include "../../../upstream/Minecraft.World/AttributeInstance.h"
 #include "../../../upstream/Minecraft.World/BowItem.h"
 
-// MCLEGameLoop.cpp: the client level's destroyTileProgress
+// MCLEGameLoop.cpp: the client level's destroyTileProgress, and the lock
+// for the particle engine the render thread draws from
 void mcle_client_destroy_progress(int id, int x, int y, int z, int progress);
+std::recursive_mutex &mcle_particle_mutex();
 
 namespace {
 
@@ -437,7 +439,10 @@ void handleMouseDown(int button, bool down) {
 
         if (P->mayDestroyBlockAt(x, y, z)) {
             Minecraft *mc = Minecraft::GetInstance();
-            if (mc && mc->particleEngine) mc->particleEngine->crack(x, y, z, s.hitResult->f);
+            if (mc && mc->particleEngine) {
+                std::lock_guard<std::recursive_mutex> lock(mcle_particle_mutex());
+                mc->particleEngine->crack(x, y, z, s.hitResult->f);
+            }
             P->swing();
         }
     } else {
