@@ -1145,6 +1145,8 @@ void initImpl() {
                 std::wstring(L"iOSPlayer"),
                 g_playerGameMode);
             MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
+            // PlayerList::getPlayerForLogin, 4J took this out of ServerPlayer's ctor
+            g_player->gameMode->player = g_player;
         } catch (const std::exception &e) {
             MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
         } catch (...) {
