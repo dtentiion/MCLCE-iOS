@@ -13,6 +13,7 @@
 #include "../Game/MCLESaveList.h"
 #include "../Game/MCLEStrings.h"
 #include "../Game/MCLEHud.h"
+#include "../Game/MCLETooltips.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 
 #include <algorithm>
@@ -664,6 +665,60 @@ static void MCLEHudPump(void) {
     if (visible != g_hud.visible) {
         g_hud.visible = visible;
         MCLESetPathVisible(@"", visible);
+    }
+}
+
+// UIComponent_Tooltips in game. What Minecraft::tick last set per slot,
+// each one only sent on a change like _SetTooltip, then one relayout.
+// Slots go A, B, X, Y, LT, RT, LB, RB, LS, RS, Back.
+static struct {
+    int ids[11];
+    bool shown[11];
+    int enabled; // -1 until the first pump
+} g_gameTooltips;
+
+// The strip still has whatever the last menu put on it, so everything
+// counts as showing and the first pump hides what the game doesn't use
+static void MCLEGameTooltipsReset(void) {
+    for (int i = 0; i < 11; i++) {
+        g_gameTooltips.ids[i] = -3;
+        g_gameTooltips.shown[i] = true;
+    }
+    g_gameTooltips.enabled = -1;
+}
+
+static void MCLEGameTooltipsPump(void) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+
+    // UIScene_HUD::SetTooltipsEnabled, from the In-Game Tooltips setting
+    int enabled = mcle_settings_get(MCLE_SETTING_Tooltips) != 0 ? 1 : 0;
+    if (enabled != g_gameTooltips.enabled) {
+        g_gameTooltips.enabled = enabled;
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, enabled);
+    }
+
+    int ids[11];
+    mcle_tooltips_get(ids);
+    ids[10] = -1;
+    bool relayout = false;
+    for (int i = 0; i < 11; i++) {
+        int id = ids[i];
+        if (id == g_gameTooltips.ids[i] && !(id > -1 && !g_gameTooltips.shown[i])) continue;
+        g_gameTooltips.ids[i] = id;
+        relayout = true;
+        bool show = id > -1 || id == -2;
+        // _SetTooltip skips hiding one that isn't showing
+        if (!show && !g_gameTooltips.shown[i]) continue;
+        g_gameTooltips.shown[i] = show;
+        const char* label = id > -1 ? mcle_string(id) : "";
+        ruffle_ios_call_set_tooltip(g_ruffle_player, kTooltipsDepth, i, (const uint8_t*)label, strlen(label),
+                                    show ? 1 : 0);
+    }
+    if (relayout) {
+        const char* updateName = "UpdateLayout";
+        ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth, (const uint8_t*)updateName,
+                                               strlen(updateName), NULL, 0);
     }
 }
 
@@ -2293,6 +2348,7 @@ static NSString* MCLETipHTML(void) {
     self.menuStack = nil;
     [self transitionToMenuNamed:@"HUD1080.swf"];
     MCLEHudReset();
+    MCLEGameTooltipsReset();
     const int depths[] = { -2, kLogoDepth, kDimDepth, kTooltipsDepth };
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
     if (self.splashLabel) self.splashLabel.hidden = YES;
@@ -3014,6 +3070,7 @@ static NSString* MCLETipHTML(void) {
         mcle_render_frame();
         if (!g_world_paused) {
             MCLEHudPump();
+            MCLEGameTooltipsPump();
             // Keep the SWF layer presenting over the world (transparent stage)
             extern PlayerHandle* g_ruffle_player;
             if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);

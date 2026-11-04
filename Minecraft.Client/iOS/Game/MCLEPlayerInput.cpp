@@ -881,6 +881,10 @@ void mcle_player_bob(float a, float *xBob, float *yBob) {
     *yBob = g_yBobO + (g_yBob - g_yBobO) * a;
 }
 
+HitResult *mcle_player_hit_result() {
+    return s.hitResult;
+}
+
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {
     std::lock_guard<std::mutex> lock(g_hitMutex);
     if (!g_hitTile) return false;

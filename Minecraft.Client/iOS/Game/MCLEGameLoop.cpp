@@ -179,6 +179,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLEPlayerInput.h"
 #include "MCLESound.h"
 #include "MCLEHud.h"
+#include "MCLETooltips.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
@@ -2048,6 +2049,11 @@ extern "C" void mcle_game_tick(void) {
                                    (unsigned int)mcle_ios_input_poll_buttons(0));
         } catch (...) {
             MCLE_LOG("mcle_game_tick: player input threw");
+        }
+        try {
+            mcle_tooltips_update(g_player, mcle_player_hit_result());
+        } catch (...) {
+            MCLE_LOG("mcle_game_tick: tooltips threw");
         }
     }
 

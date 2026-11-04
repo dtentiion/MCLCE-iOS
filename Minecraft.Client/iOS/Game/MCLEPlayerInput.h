@@ -25,5 +25,10 @@ void mcle_player_bob(float a, float *xBob, float *yBob);
 void mcle_player_fov_tick(const std::shared_ptr<ServerPlayer> &player);
 float mcle_player_fov_factor(float a);
 
+// Minecraft::hitResult from this tick's pick. Sim thread only, it's
+// replaced every tick.
+class HitResult;
+HitResult *mcle_player_hit_result();
+
 // The block the player was targeting at the last tick, if any.
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f);

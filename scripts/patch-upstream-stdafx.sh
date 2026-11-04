@@ -1651,3 +1651,9 @@ LPC_PY="$REPO_ROOT/scripts/patch-localplayer-casts.py"
 if [ -f "$LPC_PY" ]; then
     python3 "$LPC_PY"
 fi
+
+# Minecraft::tick's in-game tooltip block, for Game/MCLETooltips.cpp
+TT_PY="$REPO_ROOT/scripts/gen-ingame-tooltips.py"
+if [ -f "$TT_PY" ]; then
+    python3 "$TT_PY"
+fi
