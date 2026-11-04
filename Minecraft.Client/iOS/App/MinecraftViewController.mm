@@ -158,6 +158,52 @@ static const int kTooltipsDepth    = 201;
 @end
 static __weak MinecraftViewController* g_active_vc = nil;
 
+static int MCLECallPath(NSString* path, NSString* method, NSArray* args);
+
+// What each UIScene_Settings*Menu labels a slider with, both in init and
+// in handleSliderMove. value is the slider's own value.
+static NSString* MCLESettingsSliderLabel(NSString* scene, int sliderId, int value) {
+    if ([scene isEqualToString:@"SettingsAudioMenu1080.swf"]) {
+        if (sliderId == 0) return [NSString stringWithFormat:@"%@: %d%%", MCLEStr(IDS_SLIDER_MUSIC), value];
+        if (sliderId == 1) return [NSString stringWithFormat:@"%@: %d%%", MCLEStr(IDS_SLIDER_SOUND), value];
+    } else if ([scene isEqualToString:@"SettingsControlMenu1080.swf"]) {
+        if (sliderId == 0) return [NSString stringWithFormat:@"%@: %d%%", MCLEStr(IDS_SLIDER_SENSITIVITY_INGAME), value];
+        if (sliderId == 1) return [NSString stringWithFormat:@"%@: %d%%", MCLEStr(IDS_SLIDER_SENSITIVITY_INMENU), value];
+    } else if ([scene isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
+        if (sliderId == 5) {
+            if (value == 0) return MCLEStr(IDS_SLIDER_AUTOSAVE_OFF);
+            return [NSString stringWithFormat:@"%@: %d %@", MCLEStr(IDS_SLIDER_AUTOSAVE), value * 15, MCLEStr(IDS_MINUTES)];
+        }
+        if (sliderId == 7) {
+            static const int kTitles[4] = { IDS_DIFFICULTY_TITLE_PEACEFUL, IDS_DIFFICULTY_TITLE_EASY,
+                                            IDS_DIFFICULTY_TITLE_NORMAL, IDS_DIFFICULTY_TITLE_HARD };
+            return [NSString stringWithFormat:@"%@: %@", MCLEStr(IDS_SLIDER_DIFFICULTY), MCLEStr(kTitles[MAX(0, MIN(value, 3))])];
+        }
+    } else if ([scene isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
+        if (sliderId == 3) {
+            // LevelToDistance
+            static const int kDistance[6] = {2, 4, 8, 16, 32, 64};
+            return [NSString stringWithFormat:@"Render Distance: %d", kDistance[MAX(0, MIN(value, 5))]];
+        }
+        if (sliderId == 4) return [NSString stringWithFormat:@"%@: %d%%", MCLEStr(IDS_SLIDER_GAMMA), value];
+        // sliderValueToFov: 70..110 over 0..100
+        if (sliderId == 5) return [NSString stringWithFormat:@"FOV: %d", 70 + (MAX(0, MIN(value, 100)) * (110 - 70)) / 100];
+        if (sliderId == 6) return [NSString stringWithFormat:@"%@: %d%%", MCLEStr(IDS_SLIDER_INTERFACEOPACITY), value];
+    } else if ([scene isEqualToString:@"SettingsUIMenu1080.swf"]) {
+        if (sliderId == 6) return [NSString stringWithFormat:@"%@: %d", MCLEStr(IDS_SLIDER_UISIZE), value];
+        if (sliderId == 7) return [NSString stringWithFormat:@"%@: %d", MCLEStr(IDS_SLIDER_UISIZESPLITSCREEN), value];
+    }
+    return nil;
+}
+
+// UIScene_SettingsOptionsMenu's difficulty description under the slider
+static NSString* MCLEDifficultyText(int difficulty) {
+    static const int kText[4] = { IDS_DIFFICULTY_PEACEFUL, IDS_DIFFICULTY_EASY, IDS_DIFFICULTY_NORMAL,
+                                  IDS_DIFFICULTY_HARD };
+    // <font color> with eHTMLColor_White
+    return [NSString stringWithFormat:@"<font color=\"#%08x\">%@", 0xffffffffu, MCLEStr(kText[MAX(0, MIN(difficulty, 3))])];
+}
+
 // Maps an (sliderId, rawValue) coming from handleSliderMove in
 // whatever scene g_current_scene_name names, to a pair
 // (mcle_setting index, value to store). Returns -1 if the pair
@@ -190,6 +236,8 @@ static int mcle_map_slider(int sliderId, double rawValue, unsigned char* outValu
         if (sliderId == 5) return MCLE_SETTING_FOV;
         if (sliderId == 6) return MCLE_SETTING_InterfaceOpacity;
     } else if ([g_current_scene_name isEqualToString:@"SettingsUIMenu1080.swf"]) {
+        // the slider goes 1..3, the setting is that minus one
+        if (sliderId == 6 || sliderId == 7) *outValue = (unsigned char)MAX(0, MIN(v - 1, 2));
         if (sliderId == 6) return MCLE_SETTING_UISize;
         if (sliderId == 7) return MCLE_SETTING_UISizeSplitscreen;
     }
@@ -264,62 +312,22 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // the scene registered. Mirror per-control here.
         extern PlayerHandle* g_ruffle_player;
         if (!g_ruffle_player) return;
-        NSString* sliderName = nil;
-        NSString* sliderLabel = nil;
-        int raw = (int)value;
-        if ([g_current_scene_name isEqualToString:@"SettingsAudioMenu1080.swf"]) {
-            if ((int)id == 0) {
-                sliderName = @"Music";
-                sliderLabel = [NSString stringWithFormat:@"Music: %d%%", raw];
-            } else if ((int)id == 1) {
-                sliderName = @"Sound";
-                sliderLabel = [NSString stringWithFormat:@"Sound: %d%%", raw];
-            }
-        } else if ([g_current_scene_name isEqualToString:@"SettingsControlMenu1080.swf"]) {
-            if ((int)id == 0) {
-                sliderName = @"SensitivityInGame";
-                sliderLabel = [NSString stringWithFormat:@"Sensitivity In-game: %d%%", raw];
-            } else if ((int)id == 1) {
-                sliderName = @"SensitivityInMenu";
-                sliderLabel = [NSString stringWithFormat:@"Sensitivity In-menu: %d%%", raw];
-            }
-        } else if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
-            if ((int)id == 5) {
-                sliderName = @"Autosave";
-                sliderLabel = (raw == 0)
-                    ? @"Autosave: Off"
-                    : [NSString stringWithFormat:@"Autosave: %d minutes", raw * 15];
-            } else if ((int)id == 7) {
-                static NSArray<NSString*>* kDiff = @[@"Peaceful", @"Easy", @"Normal", @"Hard"];
-                int d = MAX(0, MIN(raw, 3));
-                sliderName = @"Difficulty";
-                sliderLabel = [NSString stringWithFormat:@"Difficulty: %@", kDiff[d]];
-            }
-        } else if ([g_current_scene_name isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
-            if ((int)id == 3) {
-                static const int kDistance[6] = {2, 4, 8, 16, 32, 64};
-                int lvl = MAX(0, MIN(raw, 5));
-                sliderName = @"RenderDistance";
-                sliderLabel = [NSString stringWithFormat:@"Render Distance: %d", kDistance[lvl]];
-            } else if ((int)id == 4) {
-                sliderName = @"Gamma";
-                sliderLabel = [NSString stringWithFormat:@"Gamma: %d%%", raw];
-            } else if ((int)id == 5) {
-                int fovDeg = 70 + (raw * (110 - 70)) / 100;
-                sliderName = @"FOV";
-                sliderLabel = [NSString stringWithFormat:@"FOV: %d", fovDeg];
-            } else if ((int)id == 6) {
-                sliderName = @"InterfaceOpacity";
-                sliderLabel = [NSString stringWithFormat:@"Interface opacity: %d%%", raw];
-            }
-        } else if ([g_current_scene_name isEqualToString:@"SettingsUIMenu1080.swf"]) {
-            if ((int)id == 6) {
-                sliderName = @"UISize";
-                sliderLabel = [NSString stringWithFormat:@"UI Size: %d", raw];
-            } else if ((int)id == 7) {
-                sliderName = @"UISizeSplitscreen";
-                sliderLabel = [NSString stringWithFormat:@"UI Size Split-screen: %d", raw];
-            }
+        static NSDictionary<NSString*, NSDictionary<NSNumber*, NSString*>*>* kSliderNames = @{
+            @"SettingsAudioMenu1080.swf":    @{ @0: @"Music", @1: @"Sound" },
+            @"SettingsControlMenu1080.swf":  @{ @0: @"SensitivityInGame", @1: @"SensitivityInMenu" },
+            @"SettingsOptionsMenu1080.swf":  @{ @5: @"Autosave", @7: @"Difficulty" },
+            @"SettingsGraphicsMenu1080.swf": @{ @3: @"RenderDistance", @4: @"Gamma", @5: @"FOV", @6: @"InterfaceOpacity" },
+            @"SettingsUIMenu1080.swf":       @{ @6: @"UISize", @7: @"UISizeSplitscreen" },
+        };
+        NSString* sliderName = kSliderNames[g_current_scene_name][@((int)id)];
+        NSString* sliderLabel = MCLESettingsSliderLabel(g_current_scene_name, (int)id, (int)value);
+        // UIScene_SettingsOptionsMenu::handleSliderMove also updates the
+        // difficulty description
+        if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"] && (int)id == 7) {
+            NSString* text = MCLEDifficultyText((int)value);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                MCLECallPath(@"DifficultyText", @"SetLabel", @[text]);
+            });
         }
         if (sliderName.length && sliderLabel.length) {
             // DO NOT call back into ruffle_ios_* from here: the
@@ -1696,11 +1704,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     //   IDS_IN_GAME_GAMERTAGS        "In-Game Gamertags"
     //   IDS_UNHIDE_MASHUP_WORLDS     "Show all Mash-up Worlds"
     Cb checkboxes[] = {
-        {"ViewBob",          "View Bobbing",             0, (BOOL)mcle_settings_get(MCLE_SETTING_ViewBob)},
-        {"ShowHints",        "Hints",                    1, (BOOL)mcle_settings_get(MCLE_SETTING_Hints)},
-        {"ShowTooltips",     "In-Game Tooltips",         2, (BOOL)mcle_settings_get(MCLE_SETTING_Tooltips)},
-        {"InGameGamertags",  "In-Game Gamertags",        3, (BOOL)mcle_settings_get(MCLE_SETTING_GamertagsVisible)},
-        {"ShowMashUpWorlds", "Show all Mash-up Worlds",  4, NO},
+        {"ViewBob",         MCLEStr(IDS_VIEW_BOBBING).UTF8String,      0, (BOOL)mcle_settings_get(MCLE_SETTING_ViewBob)},
+        {"ShowHints",       MCLEStr(IDS_HINTS).UTF8String,             1, (BOOL)mcle_settings_get(MCLE_SETTING_Hints)},
+        {"ShowTooltips",    MCLEStr(IDS_IN_GAME_TOOLTIPS).UTF8String,  2, (BOOL)mcle_settings_get(MCLE_SETTING_Tooltips)},
+        {"InGameGamertags", MCLEStr(IDS_IN_GAME_GAMERTAGS).UTF8String, 3, (BOOL)mcle_settings_get(MCLE_SETTING_GamertagsVisible)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -1716,18 +1723,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // (difficulty 0..3). Labels match the console format strings.
     int autosave = mcle_settings_get(MCLE_SETTING_Autosave);
     int difficulty = mcle_settings_get(MCLE_SETTING_Difficulty);
-    // Autosave label format from UIScene_SettingsOptionsMenu.cpp:
-    //   index 0       -> IDS_SLIDER_AUTOSAVE_OFF  "Autosave Interval: OFF"
-    //   index 1..8    -> "%ls: %d %ls" with IDS_SLIDER_AUTOSAVE
-    //                    ("Autosave Interval") and IDS_MINUTES
-    //                    ("Mins"), value = 15 * index.
-    NSString* autosaveLabel = (autosave == 0)
-        ? @"Autosave Interval: OFF"
-        : [NSString stringWithFormat:@"Autosave Interval: %d Mins", autosave * 15];
-    static NSArray<NSString*>* kDifficultyNames = @[@"Peaceful", @"Easy", @"Normal", @"Hard"];
     int diffClamped = MAX(0, MIN(difficulty, 3));
-    NSString* difficultyLabel = [NSString
-        stringWithFormat:@"Difficulty: %@", kDifficultyNames[diffClamped]];
+    NSString* autosaveLabel = MCLESettingsSliderLabel(@"SettingsOptionsMenu1080.swf", 5, autosave);
+    NSString* difficultyLabel = MCLESettingsSliderLabel(@"SettingsOptionsMenu1080.swf", 7, diffClamped);
 
     struct Sl { const char* name; const char* label; int id; int min; int max; int current; };
     Sl sliders[] = {
@@ -1743,30 +1741,18 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             s.min, s.max, s.current);
     }
 
-    // 1 button: Init(label, id) via the FJ_Button path.
-    // No IDS_ for this label in the LCE strings dump; console
-    // appears to feed it through a different path (platform-
-    // specific language picker). Placeholder until we find the
-    // right source string or the iOS language sheet wires up.
-    const char* lang = "Languages";
-    const char* langLabel = "Language Selector";
-    ruffle_ios_call_init_on_named_child(
-        g_ruffle_player,
-        (const uint8_t*)lang, strlen(lang),
-        (const uint8_t*)"Init", 4,
-        (const uint8_t*)langLabel, strlen(langLabel),
-        6.0);
+    // The difficulty description under the slider
+    MCLECallPath(@"DifficultyText", @"Init", @[MCLEDifficultyText(diffClamped)]);
 
-    // Hide ShowMashUpWorlds by default: console only shows it if
-    // there are hidden mashup packs to re-expose, which doesn't
-    // apply on a sideloaded iOS build.
-    const char* hidden = "ShowMashUpWorlds";
-    ruffle_ios_call_init_on_named_child(
-        g_ruffle_player,
-        (const uint8_t*)hidden, strlen(hidden),
-        (const uint8_t*)"HideUntilInit", 13,
-        (const uint8_t*)"", 0,
-        0.0);
+    // UIScene::removeControl for what this build doesn't have: no mash-up
+    // packs to unhide, no language select (_ENABLE_LANGUAGE_SELECT isn't
+    // defined), and no difficulty change once in game
+    MCLECallPath(@"", @"RemoveObject", @[@"ShowMashUpWorlds", @YES]);
+    if (mcle_world_is_ticking()) {
+        MCLESetPathVisible(@"DifficultyText", false);
+        MCLECallPath(@"", @"RemoveObject", @[@"Difficulty", @YES]);
+    }
+    MCLECallPath(@"", @"RemoveObject", @[@"Languages", @NO]);
 
     // Mirror console's UIScene::gainFocus first-focus path
     // (UIScene.cpp:1003-1012): call SWF SetFocus(-1) so
@@ -1795,10 +1781,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     int sound = mcle_settings_get(MCLE_SETTING_SoundFXVolume);
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"Music",
-           @"label": [NSString stringWithFormat:@"Music: %d%%", music],
+           @"label": MCLESettingsSliderLabel(@"SettingsAudioMenu1080.swf", 0, music),
            @"id":    @(0), @"min": @(0), @"max": @(100), @"cur": @(music) },
         @{ @"name":  @"Sound",
-           @"label": [NSString stringWithFormat:@"Sound: %d%%", sound],
+           @"label": MCLESettingsSliderLabel(@"SettingsAudioMenu1080.swf", 1, sound),
            @"id":    @(1), @"min": @(0), @"max": @(100), @"cur": @(sound) },
     ];
     for (NSDictionary* s in sliders) {
@@ -1838,10 +1824,10 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     // "Interface Sensitivity".
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"SensitivityInGame",
-           @"label": [NSString stringWithFormat:@"Game Sensitivity: %d%%", ingame],
+           @"label": MCLESettingsSliderLabel(@"SettingsControlMenu1080.swf", 0, ingame),
            @"id":    @(0), @"min": @(0), @"max": @(200), @"cur": @(ingame) },
         @{ @"name":  @"SensitivityInMenu",
-           @"label": [NSString stringWithFormat:@"Interface Sensitivity: %d%%", inmenu],
+           @"label": MCLESettingsSliderLabel(@"SettingsControlMenu1080.swf", 1, inmenu),
            @"id":    @(1), @"min": @(0), @"max": @(200), @"cur": @(inmenu) },
     ];
     for (NSDictionary* s in sliders) {
@@ -1906,16 +1892,16 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"RenderDistance",
-           @"label": [NSString stringWithFormat:@"Render Distance: %d", renderBlocks],
+           @"label": MCLESettingsSliderLabel(@"SettingsGraphicsMenu1080.swf", 3, renderLevel),
            @"id":    @(3), @"min": @(0), @"max": @(5), @"cur": @(renderLevel) },
         @{ @"name":  @"Gamma",
-           @"label": [NSString stringWithFormat:@"Gamma: %d%%", gamma],
+           @"label": MCLESettingsSliderLabel(@"SettingsGraphicsMenu1080.swf", 4, gamma),
            @"id":    @(4), @"min": @(0), @"max": @(100), @"cur": @(gamma) },
         @{ @"name":  @"FOV",
-           @"label": [NSString stringWithFormat:@"FOV: %d", fovDeg],
+           @"label": MCLESettingsSliderLabel(@"SettingsGraphicsMenu1080.swf", 5, fovSlider),
            @"id":    @(5), @"min": @(0), @"max": @(100), @"cur": @(fovSlider) },
         @{ @"name":  @"InterfaceOpacity",
-           @"label": [NSString stringWithFormat:@"Interface Opacity: %d%%", opacity],
+           @"label": MCLESettingsSliderLabel(@"SettingsGraphicsMenu1080.swf", 6, opacity),
            @"id":    @(6), @"min": @(0), @"max": @(100), @"cur": @(opacity) },
     ];
     for (NSDictionary* s in sliders) {
@@ -1972,16 +1958,17 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             c.checked ? 1 : 0);
     }
 
-    int uiSize = mcle_settings_get(MCLE_SETTING_UISize);
-    int uiSizeSplit = mcle_settings_get(MCLE_SETTING_UISizeSplitscreen);
+    // UIScene_SettingsUIMenu: the sliders show the setting plus one
+    int uiSize = MIN((int)mcle_settings_get(MCLE_SETTING_UISize), 2) + 1;
+    int uiSizeSplit = MIN((int)mcle_settings_get(MCLE_SETTING_UISizeSplitscreen), 2) + 1;
     // IDS_SLIDER_UISIZE = "HUD Size",
     // IDS_SLIDER_UISIZESPLITSCREEN = "HUD Size (Splitscreen)".
     NSArray<NSDictionary*>* sliders = @[
         @{ @"name":  @"UISize",
-           @"label": [NSString stringWithFormat:@"HUD Size: %d", uiSize],
+           @"label": MCLESettingsSliderLabel(@"SettingsUIMenu1080.swf", 6, uiSize),
            @"id":    @(6), @"min": @(1), @"max": @(3), @"cur": @(uiSize) },
         @{ @"name":  @"UISizeSplitscreen",
-           @"label": [NSString stringWithFormat:@"HUD Size (Splitscreen): %d", uiSizeSplit],
+           @"label": MCLESettingsSliderLabel(@"SettingsUIMenu1080.swf", 7, uiSizeSplit),
            @"id":    @(7), @"min": @(1), @"max": @(3), @"cur": @(uiSizeSplit) },
     ];
     for (NSDictionary* s in sliders) {
