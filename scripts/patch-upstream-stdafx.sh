@@ -1663,3 +1663,9 @@ WI_PY="$REPO_ROOT/scripts/patch-witch-includes.py"
 if [ -f "$WI_PY" ]; then
     python3 "$WI_PY"
 fi
+
+# Crit and item pickup particles the client makes from server packets
+CE_PY="$REPO_ROOT/scripts/patch-client-effects.py"
+if [ -f "$CE_PY" ]; then
+    python3 "$CE_PY"
+fi

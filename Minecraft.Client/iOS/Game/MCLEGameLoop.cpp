@@ -123,6 +123,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/SparseLightStorage.h"
 #include "../../../upstream/Minecraft.Client/ParticleEngine.h"
 #include "../../../upstream/Minecraft.Client/Camera.h"
+#include "../../../upstream/Minecraft.Client/CritParticle.h"
+#include "../../../upstream/Minecraft.Client/TakeAnimationParticle.h"
 #include "../../../upstream/Minecraft.World/CompressedTileStorage.h"
 #include "../../../upstream/Minecraft.World/SparseDataStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionChunkStorage.h"
@@ -1595,6 +1597,27 @@ void initImpl() {
 // Held while anything outside this file touches the particle engine
 std::recursive_mutex &mcle_particle_mutex() {
     return g_particleMutex;
+}
+
+// ClientConnection::handleAnimate's CRITICAL_HIT and MAGIC_CRITICAL_HIT, from
+// scripts/patch-client-effects.py
+void mcle_client_crit(shared_ptr<Entity> entity, bool magic) {
+    Minecraft *mc = Minecraft::GetInstance();
+    if (!mc || !mc->particleEngine || !entity) return;
+    std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+    std::shared_ptr<CritParticle> critParticle =
+        magic ? std::make_shared<CritParticle>(entity->level, entity, eParticleType_magicCrit)
+              : std::make_shared<CritParticle>(entity->level, entity);
+    critParticle->CritParticlePostConstructor();
+    mc->particleEngine->add(critParticle);
+}
+
+// ClientConnection::handleTakeItemEntity: the item flies into whoever took it
+void mcle_client_take(shared_ptr<Entity> item, shared_ptr<Entity> taker) {
+    Minecraft *mc = Minecraft::GetInstance();
+    if (!mc || !mc->particleEngine || !item || !taker) return;
+    std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+    mc->particleEngine->add(std::make_shared<TakeAnimationParticle>(item->level, item, taker, -0.5f));
 }
 
 // minecraft->level->destroyTileProgress from MultiPlayerGameMode
