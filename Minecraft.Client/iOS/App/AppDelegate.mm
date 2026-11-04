@@ -61,6 +61,11 @@ PlayerHandle* g_ruffle_player = NULL;
     // we don't miss a connect notification from an already-paired pad.
     mcle_ios_input_init();
 
+    // Controller input doesn't reset the idle timer and there's no touch
+    // input, so without this the screen auto-locks mid game and the app
+    // gets suspended.
+    application.idleTimerDisabled = YES;
+
     // Confirm the Rust Ruffle crate actually linked in and runs natively.
     int rust_magic = ruffle_ios_magic();
     NSLog(@"[AppDelegate] ruffle_ios_magic = 0x%08X (expected 0x52554646 'RUFF')",
