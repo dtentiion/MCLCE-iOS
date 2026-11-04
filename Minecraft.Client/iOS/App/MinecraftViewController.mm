@@ -2764,6 +2764,7 @@ static NSString* MCLETipHTML(void) {
         }
         mcle_render_frame();
         // Keep the SWF layer presenting over the world (transparent stage)
+        extern PlayerHandle* g_ruffle_player;
         if (g_ruffle_player) ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
         return;
     }
