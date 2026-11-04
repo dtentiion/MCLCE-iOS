@@ -1638,3 +1638,10 @@ SND_PY="$REPO_ROOT/scripts/patch-soundengine-ios.py"
 if [ -f "$SND_PY" ]; then
     python3 "$SND_PY"
 fi
+
+# Level::playLocalSound is empty upstream (MultiPlayerLevel has the real
+# one); on iOS the server level is the only level, so give it a body.
+LLS_PY="$REPO_ROOT/scripts/patch-level-local-sound.py"
+if [ -f "$LLS_PY" ]; then
+    python3 "$LLS_PY"
+fi

@@ -6,6 +6,7 @@
 
 #include <cerrno>
 #include <cfloat>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -62,6 +63,8 @@ static bool FileExists(const char *path) {
 #undef SoundEngine
 
 #include "../../../upstream/Minecraft.World/LevelListener.h"
+#include "../../../upstream/Minecraft.World/JavaMath.h"
+#include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 
 namespace {
@@ -70,17 +73,6 @@ MCLEUpstreamSoundEngine *g_engine = nullptr;
 // Sounds come from the sim thread, settings from the main thread
 std::recursive_mutex g_mutex;
 std::shared_ptr<ServerPlayer> g_listenerPlayer;
-
-// MultiPlayerLevel::playLocalSound, the way a client plays a LevelSoundPacket
-void playLocalSound(double x, double y, double z, int iSound, float volume, float pitch,
-                    float fClipSoundDist = 16.0f) {
-    if (volume > 1) fClipSoundDist *= volume;
-    float minDistSq = FLT_MAX;
-    if (g_listenerPlayer) minDistSq = g_listenerPlayer->distanceToSqr(x, y, z);
-    if (minDistSq < fClipSoundDist * fClipSoundDist) {
-        mcle_sound_play(iSound, static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), volume, pitch);
-    }
-}
 
 // There's no client level, so instead of ServerLevelListener's packets
 // reaching ClientConnection::handleSoundEvent, the level's sounds come
@@ -92,12 +84,13 @@ public:
     void tileLightChanged(int, int, int) override {}
     void setTilesDirty(int, int, int, int, int, int, Level *) override {}
     void allChanged() override {}
+    // ClientConnection::handleSoundEvent
     void playSound(int iSound, double x, double y, double z, float volume, float pitch, float) override {
-        playLocalSound(x, y, z, iSound, volume, pitch);
+        mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
     }
     void playSoundExceptPlayer(shared_ptr<Player>, int iSound, double x, double y, double z, float volume,
                                float pitch, float) override {
-        playLocalSound(x, y, z, iSound, volume, pitch);
+        mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
     }
     void addParticle(ePARTICLE_TYPE, double, double, double, double, double, double) override {}
     void entityAdded(shared_ptr<Entity>) override {}
@@ -111,6 +104,30 @@ public:
 };
 
 } // namespace
+
+// MultiPlayerLevel::playLocalSound
+void mcle_level_play_local_sound(double x, double y, double z, int iSound, float volume, float pitch,
+                                 bool distanceDelay, float fClipSoundDist) {
+    if (volume > 1) fClipSoundDist *= volume;
+
+    float minDistSq = FLT_MAX;
+    {
+        std::lock_guard<std::recursive_mutex> lock(g_mutex);
+        if (g_listenerPlayer) minDistSq = static_cast<float>(g_listenerPlayer->distanceToSqr(x, y, z));
+    }
+
+    if (minDistSq < fClipSoundDist * fClipSoundDist) {
+        if (distanceDelay && minDistSq > 10 * 10) {
+            // exhaggerate sound speed effect by making speed of sound ~=
+            // 40 m/s instead of 300 m/s
+            double delayInSeconds = sqrt(minDistSq) / 40.0;
+            mcle_sound_schedule(iSound, static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), volume,
+                                pitch, static_cast<int>(Math::round(delayInSeconds * SharedConstants::TICKS_PER_SECOND)));
+        } else {
+            mcle_sound_play(iSound, static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), volume, pitch);
+        }
+    }
+}
 
 void mcle_sound_init(const char *documentsPath) {
     std::lock_guard<std::recursive_mutex> lock(g_mutex);
