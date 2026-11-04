@@ -937,6 +937,19 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
 
+    // No GPU work while inactive. Submitting from the background leaves
+    // the layer black when the app comes back.
+    __weak MinecraftViewController* weakSelf = self;
+    NSNotificationCenter* nc = NSNotificationCenter.defaultCenter;
+    [nc addObserverForName:UIApplicationWillResignActiveNotification object:nil
+                     queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
+        weakSelf.displayLink.paused = YES;
+    }];
+    [nc addObserverForName:UIApplicationDidBecomeActiveNotification object:nil
+                     queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
+        weakSelf.displayLink.paused = NO;
+    }];
+
     // Start menu music if the user has a supported audio file in
     // Documents. Silent no-op otherwise.
     int mrc = mcle_audio_start_menu_music();
