@@ -18,6 +18,7 @@
 // real source to mcle_world_probe's source list.
 
 #include "iOS_stdafx.h"
+#include "TexturePackRepository.h"
 
 #include <mutex>
 
@@ -340,7 +341,12 @@ static ColourTable *get_colour_table_shim() {
 }
 extern "C" int mcle_log_msg(const char *msg);
 ColourTable *Minecraft::getColourTable() {
-    ColourTable *ct = get_colour_table_shim();
+    // Real table from the default pack (colours.col), same as upstream
+    // falling back to skins->getDefault(). The shim only covers the window
+    // before the pack exists.
+    ColourTable *ct = TexturePackRepository::DEFAULT_TEXTURE_PACK
+        ? TexturePackRepository::DEFAULT_TEXTURE_PACK->getColourTable() : nullptr;
+    if (!ct) ct = get_colour_table_shim();
     static int s_logged = 0;
     if (s_logged < 3) {
         char buf[256];

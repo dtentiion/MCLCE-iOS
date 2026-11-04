@@ -212,7 +212,37 @@ public:
             ? filename : (L"/" + filename);
         return new BufferedImage(path, filenameHasExtension, bTitleUpdateTexture, drive);
     }
-    void loadColourTable() override {}
+    // AbstractTexturePack::loadColourTable reads these through getPath(true),
+    // which is relative here, so read them straight out of Documents.
+    void loadColourTable() override {
+        const char *root = StorageManager.GetSaveRootPath();
+        if (!root || !*root) return;
+        std::string base(root);
+        std::vector<unsigned char> col;
+        if (readWhole(base + "/Common/res/TitleUpdate/res/colours.col", col)) {
+            delete m_colourTable;
+            m_colourTable = new ColourTable(col.data(), (DWORD)col.size());
+        } else {
+            MCLE_LOG("loadColourTable: colours.col missing");
+        }
+        std::vector<unsigned char> html;
+        if (m_colourTable && readWhole(base + "/HTMLColours.col", html))
+            m_colourTable->loadColoursFromData(html.data(), (DWORD)html.size());
+    }
+    static bool readWhole(const std::string &path, std::vector<unsigned char> &out) {
+        FILE *f = fopen(path.c_str(), "rb");
+        if (!f) return false;
+        fseek(f, 0, SEEK_END);
+        long n = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        bool ok = n > 0;
+        if (ok) {
+            out.resize((size_t)n);
+            ok = fread(out.data(), 1, (size_t)n, f) == (size_t)n;
+        }
+        fclose(f);
+        return ok;
+    }
     void loadUI() override {}
     void unloadUI() override {}
     std::wstring getXuiRootPath() override { return L""; }
@@ -1185,6 +1215,8 @@ void initImpl() {
                 TexturePackRepository::DEFAULT_TEXTURE_PACK_ID,
                 L"default", commonFile, nullptr);
             TexturePackRepository::DEFAULT_TEXTURE_PACK = pack;
+            // TexturePackRepository's ctor does this for the default pack
+            pack->loadColourTable();
             MCLE_LOG("mcle_game_init: DEFAULT_TEXTURE_PACK at %p (root=%s)",
                      (void*)pack, root);
         }
