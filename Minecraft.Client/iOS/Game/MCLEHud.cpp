@@ -3,6 +3,7 @@
 // in MinecraftViewController.mm.
 
 #include "MCLEHud.h"
+#include "MCLEPlayerInput.h"
 
 #include <cmath>
 #include <cstdio>
@@ -141,8 +142,7 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
         }
         st.ridingJumpable = riding->GetType() == eTYPE_HORSE;
     }
-    // LocalPlayer::jumpRidingScale, only charged by the jump key while riding
-    st.jumpRidingScale = 0.0f;
+    st.jumpRidingScale = mcle_player_jump_riding_scale();
     snprintf(st.displayName, sizeof(st.displayName), "%s", to_utf8(ProfileManager.GetDisplayName(0)).c_str());
 
     st.expProgress = player->experienceProgress;

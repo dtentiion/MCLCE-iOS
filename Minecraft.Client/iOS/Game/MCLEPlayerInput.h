@@ -27,6 +27,9 @@ void mcle_player_ai_step_end(Player *player);
 // MultiplayerLocalPlayer::ride does when the player gets on or off
 void mcle_player_entity_link(int type, int sourceId, int destId);
 
+// LocalPlayer::getJumpRidingScale: how far the horse jump bar is charged
+float mcle_player_jump_riding_scale();
+
 // LocalPlayer::ThirdPersonView, cycled with the left stick click
 int mcle_third_person_view();
 
