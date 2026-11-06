@@ -2957,11 +2957,17 @@ extern "C" void mcle_game_tick(void) {
     // server's runUpdate iterates levels[] each frame.
     using hrclock = std::chrono::steady_clock;
     const auto tickStart = hrclock::now();
+    // Mobs are drawn between their old and new place by the time since the
+    // last tick, which is set after the player's move below. From the first
+    // entity moving until then the frame waits, or it draws the mobs' new
+    // places with the old time and they jump.
+    std::unique_lock<std::mutex> entityFrameLock(g_frameMutex, std::defer_lock);
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
             const auto lvlStart = hrclock::now();
             g_levels[i]->tick();
+            if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
             g_levels[i]->tickEntities();
             const auto lvlMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                    hrclock::now() - lvlStart).count();
@@ -3037,7 +3043,7 @@ extern "C" void mcle_game_tick(void) {
                 // the time since the last tick. Moving the player and setting
                 // that time under the frame lock keeps a frame from seeing the
                 // new place with the old time.
-                std::lock_guard<std::mutex> frameLock(g_frameMutex);
+                if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
                 // ServerConnection::tick, before the player's packets: the
                 // item in use counting down, sleeping and the xp pickup delay
                 g_player->updateFrameTick();
@@ -3069,6 +3075,7 @@ extern "C" void mcle_game_tick(void) {
                                           std::chrono::steady_clock::now().time_since_epoch()).count(),
                                       std::memory_order_relaxed);
                 published = true;
+                entityFrameLock.unlock();
             }
             mcle_player_fov_tick(g_player);
             if (g_itemInHand) {
@@ -3088,6 +3095,7 @@ extern "C" void mcle_game_tick(void) {
         }
     }
     if (!published) g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
+    if (entityFrameLock.owns_lock()) entityFrameLock.unlock();
 
     // On-demand chunk streaming. Walk clamp is gone; instead drive
     // PlayerChunkMap each tick so new chunks load as the player moves.
