@@ -9,6 +9,9 @@
 
 #include "MCLEContainerMenu.h"
 
+// The game's side. UIKit has its own UIScene, so the view controller only
+// gets the part below.
+#ifndef __OBJC__
 class Tutorial;
 class UIScene;
 
@@ -37,6 +40,7 @@ bool mcle_tutorial_popup_is_visible();
 // Leaving the world: UIController::CloseAllPlayersScenes empties the popup
 // and the tutorial it was given goes with the game mode
 void mcle_tutorial_popup_reset();
+#endif
 
 // The view controller's side, on the main thread.
 // UIScene::initialiseMovie's part after the movie is up: the constructor's
