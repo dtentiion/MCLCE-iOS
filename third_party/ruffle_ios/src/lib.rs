@@ -131,6 +131,11 @@ fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
         "handleRequestMoreData" => (0.0, 0.0),
         // UIScene_SkinSelectMenu's carousel finished sliding
         "handleAnimationEnd" => (0.0, 0.0),
+        // IUIScene_StartGame's texture pack list moved to another pack
+        "handleSelectionChanged" if !args.is_empty() => {
+            let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
+            (id, 0.0)
+        }
         "handlePress" | "handleInitFocus" | "handleFocusChange" if args.len() >= 2 => {
             let id = match &args[0] { ExtValue::Number(n) => *n, _ => return };
             let child = match &args[1] { ExtValue::Number(n) => *n, _ => return };

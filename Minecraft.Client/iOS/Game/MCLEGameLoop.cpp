@@ -1329,6 +1329,10 @@ void initImpl() {
         }
     }
 
+    // _RunNetworkGame: the client doesn't start until the selected texture
+    // pack's data is in and the main loop has reloaded with it
+    mcle_texture_packs_wait_for_reload();
+
     // Flip to ticking state ONLY after the player is fully registered.
     // Otherwise the render thread tick races against the bootstrap and
     // first tick runs entities=0, second tick runs entities=1 mid-init.
@@ -2116,6 +2120,9 @@ void mcle_game_set_load_options(const MCLELaunchMoreOptions &params, bool isSave
                                 int gameModeId) {
     app.SetGameHostOption(eGameHostOption_WasntSaveOwner, (!isSaveOwner));
 
+    Minecraft *pMinecraft = Minecraft::GetInstance();
+    pMinecraft->skins->selectTexturePackById(params.dwTexturePack);
+
     const int pad = 0;
     app.SetGameHostOption(eGameHostOption_Difficulty, difficulty);
     app.SetGameHostOption(eGameHostOption_FriendsOfFriends, app.GetGameSettings(pad, eGameSetting_FriendsOfFriends));
@@ -2201,6 +2208,9 @@ int mcle_game_create_world(const MCLELaunchMoreOptions &params, const std::wstri
         // the seed is found in initServer
         param.findSeed = true;
     }
+
+    Minecraft *pMinecraft = Minecraft::GetInstance();
+    pMinecraft->skins->selectTexturePackById(params.dwTexturePack);
 
     const int pad = 0;
     // Minecraft's options->difficulty is the Difficulty setting

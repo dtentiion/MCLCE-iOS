@@ -438,3 +438,8 @@ extern "C" int mcle_saves_host_options(int i, unsigned int *out) {
     if (out) *out = e->hostOptions;
     return 1;
 }
+
+extern "C" unsigned int mcle_saves_texture_pack(int i) {
+    auto e = entry(i);
+    return e ? e->texturePack : 0;
+}

@@ -19,6 +19,7 @@
 #include "../Game/MCLESkinSelectMenu.h"
 #include "../Game/MCLEDLC.h"
 #include "../Game/MCLEStartGame.h"
+#include "../Game/MCLETexturePacks.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
@@ -88,6 +89,12 @@ static NSString* g_create_world_name = @"";   // m_worldName
 static int  g_create_game_mode_id = 0;         // m_iGameModeId
 static bool g_create_game_mode_creative = false;
 static bool g_create_ignore_input = false;
+// IUIScene_StartGame's texture pack list on the LoadMenu or CreateWorldMenu:
+// m_currentTexturePackIndex, m_texturePackDescDisplayed, and m_bIgnoreInput
+// while the DLC packs it lists are still being mounted
+static int  g_texture_pack_index = 0;
+static bool g_texture_pack_desc_displayed = false;
+static bool g_texture_pack_waiting_for_dlc = false;
 // UIScene_LaunchMoreOptionsMenu: m_tabIndex, 0 world options, 1 game options
 static int  g_more_options_tab = 0;
 static bool g_more_options_ignore_input = false;
@@ -200,10 +207,11 @@ static const int kTooltipsDepth    = 201;
 - (void)finishDialogWithResult:(MCLEDialogResult)result;
 - (void)navigateBack;
 - (void)navigateForwardTo:(NSString*)swfName;
-- (void)loadMenuPress:(int)controlId;
+- (void)loadMenuPress:(int)controlId child:(int)childId;
 - (void)loadMenuSlider:(int)sliderId value:(int)value;
-- (void)createWorldPress:(int)controlId;
+- (void)createWorldPress:(int)controlId child:(int)childId;
 - (void)createWorldSlider:(int)sliderId value:(int)value;
+- (void)startGameSelectionChanged:(int)selectedId;
 - (void)moreOptionsPress:(int)controlId;
 - (void)moreOptionsSlider:(int)sliderId value:(int)value;
 - (void)moreOptionsCheckbox:(int)controlId checked:(BOOL)selected;
@@ -556,6 +564,12 @@ static void MCLECreateWorldReset(void) {
     p.bDoDaylightCycle = true;
     MCLEStartGameOffline(p);
     g_start_options = p;
+
+    // IUIScene_StartGame's constructor
+    g_texture_pack_index = mcle_texture_pack_index(0);
+    g_texture_pack_desc_displayed = false;
+    // block input if we're waiting for DLC to install. The end of dlc mounting fills the list.
+    g_texture_pack_waiting_for_dlc = mcle_dlc_start_install_process(0);
 }
 
 extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
@@ -751,13 +765,15 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                   itemId);
         } else if ([g_current_scene_name isEqualToString:@"LoadMenu1080.swf"] && !g_pending_dialog) {
             int cid = listId;
+            int child = itemId;
             dispatch_async(dispatch_get_main_queue(), ^{
-                [g_active_vc loadMenuPress:cid];
+                [g_active_vc loadMenuPress:cid child:child];
             });
         } else if ([g_current_scene_name isEqualToString:@"CreateWorldMenu1080.swf"] && !g_pending_dialog) {
             int cid = listId;
+            int child = itemId;
             dispatch_async(dispatch_get_main_queue(), ^{
-                [g_active_vc createWorldPress:cid];
+                [g_active_vc createWorldPress:cid child:child];
             });
         } else if ([g_current_scene_name isEqualToString:@"LaunchMoreOptionsMenu1080.swf"] && !g_pending_dialog) {
             int cid = listId;
@@ -817,6 +833,15 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             int defaultButtons = g_load_default_buttons;
             dispatch_async(dispatch_get_main_queue(), ^{
                 MCLESelectSaveSize(child - defaultButtons);
+            });
+        }
+    } else if (strcmp(method, "handleSelectionChanged") == 0) {
+        // IUIScene_StartGame::handleSelectionChanged, the texture pack under the cursor
+        if ([g_current_scene_name isEqualToString:@"CreateWorldMenu1080.swf"] ||
+            [g_current_scene_name isEqualToString:@"LoadMenu1080.swf"]) {
+            int selectedId = (int)id;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc startGameSelectionChanged:selectedId];
             });
         }
     } else if (strcmp(method, "handleRequestMoreData") == 0) {
@@ -2698,23 +2723,88 @@ static NSString* MCLEDifficultyLabel(int d) {
     return [NSString stringWithFormat:@"%@: %@", MCLEStr(IDS_SLIDER_DIFFICULTY), MCLEStr(kTitles[d])];
 }
 
-// IUIScene_StartGame's texture pack list. Only the default pack exists on
-// iOS for now. DefaultTexturePack::loadIcon reads Graphics/TexturePackIcon.png
-// out of the media archive.
-static void MCLEAddDefaultTexturePack(void) {
+// UIScene::registerSubstitutionTexture, a png the movie shows by name
+static void MCLERegisterSubstitutionTexture(NSString* textureName, const unsigned char* pbData, unsigned int dwLength) {
     extern PlayerHandle* g_ruffle_player;
-    NSString* docs = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSData* packIcon = [NSData dataWithContentsOfFile:
-        [docs stringByAppendingPathComponent:@"Graphics/TexturePackIcon.png"]];
-    if (packIcon.length) {
-        const char* tex = "tpack00000000";
-        ruffle_ios_register_xui_bitmap(g_ruffle_player,
-            (const uint8_t*)tex, strlen(tex),
-            (const uint8_t*)packIcon.bytes, packIcon.length, 1.0f, 1.0f);
-        MCLECallPath(@"MainPanel.TexturePackSelector", @"addPack", @[@0, @"tpack00000000"]);
+    const char* tex = textureName.UTF8String;
+    ruffle_ios_register_xui_bitmap(g_ruffle_player, (const uint8_t*)tex, strlen(tex), pbData, dwLength, 1.0f, 1.0f);
+}
+
+static NSString* MCLETexturePackIconName(int index) {
+    return [NSString stringWithFormat:@"tpack%08x", mcle_texture_pack_id(index)];
+}
+
+// The texture pack list as the CreateWorldMenu and LoadMenu constructors
+// fill it: each pack with an icon, the icon registered as tpack<id>
+static void MCLEAddTexturePacks(void) {
+    int texturePacksCount = mcle_texture_pack_count();
+    for (int i = 0; i < texturePacksCount; ++i) {
+        unsigned int dwImageBytes = 0;
+        const unsigned char* pbImageData = mcle_texture_pack_icon(i, &dwImageBytes);
+        if (dwImageBytes > 0 && pbImageData) {
+            NSString* imageName = MCLETexturePackIconName(i);
+            MCLERegisterSubstitutionTexture(imageName, pbImageData, dwImageBytes);
+            MCLECallPath(@"MainPanel.TexturePackSelector", @"addPack", @[@(i), imageName]);
+        }
     }
-    MCLECallPath(@"MainPanel.TexturePackSelector", @"SelectSlot", @[@0]);
+}
+
+// IUIScene_StartGame::UpdateTexturePackDescription. A slot without a pack
+// is one from TMS that isn't installed, which upstream hasn't implemented.
+static void MCLEUpdateTexturePackDescription(int index) {
+    if (index < 0 || index >= mcle_texture_pack_count()) return;
+    NSString* name = [NSString stringWithUTF8String:mcle_texture_pack_name(index).c_str()];
+    NSString* desc = [NSString stringWithUTF8String:mcle_texture_pack_desc(index).c_str()];
+    MCLECallPath(@"TexturePackPanel.TexturePackName", @"SetLabel", @[name ?: @""]);
+    MCLECallPath(@"TexturePackPanel.TexturePackDescription", @"SetLabel", @[desc ?: @""]);
+
+    MCLECallPath(@"TexturePackPanel.Icon", @"SetTextureName", @[MCLETexturePackIconName(index)]);
+
+    unsigned int dwImageBytes = 0;
+    const unsigned char* pbImageData = mcle_texture_pack_comparison(index, &dwImageBytes);
+    if (dwImageBytes > 0 && pbImageData) {
+        NSString* imageName = [NSString stringWithFormat:@"texturePackComparison%08x", mcle_texture_pack_id(index)];
+        MCLERegisterSubstitutionTexture(imageName, pbImageData, dwImageBytes);
+        MCLECallPath(@"TexturePackPanel.ComparisonPic", @"SetTextureName", @[imageName]);
+    } else {
+        MCLECallPath(@"TexturePackPanel.ComparisonPic", @"SetTextureName", @[@""]);
+    }
+}
+
+// The list, the current pack's description and its slot selected. The
+// movie is made again coming back from More Options, so the description
+// panel slides out again if it was out on the one before.
+static void MCLEFillTexturePackList(void) {
+    MCLEAddTexturePacks();
+    MCLEUpdateTexturePackDescription(g_texture_pack_index);
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"SelectSlot", @[@(g_texture_pack_index)]);
+    if (g_texture_pack_desc_displayed) MCLECallPath(@"", @"SlideLeft", @[]);
+}
+
+// IUIScene_StartGame::UpdateCurrentTexturePack. A slot without a pack is
+// the upsell, which upstream hasn't implemented.
+static void MCLEUpdateCurrentTexturePack(int iSlot) {
+    g_texture_pack_index = iSlot;
+    if (iSlot >= 0 && iSlot < mcle_texture_pack_count()) {
+        g_start_options.dwTexturePack = mcle_texture_pack_id(iSlot);
+    }
+}
+
+// IUIScene_StartGame::HandleDLCMountingComplete, from the end of the DLC
+// mount. The scene keeps its state under More Options, its list is filled
+// when it's back.
+extern "C" void mcle_start_game_dlc_mounting_complete(void) {
+    g_texture_pack_index = mcle_texture_pack_index(0);
+    g_texture_pack_waiting_for_dlc = false;
+    if (![g_current_scene_name isEqualToString:@"CreateWorldMenu1080.swf"] &&
+        ![g_current_scene_name isEqualToString:@"LoadMenu1080.swf"]) {
+        return;
+    }
+    // clear out the current texture pack list
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"removeAllItems", @[]);
+    MCLEAddTexturePacks();
+    MCLEUpdateTexturePackDescription(g_texture_pack_index);
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"SelectSlot", @[@(g_texture_pack_index)]);
 }
 
 // UIScene_LoadMenu constructor (Win64 save path), plus what its tick()
@@ -2743,6 +2833,14 @@ static void MCLEAddDefaultTexturePack(void) {
         g_start_options = MCLELaunchMoreOptions();
         MCLEStartGameOffline(g_start_options);
         mcle_load_menu_options(g_start_options, read, opts, g_load_is_save_owner);
+
+        // IUIScene_StartGame's constructor, then the texture pack the save
+        // was played with from the thumbnail like tick() reads it
+        g_texture_pack_desc_displayed = false;
+        if (idx >= 0 && idx < mcle_saves_count()) g_start_options.dwTexturePack = mcle_saves_texture_pack(idx);
+        g_texture_pack_index = mcle_texture_pack_index(g_start_options.dwTexturePack);
+        // block input if we're waiting for DLC to install. The end of dlc mounting fills the list.
+        g_texture_pack_waiting_for_dlc = mcle_dlc_start_install_process(0);
     }
 
     MCLECallPath(@"MainPanel.GameName", @"Init", @[MCLEStr(IDS_WORLD_NAME)]);
@@ -2752,6 +2850,8 @@ static void MCLEAddDefaultTexturePack(void) {
     MCLECallPath(@"MainPanel.MoreOptions", @"Init", @[MCLEStr(IDS_MORE_OPTIONS), @2]);
     MCLECallPath(@"MainPanel.LoadSettings", @"Init", @[MCLEStr(IDS_LOAD), @3]);
     MCLECallPath(@"MainPanel.TexturePackSelector", @"Init", @[MCLEStr(IDS_DLC_MENU_TEXTUREPACKS), @4]);
+    MCLECallPath(@"TexturePackPanel.TexturePackName", @"Init", @[@""]);
+    MCLECallPath(@"TexturePackPanel.TexturePackDescription", @"Init", @[@""]);
 
     int diff = MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3));
     MCLECallPath(@"MainPanel.Difficulty", @"Init", @[MCLEDifficultyLabel(diff), @1, @0, @3, @(diff)]);
@@ -2785,7 +2885,7 @@ static void MCLEAddDefaultTexturePack(void) {
                      @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
     }
 
-    MCLEAddDefaultTexturePack();
+    if (!g_texture_pack_waiting_for_dlc) MCLEFillTexturePackList();
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
     self.menuButtonConfig = nil;
@@ -2798,7 +2898,8 @@ static void MCLEAddDefaultTexturePack(void) {
     MCLECallPath(@"MainPanel.Difficulty", @"SetLabel", @[MCLEDifficultyLabel(value)]);
 }
 
-- (void)loadMenuPress:(int)controlId {
+- (void)loadMenuPress:(int)controlId child:(int)childId {
+    if (g_texture_pack_waiting_for_dlc) return;
     mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
     switch (controlId) {
         case 0: {   // eControl_GameMode
@@ -2813,13 +2914,45 @@ static void MCLEAddDefaultTexturePack(void) {
         case 3:     // eControl_LoadWorld
             [self loadMenuStartSharedLaunchFlow];
             break;
+        case 4:     // eControl_TexturePackList
+            MCLEUpdateCurrentTexturePack(childId);
+            break;
         default:
             break;
     }
 }
 
-// UIScene_LoadMenu::StartSharedLaunchFlow: confirm a Nether reset, then LaunchGame
+// IUIScene_StartGame::handleSelectionChanged, and what tick does with it
+- (void)startGameSelectionChanged:(int)selectedId {
+    // m_iSetTexturePackDescription
+    MCLEUpdateTexturePackDescription(selectedId);
+    // m_bShowTexturePackDescription
+    if (!g_texture_pack_desc_displayed) {
+        MCLECallPath(@"", @"SlideLeft", @[]);
+        g_texture_pack_desc_displayed = true;
+    }
+}
+
+// StartSharedLaunchFlow's check that the selected texture pack is there.
+// TexturePackDialogReturned only takes the input back off hold, there's
+// no store to get it from. YES when it isn't there and the dialog is up.
+- (BOOL)startGameTexturePackMissing {
+    if (g_start_options.dwTexturePack == 0 || mcle_texture_pack_installed(g_start_options.dwTexturePack)) return NO;
+    [self presentDialogWithTitle:MCLEStr(IDS_DLC_TEXTUREPACK_NOT_PRESENT_TITLE)
+                         content:MCLEStr(IDS_DLC_TEXTUREPACK_NOT_PRESENT)
+                         buttons:@[MCLEStr(IDS_TEXTUREPACK_FULLVERSION), MCLEStr(IDS_CONFIRM_CANCEL)]
+                      focusIndex:0
+                        callback:^(MCLEDialogResult r) {
+        g_create_ignore_input = false;
+    }];
+    return YES;
+}
+
+// UIScene_LoadMenu::StartSharedLaunchFlow: the texture pack has to be there,
+// confirm a Nether reset, then LaunchGame
 - (void)loadMenuStartSharedLaunchFlow {
+    // Check if we need to upsell the texture pack
+    if ([self startGameTexturePackMissing]) return;
     if (g_start_options.bResetNether) {
         __weak MinecraftViewController* weakSelf = self;
         [self presentDialogWithTitle:MCLEStr(IDS_RESETNETHER_TITLE)
@@ -2958,7 +3091,7 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
     MCLECallPath(@"MainPanel.CheckboxOnline", @"Init",
                  @[MCLEStr(IDS_ONLINE_GAME), @6, g_start_options.bOnlineGame ? @YES : @NO]);
 
-    MCLEAddDefaultTexturePack();
+    if (!g_texture_pack_waiting_for_dlc) MCLEFillTexturePackList();
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
     self.menuButtonConfig = nil;
@@ -2973,8 +3106,8 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
 }
 
 // UIScene_CreateWorldMenu::handlePress
-- (void)createWorldPress:(int)controlId {
-    if (g_create_ignore_input) return;
+- (void)createWorldPress:(int)controlId child:(int)childId {
+    if (g_create_ignore_input || g_texture_pack_waiting_for_dlc) return;
     mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
     switch (controlId) {
         case 0: {   // eControl_EditWorldName
@@ -3014,7 +3147,8 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
         case 4:     // eControl_MoreOptions
             [self navigateForwardTo:@"LaunchMoreOptionsMenu1080.swf"];
             break;
-        case 1:     // eControl_TexturePackList, the default pack is the only one
+        case 1:     // eControl_TexturePackList
+            MCLEUpdateCurrentTexturePack(childId);
             break;
         case 5:     // eControl_NewWorld
             [self createWorldStartSharedLaunchFlow];
@@ -3027,6 +3161,8 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
 // UIScene_CreateWorldMenu::StartSharedLaunchFlow and checkStateAndStartGame.
 // Offline there are no sign in or online checks, only the start game warnings.
 - (void)createWorldStartSharedLaunchFlow {
+    // Check if we need to upsell the texture pack
+    if ([self startGameTexturePackMissing]) return;
     g_create_ignore_input = true;
 
     // Only save the online setting if the user changed it - we may change it because we're offline, but don't want that saved
@@ -3748,6 +3884,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     g_world_paused = false;
     g_world_dead = false;
     self.menuStack = nil;
+    // UIController::NavigateToHomeMenu: the menus are on the default texture pack
+    mcle_texture_packs_navigate_to_home_menu();
     [self transitionToMenuNamed:@"MainMenu1080.swf"];
     if (g_ruffle_player) {
         ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
@@ -4435,6 +4573,9 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 }
 
 - (void)tick:(CADisplayLink*)link {
+    // The main loop's app.HandleXuiActions, the texture pack reload
+    mcle_handle_xui_actions();
+
     mcle_game_tick();
 
     // Phase G phase 1A: once the world simulation is ticking, take over

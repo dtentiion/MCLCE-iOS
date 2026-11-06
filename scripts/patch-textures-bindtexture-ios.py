@@ -9,8 +9,9 @@ sun/cloud rendering because upstream's body calls loadTexture which
 needs a real TexturePack and TextureManager that aren't wired yet.
 
 This patch replaces the upstream body with the same iOS path the
-removed stub had. When textures->stitch + TexturePackRepository land
-properly we revert this and let upstream's loadTexture run.
+removed stub had, for the default pack. With a texture pack selected the
+upstream body runs, so the pack's own textures (and the default ones it
+falls back to through readImage) are what get bound.
 
 Idempotent.
 """
@@ -42,10 +43,9 @@ old = (
     "}"
 )
 new = (
-    "// MCLE_iOS_BINDTEXTURE: replaced upstream loadTexture-based body with\n"
-    "// the CGImageSource-backed iOS path (was in link_stubs.cpp pre G5-step29).\n"
-    "// Reverts to upstream once textures->stitch and TexturePackRepository\n"
-    "// are wired properly.\n"
+    "// MCLE_iOS_BINDTEXTURE: the default pack's textures go through the\n"
+    "// CGImageSource-backed iOS path (was in link_stubs.cpp pre G5-step29),\n"
+    "// a selected texture pack's through upstream's loadTexture.\n"
     "const char *texture_name_relpath(_TEXTURE_NAME tn);\n"
     "extern \"C\" unsigned int mcle_glbridge_load_or_get_png_path(const char *path);\n"
     "extern \"C\" void mcle_glbridge_bind_texture(unsigned int id);\n"
@@ -67,6 +67,19 @@ new = (
     "void Textures::bindTexture(ResourceLocation *resource)\n"
     "{\n"
     "\tif (!resource) return;\n"
+    "\t// A texture pack's textures come from the pack, through loadTexture\n"
+    "\tif (!skins->isUsingDefaultSkin())\n"
+    "\t{\n"
+    "\t\tif(resource->isPreloaded())\n"
+    "\t\t{\n"
+    "\t\t\tbind(loadTexture(resource->getTexture()));\n"
+    "\t\t}\n"
+    "\t\telse\n"
+    "\t\t{\n"
+    "\t\t\tbind(loadTexture(TN_COUNT, resource->getPath()));\n"
+    "\t\t}\n"
+    "\t\treturn;\n"
+    "\t}\n"
     "\tstd::string rel;\n"
     "\tif (resource->isPreloaded()) {\n"
     "\t\tconst char *p = texture_name_relpath(resource->getTexture());\n"

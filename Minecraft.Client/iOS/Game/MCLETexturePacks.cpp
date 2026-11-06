@@ -3,6 +3,8 @@
 // for the app stub (Common/Consoles_App.cpp).
 
 #include "MCLETexturePacks.h"
+#include "MCLESound.h"
+#include "../iOS_TexturePacks.h"
 
 #include <cstdio>
 #include <cstring>
@@ -142,6 +144,119 @@ void mcle_texture_packs_init(Minecraft *minecraft) {
     minecraft->skins->addDebugPacks();
     app.DebugPrintf("texture packs: %u, default at %p\n", minecraft->skins->getTexturePackCount(),
                     (void *)TexturePackRepository::DEFAULT_TEXTURE_PACK);
+}
+
+namespace {
+
+TexturePack *packAt(int index) {
+    return Minecraft::GetInstance()->skins->getTexturePackByIndex(static_cast<unsigned int>(index));
+}
+
+std::string utf8(const std::wstring &w) {
+    std::string out;
+    for (wchar_t wc : w) {
+        unsigned int c = static_cast<unsigned int>(wc);
+        if (c < 0x80) {
+            out += static_cast<char>(c);
+        } else if (c < 0x800) {
+            out += static_cast<char>(0xC0 | (c >> 6));
+            out += static_cast<char>(0x80 | (c & 0x3F));
+        } else if (c < 0x10000) {
+            out += static_cast<char>(0xE0 | (c >> 12));
+            out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (c & 0x3F));
+        } else {
+            out += static_cast<char>(0xF0 | (c >> 18));
+            out += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+            out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (c & 0x3F));
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+int mcle_texture_pack_count() {
+    return static_cast<int>(Minecraft::GetInstance()->skins->getTexturePackCount());
+}
+
+unsigned int mcle_texture_pack_id(int index) {
+    TexturePack *tp = packAt(index);
+    return tp ? tp->getId() : 0;
+}
+
+const unsigned char *mcle_texture_pack_icon(int index, unsigned int *bytes) {
+    *bytes = 0;
+    TexturePack *tp = packAt(index);
+    if (!tp) return nullptr;
+    DWORD dwImageBytes = 0;
+    PBYTE pbImageData = tp->getPackIcon(dwImageBytes);
+    *bytes = dwImageBytes;
+    return pbImageData;
+}
+
+const unsigned char *mcle_texture_pack_comparison(int index, unsigned int *bytes) {
+    *bytes = 0;
+    TexturePack *tp = packAt(index);
+    if (!tp) return nullptr;
+    DWORD dwImageBytes = 0;
+    PBYTE pbImageData = tp->getPackComparison(dwImageBytes);
+    *bytes = dwImageBytes;
+    return pbImageData;
+}
+
+std::string mcle_texture_pack_name(int index) {
+    TexturePack *tp = packAt(index);
+    return tp ? utf8(tp->getName()) : std::string();
+}
+
+std::string mcle_texture_pack_desc(int index) {
+    TexturePack *tp = packAt(index);
+    return tp ? utf8(tp->getDesc1()) : std::string();
+}
+
+int mcle_texture_pack_index(unsigned int id) {
+    return static_cast<int>(Minecraft::GetInstance()->skins->getTexturePackIndex(id));
+}
+
+bool mcle_texture_pack_installed(unsigned int id) {
+    return Minecraft::GetInstance()->skins->getTexturePackById(id) != nullptr;
+}
+
+void mcle_handle_xui_actions() {
+    app.HandleXuiActions();
+}
+
+void mcle_texture_packs_navigate_to_home_menu() {
+    Minecraft *pMinecraft = Minecraft::GetInstance();
+
+    // 4J-PB - just about to switched to the default texture pack , so clean up anything texture pack related here
+
+    // unload any texture pack audio
+    // if there is audio in use, clear out the audio, and unmount the pack
+    TexturePack *pTexPack = Minecraft::GetInstance()->skins->getSelected();
+
+    // change to the default texture pack
+    pMinecraft->skins->selectTexturePackById(TexturePackRepository::DEFAULT_TEXTURE_PACK_ID);
+
+    if (pTexPack->hasAudio()) {
+        // need to stop the streaming audio - by playing streaming audio from the default texture pack now
+        // reset the streaming sounds back to the normal ones
+        mcle_sound_set_default_streaming_sounds();
+        pMinecraft->soundEngine->playStreaming(L"", 0, 0, 0, 1, 1);
+
+        DWORD result = StorageManager.UnmountInstalledDLC("TPACK");
+
+        app.DebugPrintf("Unmount result is %d\n", result);
+    }
+}
+
+void mcle_texture_packs_wait_for_reload() {
+    TexturePack *tPack = Minecraft::GetInstance()->skins->getSelected();
+    while (tPack->isLoadingData() || (Minecraft::GetInstance()->skins->needsUIUpdate() || ui.IsReloadingSkin())) {
+        Sleep(50);
+    }
 }
 
 // UIController::ReloadSkin. The menus' skin movies are the ones in

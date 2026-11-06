@@ -164,6 +164,11 @@ void mcle_sound_set_streaming_sounds(int iOverworldMin, int iOverWorldMax, int i
     if (g_engine) g_engine->SetStreamingSounds(iOverworldMin, iOverWorldMax, iNetherMin, iNetherMax, iEndMin, iEndMax, iCD1);
 }
 
+void mcle_sound_set_default_streaming_sounds() {
+    mcle_sound_set_streaming_sounds(eStream_Overworld_Calm1, eStream_Overworld_piano3, eStream_Nether1, eStream_Nether4,
+                                    eStream_end_dragon, eStream_end_end, eStream_CD_1);
+}
+
 void mcle_sound_listen(const std::shared_ptr<ServerPlayer> &player, Level *level) {
     std::lock_guard<std::recursive_mutex> lock(g_mutex);
     g_listenerPlayer = player;
