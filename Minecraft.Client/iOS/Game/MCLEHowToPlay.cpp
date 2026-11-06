@@ -3,7 +3,9 @@
 // bodies are upstream's, copied out by scripts/gen-howtoplay.py and
 // scripts/gen-html-format.py. The scene side is in MinecraftViewController.mm.
 
+#include <cstdio>
 #include <string>
+#include <vector>
 
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
@@ -48,12 +50,47 @@
 #define VK_PAD_RTHUMB_DOWNLEFT  0x5837
 #endif
 
+// The default pack's colour table read straight from the files it loads
+// it from (colours.col, then HTMLColours.col), for the front end, which
+// runs before the port has made its Minecraft
+static ColourTable *frontEndColours() {
+    static ColourTable *s_table = nullptr;
+    if (s_table) return s_table;
+    // Only fills a name map, the game's init doing it again is harmless
+    ColourTable::staticCtor();
+    const char *root = StorageManager.GetSaveRootPath();
+    auto readWhole = [](const std::string &path, std::vector<unsigned char> &out) {
+        FILE *f = fopen(path.c_str(), "rb");
+        if (!f) return false;
+        fseek(f, 0, SEEK_END);
+        long n = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        bool ok = n > 0;
+        if (ok) {
+            out.resize(static_cast<size_t>(n));
+            ok = fread(out.data(), 1, out.size(), f) == out.size();
+        }
+        fclose(f);
+        return ok;
+    };
+    std::vector<unsigned char> col, html;
+    std::string base(root ? root : "");
+    if (!readWhole(base + "/Common/res/TitleUpdate/res/colours.col", col)) return nullptr;
+    s_table = new ColourTable(col.data(), static_cast<DWORD>(col.size()));
+    if (readWhole(base + "/HTMLColours.col", html)) s_table->loadColoursFromData(html.data(), static_cast<DWORD>(html.size()));
+    return s_table;
+}
+
 // The CMinecraftApp members the formatting needs
 class MCLEAppText {
 public:
     int GetHTMLColour(eMinecraftColour colour) {
         Minecraft *pMinecraft = Minecraft::GetInstance();
-        return pMinecraft->skins->getSelected()->getColourTable()->getColour(colour);
+        if (pMinecraft && pMinecraft->skins) {
+            return pMinecraft->skins->getSelected()->getColourTable()->getColour(colour);
+        }
+        ColourTable *table = frontEndColours();
+        return table ? table->getColour(colour) : 0xffffffff;
     }
     wstring FormatHTMLString(int iPad, const wstring &desc, int shadowColour = 0xFFFFFFFF);
     wstring GetActionReplacement(int iPad, unsigned char ucAction);
