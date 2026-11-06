@@ -386,35 +386,35 @@ private:
 
             // remove any icon text
             else if (temp.find(L"{*CraftingTableIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::workBench_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::workBench_Id), 1, 0);
             } else if (temp.find(L"{*SticksIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::stick_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::stick_Id), 1, 0);
             } else if (temp.find(L"{*PlanksIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::wood_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::wood_Id), 1, 0);
             } else if (temp.find(L"{*WoodenShovelIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::shovel_wood_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::shovel_wood_Id), 1, 0);
             } else if (temp.find(L"{*WoodenHatchetIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::hatchet_wood_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::hatchet_wood_Id), 1, 0);
             } else if (temp.find(L"{*WoodenPickaxeIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::pickAxe_wood_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::pickAxe_wood_Id), 1, 0);
             } else if (temp.find(L"{*FurnaceIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::furnace_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::furnace_Id), 1, 0);
             } else if (temp.find(L"{*WoodenDoorIcon*}") != wstring::npos) {
                 m_iconItem = std::make_shared<ItemInstance>(Item::door_wood, 1, 0);
             } else if (temp.find(L"{*TorchIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::torch_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::torch_Id), 1, 0);
             } else if (temp.find(L"{*BoatIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::boat_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::boat_Id), 1, 0);
             } else if (temp.find(L"{*FishingRodIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::fishingRod_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::fishingRod_Id), 1, 0);
             } else if (temp.find(L"{*FishIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::fish_raw_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::fish_raw_Id), 1, 0);
             } else if (temp.find(L"{*MinecartIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Item::minecart_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Item::minecart_Id), 1, 0);
             } else if (temp.find(L"{*RailIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::rail_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::rail_Id), 1, 0);
             } else if (temp.find(L"{*PoweredRailIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::goldenRail_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::goldenRail_Id), 1, 0);
             } else if (temp.find(L"{*StructuresIcon*}") != wstring::npos) {
                 isFixedIcon = true;
                 setupIconHolder(e_ICON_TYPE_STRUCTURES);
@@ -422,7 +422,7 @@ private:
                 isFixedIcon = true;
                 setupIconHolder(e_ICON_TYPE_TOOLS);
             } else if (temp.find(L"{*StoneIcon*}") != wstring::npos) {
-                m_iconItem = std::make_shared<ItemInstance>(Tile::stone_Id, 1, 0);
+                m_iconItem = std::make_shared<ItemInstance>(static_cast<int>(Tile::stone_Id), 1, 0);
             } else {
                 m_iconItem = nullptr;
             }
