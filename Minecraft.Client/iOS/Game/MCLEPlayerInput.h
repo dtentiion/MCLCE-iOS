@@ -48,5 +48,9 @@ HitResult *mcle_player_hit_result();
 // The block the player was targeting at the last tick, if any.
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f);
 
+// Minecraft::respawnPlayer's new LocalPlayer and Input: the movement state
+// starts over. Sim thread.
+void mcle_player_new_local_player();
+
 // Forget the player, its target and the mining state when leaving the world
 void mcle_player_input_reset();
