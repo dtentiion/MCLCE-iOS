@@ -189,6 +189,12 @@ int           ruffle_ios_set_root_child_visible(PlayerHandle* h,
                                                 const uint8_t* name, size_t name_len,
                                                 int visible);
 
+// Scale and move the root clip's child at a depth, in stage pixels.
+// Returns 1 if a child was there, 0 if not, -1 on player lock failure.
+int           ruffle_ios_set_root_child_transform_at_depth(PlayerHandle* h, int depth,
+                                                           float scale_x, float scale_y,
+                                                           float tx, float ty);
+
 // Instantiate an AS3 class by name and attach its DisplayObject as a
 // direct child of the root clip at the given depth. Used for things
 // like dropping the menu Panorama under the main menu buttons without
