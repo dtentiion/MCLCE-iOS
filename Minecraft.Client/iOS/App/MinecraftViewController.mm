@@ -18,6 +18,7 @@
 #include "../Game/MCLEContainerMenu.h"
 #include "../Game/MCLESkinSelectMenu.h"
 #include "../Game/MCLEDLC.h"
+#include "../Game/MCLEStartGame.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
@@ -28,8 +29,8 @@
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
 extern "C" int  mcle_game_start(const char *levelFolder);   // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_status(int *percent);        // MCLEGameLoop.cpp
-extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int hostOptions,
-                                           int difficulty, int gameModeId); // MCLEGameLoop.cpp
+extern "C" int  mcle_game_load_is_new(void);                // MCLEGameLoop.cpp
+extern "C" int  mcle_game_load_finding_seed(void);          // MCLEGameLoop.cpp
 
 // app.GetString(IDS_*)
 static NSString* MCLEStr(int ids) {
@@ -68,7 +69,13 @@ static int MCLENextTip(void) {
 static int  g_load_save_index = -1;
 static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
 static bool g_load_has_been_in_creative = false;
+static bool g_load_is_save_owner = true;       // m_bIsSaveOwner
+// Opened from the save list, not come back to from More Options
+static bool g_load_menu_fresh = false;
 static bool g_loading_world = false;
+// IUIScene_StartGame::m_MoreOptionsParams of the LoadMenu or CreateWorldMenu
+// that's up. LaunchMoreOptionsMenu changes it.
+static MCLELaunchMoreOptions g_start_options;
 // UIScene_PauseMenu is up and the single player game is paused under it
 static bool g_world_paused = false;
 // UIScene_DeathMenu is up
@@ -459,6 +466,16 @@ static void MCLECreditsTick(void) {
     MCLECreditsAdd(g_credits_index);
 }
 
+// IUIScene_StartGame scenes aren't signed in to an online service, so
+// multiplayer isn't allowed: the online params are off, and if the Online
+// setting is on it was changed by the system
+static void MCLEStartGameOffline(MCLELaunchMoreOptions& p) {
+    p.bOnlineSettingChangedBySystem = mcle_settings_get(MCLE_SETTING_Online) != 0;
+    p.bOnlineGame = false;
+    p.bInviteOnly = false;
+    p.bAllowFriendsOfFriends = false;
+}
+
 extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
     if (!method) return;
     if (strcmp(method, "handleCheckboxToggled") == 0) {
@@ -578,6 +595,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                     int saveIdx = itemId - 1;
                     dispatch_async(dispatch_get_main_queue(), ^{
                         g_load_save_index = saveIdx;
+                        g_load_menu_fresh = true;
                         [g_active_vc navigateForwardTo:@"LoadMenu1080.swf"];
                     });
                 }
@@ -2529,8 +2547,23 @@ static NSString* MCLEDifficultyLabel(int d) {
     [self attachMenuScenery];
 
     int idx = g_load_save_index;
-    g_load_game_mode = 0;
-    g_load_has_been_in_creative = false;
+    // Opened from the save list. Back from More Options the scene and what
+    // was picked on it are still there.
+    if (g_load_menu_fresh) {
+        g_load_menu_fresh = false;
+        g_load_game_mode = 0;
+        g_load_has_been_in_creative = false;
+        unsigned int opts = 0;
+        bool read = idx >= 0 && idx < mcle_saves_count() && mcle_saves_host_options(idx, &opts);
+        if (read) {
+            g_load_has_been_in_creative = (opts & 0x200) != 0;   // GAME_HOST_OPTION_BITMASK_BEENINCREATIVE
+            g_load_game_mode = (opts & 0x30) >> 4;               // GAME_HOST_OPTION_BITMASK_GAMETYPE
+            if (g_load_game_mode != 1) g_load_game_mode = 0;
+        }
+        g_start_options = MCLELaunchMoreOptions();
+        MCLEStartGameOffline(g_start_options);
+        mcle_load_menu_options(g_start_options, read, opts, g_load_is_save_owner);
+    }
 
     MCLECallPath(@"MainPanel.GameName", @"Init", @[MCLEStr(IDS_WORLD_NAME)]);
     MCLECallPath(@"MainPanel.Seed", @"Init", @[@""]);
@@ -2566,16 +2599,10 @@ static NSString* MCLEDifficultyLabel(int d) {
                          @[[NSString stringWithUTF8String:tex]]);
         }
 
-        unsigned int opts = 0;
-        if (mcle_saves_host_options(idx, &opts)) {
-            g_load_has_been_in_creative = (opts & 0x200) != 0;   // GAME_HOST_OPTION_BITMASK_BEENINCREATIVE
-            MCLECallPath(@"MainPanel.CreatedMode", @"SetLabel",
-                         @[MCLEStr(g_load_has_been_in_creative ? IDS_CREATED_IN_CREATIVE : IDS_CREATED_IN_SURVIVAL)]);
-            g_load_game_mode = (opts & 0x30) >> 4;               // GAME_HOST_OPTION_BITMASK_GAMETYPE
-            if (g_load_game_mode != 1) g_load_game_mode = 0;
-            MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel",
-                         @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
-        }
+        MCLECallPath(@"MainPanel.CreatedMode", @"SetLabel",
+                     @[MCLEStr(g_load_has_been_in_creative ? IDS_CREATED_IN_CREATIVE : IDS_CREATED_IN_SURVIVAL)]);
+        MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel",
+                     @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
     }
 
     // Only the default pack exists on iOS for now. DefaultTexturePack::loadIcon
@@ -2652,9 +2679,7 @@ static NSString* MCLEDifficultyLabel(int d) {
     if (idx < 0 || idx >= mcle_saves_count() || g_loading_world) return;
     NSString* folder = [NSString stringWithUTF8String:mcle_saves_folder(idx)];
     mcle_storage_set_save_folder(folder.UTF8String);
-    unsigned int hostOptions = 0;
-    int hostOptionsRead = mcle_saves_host_options(idx, &hostOptions);
-    mcle_game_set_load_options(hostOptionsRead, hostOptions,
+    mcle_game_set_load_options(g_start_options, g_load_is_save_owner,
                                MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3)),
                                g_load_game_mode);
     [self navigateForwardTo:@"FullscreenProgress1080.swf"];
@@ -2978,11 +3003,17 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         }];
         return;
     }
-    if (st != g_progress_stage) {
+    // A new world's findSeed has a stage of its own while the server starts
+    bool findingSeed = st == 0 && mcle_game_load_finding_seed();
+    int stage = findingSeed ? 10 : st;
+    if (stage != g_progress_stage) {
         if (g_progress_stage == -2)
             MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_PROGRESS_INITIALISING_SERVER)]);
-        g_progress_stage = st;
-        int statusId = (st == 1) ? IDS_PROGRESS_LOADING_SPAWN_AREA
+        g_progress_stage = stage;
+        // loadLevel generates the spawn area of a new level
+        int spawnId = mcle_game_load_is_new() ? IDS_PROGRESS_GENERATING_SPAWN_AREA : IDS_PROGRESS_LOADING_SPAWN_AREA;
+        int statusId = findingSeed ? IDS_PROGRESS_NEW_WORLD_SEED
+                     : (st == 1) ? spawnId
                      : (st >= 2) ? IDS_PROGRESS_SAVING_TO_DISC : 0;
         MCLECallPath(@"ProgressBar", @"SetLabel", @[statusId ? MCLEStr(statusId) : @""]);
     }
