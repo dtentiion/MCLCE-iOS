@@ -1638,6 +1638,11 @@ SND_PY="$REPO_ROOT/scripts/patch-soundengine-ios.py"
 if [ -f "$SND_PY" ]; then
     python3 "$SND_PY"
 fi
+# Numbered sounds Win64 keeps in a folder named after the sound (caves)
+SNDF_PY="$REPO_ROOT/scripts/patch-soundengine-sound-folder.py"
+if [ -f "$SNDF_PY" ]; then
+    python3 "$SNDF_PY"
+fi
 
 # Level::playLocalSound is empty upstream (MultiPlayerLevel has the real
 # one); on iOS the server level is the only level, so give it a body.
