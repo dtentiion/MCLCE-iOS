@@ -1632,6 +1632,12 @@ if [ -f "$LLP_PY" ]; then
     python3 "$LLP_PY"
 fi
 
+# The compass and clock pick their icon by the same pad
+CCP_PY="$REPO_ROOT/scripts/patch-compass-clock-local-pad.py"
+if [ -f "$CCP_PY" ]; then
+    python3 "$CCP_PY"
+fi
+
 # The Windows64 miniaudio SoundEngine builds for iOS through
 # Game/MCLESound.cpp.
 SND_PY="$REPO_ROOT/scripts/patch-soundengine-ios.py"
