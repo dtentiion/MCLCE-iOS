@@ -69,6 +69,7 @@ __attribute__((weak)) extern "C" void mcle_glbridge_bind_texture(unsigned int)  
 __attribute__((weak)) extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int, int, int,
                                                                         const void*)    {}
 __attribute__((weak)) extern "C" unsigned int mcle_glbridge_get_bound_texture(void)      { return 0; }
+__attribute__((weak)) extern "C" void mcle_glbridge_tex_parameter(int, int)              {}
 __attribute__((weak)) extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char*) { return 0; }
 
 // Out-of-line definitions for upstream class statics that were declared
@@ -188,7 +189,7 @@ void glCallList(int id)                                    { mcle_glbridge_call_
 void glDeleteLists(int id, int range)                      { mcle_glbridge_release_lists(id, range); }
 int  glGenLists(int range)                                 { return mcle_glbridge_gen_lists(range); }
 void glBindTexture(unsigned int /*target*/, unsigned int id)  { mcle_glbridge_bind_texture(id); }
-void glTexParameteri(unsigned int, unsigned int, int)      {}
+void glTexParameteri(unsigned int, unsigned int pname, int value) { mcle_glbridge_tex_parameter((int)pname, value); }
 extern "C" void mcle_glbridge_set_depth_func(int func);
 void glDepthFunc(unsigned int func)                        { mcle_glbridge_set_depth_func((int)func); }
 void glAlphaFunc(unsigned int, float)                      {}

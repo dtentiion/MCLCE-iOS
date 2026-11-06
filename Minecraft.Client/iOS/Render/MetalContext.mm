@@ -409,6 +409,13 @@ id<MTLSamplerState> g_default_sampler  = nil;
 id<MTLSamplerState> g_lightmap_sampler = nil;
 id<MTLTexture>      g_current_texture = nil;
 
+// RenderManager.TextureSetParam's state for each texture id: bit 0 clamps s,
+// bit 1 clamps t, bit 2 is a linear min filter and bit 3 a linear mag one.
+// Nothing set is the default sampler, nearest and repeat.
+static constexpr unsigned int kTexParamSlots = 1u << 16;
+static std::atomic<uint8_t>   g_tex_params[kTexParamSlots];
+static id<MTLSamplerState>    g_tex_samplers[16];
+
 // 16x16 lightmap. Upstream rebuilds this every frame via
 // GameRenderer::updateLightTexture (GameRenderer.cpp:849-946) from
 // Level::getSkyDarken + dimension->brightnessRamp. Indexed by
@@ -965,6 +972,17 @@ bool ensure_world_pipeline() {
         sd.tAddressMode = MTLSamplerAddressModeRepeat;
         g_default_sampler = [g.device newSamplerStateWithDescriptor:sd];
     }
+    if (!g_tex_samplers[0]) {
+        g_tex_samplers[0] = g_default_sampler;
+        for (int bits = 1; bits < 16; bits++) {
+            MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
+            sd.sAddressMode = (bits & 1) ? MTLSamplerAddressModeClampToEdge : MTLSamplerAddressModeRepeat;
+            sd.tAddressMode = (bits & 2) ? MTLSamplerAddressModeClampToEdge : MTLSamplerAddressModeRepeat;
+            sd.minFilter    = (bits & 4) ? MTLSamplerMinMagFilterLinear : MTLSamplerMinMagFilterNearest;
+            sd.magFilter    = (bits & 8) ? MTLSamplerMinMagFilterLinear : MTLSamplerMinMagFilterNearest;
+            g_tex_samplers[bits] = [g.device newSamplerStateWithDescriptor:sd];
+        }
+    }
     if (!g_lightmap_sampler) {
         MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
         sd.minFilter    = MTLSamplerMinMagFilterLinear;
@@ -1298,6 +1316,7 @@ extern "C" void mcle_glbridge_gen_textures_n(int n, unsigned int* out) {
 extern "C" void mcle_glbridge_delete_texture(unsigned int tex_id) {
     auto it = g_gl_textures.find(tex_id);
     if (it != g_gl_textures.end()) g_gl_textures.erase(it);
+    if (tex_id < kTexParamSlots) g_tex_params[tex_id].store(0, std::memory_order_relaxed);
     if (g_bound_tex_id == tex_id) {
         g_bound_tex_id    = 0;
         g_current_texture = nil;
@@ -1335,6 +1354,32 @@ extern "C" void mcle_glbridge_bind_texture(unsigned int tex_id) {
 }
 extern "C" unsigned int mcle_glbridge_get_bound_texture(void) {
     return g_bound_tex_id;
+}
+
+// glTexParameteri, RenderManager.TextureSetParam: the wrap and filter of the
+// bound texture, used whenever it's drawn with
+extern "C" void mcle_glbridge_tex_parameter(int pname, int value) {
+    const unsigned int tex_id = g_bound_tex_id;
+    if (tex_id == 0 || tex_id >= kTexParamSlots) return;
+    const bool clamp  = value == 0x2900 /* GL_CLAMP */ || value == 0x812F /* GL_CLAMP_TO_EDGE */;
+    const bool linear = value == 0x2601 /* GL_LINEAR */;
+    uint8_t bit;
+    bool on;
+    switch (pname) {
+        case 0x2802 /* GL_TEXTURE_WRAP_S */:     bit = 1; on = clamp;  break;
+        case 0x2803 /* GL_TEXTURE_WRAP_T */:     bit = 2; on = clamp;  break;
+        case 0x2801 /* GL_TEXTURE_MIN_FILTER */: bit = 4; on = linear; break;
+        case 0x2800 /* GL_TEXTURE_MAG_FILTER */: bit = 8; on = linear; break;
+        default: return;
+    }
+    uint8_t bits = g_tex_params[tex_id].load(std::memory_order_relaxed);
+    bits = on ? (bits | bit) : (bits & ~bit);
+    g_tex_params[tex_id].store(bits, std::memory_order_relaxed);
+}
+
+static id<MTLSamplerState> sampler_for_texture(unsigned int tex_id) {
+    const uint8_t bits = tex_id < kTexParamSlots ? g_tex_params[tex_id].load(std::memory_order_relaxed) : 0;
+    return g_tex_samplers[bits & 15] ? g_tex_samplers[bits & 15] : g_default_sampler;
 }
 extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, int height,
                                                   const void* rgba_pixels) {
@@ -1736,7 +1781,12 @@ inline void immediate_dispatch(int prim, int count, const void* data,
                             ? g_default_texture
                             : (g_current_texture ? g_current_texture : g_default_texture);
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
-    if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
+    // The bound texture's own wrap and filter, a shadow clamps where the
+    // rest repeat
+    id<MTLSamplerState> samp = (tex != nil && tex == g_current_texture)
+                                   ? sampler_for_texture(g_bound_tex_id)
+                                   : g_default_sampler;
+    if (samp)              [g.enc setFragmentSamplerState:samp atIndex:0];
 
     // Lightmap at fragment unit 1. The chunks always have it; the other
     // formats only inside the light layer, otherwise the 1x1 white
