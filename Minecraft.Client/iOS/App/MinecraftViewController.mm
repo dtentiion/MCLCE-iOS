@@ -2275,11 +2275,11 @@ static BOOL MCLEPlayStationPadConnected(void) {
     // Debug are runtime-removed in the console release build). BUTTON_HAO_*
     // ids match the enum on console.
     NSArray<NSDictionary*>* cfg = @[
-        @{ @"name": @"Button1", @"label": @"Change Skin",  @"id": @(0) },
-        @{ @"name": @"Button2", @"label": @"How to Play",  @"id": @(1) },
-        @{ @"name": @"Button3", @"label": @"Controls",     @"id": @(2) },
-        @{ @"name": @"Button4", @"label": @"Settings",     @"id": @(3) },
-        @{ @"name": @"Button5", @"label": @"Credits",      @"id": @(4) },
+        @{ @"name": @"Button1", @"label": MCLEStr(IDS_CHANGE_SKIN),  @"id": @(0) },
+        @{ @"name": @"Button2", @"label": MCLEStr(IDS_HOW_TO_PLAY),  @"id": @(1) },
+        @{ @"name": @"Button3", @"label": MCLEStr(IDS_CONTROLS),     @"id": @(2) },
+        @{ @"name": @"Button4", @"label": MCLEStr(IDS_SETTINGS),     @"id": @(3) },
+        @{ @"name": @"Button5", @"label": MCLEStr(IDS_CREDITS),      @"id": @(4) },
     ];
     [self attachMenuScenery];
     [self applyMenuButtonConfig:cfg];
@@ -2517,9 +2517,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
     // CUSTOM_SKIN_ANIM in stringsGeneric.xml.
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"Clouds",         "Render Clouds",         0, (BOOL)mcle_settings_get(MCLE_SETTING_Clouds)},
-        {"BedrockFog",     "Bedrock Fog",           1, (BOOL)mcle_settings_get(MCLE_SETTING_BedrockFog)},
-        {"CustomSkinAnim", "Custom Skin Animation", 2, (BOOL)mcle_settings_get(MCLE_SETTING_CustomSkinAnim)},
+        {"Clouds",         mcle_string(IDS_CHECKBOX_RENDER_CLOUDS),    0, (BOOL)mcle_settings_get(MCLE_SETTING_Clouds)},
+        {"BedrockFog",     mcle_string(IDS_CHECKBOX_RENDER_BEDROCKFOG), 1, (BOOL)mcle_settings_get(MCLE_SETTING_BedrockFog)},
+        {"CustomSkinAnim", mcle_string(IDS_CHECKBOX_CUSTOM_SKIN_ANIM),  2, (BOOL)mcle_settings_get(MCLE_SETTING_CustomSkinAnim)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
@@ -2591,12 +2591,12 @@ static BOOL MCLEPlayStationPadConnected(void) {
     // "Display" prefix that earlier versions of this port assumed.
     struct Cb { const char* name; const char* label; int id; BOOL checked; };
     Cb checkboxes[] = {
-        {"DisplayHUD",               "Display HUD",                     0, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHUD)},
-        {"DisplayHand",              "Display Hand",                    1, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHand)},
-        {"DisplayDeathMessages",     "Death Messages",                  2, (BOOL)mcle_settings_get(MCLE_SETTING_DeathMessages)},
-        {"DisplayAnimatedCharacter", "Animated Character",              3, (BOOL)mcle_settings_get(MCLE_SETTING_AnimatedCharacter)},
-        {"Splitscreen",              "2 Player Split-screen Vertical",  4, (BOOL)mcle_settings_get(MCLE_SETTING_SplitScreenVertical)},
-        {"ShowSplitscreenGamertags", "Splitscreen Gamertags",           5, (BOOL)mcle_settings_get(MCLE_SETTING_DisplaySplitscreenGamertags)},
+        {"DisplayHUD",               mcle_string(IDS_CHECKBOX_DISPLAY_HUD),                 0, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHUD)},
+        {"DisplayHand",              mcle_string(IDS_CHECKBOX_DISPLAY_HAND),                1, (BOOL)mcle_settings_get(MCLE_SETTING_DisplayHand)},
+        {"DisplayDeathMessages",     mcle_string(IDS_CHECKBOX_DEATH_MESSAGES),              2, (BOOL)mcle_settings_get(MCLE_SETTING_DeathMessages)},
+        {"DisplayAnimatedCharacter", mcle_string(IDS_CHECKBOX_ANIMATED_CHARACTER),          3, (BOOL)mcle_settings_get(MCLE_SETTING_AnimatedCharacter)},
+        {"Splitscreen",              mcle_string(IDS_CHECKBOX_VERTICAL_SPLIT_SCREEN),       4, (BOOL)mcle_settings_get(MCLE_SETTING_SplitScreenVertical)},
+        {"ShowSplitscreenGamertags", mcle_string(IDS_CHECKBOX_DISPLAY_SPLITSCREENGAMERTAGS), 5, (BOOL)mcle_settings_get(MCLE_SETTING_DisplaySplitscreenGamertags)},
     };
     for (auto& c : checkboxes) {
         ruffle_ios_call_init_checkbox(
