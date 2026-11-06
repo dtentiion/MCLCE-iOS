@@ -9,7 +9,6 @@ Windows64 code is already miniaudio + stb_vorbis, so this only:
 - leaves the miniaudio and stb_vorbis implementations to MCLE_iOS_Audio.mm,
   which compiles the same miniaudio version
 - adds iOS sound/music paths, filled with the Documents path at startup
-- compiles out the DLC mash-up pack audio branch, there are no DLC packs on iOS
 - names ScheduledSound through ConsoleSoundEngine, everywhere but
   MCLESound.cpp SoundEngine is the stub
 
@@ -70,12 +69,6 @@ patch(CPP, [
      '    sprintf_s(basePath, "%s%s", m_szSoundPath, (char*)szSoundName);'),
     ('    sprintf_s(basePath, "Windows64Media/Sound/%s/%s", soundDir, ConvertSoundPathToName(name));',
      '    sprintf_s(basePath, "%s%s/%s", m_szSoundPath, soundDir, ConvertSoundPathToName(name));'),
-    # The DLC types it uses aren't all declared here, so compile it out
-    ('\t\t\tif(Minecraft::GetInstance()->skins->getSelected()->hasAudio())\n',
-     '#ifndef __APPLE_IOS__\n'
-     '\t\t\tif(Minecraft::GetInstance()->skins->getSelected()->hasAudio())\n'),
-    ('\t\t\t}\n\t\t\telse\n\t\t\t{\t\n\t\t\t\t// 4J-PB - if this is a PS3 disc patch',
-     '\t\t\t}\n\t\t\telse\n#endif\n\t\t\t{\t\n\t\t\t\t// 4J-PB - if this is a PS3 disc patch'),
 ])
 
 # ScheduledSound is ConsoleSoundEngine's, the derived name only resolves
