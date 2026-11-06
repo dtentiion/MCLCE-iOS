@@ -91,6 +91,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/LevelSettings.h"
 #include "../../../upstream/Minecraft.World/LevelType.h"
 #include "../../../upstream/Minecraft.World/BiomeSource.h"
+#include "../../../upstream/Minecraft.World/MapItemSavedData.h"
 #include "../../../upstream/Minecraft.World/MaterialColor.h"
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/Recipes.h"
@@ -546,8 +547,20 @@ static void mcle_save_world() {
                              std::chrono::steady_clock::now() - t0).count();
         MCLE_LOG("BG_SAVE: level[%d] done took=%lldms", i, (long long)dms);
     }
-    // MinecraftServer's SaveGame action: levels[0]->saveToDisc
+    // MinecraftServer's SaveGame action: saveGameRules, then levels[0]->saveToDisc
     if (g_levels[0]) {
+        byteArray ba;
+        ba.data = nullptr;
+        app.m_gameRules.saveGameRules(&ba.data, &ba.length);
+        if (ba.data != nullptr) {
+            ConsoleSaveFile *csf = g_levels[0]->getLevelStorage()->getSaveFile();
+            FileEntry *fe = csf->createFile(ConsoleSavePath(GAME_RULE_SAVENAME));
+            csf->setFilePointer(fe, 0, nullptr, FILE_BEGIN);
+            DWORD length;
+            csf->writeFile(fe, ba.data, ba.length, &length);
+            delete[] ba.data;
+            csf->closeHandle(fe);
+        }
         try { g_levels[0]->saveToDisc(nullptr, false); }
         catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
     }
@@ -1014,8 +1027,12 @@ void initImpl() {
         if (g_newWorld.active) {
             // MinecraftServer::initServer picks the level type and finds a
             // seed if there wasn't one, then loadLevel makes the settings
+            bool gameRuleUseFlatWorld = false;
+            if (app.getLevelGenerationOptions() != nullptr) {
+                gameRuleUseFlatWorld = app.getLevelGenerationOptions()->getuseFlatWorld();
+            }
             LevelType *pLevelType = LevelType::getLevelType(
-                app.GetGameHostOption(eGameHostOption_LevelType) > 0 ? L"flat" : L"default");
+                gameRuleUseFlatWorld || app.GetGameHostOption(eGameHostOption_LevelType) > 0 ? L"flat" : L"default");
             if (pLevelType == nullptr) pLevelType = LevelType::lvl_normal;
             if (g_newWorld.findSeed) {
                 g_loadFindingSeed = true;
@@ -1162,15 +1179,46 @@ void initImpl() {
     // come from the host options LoadMenu set
     {
         GameType *gameType = LevelSettings::validateGameType(app.GetGameHostOption(eGameHostOption_GameType));
+        LevelGenerationOptions *mapOptions = app.getLevelGenerationOptions();
+        if (mapOptions != nullptr) {
+            Pos *spawnPos = mapOptions->getSpawnPos();
+            if (spawnPos != nullptr) g_levels[0]->setSpawnPos(spawnPos);
+            g_levels[0]->getLevelData()->setHasBeenInCreative(mapOptions->isFromDLC());
+        }
         for (int i = 0; i < 3; ++i) {
             g_levels[i]->difficulty = app.GetGameHostOption(eGameHostOption_Difficulty);
             g_levels[i]->setSpawnSettings(true, true);
             g_levels[i]->getLevelData()->setGameType(gameType);
+            if (mapOptions != nullptr) {
+                g_levels[i]->getLevelData()->setHasBeenInCreative(mapOptions->getLevelHasBeenInCreative());
+            }
         }
         g_loadIsNew = g_levels[0]->isNew;
         app.SetGameHostOption(eGameHostOption_HasBeenInCreative,
                               gameType == GameType::CREATIVE || g_levels[0]->getHasBeenInCreative());
         app.SetGameHostOption(eGameHostOption_Structures, g_levels[0]->isGenerateMapFeatures());
+    }
+
+    // loadLevel: the game rules a save was made with, a saved tutorial's
+    // or mash-up world's, go back in before its chunks are made
+    {
+        ConsoleSavePath filepath(GAME_RULE_SAVENAME);
+        ConsoleSaveFile *csf = g_levels[0]->getLevelStorage()->getSaveFile();
+        if (csf->doesFileExist(filepath)) {
+            DWORD numberOfBytesRead;
+            byteArray ba_gameRules;
+
+            FileEntry *fe = csf->createFile(filepath);
+
+            ba_gameRules.length = fe->getFileSize();
+            ba_gameRules.data = new BYTE[ba_gameRules.length];
+
+            csf->setFilePointer(fe, 0, nullptr, FILE_BEGIN);
+            csf->readFile(fe, ba_gameRules.data, ba_gameRules.length, &numberOfBytesRead);
+
+            app.m_gameRules.loadGameRules(ba_gameRules.data, ba_gameRules.length);
+            csf->closeHandle(fe);
+        }
     }
 
     // Step 7: preload chunks around spawn for the overworld. Parity with
@@ -1274,10 +1322,12 @@ void initImpl() {
     // Minecraft.cpp: on Windows64 the world host keeps the legacy embedded
     // host XUID, which its player file in the save is named by. Then
     // PlayerList::placeNewPlayer loads that player's saved data.
+    bool newPlayer = false;
     if (g_player && g_levelStorage) {
         g_player->setXuid((PlayerUID)0xe000d45248242f2eULL); // Win64Xuid::GetLegacyEmbeddedHostXuid
         try {
             CompoundTag *playerTag = g_levelStorage->getPlayerIO()->load(g_player);
+            newPlayer = playerTag == nullptr;
             MCLE_LOG("mcle_game_init: player data %s, pos %.1f %.1f %.1f dim %d",
                      playerTag ? "loaded" : "new", g_player->x, g_player->y, g_player->z, g_player->dimension);
             // Only the overworld is wired up to render, so a player saved in
@@ -1291,6 +1341,30 @@ void initImpl() {
             delete playerTag;
         } catch (...) {
             MCLE_LOG("mcle_game_init: player data load threw");
+        }
+    }
+
+    if (g_player && g_player->gameMode) {
+        // PlayerList::getPlayerForLogin: the player follows the level's game
+        // rules. Their progress packets have no connection to go to.
+        LevelRuleset *serverRuleDefs = app.getGameRuleDefinitions();
+        if (serverRuleDefs != nullptr) {
+            g_player->gameMode->setGameRules(GameRuleDefinition::generateNewGameRulesInstance(
+                GameRulesInstance::eGameRulesInstanceType_ServerPlayer, serverRuleDefs, nullptr));
+        }
+    }
+
+    if (g_player && newPlayer) {
+        // PlayerList::placeNewPlayer for a player new to the level
+        int mapScale = 3;
+        int scale = MapItemSavedData::MAP_SIZE * 2 * (1 << mapScale);
+        int centreXC = static_cast<int>(Math::round(g_player->x / scale) * scale);
+        int centreZC = static_cast<int>(Math::round(g_player->z / scale) * scale);
+        // 4J Added - Give every player a map the first time they join a server
+        g_player->inventory->setItem(9, std::make_shared<ItemInstance>(Item::map_Id, 1,
+            g_levels[0]->getAuxValueForMap(g_player->getXuid(), 0, centreXC, centreZC, mapScale)));
+        if (app.getGameRuleDefinitions() != nullptr) {
+            app.getGameRuleDefinitions()->postProcessPlayer(g_player);
         }
     }
 
@@ -2200,6 +2274,9 @@ void mcle_game_set_load_options(const MCLELaunchMoreOptions &params, bool isSave
 int mcle_game_create_world(const MCLELaunchMoreOptions &params, const std::wstring &worldName, int gameModeId,
                            int difficulty) {
     if (g_initStarted || g_initState != kStateUnstarted) return 0;
+    app.SetTutorialMode(false);
+    // StartNetworkGame: no level generator
+    app.setLevelGenerationOptions(nullptr);
 
     // clear out the app's terrain features list
     app.ClearTerrainFeaturePosition();
@@ -2390,6 +2467,9 @@ extern "C" void mcle_game_set_paused(int paused) {
 
 extern "C" int mcle_game_start(const char *levelFolder) {
     if (g_initStarted || g_initState != kStateUnstarted) return 0;
+    app.SetTutorialMode(false);
+    // StartNetworkGame: no level generator, loadLevel puts back any the save has
+    app.setLevelGenerationOptions(nullptr);
     g_pendingLevelId = widen(levelFolder ? levelFolder : "");
     g_newWorld = NewWorldParams();
     return mcle_start_game_thread();
@@ -2413,6 +2493,98 @@ extern "C" void mcle_minecraft_main(void) {
     mcle_world_static_ctors();
     app.loadDefaultGameRules();
     MCLE_LOG("minecraft main: %d level generators", (int)app.getLevelGenerators()->size());
+}
+
+// UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after
+// Create New World. Only the tutorial for now: a mash-up world needs its
+// pack's data mounted, which isn't done on iOS yet.
+static std::vector<LevelGenerationOptions *> g_menuGenerators;
+static std::string g_menuGeneratorName;
+
+extern "C" int mcle_level_generators_refresh(void) {
+    g_menuGenerators.clear();
+    for (LevelGenerationOptions *levelGen : *app.getLevelGenerators()) {
+        if (levelGen->requiresTexturePack()) continue;
+        g_menuGenerators.push_back(levelGen);
+    }
+    return static_cast<int>(g_menuGenerators.size());
+}
+
+extern "C" const char *mcle_level_generator_name(int i) {
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return "";
+    LPCWSTR wstr = g_menuGenerators[i]->getWorldName();
+    g_menuGeneratorName.clear();
+    for (const wchar_t *p = wstr; p && *p; ++p) {
+        unsigned int c = static_cast<unsigned int>(*p);
+        if (c < 0x80) {
+            g_menuGeneratorName += static_cast<char>(c);
+        } else if (c < 0x800) {
+            g_menuGeneratorName += static_cast<char>(0xC0 | (c >> 6));
+            g_menuGeneratorName += static_cast<char>(0x80 | (c & 0x3F));
+        } else {
+            g_menuGeneratorName += static_cast<char>(0xE0 | ((c >> 12) & 0x0F));
+            g_menuGeneratorName += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            g_menuGeneratorName += static_cast<char>(0x80 | (c & 0x3F));
+        }
+    }
+    return g_menuGeneratorName.c_str();
+}
+
+// UIScene_LoadOrJoinMenu::handlePress on the tutorial: LoadLevelGen, then
+// what StartNetworkGame and ServerThreadProc do with its init data
+extern "C" int mcle_game_start_level_gen(int i) {
+    if (g_initStarted || g_initState != kStateUnstarted) return 0;
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
+    LevelGenerationOptions *levelGen = g_menuGenerators[i];
+    app.SetTutorialMode(levelGen->isTutorial());
+    // The others go through LoadMenu
+    if (!levelGen->isTutorial()) return 0;
+
+    // clear out the app's terrain features list
+    app.ClearTerrainFeaturePosition();
+
+    StorageManager.ResetSaveData();
+    // Make our next save default to the name of the level
+    StorageManager.SetSaveTitle(levelGen->getDefaultSaveName().c_str());
+
+    NewWorldParams param;
+    param.active = true;
+    param.xzSize = LEVEL_LEGACY_WIDTH;
+    param.hellScale = HELL_LEVEL_LEGACY_SCALE;
+    const unsigned int settings = app.GetGameHostOption(eGameHostOption_Tutorial);
+
+    app.setLevelGenerationOptions(levelGen);
+    param.seed = app.getLevelGenerationOptions()->getLevelSeed();
+
+    // Load the tutorial save data here
+    if (levelGen->requiresBaseSave() && !levelGen->getBaseSavePath().empty()) {
+        std::string fileRoot = std::string(StorageManager.GetSaveRootPath()) + "/Windows64Media/Tutorial/" +
+                               wstringtofilename(levelGen->getBaseSavePath());
+        FILE *f = fopen(fileRoot.c_str(), "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long dwFileSize = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (dwFileSize > 0) {
+                PBYTE pbData = new BYTE[dwFileSize];
+                if (fread(pbData, 1, static_cast<size_t>(dwFileSize), f) == static_cast<size_t>(dwFileSize)) {
+                    levelGen->setBaseSaveData(pbData, static_cast<DWORD>(dwFileSize));
+                } else {
+                    delete[] pbData;
+                }
+            }
+            fclose(f);
+        }
+    }
+
+    // ServerThreadProc
+    app.SetGameHostOption(eGameHostOption_All, settings);
+
+    MCLE_LOG("level gen: tutorial seed=%lld host=%08x", (long long)param.seed, settings);
+    g_newWorld = param;
+    // initServer names the level from server.properties' level-name
+    g_pendingLevelId = L"world";
+    return mcle_start_game_thread();
 }
 
 // FullscreenProgress says it's generating the spawn area for a new level
@@ -4093,6 +4265,8 @@ static void mcle_exit_world(bool save) {
     if (save) {
         try { mcle_save_world(); } catch (...) { MCLE_LOG("EXIT_WORLD: save threw"); }
     }
+    // stopServer unloads the game rules after saving them
+    app.m_gameRules.unloadCurrentGameRules();
 
     // eAppAction_ExitWorld: gui->clearMessages()
     {

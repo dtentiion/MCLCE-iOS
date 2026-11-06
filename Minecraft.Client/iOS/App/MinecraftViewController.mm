@@ -32,6 +32,9 @@ extern "C" int  mcle_game_load_status(int *percent);        // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_is_new(void);                // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_finding_seed(void);          // MCLEGameLoop.cpp
 extern "C" void mcle_minecraft_main(void);                  // MCLEGameLoop.cpp
+extern "C" int  mcle_level_generators_refresh(void);        // MCLEGameLoop.cpp
+extern "C" const char* mcle_level_generator_name(int i);    // MCLEGameLoop.cpp
+extern "C" int  mcle_game_start_level_gen(int i);           // MCLEGameLoop.cpp
 
 // app.GetString(IDS_*)
 static NSString* MCLEStr(int ids) {
@@ -68,6 +71,9 @@ static int MCLENextTip(void) {
 
 // UIScene_LoadMenu state the bridge and the loading screen need.
 static int  g_load_save_index = -1;
+// UIScene_LoadOrJoinMenu::m_iDefaultButtonsC: Create New World and the level
+// generators come before the saves
+static int  g_load_default_buttons = 1;
 static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
 static bool g_load_has_been_in_creative = false;
 static bool g_load_is_save_owner = true;       // m_bIsSaveOwner
@@ -679,15 +685,29 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
             if (listId == 0) {
                 // UIScene_LoadOrJoinMenu::handlePress: item 0 is Create New
-                // World, saves start after the default buttons (just that
-                // one here, no level generators in the Win64 res set).
+                // World, then the level generators, then the saves.
+                int defaultButtons = g_load_default_buttons;
                 if (itemId == 0) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         MCLECreateWorldReset();
                         [g_active_vc navigateForwardTo:@"CreateWorldMenu1080.swf"];
                     });
+                } else if (itemId < defaultButtons) {
+                    // The tutorial's LoadLevelGen goes straight to the game
+                    int lGenID = itemId - 1;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (g_loading_world) return;
+                        mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+                        [g_active_vc navigateForwardTo:@"FullscreenProgress1080.swf"];
+                        if (mcle_game_start_level_gen(lGenID)) {
+                            g_loading_world = true;
+                        } else {
+                            NSLog(@"[loadorjoin] level generator %d didn't start", lGenID);
+                            [g_active_vc navigateBack];
+                        }
+                    });
                 } else {
-                    int saveIdx = itemId - 1;
+                    int saveIdx = itemId - defaultButtons;
                     dispatch_async(dispatch_get_main_queue(), ^{
                         g_load_save_index = saveIdx;
                         g_load_menu_fresh = true;
@@ -786,8 +806,9 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // UIScene_LoadOrJoinMenu::handleFocusChange -> m_bUpdateSaveSize
         if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && (int)id == 0) {
             int child = (int)value;
+            int defaultButtons = g_load_default_buttons;
             dispatch_async(dispatch_get_main_queue(), ^{
-                MCLESelectSaveSize(child - 1);
+                MCLESelectSaveSize(child - defaultButtons);
             });
         }
     } else if (strcmp(method, "handleRequestMoreData") == 0) {
@@ -2606,6 +2627,19 @@ static BOOL MCLEPlayStationPadConnected(void) {
         (const uint8_t*)createLabel, strlen(createLabel),
         0.0,
         (const uint8_t*)"", 0);
+    g_load_default_buttons = 1;
+
+    // AddDefaultButtons: then the level generators, the tutorial first
+    int generatorCount = mcle_level_generators_refresh();
+    for (int i = 0; i < generatorCount; ++i) {
+        const char* name = mcle_level_generator_name(i);
+        ruffle_ios_call_list_add_item(g_ruffle_player,
+            (const uint8_t*)saves, strlen(saves),
+            (const uint8_t*)name, strlen(name),
+            (double)g_load_default_buttons,
+            (const uint8_t*)"", 0);
+        ++g_load_default_buttons;
+    }
 
     // Saves after the default buttons, newest first, item data is the
     // running index (UIControl_SaveList::addItem passes m_itemCount).
@@ -2615,7 +2649,7 @@ static BOOL MCLEPlayStationPadConnected(void) {
         ruffle_ios_call_list_add_item(g_ruffle_player,
             (const uint8_t*)saves, strlen(saves),
             (const uint8_t*)name, strlen(name),
-            (double)(i + 1),
+            (double)(i + g_load_default_buttons),
             (const uint8_t*)"", 0);
     }
 
@@ -2630,7 +2664,7 @@ static BOOL MCLEPlayStationPadConnected(void) {
                 (const uint8_t*)png.bytes, png.length, 1.0f, 1.0f);
         }
         MCLECallPath(@"SavesList", @"SetTextureName",
-                     @[@(i + 1), [NSString stringWithUTF8String:tex]]);
+                     @[@(i + g_load_default_buttons), [NSString stringWithUTF8String:tex]]);
     }
 
     // m_spaceIndicatorSaves: init(L"", eControl_SpaceIndicator, 0, MAXIMUM_SAVE_STORAGE)
