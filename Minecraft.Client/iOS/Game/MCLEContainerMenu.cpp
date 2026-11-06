@@ -17,7 +17,7 @@
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.world.item.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.world.item.crafting.h"
-#include "../../../upstream/Minecraft.World/net.minecraft.world.level.tile.entity.h"
+#include "../../../upstream/Minecraft.World/FurnaceTileEntity.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.world.effect.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.stats.h"
 #include "../../../upstream/Minecraft.World/HtmlString.h"
@@ -31,7 +31,6 @@
 #include "../../../upstream/Minecraft.Client/TexturePack.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
-#include "../../../upstream/Minecraft.Client/Common/Tutorial/TutorialMode.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_AbstractContainerMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_InventoryMenu.h"
 
@@ -140,12 +139,6 @@ static void mcle_container_click(AbstractContainerMenu *menu, int slotId, int bu
     menu->broadcastChanges();
     player->broadcastCarriedItem();
     player->ignoreSlotUpdateHack = false;
-}
-
-// Minecraft::localgameModes, which only the tutorial's game mode would
-// fill. Tutorial.cpp isn't built and no world here is the tutorial.
-static constexpr MultiPlayerGameMode *mcle_container_game_mode() {
-    return nullptr;
 }
 
 #ifndef VK_LSHIFT
