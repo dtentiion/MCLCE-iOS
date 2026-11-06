@@ -2404,9 +2404,12 @@ static void mcle_do_respawn() {
     g_player->connection = nullptr;
     if (!fresh) return;
     fresh->connection = nullptr;
+    Minecraft *mc = Minecraft::GetInstance();
+    // Minecraft::respawnPlayer: don't do updating whilst the player &
+    // localplayer array are adjusted
+    mc->gameRenderer->DisableUpdateThread();
     {
         std::lock_guard<std::mutex> lock(g_frameMutex);
-        Minecraft *mc = Minecraft::GetInstance();
         std::shared_ptr<MultiplayerLocalPlayer> alias = std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(fresh);
         mc->player = alias;
         mc->localplayers[0] = alias;
@@ -2414,6 +2417,7 @@ static void mcle_do_respawn() {
         g_playerGameMode = fresh->gameMode;
         g_player = fresh;
     }
+    mc->gameRenderer->EnableUpdateThread();
     mcle_sound_listen(fresh, nullptr);
     MCLE_LOG("respawned at %.1f %.1f %.1f", fresh->x, fresh->y, fresh->z);
 }
@@ -2634,12 +2638,12 @@ static void *mcle_sim_thread_loop(void *) {
     return nullptr;
 }
 
-// GameRenderer's chunk update thread is the sim thread's updateDirtyChunks
-// here. DisableUpdateThread stops it and waits for the one running, so
-// allChanged can remake the chunks; EnableUpdateThread lets it go again.
+// GameRenderer's chunk update thread. DisableUpdateThread stops it and waits
+// for the one running, so allChanged can remake the chunks;
+// EnableUpdateThread lets it go again.
 static std::atomic<bool> g_chunkUpdateRunning{true};
 static std::mutex g_chunkUpdateMutex;
-// Set on the sim thread while it's updating, which has nothing to wait for
+// Set on the update thread while it's updating, which has nothing to wait for
 static thread_local bool t_inChunkUpdate = false;
 
 void mcle_chunk_update_disable() {
@@ -2650,6 +2654,49 @@ void mcle_chunk_update_disable() {
 
 void mcle_chunk_update_enable() {
     g_chunkUpdateRunning.store(true);
+}
+
+// GameRenderer::runUpdate
+static void *mcle_chunk_update_thread_loop(void *) {
+    mcle_install_sig_altstack();
+    Vec3::CreateNewThreadStorage();
+    AABB::CreateNewThreadStorage();
+    IntCache::CreateNewThreadStorage();
+    Tesselator::CreateNewThreadStorage(1024 * 1024);
+    Compression::UseDefaultThreadStorage();
+    Chunk::CreateNewThreadStorage();
+    Tile::CreateNewThreadStorage();
+    for (;;) {
+        bool idle = true;
+        {
+            std::lock_guard<std::mutex> lock(g_chunkUpdateMutex);
+            Minecraft *mc = Minecraft::GetInstance();
+            if (g_chunkUpdateRunning.load() && g_initState == kStateTicking &&
+                g_renderReady.load(std::memory_order_acquire) && g_levelRenderer && mc && mc->textures) {
+                t_inChunkUpdate = true;
+                // Update chunks atomically until there aren't any very near ones left
+                static const int MAX_DEFERRED_UPDATES = 10;
+                int count = 0;
+                bool shouldContinue = false;
+                try {
+                    do {
+                        shouldContinue = g_levelRenderer->updateDirtyChunks();
+                        count++;
+                    } while (shouldContinue && count < MAX_DEFERRED_UPDATES);
+                } catch (...) {}
+                try { g_levelRenderer->fullyFlagRenderableTileEntitiesToBeRemoved(); } catch (...) {}
+                mcle_delete_reassigned_storage();
+                AABB::resetPool();
+                Vec3::resetPool();
+                IntCache::Reset();
+                idle = !g_levelRenderer->dirtyChunkPresent;
+                t_inChunkUpdate = false;
+            }
+        }
+        // Nothing was dirty, wait a bit like the PS3 build does
+        if (idle) usleep(5 * 1000);
+    }
+    return nullptr;
 }
 
 // ServerPlayer::doChunkSendingTick for the local player. Its connection is
@@ -2707,6 +2754,10 @@ extern "C" void mcle_game_tick(void) {
                                mcle_sim_thread_loop, nullptr) == 0)
             {
                 pthread_detach(g_simThread);
+                pthread_t updateThread;
+                if (pthread_create(&updateThread, nullptr, mcle_chunk_update_thread_loop, nullptr) == 0) {
+                    pthread_detach(updateThread);
+                }
                 MCLE_LOG("mcle_game_tick: sim thread spawned, main goes "
                          "no-op from next call");
                 return; // Don't race the sim thread on its first iteration.
@@ -2763,8 +2814,8 @@ extern "C" void mcle_game_tick(void) {
 
     // UIScene_SettingsGraphicsMenu sets options->viewDistance when the render
     // distance slider moves, and LevelRenderer::render's allChanged resizes
-    // the area with the chunk update thread stopped. Here the chunk updates
-    // run in this tick, so it's done between them, with the frame held.
+    // the area with the chunk update thread stopped. Here it's done with the
+    // frame held, and allChanged stops the update thread itself.
     {
         Minecraft *mc = Minecraft::GetInstance();
         const int vd = mcle_view_distance_setting();
@@ -3167,35 +3218,11 @@ extern "C" void mcle_game_tick(void) {
         } catch (...) {}
     }
 
-    // Chunk-rebuild dispatch. Used to live in mcle_world_drive_renderer
-    // which runs on the iOS render thread - the WaitForAll(INFINITE)
-    // barrier waiting for the 7 worker threads stalled the render frame
-    // 200-500ms. Now on the sim thread so the render thread never blocks
-    // on chunk work; render reads finished display lists as they appear.
-    if (g_levelRenderer) {
-        Minecraft *mcShimUDC = Minecraft::GetInstance();
-        const bool texturesReadyUDC =
-            mcShimUDC != nullptr && mcShimUDC->textures != nullptr;
-        std::unique_lock<std::mutex> updateLock(g_chunkUpdateMutex, std::defer_lock);
-        if (texturesReadyUDC && g_chunkUpdateRunning.load()) updateLock.lock();
-        if (updateLock.owns_lock() && g_chunkUpdateRunning.load()) {
-            t_inChunkUpdate = true;
-            const auto udcStart = hrclock::now();
-            try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
-            const auto udcMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   hrclock::now() - udcStart).count();
-            if (udcMs > 100) {
-                MCLE_LOG("SLOW_UDC updateDirtyChunks took=%lldms", (long long)udcMs);
-            }
-            // Rest of GameRenderer::runUpdate's loop body
-            try { g_levelRenderer->fullyFlagRenderableTileEntitiesToBeRemoved(); } catch (...) {}
-            mcle_delete_reassigned_storage();
-            AABB::resetPool();
-            Vec3::resetPool();
-            IntCache::Reset();
-            t_inChunkUpdate = false;
-        }
-    }
+    // MinecraftServer::tick's. Chunk rebuilds are on the update thread
+    // (mcle_chunk_update_thread_loop), not in the tick.
+    AABB::resetPool();
+    Vec3::resetPool();
+    IntCache::Reset();
 
     const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                              hrclock::now() - tickStart).count();
@@ -4446,8 +4473,9 @@ static void mcle_exit_world(bool save) {
         g_initState = kStateExiting;
         if (!pthread_main_np()) dispatch_sync_f(dispatch_get_main_queue(), nullptr, [](void *) {});
     }
-    // The tick and the frame in flight
+    // The tick, the chunk update and the frame in flight
     { std::lock_guard<std::mutex> lock(g_simTickMutex); }
+    { std::lock_guard<std::mutex> lock(g_chunkUpdateMutex); }
     { std::lock_guard<std::mutex> lock(g_frameMutex); }
 
     // A background save in progress finishes first
