@@ -127,8 +127,12 @@ fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
             let value = match &args[1] { ExtValue::Number(n) => *n, _ => return };
             (id, value)
         }
-        // UIScene_Credits / the leaderboard list asking for the next rows
-        "handleRequestMoreData" => (0.0, 0.0),
+        // UIScene_Credits / the leaderboard list asking for the next rows,
+        // UIScene_EndPoem with the paragraph it wants (startIndex, up)
+        "handleRequestMoreData" => {
+            let start = match args.first() { Some(ExtValue::Number(n)) => *n, _ => 0.0 };
+            (start, 0.0)
+        }
         // UIScene_SkinSelectMenu's carousel finished sliding
         "handleAnimationEnd" => (0.0, 0.0),
         // IUIScene_StartGame's texture pack list moved to another pack
