@@ -395,6 +395,25 @@ struct McleAppStub {
     bool IsFileInMemoryTextures(const std::wstring &wName);
     void GetMemFileDetails(const std::wstring &wName, PBYTE *ppbData, DWORD *pdwBytes);
 
+    // CMinecraftApp's texture pack side (Game/MCLETexturePacks.cpp): the pack
+    // a game asked for, the app actions (the texture pack reload is the one
+    // with a handler on iOS), the files on a mounted pack, and the media
+    // archive with the selected pack's archive in front of it
+    DWORD m_dwRequiredTexturePackID = 0;
+    DWORD GetRequiredTexturePackID() { return m_dwRequiredTexturePackID; }
+    void SetRequiredTexturePackID(DWORD dwID) { m_dwRequiredTexturePackID = dwID; }
+    eXuiAction m_eXuiAction[XUSER_MAX_COUNT] = {};
+    LPVOID m_eXuiActionParam[XUSER_MAX_COUNT] = {};
+    void SetAction(int iPad, eXuiAction action, LPVOID param = nullptr);
+    eXuiAction GetXuiAction(int iPad) { return m_eXuiAction[iPad]; }
+    void HandleXuiActions();
+    std::wstring getFilePath(DWORD packId, std::wstring filename, bool bAddDataFolder,
+                             std::wstring mountPoint = L"TPACK:");
+    std::wstring getRootPath(DWORD packId, bool allowOverride, bool bAddDataFolder, std::wstring mountPoint);
+    int getArchiveFileSize(const std::wstring &filename);
+    bool hasArchiveFile(const std::wstring &filename);
+    byteArray getArchiveFile(const std::wstring &filename);
+
     DWORD getSkinIdFromPath(const std::wstring &skin) {
         bool dlcSkin = false;
         unsigned int skinId = 0;
@@ -516,9 +535,6 @@ struct McleAppStub {
     // always ends with en-US then en-EN.
     void getLocale(std::vector<std::wstring> &out) { out.push_back(L"en-US"); out.push_back(L"en-EN"); }
     template<class... A> bool           isXuidDeadmau5(A...)          { return false; }
-    // No media archive is mounted, so no file is found in it
-    template<class... A> int            getArchiveFileSize(A...)      { return -1; }
-    template<class... A> byteArray      getArchiveFile(A...)          { return byteArray(); }
     template<class... A> int            GetLocalPlayerCount(A...)     { return 1; }
     template<class... A> bool           LoadSignEntryMenu(A...)       { return false; }
 
@@ -555,12 +571,7 @@ struct McleAppStub {
     template<class... A> bool           DownloadAlreadyPurchased(A...){ return false; }
     template<class... A> bool           GetBanListRead(A...)          { return false; }
     template<class... A> bool           GetBanListCheck(A...)         { return false; }
-    template<class... A> int            GetXuiAction(A...)            { return 0; }
     template<class... A> bool           AutosaveDue(A...)             { return false; }
-    template<class... A> void           SetAction(A...)               {}
-    // CMinecraftApp::getFilePath, a file on a mounted DLC pack. The mash-up
-    // worlds' WPACK mount isn't there on iOS yet, so there's no path.
-    template<class... A> std::wstring   getFilePath(A...)             { return std::wstring(); }
     template<class... A> int            SecondsToAutosave(A...)       { return 0; }
     template<class... A> void           LoadCommandBlockMenu(A...)    {}
     template<class... A> void           LoadContainerMenu(A...)       {}

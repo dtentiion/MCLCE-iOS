@@ -343,11 +343,14 @@ static ColourTable *get_colour_table_shim() {
 }
 extern "C" int mcle_log_msg(const char *msg);
 ColourTable *Minecraft::getColourTable() {
-    // Real table from the default pack (colours.col), same as upstream
-    // falling back to skins->getDefault(). The shim only covers the window
-    // before the pack exists.
-    ColourTable *ct = TexturePackRepository::DEFAULT_TEXTURE_PACK
-        ? TexturePackRepository::DEFAULT_TEXTURE_PACK->getColourTable() : nullptr;
+    // Minecraft.cpp's: the selected pack's table, else the default pack's.
+    // The shim only covers colours.col not being there.
+    ColourTable *ct = nullptr;
+    if (skins) {
+        TexturePack *selected = skins->getSelected();
+        ct = selected->getColourTable();
+        if (ct == nullptr) ct = skins->getDefault()->getColourTable();
+    }
     if (!ct) ct = get_colour_table_shim();
     static int s_logged = 0;
     if (s_logged < 3) {
@@ -562,56 +565,15 @@ std::string wstr_to_utf8(const std::wstring &w) {
 // loadTexture / TextureManager chain. If iOS-specific behavior
 // is needed for any of those, patch upstream rather than re-stub.
 
-// G5-step29: TexturePackRepository.cpp can't compile (UIScene_LanguageSelector
-// pulls XC_LANGUAGE/XC_LOCALE enums we don't have, and ConsoleUIController
-// methods we don't stub). Provide just the two symbols Textures.cpp needs.
-#include "TexturePackRepository.h"
-TexturePack *TexturePackRepository::DEFAULT_TEXTURE_PACK = nullptr;
-TexturePack *TexturePackRepository::getSelected() { return DEFAULT_TEXTURE_PACK; }
-
 // G5-step32: TextureManager::createStitcher reads this for the atlas size.
 // 2048 matches Metal's safe minimum on every iOS device.
 #include "Minecraft.h"
 int Minecraft::maxSupportedTextureSize() { return 2048; }
 
-// AbstractTexturePack.cpp can't compile (UI/locale deps), but FolderTexturePack
-// inherits from it and its vtable references these. Provide minimal symbol
-// bodies so the linker has something to point at. These match the no-op
-// behavior of the IosFolderTexturePack subclass overrides.
-#include "AbstractTexturePack.h"
-void AbstractTexturePack::loadIcon() {}
-void AbstractTexturePack::loadComparison() {}
-void AbstractTexturePack::loadDescription() {}
-void AbstractTexturePack::loadName() {}
-InputStream *AbstractTexturePack::getResource(const std::wstring &, bool) { return nullptr; }
-void AbstractTexturePack::unload(Textures *) {}
-void AbstractTexturePack::load(Textures *) {}
-bool AbstractTexturePack::hasFile(const std::wstring &, bool) { return true; }
-DWORD AbstractTexturePack::getId() { return 0; }
-std::wstring AbstractTexturePack::getName() { return L""; }
-std::wstring AbstractTexturePack::getDesc1() { return L""; }
-std::wstring AbstractTexturePack::getDesc2() { return L""; }
-std::wstring AbstractTexturePack::getWorldName() { return L""; }
-std::wstring AbstractTexturePack::getAnimationString(const std::wstring &, const std::wstring &) { return L""; }
-std::wstring AbstractTexturePack::getAnimationString(const std::wstring &, const std::wstring &, bool) { return L""; }
-BufferedImage *AbstractTexturePack::getImageResource(const std::wstring &filename, bool filenameHasExtension, bool bTitleUpdateTexture, const std::wstring &drive) {
-    std::wstring path = (filename.empty() || filename[0] == L'/')
-        ? filename : (L"/" + filename);
-    return new BufferedImage(path, filenameHasExtension, bTitleUpdateTexture, drive);
+// Minecraft.cpp's, TexturePackRepository::resetWebSkin asks for it
+void Minecraft::delayTextureReload() {
+    reloadTextures = true;
 }
-void AbstractTexturePack::loadColourTable() {}
-void AbstractTexturePack::loadUI() {}
-void AbstractTexturePack::unloadUI() {}
-std::wstring AbstractTexturePack::getXuiRootPath() { return L""; }
-PBYTE AbstractTexturePack::getPackIcon(DWORD &) { return nullptr; }
-PBYTE AbstractTexturePack::getPackComparison(DWORD &) { return nullptr; }
-unsigned int AbstractTexturePack::getDLCParentPackId() { return 0; }
-unsigned char AbstractTexturePack::getDLCSubPackId() { return 0; }
-// Ctor body too - normally lives in AbstractTexturePack.cpp.
-AbstractTexturePack::AbstractTexturePack(DWORD id_, File *file_, const std::wstring &name_, TexturePack *fallback_)
-    : id(id_), name(name_), file(file_), m_iconData(nullptr), m_iconSize(0),
-      m_comparisonData(nullptr), m_comparisonSize(0), fallback(fallback_),
-      m_colourTable(nullptr), iconImage(nullptr), textureId(0) {}
 
 #include "GameRenderer.h"
 // G5: TileRenderer reads this for anaglyph color filtering; we keep it

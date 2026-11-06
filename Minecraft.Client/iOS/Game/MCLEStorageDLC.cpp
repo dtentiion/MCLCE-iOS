@@ -1,7 +1,9 @@
 // C4JStorage's installed DLC for iOS. Windows64 keeps each pack in its own
 // folder under Windows64Media/DLC; the phone's Documents mirrors that
 // install, so the packs are the folders in Documents/Windows64Media/DLC.
-// Mounting a pack makes its folder the one GetMountedDLCFileList lists.
+// Mounting a pack puts its folder on a drive name ("TPACK"), the way the
+// Windows64 storage maps them, and GetMountedPath turns "TPACK:\Data\..."
+// into a path in that folder.
 
 #include <dirent.h>
 #include <dispatch/dispatch.h>
@@ -9,6 +11,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <strings.h>
 #include <vector>
@@ -20,8 +23,21 @@ struct InstalledPack {
     std::string folder;
 };
 
+// A drive name and the pack folder that's on it
+struct DriveMapping {
+    std::string mount;
+    std::string folder;
+};
+
+// The drive a mount with no name goes on
+const char *const kPackageRoot = "DLCDrive";
+
 std::vector<InstalledPack> g_installed;
-std::string g_mounted;
+// File paths are looked up on any thread
+std::mutex g_mountLock;
+std::vector<DriveMapping> g_mappings;
+// The pack mounted last, the one GetMountedDLCFileList lists
+std::string g_currentMapped;
 
 std::string dlcRoot() {
     const char *docs = StorageManager.GetSaveRootPath();
@@ -121,35 +137,63 @@ XCONTENT_DATA &C4JStorage::GetDLC(DWORD dw) {
 DWORD C4JStorage::MountInstalledDLC(int iPad, DWORD dwDLC, int (*Func)(LPVOID, int, DWORD, DWORD), LPVOID lpParam,
                                     LPCSTR szMountDrive) {
     if (dwDLC >= g_installed.size()) return ERROR_FILE_NOT_FOUND;
-    g_mounted = g_installed[dwDLC].folder;
+    {
+        std::lock_guard<std::mutex> lock(g_mountLock);
+        const std::string mount = szMountDrive ? szMountDrive : kPackageRoot;
+        // A drive mounted again is on the new pack
+        g_mappings.erase(std::remove_if(g_mappings.begin(), g_mappings.end(),
+                                        [&](const DriveMapping &m) { return m.mount == mount; }),
+                         g_mappings.end());
+        g_mappings.push_back({mount, g_installed[dwDLC].folder});
+        g_currentMapped = g_installed[dwDLC].folder;
+    }
     // Every pack counts as owned
     if (Func) later([Func, lpParam, iPad]() { Func(lpParam, iPad, ERROR_SUCCESS, 1); });
     return ERROR_IO_PENDING;
 }
 
 DWORD C4JStorage::UnmountInstalledDLC(LPCSTR szMountDrive) {
-    g_mounted.clear();
+    std::lock_guard<std::mutex> lock(g_mountLock);
+    const std::string mount = szMountDrive ? szMountDrive : kPackageRoot;
+    g_mappings.erase(std::remove_if(g_mappings.begin(), g_mappings.end(),
+                                    [&](const DriveMapping &m) { return m.mount == mount; }),
+                     g_mappings.end());
     return ERROR_SUCCESS;
 }
 
 // The .pck files at the top of the mounted pack's folder
 void C4JStorage::GetMountedDLCFileList(const char *szMountDrive, std::vector<std::string> &fileList) {
     fileList.clear();
-    if (g_mounted.empty()) return;
-    for (const std::string &name : listFolder(g_mounted)) {
-        const std::string path = g_mounted + "/" + name;
+    std::string folder;
+    {
+        std::lock_guard<std::mutex> lock(g_mountLock);
+        folder = g_currentMapped;
+    }
+    if (folder.empty()) return;
+    for (const std::string &name : listFolder(folder)) {
+        const std::string path = folder + "/" + name;
         if (name.size() < 4 || strcasecmp(name.c_str() + name.size() - 4, ".pck") != 0) continue;
         if (isFile(path)) fileList.push_back(path);
     }
 }
 
-// A path on the mount drive ("DLCDrive:\Data\media.arc") in the mounted folder
+// A path on a mounted drive ("TPACK:\Data\media.arc") in that drive's
+// folder. Anything else isn't on a mount and comes back empty.
 std::string C4JStorage::GetMountedPath(std::string szMount) {
-    if (g_mounted.empty()) return std::string();
-    size_t colon = szMount.find(':');
-    if (colon == std::string::npos) return std::string();
-    std::string rest = szMount.substr(colon + 1);
-    std::replace(rest.begin(), rest.end(), '\\', '/');
-    while (!rest.empty() && rest[0] == '/') rest.erase(0, 1);
-    return g_mounted + "/" + rest;
+    for (size_t ch = 0; ch < szMount.size(); ++ch) {
+        if (szMount[ch] == '/' || szMount[ch] == '\\') return std::string();
+        if (szMount[ch] != ':') continue;
+
+        const std::string driveName = szMount.substr(0, ch);
+        std::lock_guard<std::mutex> lock(g_mountLock);
+        for (const DriveMapping &mapping : g_mappings) {
+            if (mapping.mount != driveName) continue;
+            std::string rest = szMount.substr(ch + 1);
+            std::replace(rest.begin(), rest.end(), '\\', '/');
+            while (!rest.empty() && rest[0] == '/') rest.erase(0, 1);
+            return mapping.folder + "/" + rest;
+        }
+        break;
+    }
+    return std::string();
 }

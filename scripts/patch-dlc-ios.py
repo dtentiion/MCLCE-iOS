@@ -7,17 +7,16 @@ DLCManager.cpp:
 - A .pck's strings are UTF-16 laid out for Windows' 2 byte WCHAR, and
   wchar_t is 4 bytes here. The file is rewritten with this build's structs
   (mcle_dlc_widen_pck) once it's read, before it's processed.
-- A texture pack found in a .pck isn't handed to TexturePackRepository,
-  which isn't built. It's still added to its parent pack.
+- A path on a mounted drive ("TPACK:\\Data\\x16Data.pck") is read from the
+  pack's folder, the way the Windows64 build looks it up in the storage.
 
 DLCSkinFile.cpp:
 - A skin's BOX and ANIM values are read with GCC's swscanf, as on PS3. iOS
   maps swscanf_s to swscanf, which would take the buffer size for a pointer.
 
 DLCPack.cpp:
-- A mash-up pack's game rules header (its world template) is skipped.
-  DLCGameRulesHeader is a JustGrSource, from the LevelGenerationOptions
-  header iOS stands in for, so it can't be built.
+- A mash-up pack's game rules header (its world template) is skipped, the
+  mash-up worlds aren't offered on iOS yet.
 
 Idempotent.
 """
@@ -59,10 +58,17 @@ patch(DLC / "DLCManager.cpp", "mcle_dlc_widen_pck", [
         "#endif",
         "\treturn processDLCDataFile(dwFilesProcessed, pbData, bytesRead, pack);",
     ]),
-    ("\t\t\t\t\tMinecraft::GetInstance()->skins->addTexturePackFromDLC(dlcTexturePack, dlcTexturePack->GetPackId() );", [
-        "#ifndef __APPLE_IOS__",
-        "\t\t\t\t\tMinecraft::GetInstance()->skins->addTexturePackFromDLC(dlcTexturePack, dlcTexturePack->GetPackId() );",
-        "#endif",
+    ("\telse if (fromArchive) return false;\n\n#ifdef _WINDOWS64\n", [
+        "\telse if (fromArchive) return false;",
+        "",
+        "#if defined(_WINDOWS64) || defined(__APPLE_IOS__)",
+        "",
+    ]),
+    ("\twstring wPath = convStringToWstring(path);\n\n#ifdef _WINDOWS64\n", [
+        "\twstring wPath = convStringToWstring(path);",
+        "",
+        "#if defined(_WINDOWS64) || defined(__APPLE_IOS__)",
+        "",
     ]),
 ])
 

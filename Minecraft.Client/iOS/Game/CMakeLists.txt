@@ -30,6 +30,7 @@ set(MCLE_GAME_SOURCES
   MCLESkinSelectMenu.cpp
   MCLEDLC.cpp
   MCLEStorageDLC.cpp
+  MCLETexturePacks.cpp
   MCLE_iOS_MachHandler.cpp
 )
 
