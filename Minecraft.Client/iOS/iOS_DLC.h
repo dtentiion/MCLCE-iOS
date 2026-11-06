@@ -1,7 +1,7 @@
 #pragma once
 
 // What DLCManager.cpp gets on iOS in place of the Iggy UI header
-// (scripts/patch-dlcmanager-ios.py).
+// (scripts/patch-dlc-ios.py).
 
 // A .pck keeps its strings in DLC_FILE_PARAM / DLC_FILE_DETAILS as UTF-16,
 // laid out for Windows' 2 byte WCHAR. wchar_t is 4 bytes here, so the file
