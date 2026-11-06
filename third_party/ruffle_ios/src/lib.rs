@@ -582,6 +582,43 @@ pub unsafe extern "C" fn ruffle_ios_player_replace_swf(
     }
 }
 
+/// UIController::loadSkin: the skin library a movie's ImportAssets of
+/// `name` gets from now on, in place of the file the import would read.
+/// Returns 1 on success, 0 on bad args, -1 on player lock failure, -2 on
+/// SWF parse failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_cache_import(
+    raw: *mut PlayerHandle,
+    name_ptr: *const u8,
+    name_len: usize,
+    data: *const u8,
+    data_len: usize,
+    url_ptr: *const u8,
+    url_len: usize,
+) -> c_int {
+    if raw.is_null() || name_ptr.is_null() || name_len == 0 || data.is_null() || data_len == 0 {
+        return 0;
+    }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(name) = std::str::from_utf8(std::slice::from_raw_parts(name_ptr, name_len)) else { return 0; };
+    let url = if url_ptr.is_null() || url_len == 0 {
+        name.to_string()
+    } else {
+        match std::str::from_utf8(std::slice::from_raw_parts(url_ptr, url_len)) {
+            Ok(s) => s.to_string(),
+            Err(_) => return 0,
+        }
+    };
+    let bytes = std::slice::from_raw_parts(data, data_len);
+    let movie = match SwfMovie::from_data(bytes, url.clone(), Some(url)) {
+        Ok(m) => m,
+        Err(_) => return -2,
+    };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    p.mutate_with_update_context(|uc| uc.library.cache_import(name.to_string(), &movie));
+    1
+}
+
 /// One level deeper than `ruffle_ios_enumerate_root_children`: list the
 /// direct children of a named root child, e.g. what `Button1` actually
 /// contains. Hypothesis we're chasing: PlaceObject places Button1 by class

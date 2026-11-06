@@ -1437,6 +1437,72 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) NSMutableArray<NSDictionary*>* menuStack;
 @end
 
+// UIController::loadSkins, Windows64's: each skin library from the selected
+// texture pack's media archive when it has one (CMinecraftApp::getArchiveFile),
+// else the game's own in Documents. The movies loaded from now on import
+// these. A library goes back to the file only after a pack replaced it.
+static void MCLEReloadSkinLibraries(void) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    if (!docs) return;
+    // The platform skins are the ones their aliases were made from
+    NSString* (^platformSkin)(NSString*, NSString*) = ^NSString*(NSString* alias, NSString* skin) {
+        NSString* marker = [[docs stringByAppendingPathComponent:alias] stringByAppendingString:@".source"];
+        NSString* source = [NSString stringWithContentsOfFile:marker encoding:NSUTF8StringEncoding error:nil];
+        return source.length ? source : skin;
+    };
+    NSArray<NSArray<NSString*>*>* skins = @[
+        @[ platformSkin(@"platformskinHD.swf", @"skinHDWin.swf"), @"platformskinHD.swf" ],
+        @[ platformSkin(@"platformskin.swf", @"skinWin.swf"), @"platformskin.swf" ],
+        @[ @"skinGraphics.swf", @"skinGraphics.swf" ],
+        @[ @"skinGraphicsHud.swf", @"skinGraphicsHud.swf" ],
+        @[ @"skinGraphicsInGame.swf", @"skinGraphicsInGame.swf" ],
+        @[ @"skinGraphicsTooltips.swf", @"skinGraphicsTooltips.swf" ],
+        @[ @"skinGraphicsLabels.swf", @"skinGraphicsLabels.swf" ],
+        @[ @"skinLabels.swf", @"skinLabels.swf" ],
+        @[ @"skinInGame.swf", @"skinInGame.swf" ],
+        @[ @"skinHud.swf", @"skinHud.swf" ],
+        @[ @"skinTooltips.swf", @"skinTooltips.swf" ],
+        @[ @"skin.swf", @"skin.swf" ],
+        @[ @"skinHDGraphics.swf", @"skinHDGraphics.swf" ],
+        @[ @"skinHDGraphicsHud.swf", @"skinHDGraphicsHud.swf" ],
+        @[ @"skinHDGraphicsInGame.swf", @"skinHDGraphicsInGame.swf" ],
+        @[ @"skinHDGraphicsTooltips.swf", @"skinHDGraphicsTooltips.swf" ],
+        @[ @"skinHDGraphicsLabels.swf", @"skinHDGraphicsLabels.swf" ],
+        @[ @"skinHDLabels.swf", @"skinHDLabels.swf" ],
+        @[ @"skinHDInGame.swf", @"skinHDInGame.swf" ],
+        @[ @"skinHDHud.swf", @"skinHDHud.swf" ],
+        @[ @"skinHDTooltips.swf", @"skinHDTooltips.swf" ],
+        @[ @"skinHD.swf", @"skinHD.swf" ],
+    ];
+    static NSMutableSet<NSString*>* fromPack = [NSMutableSet set];
+    for (NSArray<NSString*>* skin in skins) {
+        NSString* skinPath = skin[0];
+        NSString* skinName = skin[1];
+        std::vector<unsigned char> bytes;
+        const bool packSkin = mcle_texture_pack_archive_file(MCLEWideString(skinPath), bytes);
+        NSString* file = [docs stringByAppendingPathComponent:skinName];
+        if (!packSkin) {
+            if (![fromPack containsObject:skinName]) continue;
+            NSData* data = [NSData dataWithContentsOfFile:file];
+            if (!data.length) continue;
+            const unsigned char* p = static_cast<const unsigned char*>(data.bytes);
+            bytes.assign(p, p + data.length);
+        }
+        NSString* url = [NSString stringWithFormat:@"file://%@",
+                         [file stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+        int rc = ruffle_ios_cache_import(g_ruffle_player,
+            (const uint8_t*)skinName.UTF8String, strlen(skinName.UTF8String),
+            bytes.data(), bytes.size(),
+            (const uint8_t*)url.UTF8String, strlen(url.UTF8String));
+        if (rc != 1) continue;
+        if (packSkin) [fromPack addObject:skinName];
+        else [fromPack removeObject:skinName];
+    }
+}
+
 @implementation MinecraftViewController
 
 // Find a SWF to play. Preference order:
@@ -4055,8 +4121,12 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     g_world_paused = false;
     g_world_dead = false;
     self.menuStack = nil;
-    // UIController::NavigateToHomeMenu: the menus are on the default texture pack
+    // UIController::NavigateToHomeMenu: the menus are on the default texture
+    // pack, and the home menu comes once its skin is back
+    // (m_navigateToHomeOnReload)
     mcle_texture_packs_navigate_to_home_menu();
+    mcle_handle_xui_actions();
+    if (mcle_ui_take_skin_reload()) MCLEReloadSkinLibraries();
     [self transitionToMenuNamed:@"MainMenu1080.swf"];
     if (g_ruffle_player) {
         ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
@@ -4746,6 +4816,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 - (void)tick:(CADisplayLink*)link {
     // The main loop's app.HandleXuiActions, the texture pack reload
     mcle_handle_xui_actions();
+    if (mcle_ui_take_skin_reload()) MCLEReloadSkinLibraries();
 
     mcle_game_tick();
 
