@@ -242,6 +242,7 @@ struct MOJANG_DATA {
 
 // Bridges into MetalContext for texture upload during Texture::updateOnGPU.
 extern "C" unsigned int mcle_glbridge_get_bound_texture(void);
+extern "C" void         mcle_glbridge_bind_texture(unsigned int tex_id);
 extern "C" void         mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id,
                                                           int width, int height,
                                                           const void *rgba_pixels);
@@ -362,6 +363,9 @@ struct C4JRenderStub {
     template<class... A> void   DoScreenGrabOnNextPresent(A...) {}
     template<class... A> void   InternalScreenCapture(A...)   {}
     template<class... A> bool   IsHiDef(A...)                 { return true; }
+    // glBindTexture's, -1 is the default white texture (Textures::bindTextureLayers,
+    // HorseRenderer)
+    void TextureBind(int idx) { mcle_glbridge_bind_texture(idx < 0 ? 0u : (unsigned int)idx); }
     template<class... A> void   TextureBind(A...)             {}
     template<class... A> void   TextureUnbind(A...)           {}
     template<class... A> void   TextureUpdate(A...)           {}
