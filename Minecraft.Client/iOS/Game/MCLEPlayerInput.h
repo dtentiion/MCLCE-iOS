@@ -23,6 +23,10 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
 class Player;
 void mcle_player_ai_step_end(Player *player);
 
+// A SetEntityLinkPacket the server sent the local player: what
+// MultiplayerLocalPlayer::ride does when the player gets on or off
+void mcle_player_entity_link(int type, int sourceId, int destId);
+
 // LocalPlayer::ThirdPersonView, cycled with the left stick click
 int mcle_third_person_view();
 

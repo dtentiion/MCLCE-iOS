@@ -41,6 +41,7 @@
 #include "../../../upstream/Minecraft.World/SharedMonsterAttributes.h"
 #include "../../../upstream/Minecraft.World/AttributeInstance.h"
 #include "../../../upstream/Minecraft.World/BowItem.h"
+#include "../../../upstream/Minecraft.World/SetEntityLinkPacket.h"
 
 // LocalPlayer::m_iThirdPersonView: 0 first person, 1 behind, 2 in front
 std::atomic<int> g_thirdPersonView{0};
@@ -807,6 +808,8 @@ struct MoveState {
     bool twoJumpsRegistered = false;
     // LocalPlayer::ullDpad_last / ullDpad_filtered
     unsigned int dpadLast = 0, dpadFiltered = 0;
+    // What the client's player rides, as the server's SetEntityLinkPackets say
+    bool riding = false;
 };
 
 MoveState m;
@@ -999,6 +1002,21 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     g_xBobO = g_xBob;
     g_xBob += (P->xRot - g_xBob) * 0.5;
     g_yBob += (P->yRot - g_yBob) * 0.5;
+}
+
+// ClientConnection::handleEntityLinkPacket's ride for the local player, and
+// what MultiplayerLocalPlayer::ride adds to it
+void mcle_player_entity_link(int type, int sourceId, int destId) {
+    if (type != SetEntityLinkPacket::RIDING || !P || sourceId != P->entityId) return;
+    bool wasRiding = m.riding;
+    bool isRiding = destId != -1;
+    m.riding = isRiding;
+
+    // 4J Added
+    if (wasRiding && !isRiding) {
+        P->setSneaking(false);
+        m.sneaking = false;
+    }
 }
 
 // The rest of LocalPlayer::aiStep, after its Player::aiStep. Player::aiStep
