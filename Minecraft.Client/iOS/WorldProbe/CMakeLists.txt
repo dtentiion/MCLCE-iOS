@@ -816,6 +816,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Audio/SoundNames.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Audio/Consoles_SoundEngine.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Colours/ColourTable.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Telemetry/TelemetryManager.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCCapeFile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCColourTableFile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCFile.cpp

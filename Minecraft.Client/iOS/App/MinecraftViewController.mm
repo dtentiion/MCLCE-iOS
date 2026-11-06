@@ -80,6 +80,7 @@ extern "C" int  mcle_player_is_dead(void);           // MCLEGameLoop.cpp
 extern "C" void mcle_game_respawn(void);             // MCLEGameLoop.cpp
 extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MCLEGameLoop.cpp
 extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
+extern "C" void mcle_storage_set_save_folder(const char *folder); // MCLESaveList.cpp
 
 // Name of the currently loaded menu SWF, set whenever we enter a
 // new scene. The settings-event bridge reads this to decide which
@@ -2479,6 +2480,7 @@ static NSString* MCLEDifficultyLabel(int d) {
     int idx = g_load_save_index;
     if (idx < 0 || idx >= mcle_saves_count() || g_loading_world) return;
     NSString* folder = [NSString stringWithUTF8String:mcle_saves_folder(idx)];
+    mcle_storage_set_save_folder(folder.UTF8String);
     unsigned int hostOptions = 0;
     int hostOptionsRead = mcle_saves_host_options(idx, &hostOptions);
     mcle_game_set_load_options(hostOptionsRead, hostOptions,

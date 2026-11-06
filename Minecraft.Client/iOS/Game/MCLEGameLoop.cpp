@@ -492,6 +492,16 @@ std::atomic<bool>             g_autoSaveInFlight{ false };
 static void *mcle_save_now_thread(void *) {
     MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
     const auto start = std::chrono::steady_clock::now();
+    // Flush compresses on this thread, and the level saves write chunks
+    static thread_local bool s_tls = false;
+    if (!s_tls) {
+        s_tls = true;
+        Compression::CreateNewThreadStorage();
+        OldChunkStorage::CreateNewThreadStorage();
+        Tile::CreateNewThreadStorage();
+        AABB::CreateNewThreadStorage();
+        Vec3::CreateNewThreadStorage();
+    }
     // MinecraftServer::saveAllChunks saves the players first
     if (g_player && g_levelStorage) {
         try { g_levelStorage->getPlayerIO()->save(g_player); }
@@ -505,6 +515,11 @@ static void *mcle_save_now_thread(void *) {
         const auto dms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - t0).count();
         MCLE_LOG("BG_SAVE: level[%d] done took=%lldms", i, (long long)dms);
+    }
+    // MinecraftServer's SaveGame action: levels[0]->saveToDisc
+    if (g_levels[0]) {
+        try { g_levels[0]->saveToDisc(nullptr, false); }
+        catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
     }
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start).count();

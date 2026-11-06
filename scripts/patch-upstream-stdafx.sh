@@ -1664,6 +1664,12 @@ if [ -f "$CR_PY" ]; then
     python3 "$CR_PY"
 fi
 
+# ConsoleSaveFileOriginal::Flush hands the save to StorageManager like Windows64
+CSF_PY="$REPO_ROOT/scripts/patch-consolesavefile-ios-flush.py"
+if [ -f "$CSF_PY" ]; then
+    python3 "$CSF_PY"
+fi
+
 # Renderer / model includes the PC precompiled header gave them
 WI_PY="$REPO_ROOT/scripts/patch-renderer-includes.py"
 if [ -f "$WI_PY" ]; then

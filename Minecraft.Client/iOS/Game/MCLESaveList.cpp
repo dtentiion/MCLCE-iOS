@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -264,6 +265,61 @@ extern "C" int mcle_saves_count(void) { return (int)g_saves.size(); }
 
 static const SaveEntry *entry(int i) {
     return (i >= 0 && i < (int)g_saves.size()) ? &g_saves[(size_t)i] : nullptr;
+}
+
+// C4JStorage::AllocateSaveData / SaveSaveData for the loaded world. Like
+// Windows64 the whole buffer goes out, the header in front says how much of
+// it the save is.
+namespace {
+std::mutex g_storageMutex;
+std::string g_saveFolder;
+unsigned char *g_saveBuffer = nullptr;
+unsigned int g_saveBufferSize = 0;
+}
+
+extern "C" void mcle_storage_set_save_folder(const char *folder) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    g_saveFolder = folder ? folder : "";
+}
+
+extern "C" void *mcle_storage_allocate_save_data(unsigned int size) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    free(g_saveBuffer);
+    g_saveBuffer = static_cast<unsigned char *>(malloc(size));
+    g_saveBufferSize = g_saveBuffer ? size : 0;
+    return g_saveBuffer;
+}
+
+extern "C" int mcle_storage_save_save_data(void) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    const char *root = ios_documents_dir();
+    if (!g_saveBuffer || g_saveFolder.empty() || !root) return 0;
+    // The world's .ms, named after the world, the first one in its folder
+    std::string dir = std::string(root) + "/saves/" + g_saveFolder;
+    std::string target;
+    if (DIR *d = opendir(dir.c_str())) {
+        while (struct dirent *e = readdir(d)) {
+            std::string name = e->d_name;
+            if (name.size() > 3 && name.compare(name.size() - 3, 3, ".ms") == 0) {
+                target = dir + "/" + name;
+                break;
+            }
+        }
+        closedir(d);
+    }
+    if (target.empty()) return 0;
+    // Written next to it and swapped in, so a kill mid write leaves the old one
+    std::string temp = target + ".tmp";
+    FILE *f = fopen(temp.c_str(), "wb");
+    if (!f) return 0;
+    bool ok = fwrite(g_saveBuffer, 1, g_saveBufferSize, f) == g_saveBufferSize;
+    ok = (fclose(f) == 0) && ok;
+    if (ok) ok = rename(temp.c_str(), target.c_str()) == 0;
+    if (!ok) remove(temp.c_str());
+    free(g_saveBuffer);
+    g_saveBuffer = nullptr;
+    g_saveBufferSize = 0;
+    return ok ? 1 : 0;
 }
 
 extern "C" const char *mcle_saves_folder(int i) { auto e = entry(i); return e ? e->folder.c_str() : ""; }

@@ -17,6 +17,10 @@
 
 #define MAX_SAVEFILENAME_LENGTH 64
 
+// The loaded world's save, written out by Game/MCLESaveList.cpp
+extern "C" void *mcle_storage_allocate_save_data(unsigned int size);
+extern "C" int  mcle_storage_save_save_data(void);
+
 // Real SAVE_DETAILS lives in the platform 4J_Storage lib (Xbox/Sony). On
 // iOS we only need a forward decl so upstream UI headers that store
 // `SAVE_DETAILS *m_pSaveDetails` parse.
@@ -76,7 +80,15 @@ public:
     // to exist at compile time.
     template<class... A> unsigned int GetSaveSize(A...)         { return 0; }
     template<class... A> void*        GetSaveData(A...)         { return nullptr; }
-    template<class... A> void*        AllocateSaveData(A...)    { return nullptr; }
+    // ConsoleSaveFileOriginal::Flush: the compressed save goes into a
+    // buffer the storage owns, then SaveSaveData writes it to the world's
+    // .ms file and calls back
+    void *AllocateSaveData(unsigned int size) { return mcle_storage_allocate_save_data(size); }
+    template<class... A> void SetSaveImages(A...) {}
+    void SaveSaveData(int (*callback)(LPVOID, bool), LPVOID param) {
+        bool ok = mcle_storage_save_save_data() != 0;
+        if (callback) callback(param, ok);
+    }
     template<class... A> bool         GetSaveUniqueNumber(A...) { return false; }
     template<class... A> std::wstring GetSaveUniqueFilename(A...) { return std::wstring(); }
     template<class... A> int          DLC_FILE_PARAM(A...)         { return 0; }
