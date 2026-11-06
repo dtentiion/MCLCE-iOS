@@ -140,6 +140,8 @@ public:
     void tick(double now) override {
         std::shared_ptr<ServerPlayer> player = mcle_local_player();
         if (player && player->containerMenu != m_menu) {
+            // LocalPlayer::closeContainer
+            mcleContainerUI.PlayUISFX(eSFX_Back);
             mcleContainerUI.CloseUIScenes(getPad());
             return;
         }

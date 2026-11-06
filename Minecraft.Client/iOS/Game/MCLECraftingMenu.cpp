@@ -317,6 +317,8 @@ public:
         m_labelIngredients.tick();
 
         if (m_iContainerType == RECIPE_TYPE_3x3 && g_craftingPlayer && g_craftingPlayer->containerMenu != m_menu) {
+            // LocalPlayer::closeContainer
+            mcleContainerUI.PlayUISFX(eSFX_Back);
             mcleContainerUI.CloseUIScenes(getPad());
         }
     }
