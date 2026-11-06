@@ -178,7 +178,7 @@ public:
             m_slotListHotbar.addSlot(i);
         }
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Creative_Inventory_Menu);
 
         m_curTab = eCreativeInventoryTab_COUNT;
         switchTab(eCreativeInventoryTab_BuildingBlocks);
@@ -200,6 +200,8 @@ public:
     // pointer carried, and the server's handleContainerClose closes its own
     // container, which the picker never was
     void handleDestroy() override {
+        leaveTutorialState();
+
         std::shared_ptr<ServerPlayer> player = mcle_local_player();
         if (!player) return;
         player->inventory->setCarried(nullptr);

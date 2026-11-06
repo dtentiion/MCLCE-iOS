@@ -361,7 +361,7 @@ ColourTable *Minecraft::getColourTable() {
     }
     return ct;
 }
-bool         Minecraft::isTutorial()      { return false; }
+// Minecraft::isTutorial and the tutorial bits are in Game/MCLETutorial.cpp
 MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +376,10 @@ extern void mcle_container_open_packet(int type, int containerId, const std::wst
 extern "C" int mcle_log_msg(const char *msg);
 void mcle_handle_chat_packet(std::shared_ptr<ChatPacket> packet);   // Game/MCLEChat.cpp
 void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet);   // Game/MCLEGameLoop.cpp
+void mcle_tutorial_local_player_packet(std::shared_ptr<Packet> packet);   // Game/MCLETutorial.cpp
 void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
+    // what ClientConnection's handlers pass on to the tutorial
+    mcle_tutorial_local_player_packet(packet);
     if (std::shared_ptr<ContainerOpenPacket> open = std::dynamic_pointer_cast<ContainerOpenPacket>(packet)) {
         mcle_container_open_packet(open->type, open->containerId, open->title, open->customName, open->size);
     } else if (std::shared_ptr<ChatPacket> chat = std::dynamic_pointer_cast<ChatPacket>(packet)) {

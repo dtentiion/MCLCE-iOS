@@ -25,9 +25,19 @@ struct SkinSettings {
     uint8_t favoriteSkinsPos;
 };
 
+// TUTORIAL_PROFILE_STORAGE_BYTES (Common/Tutorial/TutorialEnum.h)
+const int kTutorialCompletionBytes = 512 / 8;
+
+// The GAME_SETTINGS tutorial fields
+struct TutorialSettings {
+    uint8_t completion[kTutorialCompletionBytes];
+    uint32_t specialBitmask;
+};
+
 std::mutex g_mu;
 unsigned char g_values[MCLE_SETTING_MAX] = {};
 SkinSettings g_skin = {};
+TutorialSettings g_tutorial = {};
 std::atomic<bool> g_loaded{false};
 
 NSString* settings_path() {
@@ -100,6 +110,7 @@ void save_locked() {
     }
     std::fwrite(g_values, 1, MCLE_SETTING_MAX, f);
     std::fwrite(&g_skin, 1, sizeof(g_skin), f);
+    std::fwrite(&g_tutorial, 1, sizeof(g_tutorial), f);
     std::fclose(f);
 }
 
@@ -114,15 +125,17 @@ extern "C" void mcle_settings_load(void) {
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         FILE* f = std::fopen(path.UTF8String, "rb");
         if (f) {
-            unsigned char buf[MCLE_SETTING_MAX + sizeof(SkinSettings)] = {};
+            unsigned char buf[MCLE_SETTING_MAX + sizeof(SkinSettings) + sizeof(TutorialSettings)] = {};
             size_t n = std::fread(buf, 1, sizeof(buf), f);
             std::fclose(f);
             // Tolerate shorter files: newer builds may have more
             // settings than an old settings.dat was written with.
             // Copy what we got, leave defaults for the rest.
             if (n > 0) {
+                const size_t skinEnd = MCLE_SETTING_MAX + sizeof(SkinSettings);
                 std::memcpy(g_values, buf, n < MCLE_SETTING_MAX ? n : MCLE_SETTING_MAX);
-                if (n == sizeof(buf)) std::memcpy(&g_skin, buf + MCLE_SETTING_MAX, sizeof(g_skin));
+                if (n >= skinEnd) std::memcpy(&g_skin, buf + MCLE_SETTING_MAX, sizeof(g_skin));
+                if (n == sizeof(buf)) std::memcpy(&g_tutorial, buf + skinEnd, sizeof(g_tutorial));
                 NSLog(@"[settings] loaded %zu byte(s) from %@", n, path);
             }
         }
@@ -201,5 +214,20 @@ extern "C" void mcle_settings_set_favorite_skins_pos(unsigned char pos) {
     std::lock_guard<std::mutex> lk(g_mu);
     if (g_skin.favoriteSkinsPos == pos) return;
     g_skin.favoriteSkinsPos = pos;
+    save_locked();
+}
+
+extern "C" void mcle_settings_get_tutorial(unsigned char *completion, int bytes, unsigned int *special) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    int n = bytes < kTutorialCompletionBytes ? bytes : kTutorialCompletionBytes;
+    if (completion && n > 0) std::memcpy(completion, g_tutorial.completion, n);
+    if (special) *special = g_tutorial.specialBitmask;
+}
+
+extern "C" void mcle_settings_set_tutorial(const unsigned char *completion, int bytes, unsigned int special) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    int n = bytes < kTutorialCompletionBytes ? bytes : kTutorialCompletionBytes;
+    if (completion && n > 0) std::memcpy(g_tutorial.completion, completion, n);
+    g_tutorial.specialBitmask = special;
     save_locked();
 }

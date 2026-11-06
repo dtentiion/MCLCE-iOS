@@ -199,7 +199,7 @@ public:
 
         m_labelChest.init(name);
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Container_Menu);
 
         int containerSize = menu->getSize() - (27 + 9);
 
@@ -264,7 +264,7 @@ public:
         m_progressFurnaceFire.init(L"", 0, 0, 12, 0);
         m_progressFurnaceArrow.init(L"", 0, 0, 24, 0);
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Furnace_Menu);
 
         Initialize(0, menu, false, FurnaceMenu::INV_SLOT_START, eSectionFurnaceUsing, eSectionFurnaceMax);
 
@@ -333,7 +333,7 @@ public:
 
         m_labelDispenser.init(trap->getName());
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Trap_Menu);
 
         int containerSize = trap->getContainerSize();
         Initialize(0, menu, false, containerSize, eSectionTrapUsing, eSectionTrapMax);
@@ -388,7 +388,7 @@ public:
 
         m_labelDispenser.init(hopper->getName());
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Hopper_Menu);
 
         int containerSize = hopper->getContainerSize();
         Initialize(0, menu, false, containerSize, eSectionHopperUsing, eSectionHopperMax);
@@ -452,7 +452,7 @@ public:
 
         m_labelBrewingStand.init(m_brewingStand->getName());
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Brewing_Menu);
 
         Initialize(0, menu, false, BrewingStandMenu::INV_SLOT_START, eSectionBrewingUsing, eSectionBrewingMax);
 
@@ -663,7 +663,7 @@ public:
 
         m_labelEnchant.init(name.empty() ? std::wstring(app.GetString(IDS_ENCHANT)) : name);
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Enchanting_Menu);
 
         Initialize(0, menu, false, EnchantmentMenu::INV_SLOT_START, eSectionEnchantUsing, eSectionEnchantMax);
 
@@ -1039,7 +1039,7 @@ public:
 
         for (BeaconEffectButton &button : m_buttonsPowers) button.setVisible(false);
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Beacon_Menu);
 
         // BeaconMenu::addSlotListener's setContainerData, then its slot
         m_beacon = std::make_shared<BeaconTileEntity>();
@@ -1280,7 +1280,7 @@ public:
 
         m_inventory = inventory;
 
-        // The tutorial state is left out, localgameModes is never set here
+        enterTutorialState(e_Tutorial_State_Anvil_Menu);
 
         m_repairMenu = menu;
         m_repairMenu->addSlotListener(this);

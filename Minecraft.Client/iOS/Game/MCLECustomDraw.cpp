@@ -4,6 +4,7 @@
 // read from it after it draws and the items go on the UI layer above it.
 
 #include "MCLEHud.h"
+#include "MCLETutorialPopup.h"
 
 #include <cstdio>
 #include <memory>
@@ -173,23 +174,26 @@ extern "C" void mcle_hud_custom_draw(const MCLECustomDrawRegion *regions, int co
             anything = true;
         }
     }
+    // The tutorial popup's item over the HUD
+    const bool popupIcon = count > 0 && mcle_tutorial_popup_has_icon();
     // An empty layer only needs clearing once
-    if (!anything && !g_drewLastFrame) return;
+    if (!anything && !popupIcon && !g_drewLastFrame) return;
     if (mcle_metal_ui_frame_begin() != 0) return;
-    g_drewLastFrame = anything;
+    g_drewLastFrame = anything || popupIcon;
 
-    if (anything) {
+    if (anything || popupIcon) {
         MCLEHudState st;
         mcle_hud_get_state(&st);
         float fVal = slotAlpha(st.opacityTimer);
 
         setupCustomDrawGameState();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; anything && i < count; i++) {
             // UIScene_HUD::customDraw
             int slot = -1;
             if (sscanf(regions[i].name, "slot_%d", &slot) != 1 || slot < 0 || slot >= 9) continue;
             mcle_custom_draw_slot(regions[i], hotbar[slot], fVal, true);
         }
+        if (popupIcon) mcle_tutorial_popup_custom_draw();
         endCustomDrawGameState();
     }
     mcle_metal_ui_frame_end();

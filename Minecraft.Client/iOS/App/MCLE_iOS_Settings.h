@@ -83,6 +83,12 @@ void          mcle_settings_set_favorite_skin(int index, unsigned int skinId);
 unsigned char mcle_settings_get_favorite_skins_pos(void);
 void          mcle_settings_set_favorite_skins_pos(unsigned char pos);
 
+// GAME_SETTINGS' ucTutorialCompletion (TUTORIAL_PROFILE_STORAGE_BYTES of
+// it) and uiSpecialTutorialBitmask, the tutorial's progress. Saved after
+// the skin fields.
+void          mcle_settings_get_tutorial(unsigned char *completion, int bytes, unsigned int *special);
+void          mcle_settings_set_tutorial(const unsigned char *completion, int bytes, unsigned int special);
+
 #ifdef __cplusplus
 }
 #endif

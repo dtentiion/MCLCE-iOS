@@ -158,6 +158,45 @@ enum ETelemetryChallenges {
     eTelemetryPlayerDeathSource_Ghast             = 116,
     eTelemetryPlayerDeathSource_Zombie            = 117,
     eTelemetryPlayerDeathSource_ZombiePigman      = 118,
+    // Windows64's tutorial and in-game events, in its order, which the
+    // tutorial's tasks are given
+    eTelemetryTutorial_TrialStart                 = 200,
+    eTelemetryTutorial_Halfway,
+    eTelemetryTutorial_Complete,
+    eTelemetryTutorial_Inventory,
+    eTelemetryTutorial_Crafting,
+    eTelemetryTutorial_Furnace,
+    eTelemetryTutorial_Fishing,
+    eTelemetryTutorial_Minecart,
+    eTelemetryTutorial_Boat,
+    eTelemetryTutorial_Bed,
+    eTelemetryTutorial_Redstone_And_Pistons,
+    eTelemetryTutorial_Portal,
+    eTelemetryTutorial_FoodBar,
+    eTelemetryTutorial_CreativeMode,
+    eTelemetryTutorial_BrewingMenu,
+    eTelemetryInGame_Ride_Minecart,
+    eTelemetryInGame_Ride_Boat,
+    eTelemetryInGame_Ride_Pig,
+    eTelemetryInGame_UseBed,
+    eTelemetryTutorial_CreativeInventory,
+    eTelemetryTutorial_EnchantingMenu,
+    eTelemetryTutorial_Brewing,
+    eTelemetryTutorial_Enchanting,
+    eTelemetryTutorial_Farming,
+    eTelemetryTutorial_Breeding,
+    eTelemetryTutorial_Golem,
+    eTelemetryTutorial_Anvil,
+    eTelemetryTutorial_AnvilMenu,
+    eTelemetryTutorial_Trading,
+    eTelemetryTutorial_TradingMenu,
+    eTelemetryTutorial_Enderchest,
+    eTelemetryTutorial_Hopper,
+    eTelemetryTutorial_Beacon,
+    eTelemetryTutorial_Horse,
+    eTelemetryTutorial_HorseMenu,
+    eTelemetryTutorial_FireworksMenu,
+    eTelemetryTutorial_BeaconMenu,
 };
 
 // Real eDebugSetting enum lives in Common/Console_Debug_enum.h; pre-
@@ -494,15 +533,6 @@ typedef struct _ConnectionProgressParams {
     bool  setFailTimer;
 } ConnectionProgressParams;
 #endif
-// Game mode classes (FullTutorialMode, TrialMode, ConsoleGameMode,
-// DemoMode) live under upstream Common/Tutorial / Common/Trial / etc.
-// Their headers transitively pull the Tutorial.h -> UIScene chain we
-// cannot include without conflicting with our minimal Tutorial stub.
-// The Minecraft.cpp call sites that `new FullTutorialMode(...)` etc
-// are inside conditional branches the iOS app does not exercise on
-// first launch (tutorial / trial mode). Real iOS support for those
-// modes is a Phase F item; for Phase D we accept that this specific
-// branch of Minecraft.cpp keeps it red.
 // UIVec2D is a 2D float vector used as a value-type member in
 // IUIScene_AbstractContainerMenu.h. Upstream has no definition (the
 // type is provided by the platform UI layer); a thin float pair
@@ -872,53 +902,11 @@ public:
     static bool isCloseRequested()       { return false; }
     static void setTitle(const char*)    {}
 };
-// Tutorial.h transitively pulls UIScene (UI subsystem replaced by
-// SWF on iOS) so we cannot pre-include the full header. The light
-// TutorialEnum.h has no deps and brings the eTutorial_State enum
-// into scope so PlayerList::placeNewPlayer's
-// `e_Tutorial_State_Food_Bar` reference resolves.
-#include "../Minecraft.Client/Common/Tutorial/TutorialEnum.h"
-// Minimal Tutorial class stub so PlayerList.cpp's
-// gameMode->getTutorial()->isStateCompleted(state) call resolves
-// without pulling Tutorial.h (which has UIScene deps). Real Tutorial
-// state lives in Tutorial.cpp which is in the lib already
-// (Common/Tutorial/AreaConstraint.cpp etc are green per the auto-probe).
-// iOS_stdafx provides this stub for files that don't include the real
-// Tutorial.h. The real header guards itself on _TUTORIAL_H_DEFINED so
-// it will skip its body when this stub is in scope first.
-#ifndef _TUTORIAL_H_DEFINED
-#define _TUTORIAL_H_DEFINED
-class Tutorial {
-public:
-    bool m_fullTutorialComplete = false;
-    bool m_allTutorialsComplete = false;
-    struct PopupMessageDetails {
-        int  m_icon       = 0;
-        bool m_delay      = false;
-        int  m_titleId    = 0;
-        int  m_messageId  = 0;
-    };
-    // Variadic ctor so subclasses (TutorialMode -> ConsoleGameMode etc.)
-    // that pass args up the inheritance chain can compile against the
-    // stub regardless of what the real upstream Tutorial signature is.
-    template<class... A> Tutorial(A...) {}
-    template<class... A> bool isStateCompleted(A...)  { return false; }
-    template<class... A> void setStateCompleted(A...) {}
-    template<class... A> bool isFullTutorial(A...)    { return false; }
-    template<class... A> int  getCurrentState(A...)   { return 0; }
-    template<class... A> void addMessage(A...)        {}
-    template<class... A> int  getPad(A...)            { return 0; }
-    template<class... A> void changeTutorialState(A...) {}
-    template<class... A> void tick(A...)              {}
-    template<class... A> void startDestroyBlock(A...) {}
-    template<class... A> void destroyBlock(A...)      {}
-    template<class... A> void setMessage(A...)        {}
-    template<class... A> void itemDamaged(A...)       {}
-    template<class... A> bool canMoveToPosition(A...) { return true; }
-    template<class... A> void AddConstraint(A...)     {}
-    template<class... A> void RemoveConstraint(A...)  {}
-};
-#endif
+// The real Tutorial, which stdafx.h includes on the other platforms. It only
+// needs UIScene forward-declared, which is done above. PlayerList's
+// e_Tutorial_State_Food_Bar comes from TutorialEnum.h through it.
+class Tile;
+#include "../Minecraft.Client/Common/Tutorial/Tutorial.h"
 // Iggy is the SCE/RAD Game Tools UI runtime used on Durango/Orbis. The
 // real iggy.h ships only in the Durango/Orbis SDK trees so iOS builds
 // can't pull it in. Upstream UIController.h declares

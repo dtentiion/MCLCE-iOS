@@ -10,6 +10,8 @@
 #include "MCLEContainerMenu.h"
 #include "MCLEContainerScene.h"
 #include "MCLEAbstractContainerScene.h"
+#include "MCLETutorial.h"
+#include "MCLETutorialPopup.h"
 
 #include <cassert>
 #include <chrono>
@@ -151,6 +153,15 @@ void MCLEContainerUI::SetTooltips(int, int iA, int iB, int iX, int iY, int iLT, 
 
 void MCLEContainerUI::NavigateBack(int) { g_closeRequested = true; }
 void MCLEContainerUI::CloseUIScenes(int) { g_closeRequested = true; }
+
+bool MCLEContainerUI::IsTutorialVisible(int) { return mcle_tutorial_popup_is_visible(); }
+
+void MCLEContainerScene::slideLeft() { mcle_ui_call("", "SlideLeft", {}); }
+void MCLEContainerScene::slideRight() { mcle_ui_call("", "SlideRight", {}); }
+
+MCLEContainerScene *mcle_container_current_scene() {
+    return g_scene;
+}
 
 bool MCLEContainerScene::allowRepeat(int key) {
     switch (key) {
@@ -308,6 +319,8 @@ public:
         m_slotListHotbar.rect = layout.hotbarList;
         m_slotListInventory.rect = layout.inventoryList;
         m_slotListArmor.rect = layout.armorList;
+
+        enterTutorialState(e_Tutorial_State_Inventory_Menu);
 
         InventoryMenu *menu = static_cast<InventoryMenu *>(player->inventoryMenu);
 
@@ -582,7 +595,7 @@ bool mcle_container_can_open_inventory() {
     std::shared_ptr<ServerPlayer> player = mcle_local_player();
     if (!player || player->getHealth() <= 0) return false;
     if (player->isRiding() && player->riding != nullptr && player->riding->instanceof(eTYPE_HORSE)) return false;
-    return true;
+    return mcle_tutorial_input_allowed(MINECRAFT_ACTION_INVENTORY);
 }
 
 void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now) {
@@ -734,6 +747,9 @@ void mcle_container_close() {
     {
         std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
         g_scene->handleDestroy();
+        // The popup can't be left pointing at a scene that's gone, whatever
+        // state the tutorial was put back in
+        mcle_tutorial_popup_remove_interact_scene(mcle_ui_scene(g_scene));
         delete g_scene;
         g_scene = nullptr;
         mcle_game_set_menu_displayed(false);
@@ -753,6 +769,8 @@ void mcle_container_custom_draw(const MCLECustomDrawRegion *regions, int count) 
     if (!g_scene) return;
     if (!mcle_custom_draw_begin()) return;
     for (int i = 0; i < count; ++i) g_scene->customDraw(regions[i]);
+    // The tutorial popup over the menu
+    mcle_tutorial_popup_custom_draw();
     mcle_custom_draw_end();
 }
 

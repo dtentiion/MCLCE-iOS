@@ -28,6 +28,8 @@ set(MCLE_GAME_SOURCES
   MCLECreativeMenu.cpp
   MCLEContainerMenus.cpp
   MCLESkinSelectMenu.cpp
+  MCLETutorial.cpp
+  MCLETutorialPopup.cpp
   MCLEDLC.cpp
   MCLEStorageDLC.cpp
   MCLETexturePacks.cpp

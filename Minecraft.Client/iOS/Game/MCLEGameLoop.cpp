@@ -196,6 +196,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLETooltips.h"
 #include "MCLEWeather.h"
 #include "MCLETexturePacks.h"
+#include "MCLETutorial.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 
@@ -751,6 +752,7 @@ void mcle_world_static_ctors() {
         MCLE_STATIC("EntityRenderDispatcher::staticCtor", EntityRenderDispatcher::staticCtor());
         MCLE_STATIC("TileEntityRenderDispatcher::staticCtor", TileEntityRenderDispatcher::staticCtor());
         MCLE_STATIC("User::staticCtor",            User::staticCtor());
+        MCLE_STATIC("Tutorial::staticCtor",        Tutorial::staticCtor());
         MCLE_STATIC("ColourTable::staticCtor",     ColourTable::staticCtor());
         // Common for all platforms, the creative menu's item table
         MCLE_STATIC("IUIScene_CreativeMenu::staticCtor", mcle_creative_menu_static_ctor());
@@ -1256,11 +1258,11 @@ void initImpl() {
 
     if (g_player && g_player->gameMode) {
         // PlayerList::getPlayerForLogin: the player follows the level's game
-        // rules. Their progress packets have no connection to go to.
+        // rules. Their progress packets go to the local player.
         LevelRuleset *serverRuleDefs = app.getGameRuleDefinitions();
         if (serverRuleDefs != nullptr) {
             g_player->gameMode->setGameRules(GameRuleDefinition::generateNewGameRulesInstance(
-                GameRulesInstance::eGameRulesInstanceType_ServerPlayer, serverRuleDefs, nullptr));
+                GameRulesInstance::eGameRulesInstanceType_ServerPlayer, serverRuleDefs, mcle_game_rule_connection()));
         }
     }
 
@@ -1698,6 +1700,14 @@ void initImpl() {
         }
     }
 
+    // ClientConnection::handleLogin's game mode for the primary player,
+    // FullTutorialMode in the tutorial world, before the first tick
+    try {
+        mcle_tutorial_start();
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: tutorial threw");
+    }
+
     g_loadPercent = 100;
     g_renderReady = true;
 
@@ -1834,6 +1844,15 @@ void mcle_game_set_menu_displayed(bool displayed) {
     // that shut it is marked held here rather than on the next tick
     if (!displayed) g_heldFromMenu.fetch_or((unsigned int)mcle_ios_input_poll_buttons(0));
     g_menuDisplayed.store(displayed);
+}
+
+// UIController::GetMenuDisplayed and IsPauseMenuDisplayed for the tutorial
+bool mcle_game_menu_displayed() {
+    return g_menuDisplayed.load();
+}
+
+bool mcle_game_paused() {
+    return g_gamePaused.load(std::memory_order_relaxed);
 }
 
 // ClientConnection::handleAnimate's CRITICAL_HIT and MAGIC_CRITICAL_HIT, from
@@ -2718,6 +2737,12 @@ extern "C" void mcle_game_tick(void) {
     // Before the levels tick, like the client's packets being handled at
     // the start of the server tick.
     if (g_player && g_levels[0]) {
+        // gameMode->tick(), which for the TutorialMode ticks the tutorial
+        try {
+            mcle_tutorial_tick();
+        } catch (...) {
+            MCLE_LOG("mcle_game_tick: tutorial threw");
+        }
         try {
             mcle_player_input_tick(g_player, g_levels[0], g_gameButtons);
         } catch (...) {
@@ -2874,7 +2899,14 @@ extern "C" void mcle_game_tick(void) {
                                   g_gameButtons,
                                   mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
                                   mcle_settings_get(10 /*ControlInvertLook*/) != 0);
+            const double xBefore = g_player->x, yBefore = g_player->y, zBefore = g_player->z;
             g_player->doTick(false);
+            // MultiplayerLocalPlayer::tick: a move the tutorial doesn't allow
+            // goes back
+            if (!mcle_tutorial_can_move_to_position(xBefore, yBefore, zBefore, g_player->x, g_player->y,
+                                                    g_player->z)) {
+                g_player->setPos(xBefore, g_player->y, zBefore);
+            }
             // LocalPlayer turns inside aiStep, after baseTick saved the old
             // rotation, so that's what the camera interpolates from
             g_player->xRotO = xRotBefore;
@@ -4211,6 +4243,12 @@ static void mcle_exit_world(bool save) {
     mcle_sound_stop_music();
     mcle_player_input_reset();
     mcle_hud_reset();
+    // removeLocalPlayer: out of the tutorial, and its game mode deleted
+    try {
+        mcle_tutorial_end();
+    } catch (...) {
+        MCLE_LOG("EXIT_WORLD: tutorial threw");
+    }
 
     // PlayerList::remove, as the player's connection closing does. It was
     // already saved above when saving.
@@ -4273,6 +4311,8 @@ static void mcle_exit_world(bool save) {
     g_gamePaused.store(false, std::memory_order_relaxed);
     g_playerDead.store(false, std::memory_order_relaxed);
     g_respawnRequested.store(false, std::memory_order_relaxed);
+    // Leaving from the death menu leaves no menu up for the next world
+    g_menuDisplayed.store(false);
     g_pendingLevelId.clear();
     g_newWorld = NewWorldParams();
     g_loadIsNew = false;
