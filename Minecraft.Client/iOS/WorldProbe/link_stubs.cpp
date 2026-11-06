@@ -362,7 +362,15 @@ MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 // ---------------------------------------------------------------------------
 // PlayerConnection / ServerPlayer.
 // ---------------------------------------------------------------------------
-void PlayerConnection::send(std::shared_ptr<Packet> /*packet*/) {}
+// What the server sends the local player's client goes nowhere, but a
+// ContainerOpenPacket is where the client opens the menu
+// (ClientConnection::handleContainerOpen).
+extern void mcle_container_open_packet(int type, int containerId);
+void PlayerConnection::send(std::shared_ptr<Packet> packet) {
+    if (std::shared_ptr<ContainerOpenPacket> open = std::dynamic_pointer_cast<ContainerOpenPacket>(packet)) {
+        mcle_container_open_packet(open->type, open->containerId);
+    }
+}
 bool PlayerConnection::isLocal() { return true; }
 // PlayerConnection::teleport moves the server's player and tells its client
 // where it went. The one ServerPlayer here is the local player and has no

@@ -2716,9 +2716,17 @@ static NSString* MCLETipHTML(void) {
 
 // The calls a container scene queued, made on the movie
 static void MCLEContainerApplyOps(void) {
+    extern PlayerHandle* g_ruffle_player;
     for (const MCLEUIOp& op : mcle_container_take_ops()) {
         if (op.kind == MCLEUIOp::Sound) {
-            mcle_audio_play_ui_sfx(op.method.c_str(), 1.0f, 1.0f);
+            float pitch = op.args.empty() ? 1.0f : static_cast<float>(op.args[0].number);
+            mcle_audio_play_ui_sfx(op.method.c_str(), 1.0f, pitch);
+            continue;
+        }
+        if (op.kind == MCLEUIOp::Key) {
+            if (g_ruffle_player && op.args.size() == 2) {
+                ruffle_ios_player_key(g_ruffle_player, static_cast<int>(op.args[0].number), op.args[1].number != 0);
+            }
             continue;
         }
         NSMutableArray* args = [NSMutableArray arrayWithCapacity:op.args.size()];
@@ -2751,6 +2759,26 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     if (!g_ruffle_player || !mcle_container_can_open_inventory()) return;
     self.menuStack = nil;
     [self transitionToMenuNamed:@"InventoryMenu1080.swf"];
+    [self showContainerOverWorld];
+}
+
+// Minecraft::tick's crafting action (app.LoadCrafting2x2Menu), or
+// LocalPlayer::startCrafting for the server's crafting table
+- (void)openCraftingMenu:(BOOL)table {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) {
+        if (table) mcle_container_open_failed();
+        return;
+    }
+    self.menuStack = nil;
+    [self transitionToMenuNamed:table ? @"Crafting3x3Menu1080.swf" : @"Crafting2x2Menu1080.swf"];
+    if (!mcle_container_is_open() && table) mcle_container_open_failed();
+    [self showContainerOverWorld];
+}
+
+// The scene the movie just went up for, or back to the HUD if it didn't open
+- (void)showContainerOverWorld {
+    extern PlayerHandle* g_ruffle_player;
     if (!mcle_container_is_open()) {
         [self enterWorldUI];
         return;
@@ -2762,6 +2790,14 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
     MCLEGameTooltipsReset();
+}
+
+// UIScene_CraftingMenu's constructor, once the movie is up
+- (void)initCraftingMenu:(BOOL)table {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    mcle_container_open_crafting(table);
+    MCLEContainerApplyOps();
 }
 
 // UIScene_InventoryMenu's constructor, once the movie is up
@@ -2803,12 +2839,12 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     MCLESetTooltips(tips);
     if (!g_ruffle_player) return;
     float px = 0, py = 0;
-    mcle_container_pointer(&px, &py);
-    ruffle_ios_player_mouse_move_stage(g_ruffle_player, px, py);
+    if (mcle_container_pointer(&px, &py)) ruffle_ios_player_mouse_move_stage(g_ruffle_player, px, py);
     ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
-    RuffleIosCustomDrawRegion regions[64];
-    int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 64);
-    n = std::max(0, std::min(n, 64));
+    // The crafting menus have around 70 slots
+    RuffleIosCustomDrawRegion regions[128];
+    int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 128);
+    n = std::max(0, std::min(n, 128));
     mcle_container_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
 }
 
@@ -3578,6 +3614,10 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             MCLEControlsInit();
         } else if ([swfName isEqualToString:@"InventoryMenu1080.swf"]) {
             [self initInventoryMenu];
+        } else if ([swfName isEqualToString:@"Crafting2x2Menu1080.swf"]) {
+            [self initCraftingMenu:NO];
+        } else if ([swfName isEqualToString:@"Crafting3x3Menu1080.swf"]) {
+            [self initCraftingMenu:YES];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -3692,6 +3732,12 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                 if (startNow && !startBefore) [self openPauseMenu];
                 else if (inventoryPressed) [self openInventoryMenu];
             }
+        }
+        // The crafting action and the server's ContainerOpenPacket
+        if (!g_world_paused && !g_world_dead) {
+            int request = mcle_container_take_request();
+            if (request == MCLE_CONTAINER_CRAFTING_2X2) [self openCraftingMenu:NO];
+            else if (request == MCLE_CONTAINER_CRAFTING_3X3) [self openCraftingMenu:YES];
         }
         mcle_render_frame();
         if (g_world_container) {
