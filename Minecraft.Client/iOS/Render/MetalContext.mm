@@ -4,6 +4,7 @@
 #import <QuartzCore/CAMetalLayer.h>
 #include <mach/mach_time.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -76,6 +77,11 @@ struct DrawCmd {
     // A glBindTexture compiled into the list before this draw, 0 if none.
     // Without one the draw uses whatever is bound when the list is called.
     unsigned int         texId = 0;
+    // The vertices in a Metal buffer, made once when the list is compiled
+    // (data stays empty then). A list never changes after glEndList, so
+    // every replay draws from the same buffer. Small draws stay in data and
+    // go inline.
+    id<MTLBuffer>        vbuf = nil;
 };
 
 struct DisplayList {
@@ -1368,7 +1374,7 @@ void compute_mvp(float* mvp16) {
 }
 
 inline void immediate_dispatch(int prim, int count, const void* data,
-                                int fmt, int shader);
+                                int fmt, int shader, id<MTLBuffer> cached = nil);
 
 // Replay a recorded display list. Per-cmd modelview/texture get swapped in
 // before each draw so chunk lists translate to their world position and
@@ -1393,8 +1399,13 @@ void call_list_replay(const DisplayList& dl) {
             g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
             g_bound_tex_id    = cmd.texId;
         }
-        immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
-                           cmd.fmt, cmd.shader);
+        if (cmd.vbuf) {
+            immediate_dispatch(cmd.prim, cmd.count, cmd.vbuf.contents,
+                               cmd.fmt, cmd.shader, cmd.vbuf);
+        } else {
+            immediate_dispatch(cmd.prim, cmd.count, cmd.data.data(),
+                               cmd.fmt, cmd.shader);
+        }
         if (cmd.hasTranslate) g_modelview_stack.back() = savedMv;
         if (overrideTex) {
             g_current_texture = savedTex;
@@ -1406,8 +1417,33 @@ void call_list_replay(const DisplayList& dl) {
 // Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.
 // G3d builds an MVP from the player's live position so we look out into
 // the world from where the simulation thinks the player stands.
+// GL_QUADS as triangles (0,1,2 and 0,2,3 for each quad) from one shared
+// index buffer, grown when a draw has more quads than it covers
+id<MTLBuffer> quad_index_buffer(int quadCount) {
+    static id<MTLBuffer> s_buf = nil;
+    static int s_quads = 0;
+    if (quadCount > s_quads || !s_buf) {
+        const int n = std::max(quadCount, 16384);
+        std::vector<uint32_t> idxs((size_t)n * 6);
+        for (int q = 0; q < n; q++) {
+            const uint32_t base = (uint32_t)q * 4;
+            idxs[q * 6 + 0] = base + 0;
+            idxs[q * 6 + 1] = base + 1;
+            idxs[q * 6 + 2] = base + 2;
+            idxs[q * 6 + 3] = base + 0;
+            idxs[q * 6 + 4] = base + 2;
+            idxs[q * 6 + 5] = base + 3;
+        }
+        s_buf = [g.device newBufferWithBytes:idxs.data()
+                                      length:idxs.size() * sizeof(uint32_t)
+                                     options:MTLResourceStorageModeShared];
+        s_quads = s_buf ? n : 0;
+    }
+    return s_buf;
+}
+
 inline void immediate_dispatch(int prim, int count, const void* data,
-                                int fmt, int /*shader*/) {
+                                int fmt, int /*shader*/, id<MTLBuffer> cached) {
     g_draw_count.fetch_add(1, std::memory_order_relaxed);
 
     if (!g.inFrame || !g.enc)        return;
@@ -1424,10 +1460,16 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     const int stride = vertex_stride(fmt);
     const NSUInteger byteLen = (NSUInteger)count * (NSUInteger)stride;
 
-    id<MTLBuffer> vbuf = [g.device newBufferWithBytes:data
-                                                length:byteLen
-                                               options:MTLResourceStorageModeShared];
-    if (!vbuf) return;
+    // A compiled list's own buffer, the bytes inline when they fit (Metal's
+    // 4KB setVertexBytes limit), or a buffer for this draw
+    id<MTLBuffer> vbuf = cached;
+    const bool inlineBytes = !vbuf && byteLen <= 4096;
+    if (!vbuf && !inlineBytes) {
+        vbuf = [g.device newBufferWithBytes:data
+                                     length:byteLen
+                                    options:MTLResourceStorageModeShared];
+        if (!vbuf) return;
+    }
 
     // G3d: real perspective MVP centered on the live player position.
     float mvp[16];
@@ -1497,7 +1539,8 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             g_lastCullMode = MTLCullModeNone;
         }
     }
-    [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
+    if (vbuf) [g.enc setVertexBuffer:vbuf offset:0 atIndex:0];
+    else      [g.enc setVertexBytes:data length:byteLen atIndex:0];
     // MVPUniforms = mvp + texMatrix (top of texture stack). Identity for
     // chunks; translates for cloud cube cells when renderAdvancedClouds
     // sets up per-cell UV offsets via glMatrixMode(GL_TEXTURE).
@@ -1600,25 +1643,11 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (prim == 7 /* GL_QUADS */) {
         const int quadCount = count / 4;
         if (quadCount <= 0) return;
-        const int idxCount  = quadCount * 6;
-        std::vector<uint16_t> idxs((size_t)idxCount);
-        for (int q = 0; q < quadCount; q++) {
-            const uint16_t base = (uint16_t)(q * 4);
-            idxs[q * 6 + 0] = base + 0;
-            idxs[q * 6 + 1] = base + 1;
-            idxs[q * 6 + 2] = base + 2;
-            idxs[q * 6 + 3] = base + 0;
-            idxs[q * 6 + 4] = base + 2;
-            idxs[q * 6 + 5] = base + 3;
-        }
-        id<MTLBuffer> ibuf =
-            [g.device newBufferWithBytes:idxs.data()
-                                  length:idxs.size() * sizeof(uint16_t)
-                                 options:MTLResourceStorageModeShared];
+        id<MTLBuffer> ibuf = quad_index_buffer(quadCount);
         if (!ibuf) return;
         [g.enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-                          indexCount:(NSUInteger)idxCount
-                           indexType:MTLIndexTypeUInt16
+                          indexCount:(NSUInteger)quadCount * 6
+                           indexType:MTLIndexTypeUInt32
                          indexBuffer:ibuf
                    indexBufferOffset:0];
         return;
@@ -2153,7 +2182,12 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
         cmd.shader = shader;
         const int sz = count * vertex_stride(fmt);
         const uint8_t* p = static_cast<const uint8_t*>(data);
-        cmd.data.assign(p, p + sz);
+        if (g.device && sz > 4096) {
+            cmd.vbuf = [g.device newBufferWithBytes:p
+                                             length:(NSUInteger)sz
+                                            options:MTLResourceStorageModeShared];
+        }
+        if (!cmd.vbuf) cmd.data.assign(p, p + sz);
         // G5: capture chunk world translation (set by translateToPos before
         // t->end()). Applied as translate on top of current modelview at
         // replay so geometry tracks the live camera.
@@ -2300,6 +2334,7 @@ extern "C" unsigned long long mcle_glbridge_list_bytes(void) {
         total += dl.draws.capacity() * sizeof(DrawCmd);
         for (const auto &cmd : dl.draws) {
             total += cmd.data.capacity();
+            if (cmd.vbuf) total += cmd.vbuf.length;
         }
     }
     return total;
