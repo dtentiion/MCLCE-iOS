@@ -28,6 +28,7 @@
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/Random.h"
 #include "../../../upstream/Minecraft.World/EnchantmentMenu.h"
+#include "../../../upstream/Minecraft.World/Level.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Font.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
