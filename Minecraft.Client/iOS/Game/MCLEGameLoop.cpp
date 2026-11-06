@@ -1852,13 +1852,46 @@ void mcle_broadcast_to_local_player(std::shared_ptr<Packet> packet, bool oneDime
 
 // ClientConnection::handleExplosion. The server's explosion already moved
 // this player (it is the server's own), played the sound and drew the big
-// particle, so what the client adds here is finalizeExplosion's debris; the
-// blown tiles are already air, so nothing is removed twice.
+// particle, and the blown tiles are already air. What the client's
+// finalizeExplosion(true) adds on top is the debris, so that loop is here;
+// calling it whole played the sound and the big particle twice.
 void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet) {
     if (!g_player || !g_player->level || packet->m_bKnockbackOnly) return;
-    Explosion *e = new Explosion(g_player->level, nullptr, packet->x, packet->y, packet->z, packet->r);
-    e->finalizeExplosion(true, &packet->toBlow);
-    delete e;
+    Level *level = g_player->level;
+    const double x = packet->x, y = packet->y, z = packet->z;
+    const float r = packet->r;
+    static const int MAX_EXPLODE_PARTICLES = 50;
+    // 4J - try and make at most MAX_EXPLODE_PARTICLES pairs of particles
+    int fraction = static_cast<int>(packet->toBlow.size()) / MAX_EXPLODE_PARTICLES;
+    if (fraction == 0) fraction = 1;
+    size_t j = packet->toBlow.size() - 1;
+    for (auto it = packet->toBlow.rbegin(); it != packet->toBlow.rend(); ++it) {
+        if ((j % fraction) == 0) {
+            double xa = it->x + level->random->nextFloat();
+            double ya = it->y + level->random->nextFloat();
+            double za = it->z + level->random->nextFloat();
+
+            double xd = xa - x;
+            double yd = ya - y;
+            double zd = za - z;
+
+            double dd = sqrt(xd * xd + yd * yd + zd * zd);
+
+            xd /= dd;
+            yd /= dd;
+            zd /= dd;
+
+            double speed = 0.5 / (dd / r + 0.1);
+            speed *= (level->random->nextFloat() * level->random->nextFloat() + 0.3f);
+            xd *= speed;
+            yd *= speed;
+            zd *= speed;
+
+            level->addParticle(eParticleType_explode, (xa + x * 1) / 2, (ya + y * 1) / 2, (za + z * 1) / 2, xd, yd, zd);
+            level->addParticle(eParticleType_smoke, xa, ya, za, xd, yd, zd);
+        }
+        --j;
+    }
 }
 
 // The chat handler's minecraft->gui calls
