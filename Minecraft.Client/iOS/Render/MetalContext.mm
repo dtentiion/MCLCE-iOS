@@ -168,9 +168,9 @@ id<MTLRenderPipelineState> g_world_pso_modulate         = nil;
 id<MTLRenderPipelineState> g_world_pso_compact_modulate = nil;
 
 // glPolygonOffset and GL_POLYGON_OFFSET_FILL
-bool  g_polygon_offset_fill   = false;
-float g_polygon_offset_factor = 0.0f;
-float g_polygon_offset_units  = 0.0f;
+thread_local bool  g_polygon_offset_fill   = false;
+thread_local float g_polygon_offset_factor = 0.0f;
+thread_local float g_polygon_offset_units  = 0.0f;
 float g_lastDepthBias = 0.0f, g_lastDepthSlope = 0.0f;
 
 // Cached encoder state. Reset to "unknown" at frame begin so the first
@@ -179,15 +179,15 @@ MTLCullMode g_lastCullMode = (MTLCullMode)-1;
 MTLWinding  g_lastWinding  = (MTLWinding)-1;
 // glEnable/glDisable(GL_DEPTH_TEST) writes here. Default: enabled (matches
 // upstream initial GL state). Reset to true at frame begin.
-bool        g_depth_test_enabled = true;
+thread_local bool        g_depth_test_enabled = true;
 // GL_CULL_FACE, only honoured for the chunk format (the rest never culled)
-bool        g_cull_face_enabled = true;
+thread_local bool        g_cull_face_enabled = true;
 // glDepthMask writes here. Default: enabled (matches upstream initial GL
 // state). renderSky calls glDepthMask(false) before drawing the sky dome
 // so the dome doesn't write depth - sun/moon then pass the depth test
 // against terrain only and aren't occluded by the dome. Reset to true at
 // frame begin.
-bool        g_depth_write_enabled = true;
+thread_local bool        g_depth_write_enabled = true;
 id<MTLDepthStencilState> g_lastDepthState = nil;
 
 // glEnable/glDisable(GL_ALPHA_TEST) writes here. Default on - chunks
@@ -196,7 +196,7 @@ id<MTLDepthStencilState> g_lastDepthState = nil;
 // semi-transparent texture bodies aren't discarded, then re-enables
 // for subsequent chunk passes. Threshold 0.1 matches upstream's
 // glAlphaFunc(GL_GREATER, 0.1).
-bool g_alpha_test_enabled = true;
+thread_local bool g_alpha_test_enabled = true;
 
 // glEnable/glDisable(GL_TEXTURE_2D) writes here. Default on. renderSky
 // disables texturing for the sky dome (skyList), sunrise gradient,
@@ -208,49 +208,49 @@ bool g_alpha_test_enabled = true;
 // stuck around the player. When this flag is off, immediate_dispatch
 // binds the 1x1 white texture so sample * vertex_color collapses to
 // vertex_color (parity with fixed-function GL).
-bool g_texture_2d_enabled = true;
+thread_local bool g_texture_2d_enabled = true;
 
 // Fog state. Mirrors upstream GameRenderer::setupFog which calls
 // glFog(GL_FOG_COLOR), glFogi(GL_FOG_MODE), glFogf(GL_FOG_START/END).
 // Default off (matches GL initial state). Fragment shader applies
 // linear fog over eye-space depth.
-bool  g_fog_enabled = false;
-float g_fog_r = 0.0f, g_fog_g = 0.0f, g_fog_b = 0.0f;
-float g_fog_start = 0.0f;
-float g_fog_end   = 1.0f;
+thread_local bool  g_fog_enabled = false;
+thread_local float g_fog_r = 0.0f, g_fog_g = 0.0f, g_fog_b = 0.0f;
+thread_local float g_fog_start = 0.0f;
+thread_local float g_fog_end   = 1.0f;
 // GL_FOG_MODE: 0 GL_LINEAR, 1 GL_EXP with g_fog_density
-int   g_fog_mode    = 0;
-float g_fog_density = 1.0f;
+thread_local int   g_fog_mode    = 0;
+thread_local float g_fog_density = 1.0f;
 
 // glEnable/glDisable(GL_BLEND) tracking. Default off (matches upstream
 // initial GL state). When on, immediate_dispatch picks the blending
 // pipeline variant (srcAlpha/oneMinusSrcAlpha) so transparent edges of
 // sky/sun/moon/cloud sprites blend with the framebuffer instead of
 // writing rgba=0 directly. Reset to off at frame begin.
-bool g_blend_enabled  = false;
+thread_local bool g_blend_enabled  = false;
 // Blend func tracking: 0 = srcAlpha/oneMinusSrcAlpha (default over),
 // 1 = srcAlpha/ONE (additive, used by sun + stars),
 // 2 = GL_ZERO/GL_ONE (depth-only, cloud pass 0),
 // 3 = GL_DST_COLOR/GL_SRC_COLOR (crack overlay). Set by glBlendFunc.
-int  g_blend_func_mode = 0;
+thread_local int  g_blend_func_mode = 0;
 id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
 // GL_LIGHTING the way the 4J renderer does it for the PF3_TF2_CB4_NB4_XW1
 // format: two directional lights in eye space and an ambient colour, on
 // the normal turned by the modelview and normalised. A light that's off
 // counts as black.
-bool  g_lighting_enabled = false;
-bool  g_light_enabled[2] = { false, false };
-float g_light_dir[2][3]  = { { 0, 0, 0 }, { 0, 0, 0 } };
-float g_light_col[2][3]  = { { 0, 0, 0 }, { 0, 0, 0 } };
-float g_light_ambient[3] = { 0, 0, 0 };
+thread_local bool  g_lighting_enabled = false;
+thread_local bool  g_light_enabled[2] = { false, false };
+thread_local float g_light_dir[2][3]  = { { 0, 0, 0 }, { 0, 0, 0 } };
+thread_local float g_light_col[2][3]  = { { 0, 0, 0 }, { 0, 0, 0 } };
+thread_local float g_light_ambient[3] = { 0, 0, 0 };
 
 // The light layer (GameRenderer::turnOnLightLayer, TextureBindVertex): the
 // lightmap for the formats other than the chunks', at the vertex's own tex2
 // or, where it has none, at StateSetVertexTextureUV's, which keeps u - 1 and
 // v - 1 like the 4J renderer
-bool  g_light_layer = false;
-float g_vertex_uv[2] = { -1.0f, -1.0f };
+thread_local bool  g_light_layer = false;
+thread_local float g_vertex_uv[2] = { -1.0f, -1.0f };
 
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
     g_depth_test_enabled = (enabled != 0);
@@ -373,9 +373,9 @@ extern "C" void mcle_glbridge_set_polygon_offset(float factor, float units) {
 // (srcAlpha, oneMinusSrcAlpha) based on the requested factors.
 // GL_ZERO=0, GL_ONE=1, GL_SRC_ALPHA=0x0302, GL_ONE_MINUS_SRC_ALPHA=0x0303.
 // glBlendFunc's factors and glDepthFunc, as GL enums
-int g_blend_src = 0x0302;  // GL_SRC_ALPHA
-int g_blend_dst = 0x0303;  // GL_ONE_MINUS_SRC_ALPHA
-int g_depth_func = 0x0203; // GL_LEQUAL, what Minecraft::init sets
+thread_local int g_blend_src = 0x0302;  // GL_SRC_ALPHA
+thread_local int g_blend_dst = 0x0303;  // GL_ONE_MINUS_SRC_ALPHA
+thread_local int g_depth_func = 0x0203; // GL_LEQUAL, what Minecraft::init sets
 
 extern "C" void mcle_glbridge_set_depth_func(int func) {
     g_depth_func = func;
@@ -1098,7 +1098,7 @@ thread_local std::vector<Mat4>  g_texture_stack  { mat_identity() };
 // multiplied with this in the world vertex shader so glColor3f /
 // glColor4f take effect across replayed display lists. Matches D3D9
 // fixed-function modulate semantics (Xbox 360 / PS3) for parity.
-float g_current_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+thread_local float g_current_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 inline std::vector<Mat4>& current_stack() {
     switch (g_matrix_mode) {
