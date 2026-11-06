@@ -72,6 +72,7 @@ enum MCLEContainerRequest {
     MCLE_CONTAINER_CRAFTING_2X2, // app.LoadCrafting2x2Menu
     MCLE_CONTAINER_CRAFTING_3X3, // the server opened a crafting table
     MCLE_CONTAINER_CREATIVE,     // app.LoadCreativeMenu
+    MCLE_CONTAINER_SERVER,       // another container the server opened
 };
 int mcle_container_take_request();
 
@@ -79,7 +80,16 @@ int mcle_container_take_request();
 // creative menu in creative), and ClientConnection::handleContainerOpen for
 // the ContainerOpenPacket the local player's ServerPlayer sends
 void mcle_container_request(int request);
-void mcle_container_open_packet(int type, int containerId);
+void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName, int size);
+
+// How the scenes for the server's containers read their controls' x, y,
+// width and height off the movie
+void mcle_container_set_rect_reader(MCLEControlRect (*reader)(const char *path));
+
+// The movie for the container an MCLE_CONTAINER_SERVER request is for, and
+// its scene once the movie is up (false when it couldn't open)
+const char *mcle_container_server_movie();
+bool mcle_container_open_server();
 
 // UIScene_CraftingMenu's constructor, for the 2x2 or the table's 3x3.
 // False when the 3x3 has no crafting menu to show.

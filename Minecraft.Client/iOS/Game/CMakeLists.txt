@@ -26,6 +26,7 @@ set(MCLE_GAME_SOURCES
   MCLEContainerMenu.cpp
   MCLECraftingMenu.cpp
   MCLECreativeMenu.cpp
+  MCLEContainerMenus.cpp
   MCLE_iOS_MachHandler.cpp
 )
 
