@@ -595,12 +595,14 @@ void LocalPlayer::updateRichPresence() {}
 void Gui::setNowPlaying(const std::wstring & /*s*/) {}
 
 #include "Common/UI/UIScene_SettingsGraphicsMenu.h"
-// G5: starts small. Real upstream returns 16 / 8 / 6 / 4 for the four
-// distance presets (Far / Normal / Short / Tiny). We return 4 across
-// the board so allChanged's first allocation lands a manageable
-// xChunks*yChunks*zChunks ~= 6*16*6 = 576 chunk grid. Real preset
-// support comes once chunks render correctly.
-int UIScene_SettingsGraphicsMenu::LevelToDistance(int /*dist*/) { return 4; }
+// The graphics menu's render distance table, which LevelRenderer::allChanged
+// sizes the render area from
+int UIScene_SettingsGraphicsMenu::LevelToDistance(int level) {
+    static const int table[6] = {2, 4, 8, 16, 32, 64};
+    if (level < 0) level = 0;
+    if (level > 5) level = 5;
+    return table[level];
+}
 
 // MobSkinMemTextureProcessor: real .cpp doesn't compile (uses
 // BufferedImage::Graphics which needs the full BufferedImage class
