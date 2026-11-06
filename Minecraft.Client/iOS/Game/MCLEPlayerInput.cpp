@@ -54,19 +54,11 @@ std::recursive_mutex &mcle_particle_mutex();
 
 namespace {
 
-// _360_JOY_BUTTON_* from the Win64 4J_Input.h, which the iOS pad reader uses.
-// Windows64_Minecraft.cpp maps ACTION to RT, USE to LT, scroll to LB / RB.
-// JUMP is A and SNEAK_TOGGLE is the right stick click.
-const unsigned int kButtonA = 0x00000001;
-const unsigned int kButtonB = 0x00000002;
-const unsigned int kButtonRB = 0x00000040;
-const unsigned int kButtonLB = 0x00000080;
-const unsigned int kButtonRThumb = 0x00000100;
-const unsigned int kButtonLThumb = 0x00000200;
-const unsigned int kButtonRT = 0x00400000;
-const unsigned int kButtonLT = 0x00800000;
-const unsigned int kButtonDpadLeft = 0x00001000;
-const unsigned int kButtonDpadRight = 0x00002000;
+// The buttons an action is on in the pad's control scheme, what
+// InputManager.ButtonPressed(iPad, action) checks against
+unsigned int actionButtons(int action) {
+    return InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), action);
+}
 
 // PlayerActionPacket actions the client sends while mining
 enum Action { START_DESTROY_BLOCK, ABORT_DESTROY_BLOCK, STOP_DESTROY_BLOCK };
@@ -648,20 +640,20 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     pick(1);
 
     int wheel = 0;
-    if (pressed & kButtonLB) wheel = 1;
-    else if (pressed & kButtonRB) wheel = -1;
+    if (pressed & actionButtons(MINECRAFT_ACTION_LEFT_SCROLL)) wheel = 1;
+    else if (pressed & actionButtons(MINECRAFT_ACTION_RIGHT_SCROLL)) wheel = -1;
     if (wheel != 0) P->inventory->swapPaint(wheel);
     // the opacity timer
     if (wheel != 0) mcle_hud_scrolled();
 
     // RENDER_THIRD_PERSON is the left stick click
-    if (pressed & kButtonLThumb) {
+    if (pressed & actionButtons(MINECRAFT_ACTION_RENDER_THIRD_PERSON)) {
         g_thirdPersonView.store((g_thirdPersonView.load(std::memory_order_relaxed) + 1) % 3, std::memory_order_relaxed);
     }
 
     // DROP is B. The client's inventory still has the item while the drop
     // packet is on its way, so the label is worked out before dropping.
-    const bool dropPressed = (pressed & kButtonB) != 0;
+    const bool dropPressed = (pressed & actionButtons(MINECRAFT_ACTION_DROP)) != 0;
     if (wheel != 0 || dropPressed) {
         std::wstring itemName = L"";
         std::shared_ptr<ItemInstance> selectedItem = P->getSelectedItem();
@@ -679,17 +671,17 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     }
 
     // ullButtonsPressed and ButtonPressed both fire on the same press
-    if (pressed & kButtonRT) {
+    if (pressed & actionButtons(MINECRAFT_ACTION_ACTION)) {
         handleMouseClick(0);
         s.lastClickTick[0] = s.ticks;
     }
-    if (pressed & kButtonRT) {
+    if (pressed & actionButtons(MINECRAFT_ACTION_ACTION)) {
         handleMouseClick(0);
         s.lastClickTick[0] = s.ticks;
     }
-    handleMouseDown(0, (buttons & kButtonRT) != 0);
+    handleMouseDown(0, (buttons & actionButtons(MINECRAFT_ACTION_ACTION)) != 0);
 
-    const bool useHeld = (buttons & kButtonLT) != 0;
+    const bool useHeld = (buttons & actionButtons(MINECRAFT_ACTION_USE)) != 0;
     const int ticksPerSecond = 20;
     if (P->isUsingItem()) {
         if (!useHeld) P->releaseUsingItem();
@@ -782,13 +774,13 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
 
     // In flying mode don't toggle sneaking, unless riding (sneak dismounts)
     if (!P->abilities.flying || P->riding != nullptr) {
-        if (pressed & kButtonRThumb) m.sneaking = !m.sneaking;
+        if (pressed & actionButtons(MINECRAFT_ACTION_SNEAK_TOGGLE)) m.sneaking = !m.sneaking;
     }
     if (m.sneaking) {
         m.xa *= 0.3f;
         m.ya *= 0.3f;
     }
-    m.jumping = (buttons & kButtonA) != 0;
+    m.jumping = (buttons & actionButtons(MINECRAFT_ACTION_JUMP)) != 0;
 
     // Look: squared so small pushes aim finely, scaled by the in-game
     // sensitivity, applied once a tick
@@ -865,15 +857,15 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     if (P->abilities.flying) {
         // While flying the sneak button just means it's held: go down. The
         // 0.42 matches what a jump adds in jumpFromGround.
-        if (buttons & kButtonRThumb) P->yd -= (0.15 + 0.42);
+        if (buttons & actionButtons(MINECRAFT_ACTION_SNEAK_TOGGLE)) P->yd -= (0.15 + 0.42);
         if (m.jumping) P->yd += 0.15;
 
         // D-pad strafes along the nearest axis
         float yRotSnapped = floorf((P->yRot / 90.0f) + 0.5f) * 90.0f;
-        if (buttons & kButtonDpadRight) {
+        if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_RIGHT)) {
             P->xd = -0.15 * cos(yRotSnapped * PI / 180);
             P->zd = -0.15 * sin(yRotSnapped * PI / 180);
-        } else if (buttons & kButtonDpadLeft) {
+        } else if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_LEFT)) {
             P->xd = 0.15 * cos(yRotSnapped * PI / 180);
             P->zd = 0.15 * sin(yRotSnapped * PI / 180);
         }
