@@ -2,6 +2,7 @@
 #import "MetalView.h"
 
 #import <QuartzCore/CADisplayLink.h>
+#import <GameController/GameController.h>
 #import <CoreText/CoreText.h>
 
 #include "RND_iOS_Stub.h"
@@ -1058,34 +1059,57 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // Symlinks aren't allowed inside the app sandbox without
 // entitlements, so make a real copy. Only runs once: skips if
 // the alias name already exists.
+// A PlayStation pad gets the PS4 skin (skinHDOrbis.swf / skinOrbis.swf,
+// what CopyPlatformSkin.bat puts in place on that platform) when it's
+// there, so the button glyphs match the pad. Decided once at launch like
+// a console build.
+static BOOL MCLEPlayStationPadConnected(void) {
+    for (GCController* c in GCController.controllers) {
+        NSString* category = c.productCategory ?: @"";
+        if ([category containsString:@"DualShock"] || [category containsString:@"DualSense"]) return YES;
+    }
+    return NO;
+}
+
 + (void)installPlatformSkinAliasIfNeeded {
     NSString* docs = [NSSearchPathForDirectoriesInDomains(
         NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     if (!docs) return;
     NSFileManager* fm = NSFileManager.defaultManager;
+    const BOOL playStation = MCLEPlayStationPadConnected();
     struct AliasPair { NSString* alias; NSArray<NSString*>* sources; };
     AliasPair pairs[] = {
-        { @"platformskinHD.swf", @[ @"skinHDWin.swf", @"skinHDDurango.swf",
-                                    @"skinHDOrbis.swf", @"skinHDWiiU.swf" ] },
-        { @"platformskin.swf",   @[ @"skinWin.swf", @"skinPS3.swf",
-                                    @"skinVita.swf" ] },
+        { @"platformskinHD.swf", playStation
+              ? @[ @"skinHDOrbis.swf", @"skinHDWin.swf", @"skinHDDurango.swf", @"skinHDWiiU.swf" ]
+              : @[ @"skinHDWin.swf", @"skinHDDurango.swf", @"skinHDOrbis.swf", @"skinHDWiiU.swf" ] },
+        { @"platformskin.swf", playStation
+              ? @[ @"skinOrbis.swf", @"skinWin.swf", @"skinPS3.swf", @"skinVita.swf" ]
+              : @[ @"skinWin.swf", @"skinPS3.swf", @"skinVita.swf" ] },
     };
     for (size_t i = 0; i < sizeof(pairs) / sizeof(pairs[0]); ++i) {
         NSString* aliasPath = [docs stringByAppendingPathComponent:pairs[i].alias];
-        if ([fm fileExistsAtPath:aliasPath]) continue;
+        // Which skin the alias holds, kept next to it
+        NSString* markerPath = [aliasPath stringByAppendingString:@".source"];
+        NSString* current = [NSString stringWithContentsOfFile:markerPath encoding:NSUTF8StringEncoding error:nil];
         for (NSString* candidate in pairs[i].sources) {
             NSString* srcPath = [docs stringByAppendingPathComponent:candidate];
-            if ([fm fileExistsAtPath:srcPath]) {
-                NSError* err = nil;
-                if ([fm copyItemAtPath:srcPath toPath:aliasPath error:&err]) {
-                    NSLog(@"[platformskin] aliased %@ -> %@",
-                          candidate, pairs[i].alias);
-                } else {
-                    NSLog(@"[platformskin] copy %@ -> %@ failed: %@",
-                          candidate, pairs[i].alias, err);
-                }
+            if (![fm fileExistsAtPath:srcPath]) continue;
+            // An alias from before the marker existed came from the first
+            // Windows skin
+            if (!current && [fm fileExistsAtPath:aliasPath] && ![candidate containsString:@"Orbis"]) {
+                [candidate writeToFile:markerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 break;
             }
+            if ([current isEqualToString:candidate] && [fm fileExistsAtPath:aliasPath]) break;
+            [fm removeItemAtPath:aliasPath error:nil];
+            NSError* err = nil;
+            if ([fm copyItemAtPath:srcPath toPath:aliasPath error:&err]) {
+                [candidate writeToFile:markerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                NSLog(@"[platformskin] aliased %@ -> %@", candidate, pairs[i].alias);
+            } else {
+                NSLog(@"[platformskin] copy %@ -> %@ failed: %@", candidate, pairs[i].alias, err);
+            }
+            break;
         }
     }
 }
