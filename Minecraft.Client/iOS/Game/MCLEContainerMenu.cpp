@@ -532,6 +532,9 @@ int g_request = MCLE_CONTAINER_NONE;
 bool g_openPacket = false;
 int g_openPacketType = 0;
 int g_openPacketContainerId = 0;
+std::wstring g_openPacketTitle;
+bool g_openPacketCustomName = false;
+int g_openPacketSize = 0;
 int g_openContainerId = -1;
 
 } // namespace
@@ -566,11 +569,14 @@ void mcle_container_request(int request) {
     g_request = request;
 }
 
-void mcle_container_open_packet(int type, int containerId) {
+void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName, int size) {
     std::lock_guard<std::mutex> lock(g_requestMutex);
     g_openPacket = true;
     g_openPacketType = type;
     g_openPacketContainerId = containerId;
+    g_openPacketTitle = title;
+    g_openPacketCustomName = customName;
+    g_openPacketSize = size;
 }
 
 int mcle_container_open_id() {
@@ -578,24 +584,33 @@ int mcle_container_open_id() {
 }
 
 // ClientConnection::handleContainerOpen runs when the packet arrives, by
-// which time the server has the new container on the player. Only the
-// crafting table is here; the rest fail like a menu that couldn't open.
-// A press that came in while a menu was going up is dropped.
+// which time the server has the new container on the player. The types
+// without a scene here fail like a menu that couldn't open. A press that
+// came in while a menu was going up is dropped.
 int mcle_container_take_request() {
-    bool packet;
-    int request, type, containerId;
+    bool packet, customName;
+    int request, type, containerId, size;
+    std::wstring title;
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
         request = g_request;
         packet = g_openPacket;
         type = g_openPacketType;
         containerId = g_openPacketContainerId;
+        title = g_openPacketTitle;
+        customName = g_openPacketCustomName;
+        size = g_openPacketSize;
         g_request = MCLE_CONTAINER_NONE;
         g_openPacket = false;
     }
     if (packet) {
         g_openContainerId = containerId;
-        if (type == ContainerOpenPacket::WORKBENCH && !g_scene) return MCLE_CONTAINER_CRAFTING_3X3;
+        if (!g_scene) {
+            if (type == ContainerOpenPacket::WORKBENCH) return MCLE_CONTAINER_CRAFTING_3X3;
+            if (mcle_container_take_server_packet(type, containerId, title, customName, size)) {
+                return MCLE_CONTAINER_SERVER;
+            }
+        }
         mcle_container_open_failed();
         return MCLE_CONTAINER_NONE;
     }

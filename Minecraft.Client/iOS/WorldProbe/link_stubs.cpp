@@ -365,10 +365,11 @@ MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 // What the server sends the local player's client goes nowhere, but a
 // ContainerOpenPacket is where the client opens the menu
 // (ClientConnection::handleContainerOpen).
-extern void mcle_container_open_packet(int type, int containerId);
+extern void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName,
+                                       int size);
 void PlayerConnection::send(std::shared_ptr<Packet> packet) {
     if (std::shared_ptr<ContainerOpenPacket> open = std::dynamic_pointer_cast<ContainerOpenPacket>(packet)) {
-        mcle_container_open_packet(open->type, open->containerId);
+        mcle_container_open_packet(open->type, open->containerId, open->title, open->customName, open->size);
     }
 }
 bool PlayerConnection::isLocal() { return true; }
