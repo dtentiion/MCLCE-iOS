@@ -1,18 +1,22 @@
-// The container menus. IUIScene_AbstractContainerMenu, the pointer, slot
-// and tooltip logic they all share, is upstream's own: its body is copied
-// out by scripts/gen-container-menu.py and compiled at the bottom of the
-// includes here. IUIScene_InventoryMenu is built with the rest of the
-// world. The two classes below stand in for UIScene_AbstractContainerMenu
-// and UIScene_InventoryMenu, and what those do with Iggy is queued as
+// The container menus' frame loop and what they share, and the inventory.
+// IUIScene_AbstractContainerMenu, the pointer, slot and tooltip logic the
+// slot menus share, is upstream's own: its body is copied out by
+// scripts/gen-container-menu.py and compiled at the bottom of the includes
+// here. IUIScene_InventoryMenu is built with the rest of the world. The two
+// classes below stand in for UIScene_AbstractContainerMenu and
+// UIScene_InventoryMenu, and what those do with Iggy is queued as
 // MCLEUIOps for the view controller to make on the movie.
 
 #include "MCLEContainerMenu.h"
+#include "MCLEContainerScene.h"
 
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <random>
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.world.item.h"
@@ -22,6 +26,7 @@
 #include "../../../upstream/Minecraft.World/HtmlString.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/SoundTypes.h"
+#include "../../../upstream/Minecraft.World/ContainerOpenPacket.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
@@ -33,19 +38,19 @@
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_AbstractContainerMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_InventoryMenu.h"
 
-std::mutex &mcle_sim_tick_mutex();                 // MCLEGameLoop.cpp
-std::shared_ptr<ServerPlayer> mcle_local_player(); // MCLEGameLoop.cpp
 void mcle_game_set_menu_displayed(bool displayed); // MCLEGameLoop.cpp
 
 namespace {
 
 std::vector<MCLEUIOp> g_ops;
 
-// UIComponent_Tooltips as UIController::SetTooltipText / ShowTooltip leave it
+// UIComponent_Tooltips as UIController::SetTooltips and friends leave it
 int g_tooltipText[eToolTipNumButtons];
 bool g_tooltipShown[eToolTipNumButtons];
 
 bool g_closeRequested = false;
+
+MCLEContainerScene *g_scene = nullptr;
 
 std::string toUtf8(const std::wstring &w) {
     std::string s;
@@ -65,40 +70,145 @@ std::string toUtf8(const std::wstring &w) {
     return s;
 }
 
-MCLEUIArg num(double v) { return MCLEUIArg{MCLEUIArg::Number, v, std::string()}; }
-MCLEUIArg flag(bool v) { return MCLEUIArg{MCLEUIArg::Bool, v ? 1.0 : 0.0, std::string()}; }
-MCLEUIArg str(const std::wstring &v) { return MCLEUIArg{MCLEUIArg::String, 0.0, toUtf8(v)}; }
+// UIComponent_Tooltips::_SetTooltip: -2 shows the button with no text
+void setTooltip(int button, int ids) {
+    if (button < 0 || button >= eToolTipNumButtons) return;
+    g_tooltipText[button] = ids;
+    g_tooltipShown[button] = ids > -1 || ids == -2;
+}
 
-void call(const std::string &path, const char *method, std::vector<MCLEUIArg> args) {
+void resetTooltips() {
+    for (int i = 0; i < eToolTipNumButtons; ++i) {
+        g_tooltipText[i] = -1;
+        g_tooltipShown[i] = false;
+    }
+}
+
+} // namespace
+
+MCLEUIArg mcle_ui_num(double v) { return MCLEUIArg{MCLEUIArg::Number, v, std::string()}; }
+MCLEUIArg mcle_ui_bool(bool v) { return MCLEUIArg{MCLEUIArg::Bool, v ? 1.0 : 0.0, std::string()}; }
+MCLEUIArg mcle_ui_str(const std::wstring &v) { return MCLEUIArg{MCLEUIArg::String, 0.0, toUtf8(v)}; }
+
+void mcle_ui_call(const std::string &path, const char *method, std::vector<MCLEUIArg> args) {
     g_ops.push_back(MCLEUIOp{MCLEUIOp::Call, path, method, std::move(args)});
 }
 
-// The UIController calls the scene logic makes
-struct ContainerUI {
-    void PlayUISFX(int sfx) {
-        // ConsoleSoundEngine::wchUISoundNames
-        static const char *const kNames[] = {"back", "craft", "craftfail", "focus", "press", "scroll"};
-        if (sfx < 0 || sfx >= eSFX_MAX) return;
-        g_ops.push_back(MCLEUIOp{MCLEUIOp::Sound, std::string(), kNames[sfx], {}});
+void mcle_ui_key(int iggyKeyCode, bool down) {
+    g_ops.push_back(MCLEUIOp{MCLEUIOp::Key, std::string(), std::string(), {mcle_ui_num(iggyKeyCode), mcle_ui_bool(down)}});
+}
+
+MCLEContainerUI mcleContainerUI;
+
+// UIController::PlayUISFX
+void MCLEContainerUI::PlayUISFX(int sfx) {
+    // ConsoleSoundEngine::wchUISoundNames
+    static const char *const kNames[] = {"back", "craft", "craftfail", "focus", "press", "scroll"};
+    static std::mt19937 s_random{std::random_device{}()};
+    static std::uniform_real_distribution<float> s_distribution(0.0f, 1.0f);
+    static long long s_lastUiSfx = 0;
+    if (sfx < 0 || sfx >= eSFX_MAX) return;
+
+    // Don't play multiple SFX on the same tick
+    long long time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (time - s_lastUiSfx < 10) return;
+    s_lastUiSfx = time;
+
+    float pitch = 1.0f;
+    if (sfx == eSFX_Focus) pitch += (s_distribution(s_random) - 0.5f) / 10;
+    g_ops.push_back(MCLEUIOp{MCLEUIOp::Sound, std::string(), kNames[sfx], {mcle_ui_num(pitch)}});
+}
+
+void MCLEContainerUI::ShowTooltip(int, int button, bool show) {
+    if (button >= 0 && button < eToolTipNumButtons) g_tooltipShown[button] = show;
+}
+
+void MCLEContainerUI::SetTooltipText(int, int button, int ids) { setTooltip(button, ids); }
+
+void MCLEContainerUI::SetTooltips(int, int iA, int iB, int iX, int iY, int iLT, int iRT, int iLB, int iRB, int iLS,
+                                  int iRS, int iBack, bool) {
+    const int ids[] = {iA, iB, iX, iY, iLT, iRT, iLB, iRB, iLS, iRS, iBack};
+    for (int i = 0; i < 11; ++i) setTooltip(i, ids[i]);
+}
+
+void MCLEContainerUI::NavigateBack(int) { g_closeRequested = true; }
+void MCLEContainerUI::CloseUIScenes(int) { g_closeRequested = true; }
+
+bool MCLEContainerScene::allowRepeat(int key) {
+    switch (key) {
+    case ACTION_MENU_OK:
+    case ACTION_MENU_CANCEL:
+    case ACTION_MENU_A:
+    case ACTION_MENU_B:
+    case ACTION_MENU_X:
+    case ACTION_MENU_Y:
+        return false;
     }
-    void ShowTooltip(int, int button, bool show) {
-        if (button >= 0 && button < eToolTipNumButtons) g_tooltipShown[button] = show;
+    return true;
+}
+
+void MCLEUILabel::init(const std::wstring &text) {
+    label = text;
+    mcle_ui_call(path, "Init", {mcle_ui_str(text)});
+}
+
+// UIControl_Base::setLabel
+void MCLEUILabel::setLabel(const std::wstring &text, bool instant, bool force) {
+    if (force || ((!label.empty() || !text.empty()) && label.compare(text) != 0)) changed = true;
+    label = text;
+    if (changed && instant) {
+        changed = false;
+        mcle_ui_call(path, "SetLabel", {mcle_ui_str(label)});
     }
-    void SetTooltipText(int, int button, int ids) {
-        if (button >= 0 && button < eToolTipNumButtons) g_tooltipText[button] = ids;
+}
+
+// UIControl_Base::tick
+void MCLEUILabel::tick() {
+    if (!changed) return;
+    changed = false;
+    mcle_ui_call(path, "SetLabel", {mcle_ui_str(label)});
+}
+
+void MCLEUISlotList::addSlot(int id) { mcle_ui_call(path, "addSlot", {mcle_ui_num(id), mcle_ui_bool(false), mcle_ui_bool(false)}); }
+
+void MCLEUISlotList::addSlots(int start, int count) {
+    for (int i = start; i < start + count; ++i) addSlot(i);
+}
+
+void MCLEUISlotList::setHighlightSlot(int index) {
+    if (index != lastHighlighted) {
+        if (lastHighlighted != -1) setSlotHighlighted(lastHighlighted, false);
+        setSlotHighlighted(index, true);
+        lastHighlighted = index;
     }
-    bool IsTutorialVisible(int) { return false; }
-    // The strip animates from the keys Ruffle gets from the pad
-    template <class... A> void AnimateKeyPress(A...) {}
-    // ui.SetTooltips(iPad, -1): every button set to nothing
-    template <class... A> void SetTooltips(A...) {
-        for (int i = 0; i < eToolTipNumButtons; ++i) g_tooltipShown[i] = false;
-    }
-    void NavigateBack(int) { g_closeRequested = true; }
-    void CloseUIScenes(int) { g_closeRequested = true; }
-    template <class... A> bool NavigateToScene(A...) { return false; }
-};
-ContainerUI mcleContainerUI;
+}
+
+void MCLEUISlotList::setSlotHighlighted(int index, bool highlight) {
+    mcle_ui_call(path, "SetSlotHighlight", {mcle_ui_num(index), mcle_ui_bool(highlight)});
+}
+
+void MCLEUISlotList::showSlotRedBox(int index, bool show) {
+    mcle_ui_call(path, "SetSlotRedBox", {mcle_ui_num(index), mcle_ui_bool(show)});
+}
+
+void MCLEUISlotList::setFocus(bool focus) {
+    if (lastHighlighted != -1) setSlotHighlighted(lastHighlighted, focus);
+}
+
+void mcle_container_prepare() {
+    g_ops.clear();
+    resetTooltips();
+    g_closeRequested = false;
+}
+
+void mcle_container_begin(MCLEContainerScene *scene) {
+    g_scene = scene;
+    mcle_game_set_menu_displayed(true);
+    g_scene->snapshot();
+}
+
+namespace {
 
 // Windows64's keyboard and mouse, which there isn't one of here
 struct NoKeyboardMouse {
@@ -157,38 +267,12 @@ static void mcle_container_click(AbstractContainerMenu *menu, int slotId, int bu
 
 namespace {
 
-// UIControl_SlotList: the calls it makes on its value path. x, y, width and
-// height are what setupControl read off the movie.
-struct SlotList {
-    std::string path;
-    MCLEControlRect rect{};
-    int lastHighlighted = 0;
-
-    explicit SlotList(const char *p) : path(p) {}
-
-    void addSlot(int id) { call(path, "addSlot", {num(id), flag(false), flag(false)}); }
-    void addSlots(int start, int count) {
-        for (int i = start; i < start + count; ++i) addSlot(i);
-    }
-    void setSlotHighlighted(int index, bool highlight) {
-        call(path, "SetSlotHighlight", {num(index), flag(highlight)});
-    }
-    void setHighlightSlot(int index) {
-        if (index != lastHighlighted) {
-            if (lastHighlighted != -1) setSlotHighlighted(lastHighlighted, false);
-            setSlotHighlighted(index, true);
-            lastHighlighted = index;
-        }
-    }
-    void setFocus(bool focus) {
-        if (lastHighlighted != -1) setSlotHighlighted(lastHighlighted, focus);
-    }
-};
-
 // UIScene_AbstractContainerMenu
-class ContainerScene : public virtual IUIScene_AbstractContainerMenu {
+class ContainerScene : public MCLEContainerScene, public virtual IUIScene_AbstractContainerMenu {
 public:
-    ContainerScene() : m_slotListHotbar("MainPanel.hotbarList"), m_slotListInventory("MainPanel.inventoryList") {}
+    ContainerScene()
+        : m_slotListHotbar("MainPanel.hotbarList"), m_slotListInventory("MainPanel.inventoryList"),
+          m_labelInventory("MainPanel.inventoryLabel"), m_cursorPath("MainPanel.cursor") {}
 
     int getPad() override { return 0; }
     int getMovieWidth() override { return 1920; }
@@ -198,33 +282,29 @@ public:
         scaleY = 1.0f;
     }
 
-    // UIScene_AbstractContainerMenu::handleInput, for a press
-    void input(int key, bool repeat) { handleKeyDown(getPad(), key, repeat); }
+    void handleInput(int key, bool repeat, bool pressed, bool released) override {
+        if (pressed) handleKeyDown(getPad(), key, repeat);
+    }
 
-    // UIScene_AbstractContainerMenu::tick. UIScene::tick runs the timers
-    // and sends any label that changed, then the pointer moves.
-    void tick(double now) {
+    // UIScene::tick runs the timers and sends any label that changed, then
+    // the pointer moves
+    void tick(double now) override {
         tickTimers(now);
-        // UIControl_Base::tick for the cursor's label
-        if (m_cursorLabelChanged) {
-            m_cursorLabelChanged = false;
-            call("MainPanel.cursor", "SetLabel", {str(m_cursorLabel)});
-        }
+        m_cursorPath.tick();
         onMouseTick();
     }
 
-    void pointer(float *x, float *y) {
+    bool pointer(float *x, float *y) override {
         *x = m_pointerPos.x;
         *y = m_pointerPos.y;
+        return true;
     }
 
-    AbstractContainerMenu *menu() { return m_menu; }
-
-    // UIScene_AbstractContainerMenu::handleDestroy. There's no tutorial
-    // state to put back. The client's closeContainer() ends up in the
-    // server's handleContainerClose, which is just doCloseContainer().
-    // ServerPlayer's own closeContainer() would send a ContainerClosePacket.
-    void destroy() {
+    // There's no tutorial state to put back. The client's closeContainer()
+    // ends up in the server's handleContainerClose, which is just
+    // doCloseContainer(). ServerPlayer's own closeContainer() would send a
+    // ContainerClosePacket.
+    void handleDestroy() override {
         std::shared_ptr<ServerPlayer> player = mcle_local_player();
         if (player != nullptr && player->containerMenu != nullptr && m_menu != nullptr &&
             player->containerMenu->containerId == m_menu->containerId) {
@@ -232,21 +312,66 @@ public:
         }
     }
 
+    // What the slots held at the end of the frame, for drawing
+    void snapshot() override {
+        m_slotItems.clear();
+        m_slotValid.clear();
+        m_carried = nullptr;
+        if (!m_menu) return;
+        unsigned int count = m_menu->getSize();
+        for (unsigned int i = 0; i < count; ++i) {
+            Slot *slot = m_menu->getSlot(i);
+            std::shared_ptr<ItemInstance> item = slot ? slot->getItem() : nullptr;
+            m_slotItems.push_back(copyOf(item));
+            m_slotValid.push_back(item == nullptr || m_menu->isValidIngredient(item, i));
+        }
+        std::shared_ptr<ServerPlayer> player = mcle_local_player();
+        if (player) {
+            std::shared_ptr<ItemInstance> carried = player->inventory->getCarried();
+            m_carried = copyOf(carried);
+            m_carriedValid = carried == nullptr || m_menu->isValidIngredient(carried, -1);
+        }
+    }
+
+    // UIScene_AbstractContainerMenu::customDraw
+    void customDraw(const MCLECustomDrawRegion &region) override {
+        std::shared_ptr<ItemInstance> item = nullptr;
+        bool valid = true;
+        int slotId = -1;
+        if (strcmp(region.name, "pointerIcon") == 0) {
+            item = m_carried;
+            valid = m_carriedValid;
+        } else if (sscanf(region.name, "slot_%d", &slotId) == 1 && slotId >= 0 &&
+                   slotId < static_cast<int>(m_slotItems.size())) {
+            item = m_slotItems[slotId];
+            valid = m_slotValid[slotId];
+        }
+        if (item != nullptr) mcle_custom_draw_slot(region, item, valid ? 1.0f : 0.5f, true);
+    }
+
     MCLEControlRect m_backgroundPanel{};
 
 protected:
-    SlotList m_slotListHotbar, m_slotListInventory;
+    MCLEUISlotList m_slotListHotbar, m_slotListInventory;
+    MCLEUILabel m_labelInventory, m_cursorPath;
     ESceneSection m_focusSection = eSectionNone;
-    std::wstring m_cursorLabel;
-    bool m_cursorLabelChanged = false;
+
+    std::vector<std::shared_ptr<ItemInstance>> m_slotItems;
+    std::vector<bool> m_slotValid;
+    std::shared_ptr<ItemInstance> m_carried;
+    bool m_carriedValid = true;
+
+    static std::shared_ptr<ItemInstance> copyOf(const std::shared_ptr<ItemInstance> &item) {
+        return item != nullptr ? item->copy() : nullptr;
+    }
 
     virtual void tickTimers(double now) {}
-    virtual SlotList *getSection(ESceneSection eSection) { return nullptr; }
+    virtual MCLEUISlotList *getSection(ESceneSection eSection) { return nullptr; }
 
     void InitDataAssociations(int iPad, AbstractContainerMenu *menu, int startIndex) override {}
 
     void PlatformInitialize(int iPad, int startIndex) override {
-        call("MainPanel.inventoryLabel", "Init", {str(app.GetString(IDS_INVENTORY))});
+        m_labelInventory.init(app.GetString(IDS_INVENTORY));
 
         if (startIndex >= 0) {
             m_slotListInventory.addSlots(startIndex, 27);
@@ -298,11 +423,11 @@ protected:
     bool doesSectionTreeHaveFocus(ESceneSection eSection) override { return false; }
 
     void setSectionFocus(ESceneSection eSection, int iPad) override {
-        SlotList *newFocus = getSection(eSection);
+        MCLEUISlotList *newFocus = getSection(eSection);
         if (newFocus) newFocus->setFocus(true);
 
         if (m_focusSection != eSectionNone) {
-            SlotList *currentFocus = getSection(m_focusSection);
+            MCLEUISlotList *currentFocus = getSection(m_focusSection);
             if (currentFocus != newFocus && currentFocus) currentFocus->setFocus(false);
         }
         m_focusSection = eSection;
@@ -310,19 +435,14 @@ protected:
 
     void setFocusToPointer(int iPad) override {
         if (m_focusSection != eSectionNone) {
-            SlotList *currentFocus = getSection(m_focusSection);
+            MCLEUISlotList *currentFocus = getSection(m_focusSection);
             if (currentFocus) currentFocus->setFocus(false);
         }
         m_focusSection = eSectionNone;
     }
 
-    // m_cursorPath.setLabel(HtmlString::Compose(description), false, newSlot)
     void SetPointerText(vector<HtmlString> *description, bool newSlot) override {
-        std::wstring label = HtmlString::Compose(description);
-        if (newSlot || ((!m_cursorLabel.empty() || !label.empty()) && m_cursorLabel.compare(label) != 0)) {
-            m_cursorLabelChanged = true;
-        }
-        m_cursorLabel = label;
+        m_cursorPath.setLabel(HtmlString::Compose(description), false, newSlot);
     }
 
     shared_ptr<ItemInstance> getSlotItem(ESceneSection eSection, int iSlot) override {
@@ -349,7 +469,7 @@ protected:
 class InventoryScene : public ContainerScene, public IUIScene_InventoryMenu {
 public:
     InventoryScene(const MCLEInventoryLayout &layout, const std::shared_ptr<ServerPlayer> &player, double now)
-        : m_slotListArmor("MainPanel.armorList") {
+        : m_slotListArmor("MainPanel.armorList"), m_playerRect(layout.player) {
         m_backgroundPanel = layout.backgroundPanel;
         m_slotListHotbar.rect = layout.hotbarList;
         m_slotListInventory.rect = layout.inventoryList;
@@ -374,8 +494,19 @@ public:
         m_effectsTimer = now + 1.0;
     }
 
+    // UIScene_InventoryMenu::customDraw, the player, then the slots
+    void customDraw(const MCLECustomDrawRegion &region) override {
+        if (strcmp(region.name, "player") == 0) {
+            drawPlayerPreview(region);
+            return;
+        }
+        ContainerScene::customDraw(region);
+    }
+
 protected:
-    SlotList m_slotListArmor;
+    MCLEUISlotList m_slotListArmor;
+    // The iggy_player control, MainPanel coordinates
+    MCLEControlRect m_playerRect;
     int m_bEffectTime[MobEffect::NUM_EFFECTS];
     double m_effectsTimer = 0;
 
@@ -405,7 +536,7 @@ protected:
         }
     }
 
-    const SlotList *sectionList(ESceneSection eSection) const {
+    const MCLEUISlotList *sectionList(ESceneSection eSection) const {
         switch (eSection) {
         case eSectionInventoryArmor: return &m_slotListArmor;
         case eSectionInventoryInventory: return &m_slotListInventory;
@@ -415,14 +546,14 @@ protected:
     }
 
     void GetPositionOfSection(ESceneSection eSection, UIVec2D *pPosition) override {
-        const SlotList *list = sectionList(eSection);
+        const MCLEUISlotList *list = sectionList(eSection);
         assert(list);
         pPosition->x = list ? list->rect.x : 0;
         pPosition->y = list ? list->rect.y : 0;
     }
 
     void GetItemScreenData(ESceneSection eSection, int iItemIndex, UIVec2D *pPosition, UIVec2D *pSize) override {
-        const SlotList *list = sectionList(eSection);
+        const MCLEUISlotList *list = sectionList(eSection);
         assert(list);
         UIVec2D sectionSize;
         sectionSize.x = list ? list->rect.w : 0;
@@ -446,10 +577,12 @@ protected:
     void setSectionSelectedSlot(ESceneSection eSection, int x, int y) override {
         int cols = getSectionColumns(eSection);
         int index = (y * cols) + x;
-        if (SlotList *slotList = getSection(eSection)) slotList->setHighlightSlot(index);
+        if (MCLEUISlotList *slotList = getSection(eSection)) slotList->setHighlightSlot(index);
     }
 
-    SlotList *getSection(ESceneSection eSection) override { return const_cast<SlotList *>(sectionList(eSection)); }
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        return const_cast<MCLEUISlotList *>(sectionList(eSection));
+    }
 
     // UIScene_InventoryMenu::updateEffectsDisplay
     void updateEffectsDisplay(const std::shared_ptr<ServerPlayer> &player) {
@@ -484,138 +617,119 @@ protected:
                 MobEffect *mobEffect = MobEffect::effects[effect->getId()];
                 if (mobEffect->hasIcon()) icon = mobEffect->getIcon();
                 int seconds = effect->getDuration() / SharedConstants::TICKS_PER_SECOND;
-                call("", "AddEffect", {num(icon), str(effectString), num(seconds)});
+                mcle_ui_call("", "AddEffect", {mcle_ui_num(icon), mcle_ui_str(effectString), mcle_ui_num(seconds)});
             }
 
             if (MobEffect::effects[effect->getId()]->hasIcon()) {
-                updateValues.push_back(num(MobEffect::effects[effect->getId()]->getIcon()));
-                updateValues.push_back(num(static_cast<int>(effect->getDuration() / SharedConstants::TICKS_PER_SECOND)));
+                updateValues.push_back(mcle_ui_num(MobEffect::effects[effect->getId()]->getIcon()));
+                updateValues.push_back(
+                    mcle_ui_num(static_cast<int>(effect->getDuration() / SharedConstants::TICKS_PER_SECOND)));
             }
 
             m_bEffectTime[effect->getId()] = effect->getDuration();
         }
 
-        call("", "UpdateEffects", std::move(updateValues));
+        mcle_ui_call("", "UpdateEffects", std::move(updateValues));
 
         delete activeEffects;
     }
+
+    // UIControl_MinecraftPlayer::render, the player turned towards the
+    // pointer. The region is in pixels already, so it's translated to rather
+    // than scaled from Iggy's double size target. m_fScreenWidth /
+    // m_fScreenHeight is the 16:9 screen the movie is laid out for.
+    void drawPlayerPreview(const MCLECustomDrawRegion &region) {
+        std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+        Minecraft *pMinecraft = Minecraft::GetInstance();
+        std::shared_ptr<ServerPlayer> player = mcle_local_player();
+        if (!player || !EntityRenderDispatcher::instance || !pMinecraft || !pMinecraft->options) return;
+        float pointerX = m_pointerPos.x, pointerY = m_pointerPos.y;
+
+        glLoadIdentity();
+        glTranslatef(region.x0, region.y0, -2000);
+
+        glEnable(GL_RESCALE_NORMAL);
+        glEnable(GL_COLOR_MATERIAL);
+        glPushMatrix();
+
+        float width = region.x1 - region.x0;
+        float height = region.y1 - region.y0;
+        float xo = width / 2;
+        float yo = height;
+
+        // dynamic y offset according to region height
+        glTranslatef(xo, yo - (height / 9.0f), 50.0f);
+
+        // Base scale on height of this control
+        float ss = width / (1920.0f / 1080.0f);
+
+        glScalef(-ss, ss, ss);
+        glRotatef(180, 0, 0, 1);
+
+        float oybr = player->yBodyRot;
+        float oyr = player->yRot;
+        float oxr = player->xRot;
+        float oyhr = player->yHeadRot;
+
+        float xd = (m_playerRect.x + m_playerRect.w / 2) - pointerX;
+
+        // Need to base Y on head position, not centre of mass
+        float yd = (m_playerRect.y + m_playerRect.h / 2 - 40) - pointerY;
+
+        glRotatef(45 + 90, 0, 1, 0);
+        Lighting::turnOn();
+        glRotatef(-45 - 90, 0, 1, 0);
+
+        glRotatef(-(float)atan(yd / 40.0f) * 20, 1, 0, 0);
+
+        player->yBodyRot = (float)atan(xd / 40.0f) * 20;
+        player->yRot = (float)atan(xd / 40.0f) * 40;
+        player->xRot = -(float)atan(yd / 40.0f) * 20;
+        player->yHeadRot = player->yRot;
+        glTranslatef(0, player->heightOffset, 0);
+        EntityRenderDispatcher::instance->playerRotY = 180;
+
+        // Turning on hideGui while this draws stops the name rendering
+        bool wasHidingGui = pMinecraft->options->hideGui;
+        pMinecraft->options->hideGui = true;
+        try {
+            EntityRenderDispatcher::instance->render(player, 0, 0, 0, 0, 1, false, false);
+        } catch (...) {
+        }
+        pMinecraft->options->hideGui = wasHidingGui;
+
+        player->yBodyRot = oybr;
+        player->yRot = oyr;
+        player->xRot = oxr;
+        player->yHeadRot = oyhr;
+        glPopMatrix();
+        Lighting::turnOff();
+        glDisable(GL_RESCALE_NORMAL);
+    }
 };
 
-ContainerScene *g_scene = nullptr;
-// The inventory's iggy_player control, MainPanel coordinates
-MCLEControlRect g_playerRect{};
+// UIController::handleInput's key repeat
+const double kRepeatDelay = 0.3; // UI_REPEAT_KEY_DELAY_MS
+const double kRepeatRate = 0.1;  // UI_REPEAT_KEY_REPEAT_RATE_MS
 
-// What the slots held at the end of the last frame, for drawing
-std::vector<std::shared_ptr<ItemInstance>> g_slotItems;
-std::vector<bool> g_slotValid;
-std::shared_ptr<ItemInstance> g_carried;
-bool g_carriedValid = true;
+// The menu actions UIController::handleInput goes through
+const int kActions[] = {
+    ACTION_MENU_A,         ACTION_MENU_B,          ACTION_MENU_X,           ACTION_MENU_Y,
+    ACTION_MENU_UP,        ACTION_MENU_DOWN,       ACTION_MENU_LEFT,        ACTION_MENU_RIGHT,
+    ACTION_MENU_PAGEUP,    ACTION_MENU_PAGEDOWN,   ACTION_MENU_LEFT_SCROLL, ACTION_MENU_RIGHT_SCROLL,
+    ACTION_MENU_PAUSEMENU, ACTION_MENU_OTHER_STICK_UP, ACTION_MENU_OTHER_STICK_DOWN,
+    ACTION_MENU_OTHER_STICK_LEFT, ACTION_MENU_OTHER_STICK_RIGHT,
+};
+const int kActionCount = sizeof(kActions) / sizeof(kActions[0]);
+double g_repeatTimer[kActionCount];
 
-std::shared_ptr<ItemInstance> copyOf(const std::shared_ptr<ItemInstance> &item) {
-    return item != nullptr ? item->copy() : nullptr;
-}
-
-void snapshotSlots() {
-    g_slotItems.clear();
-    g_slotValid.clear();
-    g_carried = nullptr;
-    if (!g_scene || !g_scene->menu()) return;
-    AbstractContainerMenu *menu = g_scene->menu();
-    unsigned int count = menu->getSize();
-    for (unsigned int i = 0; i < count; ++i) {
-        Slot *slot = menu->getSlot(i);
-        std::shared_ptr<ItemInstance> item = slot ? slot->getItem() : nullptr;
-        g_slotItems.push_back(copyOf(item));
-        g_slotValid.push_back(item == nullptr || menu->isValidIngredient(item, i));
-    }
-    std::shared_ptr<ServerPlayer> player = mcle_local_player();
-    if (player) {
-        std::shared_ptr<ItemInstance> carried = player->inventory->getCarried();
-        g_carried = copyOf(carried);
-        g_carriedValid = carried == nullptr || menu->isValidIngredient(carried, -1);
-    }
-}
-
-void resetTooltips() {
-    for (int i = 0; i < eToolTipNumButtons; ++i) {
-        g_tooltipText[i] = -1;
-        g_tooltipShown[i] = false;
-    }
-}
-
-// UIControl_MinecraftPlayer::render, the player turned towards the pointer.
-// The region is in pixels already, so it's translated to rather than
-// scaled from Iggy's double size target. m_fScreenWidth / m_fScreenHeight
-// is the 16:9 screen the movie is laid out for.
-void drawPlayerPreview(const MCLECustomDrawRegion &region) {
-    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
-    Minecraft *pMinecraft = Minecraft::GetInstance();
-    std::shared_ptr<ServerPlayer> player = mcle_local_player();
-    if (!player || !g_scene || !EntityRenderDispatcher::instance || !pMinecraft || !pMinecraft->options) return;
-    float pointerX = 0, pointerY = 0;
-    g_scene->pointer(&pointerX, &pointerY);
-
-    glLoadIdentity();
-    glTranslatef(region.x0, region.y0, -2000);
-
-    glEnable(GL_RESCALE_NORMAL);
-    glEnable(GL_COLOR_MATERIAL);
-    glPushMatrix();
-
-    float width = region.x1 - region.x0;
-    float height = region.y1 - region.y0;
-    float xo = width / 2;
-    float yo = height;
-
-    // dynamic y offset according to region height
-    glTranslatef(xo, yo - (height / 9.0f), 50.0f);
-
-    // Base scale on height of this control
-    float ss = width / (1920.0f / 1080.0f);
-
-    glScalef(-ss, ss, ss);
-    glRotatef(180, 0, 0, 1);
-
-    float oybr = player->yBodyRot;
-    float oyr = player->yRot;
-    float oxr = player->xRot;
-    float oyhr = player->yHeadRot;
-
-    float xd = (g_playerRect.x + g_playerRect.w / 2) - pointerX;
-
-    // Need to base Y on head position, not centre of mass
-    float yd = (g_playerRect.y + g_playerRect.h / 2 - 40) - pointerY;
-
-    glRotatef(45 + 90, 0, 1, 0);
-    Lighting::turnOn();
-    glRotatef(-45 - 90, 0, 1, 0);
-
-    glRotatef(-(float)atan(yd / 40.0f) * 20, 1, 0, 0);
-
-    player->yBodyRot = (float)atan(xd / 40.0f) * 20;
-    player->yRot = (float)atan(xd / 40.0f) * 40;
-    player->xRot = -(float)atan(yd / 40.0f) * 20;
-    player->yHeadRot = player->yRot;
-    glTranslatef(0, player->heightOffset, 0);
-    EntityRenderDispatcher::instance->playerRotY = 180;
-
-    // Turning on hideGui while this draws stops the name rendering
-    bool wasHidingGui = pMinecraft->options->hideGui;
-    pMinecraft->options->hideGui = true;
-    try {
-        EntityRenderDispatcher::instance->render(player, 0, 0, 0, 0, 1, false, false);
-    } catch (...) {
-    }
-    pMinecraft->options->hideGui = wasHidingGui;
-
-    player->yBodyRot = oybr;
-    player->yRot = oyr;
-    player->xRot = oxr;
-    player->yHeadRot = oyhr;
-    glPopMatrix();
-    Lighting::turnOff();
-    glDisable(GL_RESCALE_NORMAL);
-}
+// What the world asked to open, see mcle_container_take_request
+std::mutex g_requestMutex;
+bool g_craftingRequested = false;
+bool g_openPacket = false;
+int g_openPacketType = 0;
+int g_openPacketContainerId = 0;
+int g_openContainerId = -1;
 
 } // namespace
 
@@ -638,15 +752,61 @@ void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now
     std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
     std::shared_ptr<ServerPlayer> player = mcle_local_player();
     if (!player || g_scene) return;
-    g_ops.clear();
-    resetTooltips();
-    g_closeRequested = false;
+    mcle_container_prepare();
     // Minecraft::tick plays the press unless riding
     if (!player->isRiding()) mcleContainerUI.PlayUISFX(eSFX_Press);
-    g_playerRect = layout.player;
-    g_scene = new InventoryScene(layout, player, now);
-    mcle_game_set_menu_displayed(true);
-    snapshotSlots();
+    mcle_container_begin(new InventoryScene(layout, player, now));
+}
+
+void mcle_container_request_crafting() {
+    std::lock_guard<std::mutex> lock(g_requestMutex);
+    g_craftingRequested = true;
+}
+
+void mcle_container_open_packet(int type, int containerId) {
+    std::lock_guard<std::mutex> lock(g_requestMutex);
+    g_openPacket = true;
+    g_openPacketType = type;
+    g_openPacketContainerId = containerId;
+}
+
+int mcle_container_open_id() {
+    return g_openContainerId;
+}
+
+// ClientConnection::handleContainerOpen runs when the packet arrives, by
+// which time the server has the new container on the player. Only the
+// crafting table is here; the rest fail like a menu that couldn't open.
+// A crafting press that came in while a menu was going up is dropped.
+int mcle_container_take_request() {
+    bool crafting, packet;
+    int type, containerId;
+    {
+        std::lock_guard<std::mutex> lock(g_requestMutex);
+        crafting = g_craftingRequested;
+        packet = g_openPacket;
+        type = g_openPacketType;
+        containerId = g_openPacketContainerId;
+        g_craftingRequested = false;
+        g_openPacket = false;
+    }
+    if (packet) {
+        g_openContainerId = containerId;
+        if (type == ContainerOpenPacket::WORKBENCH && !g_scene) return MCLE_CONTAINER_CRAFTING_3X3;
+        mcle_container_open_failed();
+        return MCLE_CONTAINER_NONE;
+    }
+    return (crafting && !g_scene) ? MCLE_CONTAINER_CRAFTING_2X2 : MCLE_CONTAINER_NONE;
+}
+
+// handleContainerOpen's failed case sends a ContainerClosePacket, and the
+// server's handleContainerClose closes whatever the player has open
+void mcle_container_open_failed() {
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    std::shared_ptr<ServerPlayer> player = mcle_local_player();
+    if (!player || player->containerMenu == player->inventoryMenu) return;
+    if (player->containerMenu->containerId != g_openContainerId) return;
+    player->doCloseContainer();
 }
 
 void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double now) {
@@ -657,23 +817,30 @@ void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double
         return;
     }
 
-    // UIController::handleInput, the menu actions newly pressed this frame
-    static const int kActions[] = {
-        ACTION_MENU_A,         ACTION_MENU_B,          ACTION_MENU_X,           ACTION_MENU_Y,
-        ACTION_MENU_UP,        ACTION_MENU_DOWN,       ACTION_MENU_LEFT,        ACTION_MENU_RIGHT,
-        ACTION_MENU_PAGEUP,    ACTION_MENU_PAGEDOWN,   ACTION_MENU_LEFT_SCROLL, ACTION_MENU_RIGHT_SCROLL,
-        ACTION_MENU_PAUSEMENU, ACTION_MENU_OTHER_STICK_UP, ACTION_MENU_OTHER_STICK_DOWN,
-        ACTION_MENU_OTHER_STICK_LEFT, ACTION_MENU_OTHER_STICK_RIGHT,
-    };
-    const unsigned int pressed = buttons & ~prevButtons;
-    for (int action : kActions) {
-        if (g_closeRequested) break;
+    // UIController::handleKeyPress for each action, then UILayer::handleInput
+    for (int i = 0; i < kActionCount && !g_closeRequested; ++i) {
+        int action = kActions[i];
         unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), action);
-        if (pressed & mapped) g_scene->input(action, false);
+        bool down = (buttons & mapped) != 0;
+        bool pressed = down && (prevButtons & mapped) == 0;
+        bool released = !down && (prevButtons & mapped) != 0;
+        bool repeat = false;
+        if (pressed) {
+            g_repeatTimer[i] = now + kRepeatDelay;
+        } else if (released) {
+            g_repeatTimer[i] = 0;
+        } else if (down && g_repeatTimer[i] > 0 && now > g_repeatTimer[i]) {
+            repeat = true;
+            pressed = true;
+            g_repeatTimer[i] = now + kRepeatRate;
+        }
+        if (!(repeat || pressed || released)) continue;
+        if (repeat && !g_scene->allowRepeat(action)) continue;
+        g_scene->handleInput(action, repeat, pressed, released);
     }
 
     if (!g_closeRequested) g_scene->tick(now);
-    snapshotSlots();
+    g_scene->snapshot();
 }
 
 std::vector<MCLEUIOp> mcle_container_take_ops() {
@@ -688,10 +855,10 @@ void mcle_container_tooltips(int out[11]) {
     }
 }
 
-void mcle_container_pointer(float *x, float *y) {
+bool mcle_container_pointer(float *x, float *y) {
     *x = 0;
     *y = 0;
-    if (g_scene) g_scene->pointer(x, y);
+    return g_scene != nullptr && g_scene->pointer(x, y);
 }
 
 bool mcle_container_close_requested() {
@@ -702,7 +869,7 @@ void mcle_container_close() {
     if (!g_scene) return;
     {
         std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
-        g_scene->destroy();
+        g_scene->handleDestroy();
         delete g_scene;
         g_scene = nullptr;
         mcle_game_set_menu_displayed(false);
@@ -710,9 +877,7 @@ void mcle_container_close() {
     g_ops.clear();
     g_closeRequested = false;
     resetTooltips();
-    g_slotItems.clear();
-    g_slotValid.clear();
-    g_carried = nullptr;
+    for (double &t : g_repeatTimer) t = 0;
 }
 
 bool mcle_container_is_open() {
@@ -722,26 +887,7 @@ bool mcle_container_is_open() {
 void mcle_container_custom_draw(const MCLECustomDrawRegion *regions, int count) {
     if (!g_scene) return;
     if (!mcle_custom_draw_begin()) return;
-    for (int i = 0; i < count; ++i) {
-        // UIScene_InventoryMenu::customDraw, then
-        // UIScene_AbstractContainerMenu::customDraw
-        std::shared_ptr<ItemInstance> item = nullptr;
-        bool valid = true;
-        int slotId = -1;
-        if (strcmp(regions[i].name, "player") == 0) {
-            drawPlayerPreview(regions[i]);
-            continue;
-        }
-        if (strcmp(regions[i].name, "pointerIcon") == 0) {
-            item = g_carried;
-            valid = g_carriedValid;
-        } else if (sscanf(regions[i].name, "slot_%d", &slotId) == 1 && slotId >= 0 &&
-                   slotId < static_cast<int>(g_slotItems.size())) {
-            item = g_slotItems[slotId];
-            valid = g_slotValid[slotId];
-        }
-        if (item != nullptr) mcle_custom_draw_slot(regions[i], item, valid ? 1.0f : 0.5f, true);
-    }
+    for (int i = 0; i < count; ++i) g_scene->customDraw(regions[i]);
     mcle_custom_draw_end();
 }
 

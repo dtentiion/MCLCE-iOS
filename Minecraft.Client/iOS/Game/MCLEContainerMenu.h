@@ -1,10 +1,11 @@
 #pragma once
 
-// The container menus (UIScene_InventoryMenu for now). The scene logic is
-// upstream's IUIScene_AbstractContainerMenu and IUIScene_InventoryMenu,
-// what UIScene_AbstractContainerMenu does with Iggy comes back from here as
-// calls for the view controller to make on the movie. Everything here runs
-// on the main thread; whatever touches the player holds the sim tick lock.
+// The container menus (UIScene_InventoryMenu and UIScene_CraftingMenu for
+// now). The scene logic is upstream's IUIScene_ classes, what the
+// UIScene_ classes do with Iggy comes back from here as calls for the view
+// controller to make on the movie. Everything here runs on the main thread
+// unless it says otherwise; whatever touches the player holds the sim tick
+// lock.
 
 #include <memory>
 #include <string>
@@ -14,7 +15,7 @@
 
 class ItemInstance;
 
-// One IggyPlayerCallMethodRS, or a UI sound to play
+// One IggyPlayerCallMethodRS, a UI sound to play, or a key for the movie
 struct MCLEUIArg {
     enum Kind { Number, Bool, String } kind;
     double number;
@@ -22,9 +23,11 @@ struct MCLEUIArg {
 };
 
 struct MCLEUIOp {
-    enum Kind { Call, Sound } kind;
+    enum Kind { Call, Sound, Key } kind;
     std::string path;   // value path, "" for the root
     std::string method; // the method, or the sound's name
+    // the call's arguments; a sound's pitch; a key's Iggy key code and
+    // whether it went down
     std::vector<MCLEUIArg> args;
 };
 
@@ -51,8 +54,30 @@ bool mcle_container_can_open_inventory();
 // UIScene_InventoryMenu's constructor
 void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now);
 
-// One UI frame: the pad's presses (UIScene::handleInput) then
-// UIScene_AbstractContainerMenu::tick. `prevButtons` is the last frame's.
+// The menu the world asked for, taken once a frame while none is up
+enum MCLEContainerRequest {
+    MCLE_CONTAINER_NONE,
+    MCLE_CONTAINER_CRAFTING_2X2, // app.LoadCrafting2x2Menu
+    MCLE_CONTAINER_CRAFTING_3X3, // the server opened a crafting table
+};
+int mcle_container_take_request();
+
+// From the sim thread: Minecraft::tick's crafting action away from a
+// crafting table, and ClientConnection::handleContainerOpen for the
+// ContainerOpenPacket the local player's ServerPlayer sends
+void mcle_container_request_crafting();
+void mcle_container_open_packet(int type, int containerId);
+
+// UIScene_CraftingMenu's constructor, for the 2x2 or the table's 3x3.
+// False when the 3x3 has no crafting menu to show.
+bool mcle_container_open_crafting(bool table);
+
+// handleContainerOpen when the menu couldn't open: the client's
+// ContainerClosePacket, so the server closes what it opened
+void mcle_container_open_failed();
+
+// One UI frame: the pad's presses (UIController::handleInput) then the
+// scene's tick. `prevButtons` is the last frame's.
 void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double now);
 
 // What the scene wants done on the movie since the last call
@@ -61,19 +86,18 @@ std::vector<MCLEUIOp> mcle_container_take_ops();
 // The tooltip strip, A B X Y LT RT LB RB LS RS Back, -1 for hidden
 void mcle_container_tooltips(int out[11]);
 
-// m_pointerPos, the stage point IggyMakeEventMouseMove goes to
-void mcle_container_pointer(float *x, float *y);
+// The stage point IggyMakeEventMouseMove goes to, false without a pointer
+bool mcle_container_pointer(float *x, float *y);
 
 // ui.CloseUIScenes from the scene
 bool mcle_container_close_requested();
 
-// UIScene_AbstractContainerMenu::handleDestroy
+// The scene's handleDestroy
 void mcle_container_close();
 
 bool mcle_container_is_open();
 
-// UIScene_AbstractContainerMenu::customDraw for the movie's iggy_ regions,
-// drawn from what the last frame saw in the slots
+// The scene's customDraw for the movie's iggy_ regions
 void mcle_container_custom_draw(const MCLECustomDrawRegion *regions, int count);
 
 // MCLECustomDraw.cpp, the UI layer the HUD draws its items on
