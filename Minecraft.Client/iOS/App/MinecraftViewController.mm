@@ -2800,6 +2800,33 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     MCLEContainerApplyOps();
 }
 
+// Minecraft::tick's crafting action in creative: app.LoadCreativeMenu
+- (void)openCreativeMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"CreativeMenu1080.swf"];
+    [self showContainerOverWorld];
+}
+
+// UIScene_CreativeMenu's constructor, once the movie is up
+- (void)initCreativeMenu {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    MCLECreativeLayout layout;
+    layout.backgroundPanel = MCLEControlRectAt("MainPanel.BackgroundPanel");
+    layout.containerList = MCLEControlRectAt("MainPanel.containerList");
+    layout.hotbarList = MCLEControlRectAt("MainPanel.hotbarList");
+    for (int i = 0; i < 8; ++i) {
+        char path[32];
+        snprintf(path, sizeof(path), "MainPanel.TouchPanel_%d", i);
+        layout.tabs[i] = MCLEControlRectAt(path);
+    }
+    layout.slider = MCLEControlRectAt("MainPanel.TouchPanel_Slider");
+    mcle_container_open_creative(layout);
+    MCLEContainerApplyOps();
+}
+
 // UIScene_InventoryMenu's constructor, once the movie is up
 - (void)initInventoryMenu {
     self.menuButtonConfig = nil;
@@ -3618,6 +3645,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self initCraftingMenu:NO];
         } else if ([swfName isEqualToString:@"Crafting3x3Menu1080.swf"]) {
             [self initCraftingMenu:YES];
+        } else if ([swfName isEqualToString:@"CreativeMenu1080.swf"]) {
+            [self initCreativeMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -3738,6 +3767,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             int request = mcle_container_take_request();
             if (request == MCLE_CONTAINER_CRAFTING_2X2) [self openCraftingMenu:NO];
             else if (request == MCLE_CONTAINER_CRAFTING_3X3) [self openCraftingMenu:YES];
+            else if (request == MCLE_CONTAINER_CREATIVE) [self openCreativeMenu];
         }
         mcle_render_frame();
         if (g_world_container) {
