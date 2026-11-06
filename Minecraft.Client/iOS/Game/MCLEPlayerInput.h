@@ -18,6 +18,11 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
                            float lookX, float lookY, unsigned int buttons, float sensitivity,
                            bool invertLook);
 
+// The end of LocalPlayer::aiStep, after Player::aiStep: the flying move.
+// Player::aiStep calls it for every player, it only acts on the local one.
+class Player;
+void mcle_player_ai_step_end(Player *player);
+
 // LocalPlayer::ThirdPersonView, cycled with the left stick click
 int mcle_third_person_view();
 

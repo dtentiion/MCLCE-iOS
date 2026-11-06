@@ -802,9 +802,30 @@ struct MoveState {
     bool sprintTriggerRegisteredReturn = false;
     int jumpTriggerTime = 0;
     bool twoJumpsRegistered = false;
+    // LocalPlayer::ullDpad_last / ullDpad_filtered
+    unsigned int dpadLast = 0, dpadFiltered = 0;
 };
 
 MoveState m;
+
+enum DpadBit { kDpadLeft = 1, kDpadRight = 2, kDpadUp = 4, kDpadDown = 8 };
+
+// Minecraft::run_middle: movement on the d-pad ignores diagonals and keeps
+// the last single direction, so there are no accidental diagonal moves
+void filterDpad(unsigned int buttons) {
+    unsigned int dpadThis = 0;
+    int dirCount = 0;
+    if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_LEFT)) { dpadThis |= kDpadLeft; dirCount++; }
+    if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_RIGHT)) { dpadThis |= kDpadRight; dirCount++; }
+    if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_UP)) { dpadThis |= kDpadUp; dirCount++; }
+    if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_DOWN)) { dpadThis |= kDpadDown; dirCount++; }
+    if (dirCount <= 1) {
+        m.dpadLast = dpadThis;
+        m.dpadFiltered = dpadThis;
+    } else {
+        m.dpadFiltered = m.dpadLast;
+    }
+}
 
 // LocalPlayer's xBob / yBob: the hand lags behind the view. Ticked here,
 // read by ItemInHandRenderer on the render thread.
@@ -941,20 +962,27 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     // Player::aiStep counts this down right after
     if (m.jumpTriggerTime > 0) m.jumpTriggerTime--;
 
+    filterDpad(buttons);
+
     if (P->abilities.flying) {
         // While flying the sneak button just means it's held: go down. The
         // 0.42 matches what a jump adds in jumpFromGround.
         if (buttons & actionButtons(MINECRAFT_ACTION_SNEAK_TOGGLE)) P->yd -= (0.15 + 0.42);
-        if (m.jumping) P->yd += 0.15;
+        if (m.jumping) {
+            P->noJumpDelay = 0;
+            P->yd += 0.15;
+        }
 
-        // D-pad strafes along the nearest axis
+        // D-pad strafes along the nearest axis, in the default control scheme
         float yRotSnapped = floorf((P->yRot / 90.0f) + 0.5f) * 90.0f;
-        if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_RIGHT)) {
-            P->xd = -0.15 * cos(yRotSnapped * PI / 180);
-            P->zd = -0.15 * sin(yRotSnapped * PI / 180);
-        } else if (buttons & actionButtons(MINECRAFT_ACTION_DPAD_LEFT)) {
-            P->xd = 0.15 * cos(yRotSnapped * PI / 180);
-            P->zd = 0.15 * sin(yRotSnapped * PI / 180);
+        if (InputManager.GetJoypadMapVal(0) == 0) {
+            if (m.dpadFiltered & kDpadRight) {
+                P->xd = -0.15 * cos(yRotSnapped * PI / 180);
+                P->zd = -0.15 * sin(yRotSnapped * PI / 180);
+            } else if (m.dpadFiltered & kDpadLeft) {
+                P->xd = 0.15 * cos(yRotSnapped * PI / 180);
+                P->zd = 0.15 * sin(yRotSnapped * PI / 180);
+            }
         }
     }
 
@@ -968,6 +996,46 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     g_xBobO = g_xBob;
     g_xBob += (P->xRot - g_xBob) * 0.5;
     g_yBob += (P->yRot - g_yBob) * 0.5;
+}
+
+// The rest of LocalPlayer::aiStep, after its Player::aiStep. Player::aiStep
+// calls this at its end (scripts/patch-player-local-aistep.py).
+void mcle_player_ai_step_end(Player *player) {
+    if (!P || player != P.get()) return;
+
+    // 4J-PB - If we're in Creative Mode, allow flying on ground
+    if (!P->abilities.mayfly && !P->isAllowedToFly()) {
+        if (P->onGround && P->abilities.flying) P->abilities.flying = false;
+    }
+
+    if (P->abilities.flying) {
+        Vec3 *viewVector = P->getViewVector(1.0f);
+        float flyX = 0.0f, flyY = 0.0f, flyZ = 0.0f;
+
+        // To let the player build easily while flying
+        if (P->isSprinting()) {
+            // Accelerate up to full speed when sprinting, along the view vector
+            flyX = static_cast<float>(viewVector->x) * m.ya;
+            flyY = static_cast<float>(viewVector->y) * m.ya;
+            flyZ = static_cast<float>(viewVector->z) * m.ya;
+
+            float scale = static_cast<float>(SPRINT_DURATION - m.sprintTime) / 10.0f;
+            scale = scale * scale;
+            if (scale > 1.0f) scale = 1.0f;
+            flyX *= scale;
+            flyY *= scale;
+            flyZ *= scale;
+        } else {
+            if (m.dpadFiltered & kDpadUp) flyY = 0.1f;
+            if (m.dpadFiltered & kDpadDown) flyY = -0.1f;
+        }
+
+        P->move(flyX, flyY, flyZ);
+
+        P->fallDistance = 0.0f;
+        P->yd = 0.0f;
+        P->onGround = true;
+    }
 }
 
 void mcle_player_bob(float a, float *xBob, float *yBob) {
