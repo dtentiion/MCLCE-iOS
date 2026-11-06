@@ -345,6 +345,10 @@ void          ruffle_ios_clear_focus(PlayerHandle* h);
 // highlight on top, producing a duplicate outline.
 void          ruffle_ios_suppress_auto_focus_highlight(PlayerHandle* h, int suppress);
 
+// Gamma on the player's whole frame from the next one on, pow(rgb, 1/gamma)
+// like the world's gamma pass. 1 leaves it alone.
+void          ruffle_ios_player_set_gamma(PlayerHandle* h, float gamma);
+
 // Set AS3 stage focus to a named direct child of the root clip.
 // Needed on Settings sub-scenes so keyboard-mapped gamepad input
 // routes to a control instead of vanishing into a null-focus

@@ -741,6 +741,20 @@ pub unsafe extern "C" fn ruffle_ios_suppress_auto_focus_highlight(
     p.set_suppress_auto_highlight(suppress != 0);
 }
 
+/// Gamma on everything the player draws from the next frame on, the same
+/// pow(rgb, 1 / gamma) the game puts on its own layers
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_set_gamma(raw: *mut PlayerHandle, gamma: f32) {
+    use ruffle_render_wgpu::backend::WgpuRenderBackend;
+    use ruffle_render_wgpu::target::SwapChainTarget;
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Ok(mut p) = handle.player.lock() else { return; };
+    let renderer: &mut dyn std::any::Any = p.renderer_mut();
+    if let Some(backend) = renderer.downcast_mut::<WgpuRenderBackend<SwapChainTarget>>() {
+        backend.set_gamma(gamma);
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_clear_focus(raw: *mut PlayerHandle) {
     let Some(handle) = borrow_handle(raw) else { return; };
