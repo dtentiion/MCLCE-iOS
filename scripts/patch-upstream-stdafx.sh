@@ -1414,15 +1414,6 @@ fi
 # patch-renderclouds-force-simple.py kept on disk in case we need to
 # fall back, but no longer applied by default.
 
-# LevelRenderer.cpp: neuter the End-dimension sky-cube branch at the
-# top of renderSky. We're overworld-only and that branch draws a
-# tunnel-textured cube around the camera that turns into a stuck
-# wedge if dimension->id ever lands on 1.
-RSE_PY="$REPO_ROOT/scripts/patch-rendersky-no-end.py"
-if [ -f "$RSE_PY" ]; then
-    python3 "$RSE_PY"
-fi
-
 # LevelRenderer.h: expose starList/skyList/darkList/haloRingList/
 # cloudList as public. MCLEGameLoop reads them post-ctor to register
 # the auto-replay skip set so haloRingList et al stop drawing every
