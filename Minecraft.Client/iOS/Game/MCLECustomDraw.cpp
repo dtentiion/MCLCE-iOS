@@ -108,7 +108,57 @@ float slotAlpha(int opacityTimer) {
     return fVal;
 }
 
+// UIController::setupCustomDrawGameState
+void setupCustomDrawGameState() {
+    int w = 0, h = 0;
+    mcle_metal_ui_size(&w, &h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    mcle_glbridge_metal_ortho(0, static_cast<float>(w), static_cast<float>(h), 0, 1000, 3000);
+    glMatrixMode(GL_MODELVIEW);
+    glEnable(GL_ALPHA_TEST);
+    glAlphaFunc(GL_GREATER, 0.1f);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(true);
+}
+
+// UIController::endCustomDrawGameState
+void endCustomDrawGameState() {
+    glDepthMask(false);
+    glDisable(GL_ALPHA_TEST);
+}
+
 } // namespace
+
+// The UI layer for another scene's custom draw, false when it can't be drawn
+bool mcle_custom_draw_begin() {
+    Minecraft *pMinecraft = Minecraft::GetInstance();
+    if (!pMinecraft || !pMinecraft->textures || !pMinecraft->font) return false;
+    if (mcle_metal_ui_frame_begin() != 0) return false;
+    // so the HUD clears it once it's back
+    g_drewLastFrame = true;
+    setupCustomDrawGameState();
+    return true;
+}
+
+// UIScene::customDrawSlotControl for one region, already in pixels
+void mcle_custom_draw_slot(const MCLECustomDrawRegion &region, std::shared_ptr<ItemInstance> item, float alpha,
+                           bool decorations) {
+    if (item == nullptr) return;
+    glLoadIdentity();
+    glTranslatef(0, 0, -2000);
+    try {
+        drawSlot(region.x0, region.y0, region.x1 - region.x0, region.y1 - region.y0, item, alpha, item->isFoil(),
+                 decorations);
+    } catch (...) {
+    }
+}
+
+void mcle_custom_draw_end() {
+    endCustomDrawGameState();
+    mcle_metal_ui_frame_end();
+}
 
 extern "C" void mcle_hud_custom_draw(const MCLECustomDrawRegion *regions, int count) {
     Minecraft *pMinecraft = Minecraft::GetInstance();
@@ -133,39 +183,14 @@ extern "C" void mcle_hud_custom_draw(const MCLECustomDrawRegion *regions, int co
         mcle_hud_get_state(&st);
         float fVal = slotAlpha(st.opacityTimer);
 
-        // UIController::setupCustomDrawGameState
-        int w = 0, h = 0;
-        mcle_metal_ui_size(&w, &h);
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        mcle_glbridge_metal_ortho(0, static_cast<float>(w), static_cast<float>(h), 0, 1000, 3000);
-        glMatrixMode(GL_MODELVIEW);
-        glEnable(GL_ALPHA_TEST);
-        glAlphaFunc(GL_GREATER, 0.1f);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glDepthMask(true);
-
+        setupCustomDrawGameState();
         for (int i = 0; i < count; i++) {
             // UIScene_HUD::customDraw
             int slot = -1;
             if (sscanf(regions[i].name, "slot_%d", &slot) != 1 || slot < 0 || slot >= 9) continue;
-            std::shared_ptr<ItemInstance> item = hotbar[slot];
-            if (item == nullptr) continue;
-
-            // setupCustomDrawMatrices, the region being in pixels already
-            glLoadIdentity();
-            glTranslatef(0, 0, -2000);
-            try {
-                drawSlot(regions[i].x0, regions[i].y0, regions[i].x1 - regions[i].x0, regions[i].y1 - regions[i].y0,
-                         item, fVal, item->isFoil(), true);
-            } catch (...) {
-            }
+            mcle_custom_draw_slot(regions[i], hotbar[slot], fVal, true);
         }
-
-        // endCustomDrawGameState
-        glDepthMask(false);
-        glDisable(GL_ALPHA_TEST);
+        endCustomDrawGameState();
     }
     mcle_metal_ui_frame_end();
 }

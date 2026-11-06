@@ -1670,6 +1670,11 @@ for HTP_PY in "$REPO_ROOT/scripts/gen-html-format.py" "$REPO_ROOT/scripts/gen-ho
         python3 "$HTP_PY"
     fi
 done
+# IUIScene_AbstractContainerMenu's body, for Game/MCLEContainerMenu.cpp
+CM_PY="$REPO_ROOT/scripts/gen-container-menu.py"
+if [ -f "$CM_PY" ]; then
+    python3 "$CM_PY"
+fi
 
 # UIScene_Credits' credit table, for Game/MCLECredits.cpp
 CR_PY="$REPO_ROOT/scripts/gen-credits.py"

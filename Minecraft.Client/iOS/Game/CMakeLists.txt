@@ -22,6 +22,7 @@ set(MCLE_GAME_SOURCES
   MCLEJoypadMaps.cpp
   MCLEControls.cpp
   MCLEHowToPlay.cpp
+  MCLEContainerMenu.cpp
   MCLE_iOS_MachHandler.cpp
 )
 

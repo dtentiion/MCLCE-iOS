@@ -545,7 +545,17 @@ typedef struct _ConnectionProgressParams {
 // this stub.
 #ifndef _UIVEC2D_DEFINED
 #  define _UIVEC2D_DEFINED
-typedef struct _UIVec2D { float x; float y; } UIVec2D;
+typedef struct _UIVec2D {
+    float x;
+    float y;
+
+    _UIVec2D& operator+=(const _UIVec2D &rhs)
+    {
+        x += rhs.x;
+        y += rhs.y;
+        return *this;
+    }
+} UIVec2D;
 #endif
 // Textures lives in Minecraft.Client/Textures.h. TexturePack.h
 // references it as a pointer field.
