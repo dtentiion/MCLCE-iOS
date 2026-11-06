@@ -1664,6 +1664,12 @@ if [ -f "$JM_PY" ]; then
     python3 "$JM_PY"
 fi
 
+# IUIScene_AbstractContainerMenu's body, for Game/MCLEContainerMenu.cpp
+CM_PY="$REPO_ROOT/scripts/gen-container-menu.py"
+if [ -f "$CM_PY" ]; then
+    python3 "$CM_PY"
+fi
+
 # UIScene_Credits' credit table, for Game/MCLECredits.cpp
 CR_PY="$REPO_ROOT/scripts/gen-credits.py"
 if [ -f "$CR_PY" ]; then

@@ -1737,6 +1737,25 @@ std::recursive_mutex &mcle_particle_mutex() {
     return g_particleMutex;
 }
 
+// The container menus run on the main thread against the player the sim
+// thread owns, holding the tick lock while they do
+std::mutex &mcle_sim_tick_mutex() {
+    return g_simTickMutex;
+}
+
+std::shared_ptr<ServerPlayer> mcle_local_player() {
+    return g_player;
+}
+
+// While a menu is up the pad drives the menu, not the player
+static std::atomic<bool> g_menuDisplayed{false};
+// The pad's buttons as the game sees them this tick
+static unsigned int g_gameButtons = 0;
+
+void mcle_game_set_menu_displayed(bool displayed) {
+    g_menuDisplayed.store(displayed, std::memory_order_relaxed);
+}
+
 // ClientConnection::handleAnimate's CRITICAL_HIT and MAGIC_CRITICAL_HIT, from
 // scripts/patch-client-effects.py
 void mcle_client_crit(shared_ptr<Entity> entity, bool magic) {
@@ -2301,13 +2320,27 @@ extern "C" void mcle_game_tick(void) {
     CompressedTileStorage::tick();
     SparseDataStorage::tick();
 
+    // While a menu is up the game gets no buttons, and a button pressed then
+    // only counts once it's been let go, so the press that shut the menu
+    // isn't a press in the game as well
+    {
+        static unsigned int s_heldFromMenu = 0;
+        const unsigned int raw = (unsigned int)mcle_ios_input_poll_buttons(0);
+        if (g_menuDisplayed.load(std::memory_order_relaxed)) {
+            s_heldFromMenu |= raw;
+            g_gameButtons = 0;
+        } else {
+            s_heldFromMenu &= raw;
+            g_gameButtons = raw & ~s_heldFromMenu;
+        }
+    }
+
     // Minecraft::tick's player input: mining, placing, attacking, hotbar.
     // Before the levels tick, like the client's packets being handled at
     // the start of the server tick.
     if (g_player && g_levels[0]) {
         try {
-            mcle_player_input_tick(g_player, g_levels[0],
-                                   (unsigned int)mcle_ios_input_poll_buttons(0));
+            mcle_player_input_tick(g_player, g_levels[0], g_gameButtons);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: player input threw");
         }
@@ -2454,11 +2487,12 @@ extern "C" void mcle_game_tick(void) {
     if (g_player) {
         try {
             const float xRotBefore = g_player->xRot, yRotBefore = g_player->yRot;
-            mcle_player_move_tick(g_player, mcle_ios_input_poll_lx(0) / 1000.0f,
-                                  -mcle_ios_input_poll_ly(0) / 1000.0f,
-                                  mcle_ios_input_poll_rx(0) / 1000.0f,
-                                  -mcle_ios_input_poll_ry(0) / 1000.0f,
-                                  (unsigned int)mcle_ios_input_poll_buttons(0),
+            const bool menu = g_menuDisplayed.load(std::memory_order_relaxed);
+            mcle_player_move_tick(g_player, menu ? 0.0f : mcle_ios_input_poll_lx(0) / 1000.0f,
+                                  menu ? 0.0f : -mcle_ios_input_poll_ly(0) / 1000.0f,
+                                  menu ? 0.0f : mcle_ios_input_poll_rx(0) / 1000.0f,
+                                  menu ? 0.0f : -mcle_ios_input_poll_ry(0) / 1000.0f,
+                                  g_gameButtons,
                                   mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
                                   mcle_settings_get(10 /*ControlInvertLook*/) != 0);
             g_player->doTick(false);

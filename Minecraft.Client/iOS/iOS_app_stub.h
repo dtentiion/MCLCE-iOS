@@ -30,6 +30,7 @@ class FileNameMap;
 extern "C" int mcle_log_msg(const char *msg);
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 extern "C" const wchar_t *mcle_wstring(int id);        // Game/MCLEStrings.cpp
+extern "C" int mcle_html_colour(int colour);           // Game/MCLEContainerMenu.cpp
 
 struct McleAppStub {
     // Heavyweight returning ptr to opaque object; nullptr is fine
@@ -216,7 +217,8 @@ struct McleAppStub {
     template<class... A> int            GetGameNewHellScale(A...) { return 1; }
     template<class... A> int            GetGameNewWorldSize(A...) { return 0; }
     template<class... A> bool           GetGameNewWorldSizeUseMoat(A...) { return false; }
-    template<class... A> int            GetHTMLColor(A...)      { return 0; }
+    // CMinecraftApp::GetHTMLColour, the texture pack's colour table
+    template<class T> int               GetHTMLColor(T colour)  { return mcle_html_colour(static_cast<int>(colour)); }
     template<class... A> bool           GetMobsDontAttackEnabled(A...) { return false; }
     template<class... A> bool           GetMobsDontTickEnabled(A...)   { return false; }
     template<class... A> bool           GetWriteSavesToFolderEnabled(A...) { return false; }
