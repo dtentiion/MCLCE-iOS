@@ -1311,13 +1311,43 @@ static void MCLEGameTooltipsReset(void) {
     g_tooltips.enabled = -1;
 }
 
+// UIComponent_Tooltips::tick: the strip follows Interface Opacity, back at
+// 80% for a while after the hotbar scrolls, and never under 15% with a menu
+// up. setOpacity only calls the movie when it changes.
+static float g_tooltips_alpha = -1.0f;
+static void MCLETooltipsOpacityPump(bool menuDisplayed, int opacityTimer) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    unsigned char ucAlpha = mcle_settings_get(MCLE_SETTING_InterfaceOpacity);
+    if (menuDisplayed && ucAlpha < 15) ucAlpha = 15;
+    float fVal;
+    if (ucAlpha < 80 && opacityTimer != 0) {
+        if (opacityTimer < 10) {
+            float fStep = (80.0f - static_cast<float>(ucAlpha)) / 10.0f;
+            fVal = 0.01f * (80.0f - ((10.0f - static_cast<float>(opacityTimer)) * fStep));
+        } else {
+            fVal = 0.01f * 80.0f;
+        }
+    } else {
+        fVal = 0.01f * static_cast<float>(ucAlpha);
+    }
+    if (fVal == g_tooltips_alpha) return;
+    g_tooltips_alpha = fVal;
+    const char* setAlpha = "SetAlpha";
+    double value = fVal;
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
+        (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1);
+}
+
 // In game: Minecraft::tick's tooltips
 static void MCLEGameTooltipsPump(void) {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
-    // UIScene_HUD::SetTooltipsEnabled, from the In-Game Tooltips setting
-    int enabled = mcle_settings_get(MCLE_SETTING_Tooltips) != 0 ? 1 : 0;
+    // UIComponent_Tooltips::render: with no menu up the strip is off when
+    // In-Game Tooltips or Display HUD is
+    int enabled = (mcle_settings_get(MCLE_SETTING_Tooltips) != 0 &&
+                   mcle_settings_get(MCLE_SETTING_DisplayHUD) != 0) ? 1 : 0;
     if (enabled != g_tooltips.enabled) {
         g_tooltips.enabled = enabled;
         ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, enabled);
@@ -4702,6 +4732,20 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         void (^then)(void) = g_after_thumbnail;
         g_after_thumbnail = nil;
         then();
+    }
+
+    // UIComponent_Tooltips::tick, in the menus and in game
+    {
+        const bool inWorld = mcle_world_is_ticking() != 0;
+        int opacityTimer = 0;
+        if (inWorld) {
+            MCLEHudState st;
+            mcle_hud_get_state(&st);
+            if (st.valid) opacityTimer = st.opacityTimer;
+        }
+        const bool menuDisplayed = !inWorld || g_world_paused || g_world_dead || g_world_container ||
+                                   g_pending_dialog != nil;
+        MCLETooltipsOpacityPump(menuDisplayed, opacityTimer);
     }
 
     // Phase G phase 1A: once the world simulation is ticking, take over
