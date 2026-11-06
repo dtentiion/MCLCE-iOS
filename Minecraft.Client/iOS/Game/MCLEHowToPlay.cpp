@@ -141,6 +141,11 @@ std::string toUtf8(const std::wstring &w) {
 
 } // namespace
 
+// CMinecraftApp::FormatHTMLString, for the other scenes' text
+std::wstring mcle_format_html_string(int iPad, const std::wstring &desc) {
+    return g_appText.FormatHTMLString(iPad, desc);
+}
+
 extern "C" int mcle_htp_num_pages(void) { return eHowToPlay_NumPages; }
 
 // UIScene_HowToPlayMenu::m_uiHTPSceneA

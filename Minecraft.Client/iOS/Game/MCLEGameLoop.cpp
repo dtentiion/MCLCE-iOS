@@ -2106,6 +2106,29 @@ static void mcle_do_respawn() {
     MCLE_LOG("respawned at %.1f %.1f %.1f", fresh->x, fresh->y, fresh->z);
 }
 
+// PlayerConnection::handleCraftItem crafts on the server player, and
+// awardStat and refreshContainer in there send their packets through its
+// connection. As for respawn, a zeroed one stands in while it runs: the
+// only thing called on it is the link_stubs send, which doesn't touch it.
+void mcle_run_with_stand_in_connection(const std::shared_ptr<ServerPlayer> &player, void (*fn)(void *), void *arg) {
+    if (!player) return;
+    struct alignas(PlayerConnection) ConnectionBuf { char bytes[sizeof(PlayerConnection)]; };
+    static ConnectionBuf s_connection = {};
+    const bool standIn = player->connection == nullptr;
+    if (standIn) {
+        player->connection = std::shared_ptr<PlayerConnection>(reinterpret_cast<PlayerConnection *>(&s_connection),
+                                                               [](PlayerConnection *) {});
+    }
+    struct Restore {
+        const std::shared_ptr<ServerPlayer> &player;
+        bool standIn;
+        ~Restore() {
+            if (standIn) player->connection = nullptr;
+        }
+    } restore{player, standIn};
+    fn(arg);
+}
+
 extern "C" void mcle_game_set_paused(int paused) {
     g_gamePaused.store(paused != 0, std::memory_order_relaxed);
 }
