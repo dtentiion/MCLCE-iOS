@@ -3112,6 +3112,13 @@ extern "C" void mcle_world_drive_renderer(void) {
         int vw = 0, vh = 0;
         mcle_metal_current_size(&vw, &vh);
         const float aspect = (vh > 0) ? ((float)vw / (float)vh) : 1.0f;
+        // Minecraft's backbuffer size. ItemRenderer::blit scales item icons
+        // by width / width_phys, which were never set, so every 2D item
+        // icon came out NaN.
+        if (Minecraft *mcSize = Minecraft::GetInstance()) {
+            mcSize->width = mcSize->width_phys = vw;
+            mcSize->height = mcSize->height_phys = vh;
+        }
 
         // Partial tick. The sim runs at 20Hz and rendering interpolates
         // between its last two ticks, alpha = (now - lastTick) / 50ms.
