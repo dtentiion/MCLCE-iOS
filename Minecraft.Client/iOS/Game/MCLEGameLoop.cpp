@@ -156,6 +156,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/Tesselator.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
+#include "../../../upstream/Minecraft.Client/ScreenSizeCalculator.h"
 #include "../../../upstream/Minecraft.Client/Gui.h"
 #include "../../../upstream/Minecraft.Client/GameRenderer.h"
 #include "../../../upstream/Minecraft.Client/MultiPlayerLevel.h"
@@ -3595,8 +3596,9 @@ static void mcle_gui_overlays(float a) {
 }
 
 // Gui::render's animated character: the player at the top of the screen
-// while sneaking, sprinting or flying, kept up a moment after. Placed on
-// the 16:9 stage the HUD is laid out on, at the Gui's safe zone plus 10.
+// while sneaking, sprinting or flying, kept up a moment after. Gui lays it
+// out over the whole screen, not the 16:9 movie, in gui units of
+// Minecraft's 720 line screen at the safe zone plus 10.
 static void mcle_gui_animated_character(float a) {
     static int s_characterDisplayTimer = 0;
     if (!mcle_settings_get(31 /*AnimatedCharacter*/)) return;
@@ -3624,11 +3626,18 @@ static void mcle_gui_animated_character(float a) {
     mcle_metal_current_size(&w, &h);
     if (!renderer || w <= 0 || h <= 0) return;
 
-    // GameRenderer::setupGuiScreen
+    // Minecraft is 1280x720 on a 16:9 screen, here it's as wide as the
+    // screen so a gui unit stays square
+    const int guiScale = mcle_settings_get(29 /*UISize*/) + 2;
+    ScreenSizeCalculator ssc(nullptr, 720 * w / h, 720, guiScale);
+    const int screenWidth = ssc.getWidth();
+    const int screenHeight = ssc.getHeight();
+
+    // GameRenderer::setupGuiScreen(guiScale)
     mcle_metal_clear_depth();
     mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
     mcle_glbridge_load_identity();
-    mcle_glbridge_metal_ortho(0, static_cast<float>(w), static_cast<float>(h), 0, 1000, 3000);
+    mcle_glbridge_metal_ortho(0, static_cast<float>(ssc.rawWidth), static_cast<float>(ssc.rawHeight), 0, 1000, 3000);
     mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
     mcle_glbridge_load_identity();
     mcle_glbridge_translate(0, 0, -2000);
@@ -3637,19 +3646,17 @@ static void mcle_gui_animated_character(float a) {
     glEnable(GL_ALPHA_TEST);
     glEnable(GL_DEPTH_TEST);
 
-    // Gui units are guiScale pixels of the 1920x1080 screen, and the safe
-    // zone is 5% of it
-    const float guiScale = static_cast<float>(mcle_settings_get(29 /*UISize*/) + 2);
-    const float k = static_cast<float>(h) / 1080.0f;
-    const float stageX = (static_cast<float>(w) - 1920.0f * k) * 0.5f;
-    const float xo = stageX + (1920.0f / 20.0f + 10.0f * guiScale) * k;
-    const float yo = (1080.0f / 20.0f + 10.0f * guiScale) * k;
+    // The full screen safe zone, 5%
+    const int iSafezoneXHalf = screenWidth / 20;
+    const int iSafezoneTopYHalf = screenHeight / 20;
+    const int xo = iSafezoneXHalf + 10;
+    const int yo = iSafezoneTopYHalf + 10;
 
     glEnable(GL_RESCALE_NORMAL);
     glEnable(GL_COLOR_MATERIAL);
     glPushMatrix();
-    glTranslatef(xo, yo, 50);
-    float ss = 12 * guiScale * k;
+    glTranslatef(static_cast<float>(xo), static_cast<float>(yo), 50);
+    float ss = 12;
     glScalef(-ss, ss, ss);
     glRotatef(180, 0, 0, 1);
 
