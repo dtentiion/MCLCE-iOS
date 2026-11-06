@@ -16,6 +16,7 @@
 #include "../Game/MCLEHud.h"
 #include "../Game/MCLETooltips.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
+#include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
 #include <algorithm>
 #include <atomic>
@@ -260,6 +261,12 @@ static int mcle_map_slider(int sliderId, double rawValue, unsigned char* outValu
 }
 
 static int mcle_map_checkbox(int boxId) {
+    // UIScene_ControlsMenu::handleCheckboxToggled
+    if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
+        if (boxId == 3) return MCLE_SETTING_ControlInvertLook;
+        if (boxId == 4) return MCLE_SETTING_ControlSouthPaw;
+        return -1;
+    }
     if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"]) {
         switch (boxId) {
             case 0: return MCLE_SETTING_ViewBob;
@@ -285,6 +292,83 @@ static int mcle_map_checkbox(int boxId) {
         }
     }
     return -1;
+}
+
+// UIScene_ControlsMenu. The labels and lines in e_Pad order.
+extern "C" void mcle_controls_text(int layout, int creativeMode, int southPaw, int* out); // Game/MCLEControls.cpp
+static const char* const kControlsLabels[19] = {
+    "LabelBack", "LabelLT", "LabelLB", "LabelDPadLeft", "LabelDPadRight", "LabelDPadUp", "LabelDPadDown",
+    "LabelLS_1", "LabelLS_2", "LabelStart", "LabelRT", "LabelRB", "LabelY", "LabelB", "LabelA", "LabelX",
+    "LabelRS_1", "LabelRS_2", "LabelTouch",
+};
+static const char* const kControlsLines[19] = {
+    "LineBack", "LineLT", "LineLB", "LineDpadLeft", "LineDpadRight", "LineDpadUp", "LineDpadDown",
+    "LineL3", "LineLeftStick", "LineStart", "LineRT", "LineRB", "LineY", "LineB", "LineA", "LineX",
+    "LineR3", "LineRightStick", "LineTouch",
+};
+static int g_controls_layout = 0;       // m_iCurrentNavigatedControlsLayout
+static bool g_controls_creative = false; // m_bCreativeMode
+static std::atomic<bool> g_controls_layout_changed{false};
+
+static void MCLESetPathVisible(NSString* path, BOOL visible);
+static BOOL MCLEPlayStationPadConnected(void);
+
+// PositionAllText
+static void MCLEControlsPositionAllText(void) {
+    int text[19];
+    mcle_controls_text(g_controls_layout, g_controls_creative ? 1 : 0,
+                       mcle_settings_get(MCLE_SETTING_ControlSouthPaw), text);
+    for (int i = 0; i < 19; ++i) {
+        MCLECallPath(@(kControlsLabels[i]), @"SetLabel", @[text[i] >= 0 ? MCLEStr(text[i]) : @""]);
+        MCLESetPathVisible(@(kControlsLines[i]), text[i] >= 0);
+    }
+    g_controls_layout_changed = false;
+}
+
+// "Current Layout : Layout n"
+static NSString* MCLEControlsLayoutString(int scheme) {
+    static const int kSchemeText[3] = { IDS_CONTROLS_SCHEME0, IDS_CONTROLS_SCHEME1, IDS_CONTROLS_SCHEME2 };
+    return [NSString stringWithFormat:@"%@ : %@", MCLEStr(IDS_CURRENT_LAYOUT), MCLEStr(kSchemeText[MAX(0, MIN(scheme, 2))])];
+}
+
+// UIScene_ControlsMenu constructor
+static void MCLEControlsInit(void) {
+    extern PlayerHandle* g_ruffle_player;
+    // SetPlatform: the Windows64 picture, or the PS4 one when the PS4 skin is in
+    MCLECallPath(@"", @"SetPlatform", @[@(MCLEPlayStationPadConnected() ? 3 : 0)]);
+
+    bool notInGame = !mcle_world_is_ticking();
+    MCLECallPath(@"Version", @"Init", @[notInGame ? @(VER_PRODUCTVERSION_STR) : @" "]);
+    MCLEHudState st;
+    mcle_hud_get_state(&st);
+    g_controls_creative = !notInGame && st.valid && st.mayfly;
+
+    MCLECallPath(@"Button1", @"Init", @[@"1", @0]);
+    MCLECallPath(@"Button2", @"Init", @[@"2", @1]);
+    MCLECallPath(@"Button3", @"Init", @[@"3", @2]);
+
+    struct Cb { const char* name; int ids; int id; int setting; };
+    const Cb checkboxes[] = {
+        { "InvertLook", IDS_INVERT_LOOK, 3, MCLE_SETTING_ControlInvertLook },
+        { "SouthPaw",   IDS_SOUTHPAW,    4, MCLE_SETTING_ControlSouthPaw },
+    };
+    for (const auto& c : checkboxes) {
+        const char* label = MCLEStr(c.ids).UTF8String;
+        ruffle_ios_call_init_checkbox(g_ruffle_player, (const uint8_t*)c.name, strlen(c.name),
+                                      (const uint8_t*)label, strlen(label), (double)c.id,
+                                      mcle_settings_get(c.setting) ? 1 : 0);
+    }
+
+    int selected = MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_ControlScheme), 2));
+    MCLECallPath(@"CurrentLayout", @"Init", @[MCLEControlsLayoutString(selected)]);
+    g_controls_layout = selected;
+    MCLECallPath(@"", @"SetControllerLayout", @[@(selected)]);
+
+    for (int i = 0; i < 19; ++i) {
+        MCLECallPath(@(kControlsLabels[i]), @"Init", @[@""]);
+        MCLESetPathVisible(@(kControlsLines[i]), NO);
+    }
+    MCLEControlsPositionAllText();
 }
 
 // UIScene_Credits
@@ -334,6 +418,8 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         mcle_settings_set(setting, v);
         NSLog(@"[settings] %@ checkbox id=%d -> setting=%d val=%u",
               g_current_scene_name, (int)id, setting, v);
+        // UIScene_ControlsMenu: southpaw swaps move and look
+        if (setting == MCLE_SETTING_ControlSouthPaw) g_controls_layout_changed = true;
     } else if (strcmp(method, "handleSliderMove") == 0) {
         if ([g_current_scene_name isEqualToString:@"LoadMenu1080.swf"]) {
             int sid = (int)id;
@@ -405,6 +491,16 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             });
         }
     } else if (strcmp(method, "handlePress") == 0) {
+        // UIScene_ControlsMenu::handlePress: the layout buttons pick the scheme
+        if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
+            int control = (int)id;
+            if (control < 0 || control > 2) return;
+            mcle_settings_set(MCLE_SETTING_ControlScheme, (unsigned char)control);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                MCLECallPath(@"CurrentLayout", @"SetLabel", @[MCLEControlsLayoutString(control)]);
+            });
+            return;
+        }
         // LCE SWF fires handlePress(controlId, childId) when the
         // user hits A on a button or list item. FJ_Document's
         // stage-level handler in FJ_Document.as:170-191 routes
@@ -496,6 +592,16 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                   g_current_scene_name, listId, itemId);
         }
     } else if (strcmp(method, "handleFocusChange") == 0) {
+        // UIScene_ControlsMenu::handleFocusChange: show the layout being
+        // looked at, from tick
+        if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
+            int control = (int)id;
+            if (control >= 0 && control <= 2) {
+                g_controls_layout = control;
+                g_controls_layout_changed = true;
+            }
+            return;
+        }
         // UIScene_LoadOrJoinMenu::handleFocusChange -> m_bUpdateSaveSize
         if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && (int)id == 0) {
             int child = (int)value;
@@ -3311,6 +3417,10 @@ static NSString* MCLETipHTML(void) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
             MCLECreditsInit();
+        } else if ([swfName isEqualToString:@"Controls1080.swf"]) {
+            [self attachMenuScenery];
+            self.menuButtonConfig = nil;
+            MCLEControlsInit();
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -3490,6 +3600,10 @@ static NSString* MCLETipHTML(void) {
     extern PlayerHandle* g_ruffle_player;
 
     if ([self.currentMenuSwf isEqualToString:@"Credits1080.swf"]) MCLECreditsTick();
+    // UIScene_ControlsMenu::tick
+    if ([self.currentMenuSwf isEqualToString:@"Controls1080.swf"] && g_controls_layout_changed) {
+        MCLEControlsPositionAllText();
+    }
 
     // Edge-detect controller buttons and forward press/release events to
     // Ruffle so the menu's AS3 input handlers fire. Bit layout matches

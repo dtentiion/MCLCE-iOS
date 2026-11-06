@@ -33,6 +33,8 @@ typedef struct {
     int riderHealth, riderMaxHealth;
     float jumpRidingScale;
     char displayName[64];
+    // abilities.mayfly, what the controls picture calls creative
+    int mayfly;
 } MCLEHudState;
 
 void mcle_hud_get_state(MCLEHudState *out);

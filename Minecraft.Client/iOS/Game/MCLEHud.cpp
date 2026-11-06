@@ -87,6 +87,7 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
     st.activeSlot = player->inventory->selected;
     // MultiPlayerGameMode::canHurtPlayer / hasExperience
     st.canHurtPlayer = player->gameMode->isSurvival();
+    st.mayfly = player->abilities.mayfly;
     st.hasExperience = player->gameMode->isSurvival();
 
     // renderPlayerHealth
