@@ -1613,6 +1613,55 @@ void initImpl() {
 
 } // anonymous namespace
 
+// Gui's chat lines for UIScene_HUD's chat timer on the main thread. The Gui
+// ticks on the sim thread.
+static std::mutex s_guiMutex;
+
+static void copyUtf8(const std::wstring &w, char *out, int cap) {
+    int n = 0;
+    for (wchar_t wc : w) {
+        unsigned int c = static_cast<unsigned int>(wc);
+        char b[4];
+        int len;
+        if (c < 0x80) {
+            b[0] = static_cast<char>(c);
+            len = 1;
+        } else if (c < 0x800) {
+            b[0] = static_cast<char>(0xC0 | (c >> 6));
+            b[1] = static_cast<char>(0x80 | (c & 0x3F));
+            len = 2;
+        } else {
+            b[0] = static_cast<char>(0xE0 | ((c >> 12) & 0x0F));
+            b[1] = static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            b[2] = static_cast<char>(0x80 | (c & 0x3F));
+            len = 3;
+        }
+        if (n + len >= cap) break;
+        for (int i = 0; i < len; i++) out[n++] = b[i];
+    }
+    out[n] = 0;
+}
+
+// Gui::getOpacity / getMessage for a chat line
+extern "C" float mcle_hud_chat_line(int index, char *out, int cap) {
+    if (cap > 0) out[0] = 0;
+    std::lock_guard<std::mutex> lock(s_guiMutex);
+    if (!g_gui || g_initState != kStateTicking) return 0.0f;
+    float opacity = g_gui->getOpacity(0, static_cast<DWORD>(index));
+    if (opacity > 0 && cap > 0) copyUtf8(g_gui->getMessage(0, static_cast<DWORD>(index)), out, cap);
+    return opacity;
+}
+
+// Gui::getJukeboxOpacity / getJukeboxMessage
+extern "C" float mcle_hud_jukebox(char *out, int cap) {
+    if (cap > 0) out[0] = 0;
+    std::lock_guard<std::mutex> lock(s_guiMutex);
+    if (!g_gui || g_initState != kStateTicking) return 0.0f;
+    float opacity = g_gui->getJukeboxOpacity(0);
+    if (cap > 0) copyUtf8(g_gui->getJukeboxMessage(0), out, cap);
+    return opacity;
+}
+
 // Held while anything outside this file touches the particle engine
 std::recursive_mutex &mcle_particle_mutex() {
     return g_particleMutex;
@@ -2124,6 +2173,12 @@ extern "C" void mcle_game_tick(void) {
     if (g_gamePaused.load(std::memory_order_relaxed)) return;
 
     if (g_respawnRequested.exchange(false)) mcle_do_respawn();
+
+    // Minecraft::tick: gui->tick() while not paused
+    {
+        std::lock_guard<std::mutex> lock(s_guiMutex);
+        if (g_gui) g_gui->tick();
+    }
 
     // GameRenderer::tick: torch flicker for the light texture
     // (tickLightTexture) and the wither boss darkening the world

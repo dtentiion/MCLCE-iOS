@@ -553,6 +553,8 @@ static struct {
     float opacity;
 } g_hud;
 
+static void MCLEHudChatReset(void);
+
 static void MCLEHudReset(void) {
     g_hud.activeSlot = -1;
     g_hud.guiScale = -1;
@@ -586,6 +588,7 @@ static void MCLEHudReset(void) {
     g_hud.hideLabelCalls = st.hideLabelCalls;
     // UIScene sends the opacity once a scene has loaded
     g_hud.opacity = -1.0f;
+    MCLEHudChatReset();
 }
 
 static void MCLEHudShow(NSString* fn, bool show, bool& last) {
@@ -679,11 +682,78 @@ static void MCLEHudRenderPlayerHealth(const MCLEHudState& st) {
     }
 }
 
+extern "C" float mcle_hud_chat_line(int index, char *out, int cap);
+extern "C" float mcle_hud_jukebox(char *out, int cap);
+
+// UIControl::setOpacity and setLabel on the HUD's chat lines, what was last
+// sent starting from UIControl's 1.0 / unset
+static struct {
+    float labelOpacity[10], backgroundOpacity[10], jukeboxOpacity;
+    char label[10][256], jukebox[256];
+    bool labelSet[10], jukeboxSet;
+    double lastTimer;
+} g_hudChat;
+
+static void MCLEHudChatReset(void) {
+    for (int i = 0; i < 10; ++i) {
+        g_hudChat.labelOpacity[i] = 1.0f;
+        g_hudChat.backgroundOpacity[i] = 1.0f;
+        g_hudChat.labelSet[i] = false;
+    }
+    g_hudChat.jukeboxOpacity = 1.0f;
+    g_hudChat.jukeboxSet = false;
+    g_hudChat.lastTimer = 0;
+}
+
+static void MCLEHudControlAlpha(NSString* control, float opacity, float& last) {
+    if (opacity != last) {
+        last = opacity;
+        MCLECallPath(@"", @"SetControlAlpha", @[control, @(opacity)]);
+    }
+}
+
+static void MCLEHudLabel(NSString* control, const char* text, char* last, bool& set) {
+    if (!set || strcmp(text, last) != 0) {
+        set = true;
+        snprintf(last, 256, "%s", text);
+        NSString* str = [NSString stringWithUTF8String:text];
+        MCLECallPath(control, @"SetLabel", @[str ? str : @""]);
+    }
+}
+
+// UIScene_HUD::handleTimerComplete, every 100ms (addTimer(0, 100)). Each
+// line shows while its message is fading, Win64's Gui::render chat aside.
+static void MCLEHudChatTimer(void) {
+    double now = CACurrentMediaTime();
+    if (now - g_hudChat.lastTimer < 0.1) return;
+    g_hudChat.lastTimer = now;
+    char text[256];
+    for (int i = 0; i < 10; ++i) {
+        NSString* label = [NSString stringWithFormat:@"Label%d", i + 1];
+        NSString* background = [NSString stringWithFormat:@"Label%dBackground", i + 1];
+        float opacity = mcle_hud_chat_line(i, text, sizeof(text));
+        if (opacity > 0) {
+            MCLEHudControlAlpha(background, opacity, g_hudChat.backgroundOpacity[i]);
+            MCLEHudControlAlpha(label, opacity, g_hudChat.labelOpacity[i]);
+            MCLEHudLabel(label, text, g_hudChat.label[i], g_hudChat.labelSet[i]);
+        } else {
+            MCLEHudControlAlpha(background, 0, g_hudChat.backgroundOpacity[i]);
+            MCLEHudControlAlpha(label, 0, g_hudChat.labelOpacity[i]);
+            MCLEHudLabel(label, "", g_hudChat.label[i], g_hudChat.labelSet[i]);
+        }
+    }
+    float jukebox = mcle_hud_jukebox(text, sizeof(text));
+    MCLEHudControlAlpha(@"Jukebox", jukebox, g_hudChat.jukeboxOpacity);
+    MCLEHudLabel(@"Jukebox", text, g_hudChat.jukebox, g_hudChat.jukeboxSet);
+}
+
 // IUIScene_HUD::updateFrameTick, called every frame in game
 static void MCLEHudPump(void) {
     MCLEHudState st;
     mcle_hud_get_state(&st);
     if (!st.valid) return;
+
+    MCLEHudChatTimer();
 
     // SetHudSize -> LoadHud
     MCLEHudNumber(@"LoadHud", mcle_settings_get(MCLE_SETTING_UISize), g_hud.guiScale);
