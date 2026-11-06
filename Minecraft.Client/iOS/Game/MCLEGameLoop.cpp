@@ -97,6 +97,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Recipes.h"
 #include "../../../upstream/Minecraft.World/Tile.h"
 #include "../../../upstream/Minecraft.World/GrassTile.h"
+#include "../../../upstream/Minecraft.World/PortalTile.h"
+#include "../../../upstream/Minecraft.World/Facing.h"
 #include "../../../upstream/Minecraft.World/Icon.h"
 #include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
@@ -205,6 +207,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLEWeather.h"
 #include "MCLETexturePacks.h"
 #include "MCLETutorial.h"
+#include "MCLEPortal.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 #include "../../../upstream/Minecraft.Client/HumanoidModel.h"
@@ -2554,6 +2557,8 @@ static void mcle_client_follow_player() {
         // Stop any streaming music (e.g. jukebox) when changing dimensions
         g_levelRenderer->playStreamingMusic(L"", 0, 0, 0);
         mcle_client_set_level(g_player->getLevel());
+        // respawnPlayer makes the client a new player
+        mcle_portal_client_reset();
         mc->gameRenderer->EnableUpdateThread();
     }
     g_levelChangesFinished.store(g_levelChangesStarted.load());
@@ -2602,6 +2607,7 @@ static void mcle_do_respawn() {
     mc->gameRenderer->EnableUpdateThread();
     mcle_player_new_local_player();
     mcle_sound_listen(fresh, nullptr);
+    mcle_portal_client_reset();
     MCLE_LOG("respawned at %.1f %.1f %.1f dim %d", fresh->x, fresh->y, fresh->z, fresh->dimension);
 }
 
@@ -3336,6 +3342,7 @@ extern "C" void mcle_game_tick(void) {
                 entityFrameLock.unlock();
             }
             mcle_player_fov_tick(g_player);
+            mcle_portal_client_tick(g_player);
             if (g_itemInHand) {
                 std::lock_guard<std::mutex> lock(g_itemInHandMutex);
                 g_itemInHand->tick();
@@ -3815,12 +3822,14 @@ static void mcle_gui_fill(int x0, int y0, int x1, int y1, int col) {
 }
 
 // The parts of Gui::render still drawn natively next to the SWF HUD: the
-// pumpkin blur, falling asleep and the red death fade. Gui works in gui
-// units over the whole screen, here that's 0..w and 0..h of the drawable.
+// pumpkin blur, the portal, falling asleep and the red death fade. Gui works
+// in gui units over the whole screen, here that's 0..w and 0..h of the
+// drawable.
 static void mcle_gui_overlays(float a) {
     std::shared_ptr<ItemInstance> headGear = g_player->inventory->getArmor(3);
     const bool pumpkin = mcle_third_person_view() == 0 && headGear != nullptr && headGear->id == Tile::pumpkin_Id;
-    if (!pumpkin && g_player->getSleepTimer() <= 0 && g_player->isAlive()) return;
+    const float pt = g_player->hasEffect(MobEffect::confusion) ? 0.0f : mcle_portal_client_time(a);
+    if (!pumpkin && pt <= 0 && g_player->getSleepTimer() <= 0 && g_player->isAlive()) return;
 
     int w = 0, h = 0;
     mcle_metal_current_size(&w, &h);
@@ -3853,6 +3862,40 @@ static void mcle_gui_overlays(float a) {
         t->vertexUV(static_cast<float>(w), static_cast<float>(h), static_cast<float>(-90), static_cast<float>(1), static_cast<float>(1));
         t->vertexUV(static_cast<float>(w), static_cast<float>(0), static_cast<float>(-90), static_cast<float>(1), static_cast<float>(0));
         t->vertexUV(static_cast<float>(0), static_cast<float>(0), static_cast<float>(-90), static_cast<float>(0), static_cast<float>(0));
+        t->end();
+        glDepthMask(true);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_ALPHA_TEST);
+        glColor4f(1, 1, 1, 1);
+    }
+
+    // Gui::renderTp, the portal's own texture over the screen
+    if (pt > 0) {
+        float br = pt;
+        if (br < 1) {
+            br = br * br;
+            br = br * br;
+            br = br * 0.8f + 0.2f;
+        }
+
+        glDisable(GL_ALPHA_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(false);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glColor4f(1, 1, 1, br);
+        Minecraft::GetInstance()->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);
+
+        Icon *slot = Tile::portalTile->getTexture(Facing::UP);
+        float u0 = slot->getU0();
+        float v0 = slot->getV0();
+        float u1 = slot->getU1();
+        float v1 = slot->getV1();
+        Tesselator *t = Tesselator::getInstance();
+        t->begin();
+        t->vertexUV(static_cast<float>(0), static_cast<float>(h), static_cast<float>(-90), (float)(u0), (float)(v1));
+        t->vertexUV(static_cast<float>(w), static_cast<float>(h), static_cast<float>(-90), (float)(u1), (float)(v1));
+        t->vertexUV(static_cast<float>(w), static_cast<float>(0), static_cast<float>(-90), (float)(u1), (float)(v0));
+        t->vertexUV(static_cast<float>(0), static_cast<float>(0), static_cast<float>(-90), (float)(u0), (float)(v0));
         t->end();
         glDepthMask(true);
         glEnable(GL_DEPTH_TEST);
@@ -4163,6 +4206,25 @@ extern "C" void mcle_world_drive_renderer(void) {
 
         mcle_bob_hurt(a);
         if (mcle_view_bob_on()) mcle_bob_view(a);
+
+        // The portal skews the view as its overlay fades in
+        {
+            float pt = mcle_portal_client_time(a);
+            if (pt > 0) {
+                int multiplier = 20;
+                if (g_player->hasEffect(MobEffect::confusion)) {
+                    multiplier = 7;
+                }
+
+                float skew = 5 / (pt * pt + 5) - pt * 0.04f;
+                skew *= skew;
+                // GameRenderer's _tick
+                const int _tick = mcle_renderer_tick();
+                glRotatef((_tick + a) * multiplier, 0, 1, 1);
+                glScalef(1 / skew, 1, 1);
+                glRotatef(-(_tick + a) * multiplier, 0, 1, 1);
+            }
+        }
 
         // GameRenderer::moveCameraToPlayer. Rotation interpolates between
         // ticks like everything else, the look turns once a tick in
@@ -4805,6 +4867,7 @@ static void mcle_exit_world(bool save) {
     delete g_clientLevelListener;
     g_clientLevelListener = nullptr;
     g_clientLevel = nullptr;
+    mcle_portal_client_reset();
     mcle_sound_unlisten();
     mcle_sound_stop_music();
     mcle_player_input_reset();

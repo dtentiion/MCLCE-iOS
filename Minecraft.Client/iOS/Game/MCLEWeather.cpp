@@ -50,6 +50,10 @@ ResourceLocation &snowLocation() {
 
 } // namespace
 
+int mcle_renderer_tick() {
+    return g_tick.load(std::memory_order_relaxed);
+}
+
 void mcle_weather_tick(const std::shared_ptr<LivingEntity> &player, Level *level) {
     static Random s_random;
     Random *random = &s_random;

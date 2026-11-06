@@ -11,3 +11,6 @@ void mcle_weather_tick(const std::shared_ptr<LivingEntity> &player, Level *level
 
 // GameRenderer::renderSnowAndRain, on the render thread after the chunks
 void mcle_weather_render(const std::shared_ptr<LivingEntity> &player, Level *level, float a);
+
+// GameRenderer::_tick, for the render thread
+int mcle_renderer_tick();

@@ -12,6 +12,11 @@ can take a while) with a stand-in connection.
 The End exit sends WIN_GAME with the network player's pad. There's no
 network player here, the local player is the primary pad.
 
+PortalTile::entityInside is also where the client's own player finds it is
+inside a portal (LocalPlayer::aiStep's portal time, the overlay and the
+trigger sound), and the client player is this same one, so it tells
+Game/MCLEPortal.cpp too.
+
 Idempotent.
 """
 import sys
@@ -68,5 +73,24 @@ patch(UP / "Minecraft.Client" / "ServerPlayer.cpp", [
      "#else\n"
      "\t\t\tconnection->send(std::make_shared<GameEventPacket>(GameEventPacket::WIN_GAME, thisPlayer->GetUserIndex()));\n"
      "\t\t\tapp.DebugPrintf(\"Sending packet to %d\\n\", thisPlayer->GetUserIndex());\n"
+     "#endif\n"),
+])
+
+patch(UP / "Minecraft.World" / "PortalTile.cpp", [
+    ("void PortalTile::entityInside(Level *level, int x, int y, int z, shared_ptr<Entity> entity)\n"
+     "{\n"
+     "\tif (entity->GetType() == eTYPE_EXPERIENCEORB ) return;\t\t// 4J added\n"
+     "\n",
+     "#ifdef __APPLE_IOS__\n"
+     "void mcle_client_entity_inside_portal(shared_ptr<Entity> entity);\n"
+     "#endif\n"
+     "\n"
+     "void PortalTile::entityInside(Level *level, int x, int y, int z, shared_ptr<Entity> entity)\n"
+     "{\n"
+     "\tif (entity->GetType() == eTYPE_EXPERIENCEORB ) return;\t\t// 4J added\n"
+     "\n"
+     "#ifdef __APPLE_IOS__\n"
+     "\t// The client's player moves through the same tiles\n"
+     "\tmcle_client_entity_inside_portal(entity);\n"
      "#endif\n"),
 ])
