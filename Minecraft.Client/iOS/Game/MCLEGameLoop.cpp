@@ -1970,10 +1970,24 @@ void mcle_client_crit(shared_ptr<Entity> entity, bool magic) {
     mc->particleEngine->add(critParticle);
 }
 
-// ClientConnection::handleTakeItemEntity: the item flies into whoever took it
+// ClientConnection::handleTakeItemEntity: the client's own pickup sound,
+// besides the one the server plays, and the item flies into whoever took it
 void mcle_client_take(shared_ptr<Entity> item, shared_ptr<Entity> taker) {
     Minecraft *mc = Minecraft::GetInstance();
     if (!mc || !mc->particleEngine || !item || !taker) return;
+    if (!g_player || item->level != g_player->level) return;
+    // level->playSound(from, ...) is MultiPlayerLevel's, a local sound at the entity
+    static Random s_takeRandom;
+    const bool isLocalPlayer = taker->entityId == g_player->entityId;
+    if (isLocalPlayer && item->GetType() == eTYPE_EXPERIENCEORB) {
+        float fPitch = ((s_takeRandom.nextFloat() - s_takeRandom.nextFloat()) * 0.7f + 1.0f) * 2.0f;
+        item->level->playLocalSound(item->x, item->y - item->heightOffset, item->z, eSoundType_RANDOM_ORB, 0.2f,
+                                    fPitch, false);
+    } else {
+        item->level->playLocalSound(item->x, item->y - item->heightOffset, item->z, eSoundType_RANDOM_POP, 0.2f,
+                                    ((s_takeRandom.nextFloat() - s_takeRandom.nextFloat()) * 0.7f + 1.0f) * 2.0f,
+                                    false);
+    }
     std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
     mc->particleEngine->add(std::make_shared<TakeAnimationParticle>(item->level, item, taker, -0.5f));
 }
