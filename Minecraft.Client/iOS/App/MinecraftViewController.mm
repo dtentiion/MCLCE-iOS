@@ -31,6 +31,7 @@ extern "C" int  mcle_game_start(const char *levelFolder);   // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_status(int *percent);        // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_is_new(void);                // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_finding_seed(void);          // MCLEGameLoop.cpp
+extern "C" void mcle_minecraft_main(void);                  // MCLEGameLoop.cpp
 
 // app.GetString(IDS_*)
 static NSString* MCLEStr(int ids) {
@@ -1442,6 +1443,10 @@ static BOOL MCLEPlayStationPadConnected(void) {
                   e, isDir ? @"/" : @"", sz);
         }
     }
+
+    // Minecraft::main's part before the menus: the statics, and the default
+    // game rules with the tutorial's level generator
+    mcle_minecraft_main();
 
     // Lay down the platform-skin alias before any SWF parses
     // imports. Without this, ToolTips1080.swf (and any other

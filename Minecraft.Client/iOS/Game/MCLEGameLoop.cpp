@@ -36,6 +36,7 @@
 #include <chrono>
 #include <exception>
 #include <memory>
+#include <mutex>
 #include <typeinfo>
 #include <string>
 #include <vector>
@@ -765,6 +766,76 @@ bool mcle_open_save_bundle(const std::wstring &saveFolder) {
     return true;
 }
 
+// Minecraft::main runs these once per process, not per world, before the
+// menus. Whichever thread gets here first runs them, the other waits.
+void mcle_world_static_ctors() {
+    static std::once_flag s_once;
+    std::call_once(s_once, [] {
+        // Parity-correct upstream static init order, mirroring
+        // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
+        // Each call wrapped in try/catch so a single C++ throw doesn't kill
+        // the whole sequence (SIGSEGV will still terminate; that's by design
+        // - we want to know which static init has a bad dep on iOS).
+        #define MCLE_STATIC(name, body) \
+            try { body; MCLE_LOG("mcle_game_init: " name " done"); } \
+            catch (...) { MCLE_LOG("mcle_game_init: " name " threw"); }
+
+        MCLE_STATIC("Packet::staticCtor",          Packet::staticCtor());
+        MCLE_STATIC("GameType::staticCtor",        GameType::staticCtor());
+        MCLE_STATIC("MaterialColor::staticCtor",   MaterialColor::staticCtor());
+        MCLE_STATIC("Material::staticCtor",        Material::staticCtor());
+        MCLE_STATIC("Tile::staticCtor",            Tile::staticCtor());
+        MCLE_STATIC("HatchetItem::staticCtor",     HatchetItem::staticCtor());
+        MCLE_STATIC("PickaxeItem::staticCtor",     PickaxeItem::staticCtor());
+        MCLE_STATIC("ShovelItem::staticCtor",      ShovelItem::staticCtor());
+        MCLE_STATIC("BlockReplacements::staticCtor", BlockReplacements::staticCtor());
+        MCLE_STATIC("Biome::staticCtor",           Biome::staticCtor());
+        MCLE_STATIC("MobEffect::staticCtor",       MobEffect::staticCtor());
+        MCLE_STATIC("Item::staticCtor",            Item::staticCtor());
+        MCLE_STATIC("FurnaceRecipes::staticCtor",  FurnaceRecipes::staticCtor());
+        MCLE_STATIC("Recipes::staticCtor",         Recipes::staticCtor());
+        MCLE_STATIC("GenericStats::setInstance",   GenericStats::setInstance(new CommonStats()));
+        MCLE_STATIC("Stats::staticCtor",           Stats::staticCtor());
+        MCLE_STATIC("TileEntity::staticCtor",      TileEntity::staticCtor());
+        MCLE_STATIC("EntityIO::staticCtor",        EntityIO::staticCtor());
+        MCLE_STATIC("MobCategory::staticCtor",     MobCategory::staticCtor());
+        MCLE_STATIC("Item::staticInit",            Item::staticInit());
+        MCLE_STATIC("LevelChunk::staticCtor",      LevelChunk::staticCtor());
+        MCLE_STATIC("LevelType::staticCtor",       LevelType::staticCtor());
+        MCLE_STATIC("StructureFeatureIO::staticCtor",       StructureFeatureIO::staticCtor());
+        MCLE_STATIC("MineShaftPieces::staticCtor",          MineShaftPieces::staticCtor());
+        MCLE_STATIC("StrongholdFeature::staticCtor",        StrongholdFeature::staticCtor());
+        MCLE_STATIC("VillagePieces::Smithy::staticCtor",    VillagePieces::Smithy::staticCtor());
+        MCLE_STATIC("VillageFeature::staticCtor",           VillageFeature::staticCtor());
+        MCLE_STATIC("RandomScatteredLargeFeature::staticCtor", RandomScatteredLargeFeature::staticCtor());
+        MCLE_STATIC("EnderMan::staticCtor",        EnderMan::staticCtor());
+        MCLE_STATIC("PotionBrewing::staticCtor",   PotionBrewing::staticCtor());
+        MCLE_STATIC("Enchantment::staticCtor",     Enchantment::staticCtor());
+        MCLE_STATIC("SharedConstants::staticCtor", SharedConstants::staticCtor());
+        MCLE_STATIC("ServerLevel::staticCtor",     ServerLevel::staticCtor());
+        MCLE_STATIC("SparseLightStorage::staticCtor", SparseLightStorage::staticCtor());
+        // Rest of MinecraftWorld_RunStaticCtors. McRegionChunkStorage starts the
+        // save threads that drain s_chunkDataQueue; without them every saved
+        // chunk's buffers pile up forever.
+        MCLE_STATIC("CompressedTileStorage::staticCtor", CompressedTileStorage::staticCtor());
+        MCLE_STATIC("SparseDataStorage::staticCtor", SparseDataStorage::staticCtor());
+        MCLE_STATIC("McRegionChunkStorage::staticCtor", McRegionChunkStorage::staticCtor());
+        MCLE_STATIC("Villager::staticCtor",        Villager::staticCtor());
+        MCLE_STATIC("BeaconTileEntity::staticCtor", BeaconTileEntity::staticCtor());
+
+        // Minecraft::main runs these right after the world ones. ColourTable's
+        // fills the name map colours.col is read through.
+        MCLE_STATIC("EntityRenderDispatcher::staticCtor", EntityRenderDispatcher::staticCtor());
+        MCLE_STATIC("TileEntityRenderDispatcher::staticCtor", TileEntityRenderDispatcher::staticCtor());
+        MCLE_STATIC("User::staticCtor",            User::staticCtor());
+        MCLE_STATIC("ColourTable::staticCtor",     ColourTable::staticCtor());
+        // Common for all platforms, the creative menu's item table
+        MCLE_STATIC("IUIScene_CreativeMenu::staticCtor", mcle_creative_menu_static_ctor());
+
+        #undef MCLE_STATIC
+    });
+}
+
 void initImpl() {
     MCLE_LOG("mcle_game_init: starting");
 
@@ -825,74 +896,7 @@ void initImpl() {
     Chunk::CreateNewThreadStorage();
     MCLE_LOG("mcle_game_init: Chunk::CreateNewThreadStorage done");
 
-    // Parity-correct upstream static init order, mirroring
-    // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
-    // Each call wrapped in try/catch so a single C++ throw doesn't kill
-    // the whole sequence (SIGSEGV will still terminate; that's by design
-    // - we want to know which static init has a bad dep on iOS).
-    #define MCLE_STATIC(name, body) \
-        try { body; MCLE_LOG("mcle_game_init: " name " done"); } \
-        catch (...) { MCLE_LOG("mcle_game_init: " name " threw"); }
-
-    // Minecraft::main runs these once per process, not per world
-    static bool s_staticCtorsDone = false;
-    if (!s_staticCtorsDone) {
-    s_staticCtorsDone = true;
-
-    MCLE_STATIC("Packet::staticCtor",          Packet::staticCtor());
-    MCLE_STATIC("GameType::staticCtor",        GameType::staticCtor());
-    MCLE_STATIC("MaterialColor::staticCtor",   MaterialColor::staticCtor());
-    MCLE_STATIC("Material::staticCtor",        Material::staticCtor());
-    MCLE_STATIC("Tile::staticCtor",            Tile::staticCtor());
-    MCLE_STATIC("HatchetItem::staticCtor",     HatchetItem::staticCtor());
-    MCLE_STATIC("PickaxeItem::staticCtor",     PickaxeItem::staticCtor());
-    MCLE_STATIC("ShovelItem::staticCtor",      ShovelItem::staticCtor());
-    MCLE_STATIC("BlockReplacements::staticCtor", BlockReplacements::staticCtor());
-    MCLE_STATIC("Biome::staticCtor",           Biome::staticCtor());
-    MCLE_STATIC("MobEffect::staticCtor",       MobEffect::staticCtor());
-    MCLE_STATIC("Item::staticCtor",            Item::staticCtor());
-    MCLE_STATIC("FurnaceRecipes::staticCtor",  FurnaceRecipes::staticCtor());
-    MCLE_STATIC("Recipes::staticCtor",         Recipes::staticCtor());
-    MCLE_STATIC("GenericStats::setInstance",   GenericStats::setInstance(new CommonStats()));
-    MCLE_STATIC("Stats::staticCtor",           Stats::staticCtor());
-    MCLE_STATIC("TileEntity::staticCtor",      TileEntity::staticCtor());
-    MCLE_STATIC("EntityIO::staticCtor",        EntityIO::staticCtor());
-    MCLE_STATIC("MobCategory::staticCtor",     MobCategory::staticCtor());
-    MCLE_STATIC("Item::staticInit",            Item::staticInit());
-    MCLE_STATIC("LevelChunk::staticCtor",      LevelChunk::staticCtor());
-    MCLE_STATIC("LevelType::staticCtor",       LevelType::staticCtor());
-    MCLE_STATIC("StructureFeatureIO::staticCtor",       StructureFeatureIO::staticCtor());
-    MCLE_STATIC("MineShaftPieces::staticCtor",          MineShaftPieces::staticCtor());
-    MCLE_STATIC("StrongholdFeature::staticCtor",        StrongholdFeature::staticCtor());
-    MCLE_STATIC("VillagePieces::Smithy::staticCtor",    VillagePieces::Smithy::staticCtor());
-    MCLE_STATIC("VillageFeature::staticCtor",           VillageFeature::staticCtor());
-    MCLE_STATIC("RandomScatteredLargeFeature::staticCtor", RandomScatteredLargeFeature::staticCtor());
-    MCLE_STATIC("EnderMan::staticCtor",        EnderMan::staticCtor());
-    MCLE_STATIC("PotionBrewing::staticCtor",   PotionBrewing::staticCtor());
-    MCLE_STATIC("Enchantment::staticCtor",     Enchantment::staticCtor());
-    MCLE_STATIC("SharedConstants::staticCtor", SharedConstants::staticCtor());
-    MCLE_STATIC("ServerLevel::staticCtor",     ServerLevel::staticCtor());
-    MCLE_STATIC("SparseLightStorage::staticCtor", SparseLightStorage::staticCtor());
-    // Rest of MinecraftWorld_RunStaticCtors. McRegionChunkStorage starts the
-    // save threads that drain s_chunkDataQueue; without them every saved
-    // chunk's buffers pile up forever.
-    MCLE_STATIC("CompressedTileStorage::staticCtor", CompressedTileStorage::staticCtor());
-    MCLE_STATIC("SparseDataStorage::staticCtor", SparseDataStorage::staticCtor());
-    MCLE_STATIC("McRegionChunkStorage::staticCtor", McRegionChunkStorage::staticCtor());
-    MCLE_STATIC("Villager::staticCtor",        Villager::staticCtor());
-    MCLE_STATIC("BeaconTileEntity::staticCtor", BeaconTileEntity::staticCtor());
-
-    // Minecraft::main runs these right after the world ones. ColourTable's
-    // fills the name map colours.col is read through.
-    MCLE_STATIC("EntityRenderDispatcher::staticCtor", EntityRenderDispatcher::staticCtor());
-    MCLE_STATIC("TileEntityRenderDispatcher::staticCtor", TileEntityRenderDispatcher::staticCtor());
-    MCLE_STATIC("User::staticCtor",            User::staticCtor());
-    MCLE_STATIC("ColourTable::staticCtor",     ColourTable::staticCtor());
-    // Common for all platforms, the creative menu's item table
-    MCLE_STATIC("IUIScene_CreativeMenu::staticCtor", mcle_creative_menu_static_ctor());
-    }
-
-    #undef MCLE_STATIC
+    mcle_world_static_ctors();
 
     const char *saveRootC = StorageManager.GetSaveRootPath();
     if (!saveRootC || !*saveRootC) {
@@ -2394,6 +2398,26 @@ extern "C" int mcle_game_start(const char *levelFolder) {
     g_pendingLevelId = widen(levelFolder ? levelFolder : "");
     g_newWorld = NewWorldParams();
     return mcle_start_game_thread();
+}
+
+// Minecraft::main up to the menus, on the main thread like Windows64's main:
+// its thread storage, the statics, then the default game rules, which read
+// Tutorial.pck into the level generators.
+extern "C" void mcle_minecraft_main(void) {
+    static bool s_done = false;
+    if (s_done) return;
+    s_done = true;
+    Tesselator::CreateNewThreadStorage(16 * 1024);
+    AABB::CreateNewThreadStorage();
+    Vec3::CreateNewThreadStorage();
+    IntCache::CreateNewThreadStorage();
+    Compression::CreateNewThreadStorage();
+    OldChunkStorage::CreateNewThreadStorage();
+    Tile::CreateNewThreadStorage();
+
+    mcle_world_static_ctors();
+    app.loadDefaultGameRules();
+    MCLE_LOG("minecraft main: %d level generators", (int)app.getLevelGenerators()->size());
 }
 
 // FullscreenProgress says it's generating the spawn area for a new level
