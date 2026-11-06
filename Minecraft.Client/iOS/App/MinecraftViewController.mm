@@ -371,6 +371,13 @@ static void MCLEControlsInit(void) {
     MCLEControlsPositionAllText();
 }
 
+// CMinecraftApp::SetAutosaveTimerTime: the Autosave setting is in 15
+// minute steps
+static CFTimeInterval g_autosave_due = 0;
+static void MCLESetAutosaveTimerTime(void) {
+    g_autosave_due = CACurrentMediaTime() + mcle_settings_get(MCLE_SETTING_Autosave) * 60.0 * 15.0;
+}
+
 // UIScene_Credits
 extern "C" int mcle_credits_count(void);
 extern "C" int mcle_credits_get(int index, char* out, int cap, int* type);
@@ -439,6 +446,10 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // Apply live for the settings the audio engine cares about
         // so the Music / Sound sliders actually fade the playing
         // track rather than just writing to disk.
+        // UIScene_SettingsOptionsMenu restarts the autosave timer
+        if (setting == MCLE_SETTING_Autosave) {
+            dispatch_async(dispatch_get_main_queue(), ^{ MCLESetAutosaveTimerTime(); });
+        }
         if (setting == MCLE_SETTING_MusicVolume) {
             mcle_audio_set_music_volume(stored);
         } else if (setting == MCLE_SETTING_SoundFXVolume) {
@@ -3493,6 +3504,18 @@ static NSString* MCLETipHTML(void) {
             g_loading_world = false;
             NSLog(@"[MinecraftVC] world ready, leaving FullscreenProgress");
             [self enterWorldUI];
+            // UIScene_LoadMenu starts the autosave timer with the game
+            MCLESetAutosaveTimerTime();
+        }
+        // Minecraft::run's autosave: not with the pause menu up, and the
+        // timer starts again once the save has gone
+        if (!g_world_paused && !g_world_dead) {
+            unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
+            if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
+                NSLog(@"[MinecraftVC] autosave");
+                mcle_save_now();
+                MCLESetAutosaveTimerTime();
+            }
         }
         // GameRenderer::CachePlayerGammas / ComputeGammaFromSlider
         {
