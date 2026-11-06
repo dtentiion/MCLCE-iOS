@@ -1003,6 +1003,15 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: Settings ctor threw: %{public}s", e.what());
     }
 
+    // The rest of initServer's settings. server.properties only changes them
+    // on a dedicated server. Unset, isAnimals() and isNpcsEnabled() were
+    // false, and ServerLevel::tick(entity) removes every animal, squid and
+    // villager when they're off.
+    g_server->setAnimals(true);
+    g_server->setNpcsEnabled(true);
+    g_server->setPvpAllowed(app.GetGameHostOption(eGameHostOption_PvP) > 0);
+    g_server->setFlightAllowed(true);
+
     // Step 5.6: attach a PlayerList. Parity with MinecraftServer.cpp:690
     // (`setPlayers(new PlayerList(this))`). Without this, ServerLevel ctor
     // crashes inside `server->getPlayers()->getViewDistance()`.
@@ -1099,7 +1108,7 @@ void initImpl() {
         }
         for (int i = 0; i < 3; ++i) {
             g_levels[i]->difficulty = app.GetGameHostOption(eGameHostOption_Difficulty);
-            g_levels[i]->setSpawnSettings(true, true);
+            g_levels[i]->setSpawnSettings(true, g_server->isAnimals());
             g_levels[i]->getLevelData()->setGameType(gameType);
             if (mapOptions != nullptr) {
                 g_levels[i]->getLevelData()->setHasBeenInCreative(mapOptions->getLevelHasBeenInCreative());
@@ -2755,12 +2764,12 @@ extern "C" void mcle_game_tick(void) {
         }
     }
 
-    // MinecraftServer::tick: difficulty and spawning follow the host options.
-    // spawn-animals defaults to true.
+    // MinecraftServer::tick: difficulty and spawning follow the host options,
+    // animals the server's spawn-animals.
     for (int i = 0; i < 3; ++i) {
         if (!g_levels[i]) continue;
         g_levels[i]->difficulty = app.GetGameHostOption(eGameHostOption_Difficulty);
-        g_levels[i]->setSpawnSettings(g_levels[i]->difficulty > 0 && !Minecraft::GetInstance()->isTutorial(), true);
+        g_levels[i]->setSpawnSettings(g_levels[i]->difficulty > 0 && !Minecraft::GetInstance()->isTutorial(), g_server->isAnimals());
     }
 
     // Tick all three dimensions in order. Parity with how the upstream
