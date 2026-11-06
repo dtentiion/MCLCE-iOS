@@ -1289,6 +1289,9 @@ void initImpl() {
             g_player->setPlayerIndex(0);
             g_player->setCustomSkin(app.GetPlayerSkinId(0));
             g_player->setCustomCape(app.GetPlayerCapeId(0));
+            // This player moves like the client's LocalPlayer, which keeps
+            // LivingEntity's step, ServerPlayer's ctor zeroes it
+            g_player->footSize = 0.5f;
         } catch (const std::exception &e) {
             MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
         } catch (...) {
@@ -2405,6 +2408,8 @@ static void mcle_do_respawn() {
     g_player->connection = nullptr;
     if (!fresh) return;
     fresh->connection = nullptr;
+    // LocalPlayer's step, like the first player's
+    fresh->footSize = 0.5f;
     Minecraft *mc = Minecraft::GetInstance();
     // Minecraft::respawnPlayer: don't do updating whilst the player &
     // localplayer array are adjusted
