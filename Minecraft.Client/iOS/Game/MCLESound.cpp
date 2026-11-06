@@ -88,19 +88,21 @@ std::vector<std::pair<Level *, ClientSoundListener *>> g_listeners;
 // reaching ClientConnection::handleSoundEvent, the level's sounds come
 // straight here. Sounds that skip their source player were already played
 // by that player's own client, which here is this one, so they play too.
+// PlayerList::broadcast only sends them to players in the level's dimension.
 class ClientSoundListener : public LevelListener {
 public:
+    explicit ClientSoundListener(Level *level) : level(level) {}
     void tileChanged(int, int, int) override {}
     void tileLightChanged(int, int, int) override {}
     void setTilesDirty(int, int, int, int, int, int, Level *) override {}
     void allChanged() override {}
     // ClientConnection::handleSoundEvent
     void playSound(int iSound, double x, double y, double z, float volume, float pitch, float) override {
-        mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
+        if (inListenerLevel()) mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
     }
     void playSoundExceptPlayer(shared_ptr<Player>, int iSound, double x, double y, double z, float volume,
                                float pitch, float) override {
-        mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
+        if (inListenerLevel()) mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
     }
     void addParticle(ePARTICLE_TYPE, double, double, double, double, double, double) override {}
     void entityAdded(shared_ptr<Entity>) override {}
@@ -111,6 +113,14 @@ public:
     void globalLevelEvent(int, int, int, int, int) override {}
     void levelEvent(shared_ptr<Player>, int, int, int, int, int) override {}
     void destroyTileProgress(int, int, int, int, int) override {}
+
+private:
+    bool inListenerLevel() {
+        std::lock_guard<std::recursive_mutex> lock(g_mutex);
+        return g_listenerPlayer && g_listenerPlayer->level == level;
+    }
+
+    Level *level;
 };
 
 } // namespace
@@ -176,7 +186,7 @@ void mcle_sound_listen(const std::shared_ptr<ServerPlayer> &player, Level *level
     std::lock_guard<std::recursive_mutex> lock(g_mutex);
     g_listenerPlayer = player;
     if (level) {
-        ClientSoundListener *listener = new ClientSoundListener();
+        ClientSoundListener *listener = new ClientSoundListener(level);
         level->addListener(listener);
         g_listeners.emplace_back(level, listener);
     }
