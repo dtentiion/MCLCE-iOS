@@ -327,7 +327,6 @@ extern "C" void mcle_audio_stop_menu_music(void) {
         }
         g_current_path.clear();
     }
-    [[AVAudioSession sharedInstance] setActive:NO
-                                   withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
-                                         error:nil];
+    // The session stays active, the game's SoundEngine plays through it
+    // once the world is up
 }
