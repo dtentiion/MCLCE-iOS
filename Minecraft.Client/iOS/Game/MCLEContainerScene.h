@@ -90,6 +90,18 @@ struct MCLEUILabel {
     void tick();
 };
 
+// UIControl_Progress: Init with its label, setProgress when the fraction
+// changes
+struct MCLEUIProgress {
+    std::string path;
+    int min = 0, max = 100;
+    float lastPercent = 0.0f;
+
+    explicit MCLEUIProgress(const char *p) : path(p) {}
+    void init(const std::wstring &label, int id, int min, int max, int current);
+    void setProgress(int current);
+};
+
 // UIControl_SlotList's calls on its value path
 struct MCLEUISlotList {
     std::string path;
