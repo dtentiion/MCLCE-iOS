@@ -65,6 +65,15 @@ std::string to_utf8(const wchar_t *w) {
 
 } // namespace
 
+// CMinecraftApp::GetString. The table's strings live as long as it does.
+extern "C" const wchar_t *mcle_wstring(int id) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    load_locked();
+    if (!g_table) return L"";
+    const wchar_t *s = g_table->getString(id);
+    return s ? s : L"";
+}
+
 extern "C" const char *mcle_string(int id) {
     std::lock_guard<std::mutex> lk(g_mu);
     auto it = g_cache.find(id);

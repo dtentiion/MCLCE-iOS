@@ -29,6 +29,7 @@ class FileNameMap;
 
 extern "C" int mcle_log_msg(const char *msg);
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
+extern "C" const wchar_t *mcle_wstring(int id);        // Game/MCLEStrings.cpp
 
 struct McleAppStub {
     // Heavyweight returning ptr to opaque object; nullptr is fine
@@ -66,7 +67,8 @@ struct McleAppStub {
 
     // Generic templates - accept any args, return either a default-
     // constructible value or void. Compile-only, not link-only.
-    template<class... A> const wchar_t* GetString(A...)         { return L""; }
+    // CMinecraftApp::GetString, the languages.loc string table
+    template<class T> const wchar_t* GetString(T id)            { return mcle_wstring(static_cast<int>(id)); }
     // Real CMinecraftApp::DebugPrintf is a printf wrapper. Route it
     // through mcle_log_msg (NSLog) so the formatted string isn't
     // redacted as <private> by os_log on sideloaded apps without
