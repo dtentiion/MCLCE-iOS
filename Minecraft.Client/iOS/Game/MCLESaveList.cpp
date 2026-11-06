@@ -17,6 +17,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <zlib.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -278,6 +279,60 @@ std::string g_saveFolder;
 std::string g_saveTitle;
 unsigned char *g_saveBuffer = nullptr;
 unsigned int g_saveBufferSize = 0;
+// SetSaveImages: the thumbnail and the text that goes in its png
+std::vector<unsigned char> g_saveThumb;
+std::vector<unsigned char> g_saveText;
+
+void put_be32(std::vector<unsigned char> &out, unsigned int v) {
+    out.push_back((unsigned char)(v >> 24));
+    out.push_back((unsigned char)(v >> 16));
+    out.push_back((unsigned char)(v >> 8));
+    out.push_back((unsigned char)v);
+}
+
+// The save's thumbnails/thumbData.png, with SetSaveImages' text in a tEXt
+// chunk after the header, which is where LoadMenu reads the seed, the host
+// options and the texture pack back from. No screenshot is taken on iOS
+// yet, so the image already there is kept, and a new save gets the texture
+// pack's icon.
+bool write_thumbnail(const std::string &root, const std::string &dir) {
+    static const unsigned char kSig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    const std::string path = dir + "/thumbnails/thumbData.png";
+    std::vector<unsigned char> png = g_saveThumb;
+    if (png.empty()) read_file(path, png);
+    if (png.empty()) read_file(root + "/Graphics/TexturePackIcon.png", png);
+    if (png.size() < 8 || memcmp(png.data(), kSig, 8) != 0) return false;
+
+    std::vector<unsigned char> out(png.begin(), png.begin() + 8);
+    size_t pos = 8;
+    while (pos + 12 <= png.size()) {
+        unsigned int len = be32(&png[pos]);
+        unsigned int type = be32(&png[pos + 4]);
+        if (pos + 12 + len > png.size()) break;
+        // The old text goes, the new text follows the header
+        if (type != 0x74455874 || g_saveText.empty()) {
+            out.insert(out.end(), png.begin() + pos, png.begin() + pos + 12 + len);
+        }
+        if (type == 0x49484452 && !g_saveText.empty()) { // IHDR
+            std::vector<unsigned char> chunk = {'t', 'E', 'X', 't'};
+            chunk.insert(chunk.end(), g_saveText.begin(), g_saveText.end());
+            put_be32(out, (unsigned int)g_saveText.size());
+            out.insert(out.end(), chunk.begin(), chunk.end());
+            put_be32(out, (unsigned int)crc32(0, chunk.data(), (uInt)chunk.size()));
+        }
+        pos += 12 + len;
+    }
+
+    mkdir((dir + "/thumbnails").c_str(), 0755);
+    const std::string temp = path + ".tmp";
+    FILE *f = fopen(temp.c_str(), "wb");
+    if (!f) return false;
+    bool ok = fwrite(out.data(), 1, out.size(), f) == out.size();
+    ok = (fclose(f) == 0) && ok;
+    if (ok) ok = rename(temp.c_str(), path.c_str()) == 0;
+    if (!ok) remove(temp.c_str());
+    return ok;
+}
 
 // A new save's folder is named by the time it's made, like the GameHDD ones
 std::string new_save_folder(const std::string &savesDir) {
@@ -356,10 +411,18 @@ extern "C" int mcle_storage_save_save_data(void) {
     ok = (fclose(f) == 0) && ok;
     if (ok) ok = rename(temp.c_str(), target.c_str()) == 0;
     if (!ok) remove(temp.c_str());
+    if (ok) write_thumbnail(root, dir);
     free(g_saveBuffer);
     g_saveBuffer = nullptr;
     g_saveBufferSize = 0;
     return ok ? 1 : 0;
+}
+
+extern "C" void mcle_storage_set_save_images(const unsigned char *thumb, unsigned int thumbBytes,
+                                             const unsigned char *text, unsigned int textBytes) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    g_saveThumb.assign(thumb, thumb ? thumb + thumbBytes : thumb);
+    g_saveText.assign(text, text ? text + textBytes : text);
 }
 
 extern "C" const char *mcle_saves_folder(int i) { auto e = entry(i); return e ? e->folder.c_str() : ""; }

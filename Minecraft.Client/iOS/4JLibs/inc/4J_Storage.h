@@ -45,6 +45,8 @@ extern "C" void *mcle_storage_allocate_save_data(unsigned int size);
 extern "C" int  mcle_storage_save_save_data(void);
 extern "C" void mcle_storage_reset_save_data(void);
 extern "C" void mcle_storage_set_save_title(const wchar_t *title);
+extern "C" void mcle_storage_set_save_images(const unsigned char *thumb, unsigned int thumbBytes,
+                                             const unsigned char *text, unsigned int textBytes);
 
 // Real SAVE_DETAILS lives in the platform 4J_Storage lib (Xbox/Sony). On
 // iOS we only need a forward decl so upstream UI headers that store
@@ -109,7 +111,11 @@ public:
     // buffer the storage owns, then SaveSaveData writes it to the world's
     // .ms file and calls back
     void *AllocateSaveData(unsigned int size) { return mcle_storage_allocate_save_data(size); }
-    template<class... A> void SetSaveImages(A...) {}
+    // Sets the thumbnail & image for the save, optionally setting the metadata in the png
+    void SetSaveImages(PBYTE pbThumbnail, DWORD dwThumbnailBytes, PBYTE pbImage, DWORD dwImageBytes, PBYTE pbTextData,
+                       DWORD dwTextDataBytes) {
+        mcle_storage_set_save_images(pbThumbnail, dwThumbnailBytes, pbTextData, dwTextDataBytes);
+    }
     // Call before a new save to clear out stored save file name
     void ResetSaveData() { mcle_storage_reset_save_data(); }
     // A new save's file is named after its title

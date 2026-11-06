@@ -480,7 +480,38 @@ struct McleAppStub {
     template<class... A> bool           IsTutorialActive(A...)        { return false; }
     template<class... A> bool           IsTrialMode(A...)             { return false; }
     template<class... A> bool           IsDemoMode(A...)              { return false; }
-    template<class... A> int            CreateImageTextData(A...)     { return 0; }
+    // CMinecraftApp::CreateImageTextData: the save's seed, host options and
+    // texture pack as text for its thumbnail png, which LoadMenu reads back
+    unsigned int CreateImageTextData(PBYTE bTextMetadata, int64_t seed, bool hasSeed, unsigned int uiHostOptions,
+                                     unsigned int uiTexturePackId) {
+        int iTextMetadataBytes = 0;
+        if (hasSeed) {
+            strcpy((char *)bTextMetadata, "4J_SEED");
+            snprintf((char *)&bTextMetadata[8], 42, "%lld", (long long)seed);
+
+            // get the length
+            iTextMetadataBytes += 8;
+            while (bTextMetadata[iTextMetadataBytes] != 0) iTextMetadataBytes++;
+            ++iTextMetadataBytes; // Add a null terminator at the end of the seed value
+        }
+
+        // Save the host options that this world was last played with
+        strcpy((char *)&bTextMetadata[iTextMetadataBytes], "4J_HOSTOPTIONS");
+        snprintf((char *)&bTextMetadata[iTextMetadataBytes + 15], 9, "%x", uiHostOptions);
+
+        iTextMetadataBytes += 15;
+        while (bTextMetadata[iTextMetadataBytes] != 0) iTextMetadataBytes++;
+        ++iTextMetadataBytes; // Add a null terminator at the end of the host options value
+
+        // Save the texture pack id
+        strcpy((char *)&bTextMetadata[iTextMetadataBytes], "4J_TEXTUREPACK");
+        snprintf((char *)&bTextMetadata[iTextMetadataBytes + 15], 9, "%x", uiTexturePackId);
+
+        iTextMetadataBytes += 15;
+        while (bTextMetadata[iTextMetadataBytes] != 0) iTextMetadataBytes++;
+
+        return iTextMetadataBytes;
+    }
     // English only for now: the tail of CMinecraftApp::getLocale, which
     // always ends with en-US then en-EN.
     void getLocale(std::vector<std::wstring> &out) { out.push_back(L"en-US"); out.push_back(L"en-EN"); }
