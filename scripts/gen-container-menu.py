@@ -9,10 +9,13 @@ Game/MCLEContainerMenu.cpp against small stand-ins for `ui` and the
 Windows64 keyboard and mouse.
 
 What changes:
-- The local player here is the server player, so the menu goes on it, the
-  carried item comes off it, and a slot click goes to its container the way
+- The local player here is the server player. The carried item comes off
+  it, and a slot click goes to its container the way
   PlayerConnection::handleContainerClick does (handleInventoryMouseClick
   would send a packet to a server that is this same player).
+- Initialize doesn't put the menu on the player. The client sets its own
+  LocalPlayer's, but the server player already has the container the
+  server opened, and the creative menu's item picker is the client's alone.
 - The tutorial checks are left out. They only run when
   Minecraft::localgameModes holds the tutorial's game mode, which is never
   set here, and the iOS Tutorial is a stand-in without those calls.
@@ -30,7 +33,7 @@ START = "IUIScene_AbstractContainerMenu::IUIScene_AbstractContainerMenu()\n"
 
 REPLACEMENTS = [
     ("\tMinecraft::GetInstance()->localplayers[iPad]->containerMenu = menu;\n",
-     "\tmcle_container_player()->containerMenu = menu;\n", 1),
+     "\t// the server player keeps the container the server opened\n", 1),
     ("\tshared_ptr<LocalPlayer> player = Minecraft::GetInstance()->localplayers[getPad()];\n",
      "\tshared_ptr<Player> player = mcle_container_player();\n", 1),
     ("\tpMinecraft->localgameModes[getPad()]->handleInventoryMouseClick(m_menu->containerId, slotId, buttonNum, quickKey, pMinecraft->localplayers[getPad()] );\n",
