@@ -12,6 +12,7 @@
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.World/HtmlString.h"
+#include "../../../upstream/Minecraft.World/SoundTypes.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_AbstractContainerMenu.h"
 
