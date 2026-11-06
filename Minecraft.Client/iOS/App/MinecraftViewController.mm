@@ -74,6 +74,13 @@ static bool g_loading_world = false;
 // IUIScene_StartGame::m_MoreOptionsParams of the LoadMenu or CreateWorldMenu
 // that's up. LaunchMoreOptionsMenu changes it.
 static MCLELaunchMoreOptions g_start_options;
+// UIScene_CreateWorldMenu. It stays alive under LaunchMoreOptionsMenu.
+static NSString* g_create_world_name = @"";   // m_worldName
+static int  g_create_game_mode_id = 0;         // m_iGameModeId
+static bool g_create_game_mode_creative = false;
+static bool g_create_ignore_input = false;
+// InputManager.RequestKeyboard is up, the pad doesn't reach the menus
+static bool g_text_input_open = false;
 // UIScene_PauseMenu is up and the single player game is paused under it
 static bool g_world_paused = false;
 // UIScene_DeathMenu is up
@@ -181,6 +188,8 @@ static const int kTooltipsDepth    = 201;
 - (void)navigateForwardTo:(NSString*)swfName;
 - (void)loadMenuPress:(int)controlId;
 - (void)loadMenuSlider:(int)sliderId value:(int)value;
+- (void)createWorldPress:(int)controlId;
+- (void)createWorldSlider:(int)sliderId value:(int)value;
 @end
 static __weak MinecraftViewController* g_active_vc = nil;
 
@@ -463,6 +472,13 @@ static void MCLECreditsTick(void) {
     MCLECreditsAdd(g_credits_index);
 }
 
+// A world name as the game's wide strings hold it
+static std::wstring MCLEWideString(NSString* s) {
+    NSData* d = [s dataUsingEncoding:NSUTF32LittleEndianStringEncoding];
+    if (!d.length) return std::wstring();
+    return std::wstring(static_cast<const wchar_t*>(d.bytes), d.length / sizeof(wchar_t));
+}
+
 // IUIScene_StartGame scenes aren't signed in to an online service, so
 // multiplayer isn't allowed: the online params are off, and if the Online
 // setting is on it was changed by the system
@@ -471,6 +487,36 @@ static void MCLEStartGameOffline(MCLELaunchMoreOptions& p) {
     p.bOnlineGame = false;
     p.bInviteOnly = false;
     p.bAllowFriendsOfFriends = false;
+}
+
+// UIScene_CreateWorldMenu constructor, the state that outlives its movie
+static void MCLECreateWorldReset(void) {
+    g_create_world_name = MCLEStr(IDS_DEFAULT_WORLD_NAME);
+    g_create_game_mode_id = 0;   // GameType::SURVIVAL
+    g_create_game_mode_creative = false;
+    g_create_ignore_input = false;
+
+    MCLELaunchMoreOptions p;
+    p.bGenerateOptions = true;
+    p.bStructures = true;
+    p.bFlatWorld = false;
+    p.bBonusChest = false;
+    p.bPVP = true;
+    p.bTrust = true;
+    p.bFireSpreads = true;
+    p.bHostPrivileges = false;
+    p.bTNT = true;
+    p.iPad = 0;
+
+    p.bMobGriefing = true;
+    p.bKeepInventory = false;
+    p.bDoMobSpawning = true;
+    p.bDoMobLoot = true;
+    p.bDoTileDrops = true;
+    p.bNaturalRegeneration = true;
+    p.bDoDaylightCycle = true;
+    MCLEStartGameOffline(p);
+    g_start_options = p;
 }
 
 extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
@@ -490,6 +536,14 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             int v = (int)value;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [g_active_vc loadMenuSlider:sid value:v];
+            });
+            return;
+        }
+        if ([g_current_scene_name isEqualToString:@"CreateWorldMenu1080.swf"]) {
+            int sid = (int)id;
+            int v = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc createWorldSlider:sid value:v];
             });
             return;
         }
@@ -587,7 +641,10 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 // World, saves start after the default buttons (just that
                 // one here, no level generators in the Win64 res set).
                 if (itemId == 0) {
-                    NSLog(@"[loadorjoin] create new world (CreateWorldMenu not wired yet)");
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        MCLECreateWorldReset();
+                        [g_active_vc navigateForwardTo:@"CreateWorldMenu1080.swf"];
+                    });
                 } else {
                     int saveIdx = itemId - 1;
                     dispatch_async(dispatch_get_main_queue(), ^{
@@ -627,6 +684,11 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             int cid = listId;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [g_active_vc loadMenuPress:cid];
+            });
+        } else if ([g_current_scene_name isEqualToString:@"CreateWorldMenu1080.swf"] && !g_pending_dialog) {
+            int cid = listId;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc createWorldPress:cid];
             });
         } else if (g_pending_dialog) {
             // MessageBox button press. Mirrors
@@ -2527,6 +2589,25 @@ static NSString* MCLEDifficultyLabel(int d) {
     return [NSString stringWithFormat:@"%@: %@", MCLEStr(IDS_SLIDER_DIFFICULTY), MCLEStr(kTitles[d])];
 }
 
+// IUIScene_StartGame's texture pack list. Only the default pack exists on
+// iOS for now. DefaultTexturePack::loadIcon reads Graphics/TexturePackIcon.png
+// out of the media archive.
+static void MCLEAddDefaultTexturePack(void) {
+    extern PlayerHandle* g_ruffle_player;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSData* packIcon = [NSData dataWithContentsOfFile:
+        [docs stringByAppendingPathComponent:@"Graphics/TexturePackIcon.png"]];
+    if (packIcon.length) {
+        const char* tex = "tpack00000000";
+        ruffle_ios_register_xui_bitmap(g_ruffle_player,
+            (const uint8_t*)tex, strlen(tex),
+            (const uint8_t*)packIcon.bytes, packIcon.length, 1.0f, 1.0f);
+        MCLECallPath(@"MainPanel.TexturePackSelector", @"addPack", @[@0, @"tpack00000000"]);
+    }
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"SelectSlot", @[@0]);
+}
+
 // UIScene_LoadMenu constructor (Win64 save path), plus what its tick()
 // pulls from the thumbnail metadata. Control ids follow the scene's
 // EControls: GameMode 0, Difficulty 1, MoreOptions 2, LoadWorld 3,
@@ -2595,20 +2676,7 @@ static NSString* MCLEDifficultyLabel(int d) {
                      @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
     }
 
-    // Only the default pack exists on iOS for now. DefaultTexturePack::loadIcon
-    // reads Graphics/TexturePackIcon.png out of the media archive.
-    NSString* docs = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSData* packIcon = [NSData dataWithContentsOfFile:
-        [docs stringByAppendingPathComponent:@"Graphics/TexturePackIcon.png"]];
-    if (packIcon.length) {
-        const char* tex = "tpack00000000";
-        ruffle_ios_register_xui_bitmap(g_ruffle_player,
-            (const uint8_t*)tex, strlen(tex),
-            (const uint8_t*)packIcon.bytes, packIcon.length, 1.0f, 1.0f);
-        MCLECallPath(@"MainPanel.TexturePackSelector", @"addPack", @[@0, @"tpack00000000"]);
-    }
-    MCLECallPath(@"MainPanel.TexturePackSelector", @"SelectSlot", @[@0]);
+    MCLEAddDefaultTexturePack();
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
     self.menuButtonConfig = nil;
@@ -2677,6 +2745,188 @@ static NSString* MCLEDifficultyLabel(int d) {
         g_loading_world = true;
     } else {
         NSLog(@"[loadmenu] mcle_game_start refused for %@", folder);
+    }
+}
+
+// InputManager.RequestKeyboard: the system keyboard in an alert, cut to the
+// keyboard's character limit. done gets the text, or nil when cancelled.
+- (void)requestKeyboardWithTitle:(NSString*)title
+                            text:(NSString*)text
+                        maxChars:(int)maxChars
+                            done:(void (^)(NSString* text))done {
+    if (!self.view.window) {
+        done(nil);
+        return;
+    }
+    g_text_input_open = true;
+    UIAlertController* alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField* field) {
+        field.text = text;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    __weak UIAlertController* weakAlert = alert;
+    [alert addAction:[UIAlertAction actionWithTitle:MCLEStr(IDS_CONFIRM_CANCEL)
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(UIAlertAction* action) {
+        g_text_input_open = false;
+        done(nil);
+    }]];
+    UIAlertAction* ok = [UIAlertAction actionWithTitle:MCLEStr(IDS_CONFIRM_OK)
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(UIAlertAction* action) {
+        g_text_input_open = false;
+        NSString* s = weakAlert.textFields.firstObject.text ?: @"";
+        if ((int)s.length > maxChars) {
+            s = [s substringToIndex:[s rangeOfComposedCharacterSequenceAtIndex:maxChars].location];
+        }
+        done(s);
+    }];
+    [alert addAction:ok];
+    alert.preferredAction = ok;
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+static NSString* MCLECreateWorldGameModeLabel(void) {
+    switch (g_create_game_mode_id) {
+        case 1:  return MCLEStr(IDS_GAMEMODE_CREATIVE);
+        case 2:  return MCLEStr(IDS_GAMEMODE_ADVENTURE);
+        default: return MCLEStr(IDS_GAMEMODE_SURVIVAL);
+    }
+}
+
+// UIScene_CreateWorldMenu constructor. Coming back from More Options this is
+// handleGainFocus, the scene's state is still in the statics. Control ids
+// follow its EControls: EditWorldName 0, TexturePackList 1, GameModeToggle 2,
+// Difficulty 3, MoreOptions 4, NewWorld 5, OnlineGame 6.
+- (void)initCreateWorldMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    [self attachMenuScenery];
+    // No keyboard or dialog outlives the movie
+    g_create_ignore_input = false;
+
+    MCLECallPath(@"MainPanel.WorldName", @"Init", @[MCLEStr(IDS_WORLD_NAME)]);
+    MCLECallPath(@"MainPanel.EditWorldName", @"Init", @[g_create_world_name, @0]);
+    MCLECallPath(@"MainPanel.GameModeToggle", @"Init", @[MCLECreateWorldGameModeLabel(), @2]);
+    MCLECallPath(@"MainPanel.MoreOptions", @"Init", @[MCLEStr(IDS_MORE_OPTIONS), @4]);
+    MCLECallPath(@"MainPanel.NewWorld", @"Init", @[MCLEStr(IDS_CREATE_NEW_WORLD), @5]);
+    MCLECallPath(@"MainPanel.NewWorld", @"EnableButton", @[g_create_world_name.length ? @YES : @NO]);
+    MCLECallPath(@"MainPanel.TexturePackSelector", @"Init", @[MCLEStr(IDS_DLC_MENU_TEXTUREPACKS), @1]);
+    MCLECallPath(@"TexturePackPanel.TexturePackName", @"Init", @[@""]);
+    MCLECallPath(@"TexturePackPanel.TexturePackDescription", @"Init", @[@""]);
+
+    int diff = MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3));
+    MCLECallPath(@"MainPanel.Difficulty", @"Init", @[MCLEDifficultyLabel(diff), @3, @0, @3, @(diff)]);
+
+    // Not signed in to an online service, so the box is off and disabled
+    MCLECallPath(@"MainPanel.CheckboxOnline", @"EnableCheckBox", @[@NO]);
+    MCLECallPath(@"MainPanel.CheckboxOnline", @"Init",
+                 @[MCLEStr(IDS_ONLINE_GAME), @6, g_start_options.bOnlineGame ? @YES : @NO]);
+
+    MCLEAddDefaultTexturePack();
+
+    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// UIScene_CreateWorldMenu::handleSliderMove
+- (void)createWorldSlider:(int)sliderId value:(int)value {
+    if (sliderId != 3) return;   // eControl_Difficulty
+    mcle_settings_set(MCLE_SETTING_Difficulty, (unsigned char)MAX(0, MIN(value, 3)));
+    MCLECallPath(@"MainPanel.Difficulty", @"SetLabel", @[MCLEDifficultyLabel(value)]);
+}
+
+// UIScene_CreateWorldMenu::handlePress
+- (void)createWorldPress:(int)controlId {
+    if (g_create_ignore_input) return;
+    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+    switch (controlId) {
+        case 0: {   // eControl_EditWorldName
+            g_create_ignore_input = true;
+            [self requestKeyboardWithTitle:MCLEStr(IDS_CREATE_NEW_WORLD)
+                                      text:g_create_world_name
+                                  maxChars:25
+                                      done:^(NSString* text) {
+                // KeyboardCompleteWorldNameCallback
+                g_create_ignore_input = false;
+                if (!text) return;
+                if (text.length) {
+                    MCLECallPath(@"MainPanel.EditWorldName", @"SetLabel", @[text]);
+                    g_create_world_name = text;
+                }
+                MCLECallPath(@"MainPanel.NewWorld", @"EnableButton", @[g_create_world_name.length ? @YES : @NO]);
+            }];
+            break;
+        }
+        case 2:     // eControl_GameModeToggle
+            switch (g_create_game_mode_id) {
+                case 0: // Creative
+                    g_create_game_mode_id = 1;
+                    g_create_game_mode_creative = true;
+                    break;
+                case 1: // Adventure
+                    g_create_game_mode_id = 2;
+                    g_create_game_mode_creative = false;
+                    break;
+                case 2: // Survival
+                    g_create_game_mode_id = 0;
+                    g_create_game_mode_creative = false;
+                    break;
+            }
+            MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel", @[MCLECreateWorldGameModeLabel()]);
+            break;
+        case 1:     // eControl_TexturePackList, the default pack is the only one
+            break;
+        case 5:     // eControl_NewWorld
+            [self createWorldStartSharedLaunchFlow];
+            break;
+        default:
+            break;
+    }
+}
+
+// UIScene_CreateWorldMenu::StartSharedLaunchFlow and checkStateAndStartGame.
+// Offline there are no sign in or online checks, only the start game warnings.
+- (void)createWorldStartSharedLaunchFlow {
+    g_create_ignore_input = true;
+
+    // Only save the online setting if the user changed it - we may change it because we're offline, but don't want that saved
+    if (!g_start_options.bOnlineSettingChangedBySystem) {
+        mcle_settings_set(MCLE_SETTING_Online, g_start_options.bOnlineGame ? 1 : 0);
+    }
+    mcle_settings_set(MCLE_SETTING_InviteOnly, g_start_options.bInviteOnly ? 1 : 0);
+    mcle_settings_set(MCLE_SETTING_FriendsOfFriends, g_start_options.bAllowFriendsOfFriends ? 1 : 0);
+
+    if (g_create_game_mode_creative || g_start_options.bHostPrivileges) {
+        int textId = g_create_game_mode_creative ? IDS_CONFIRM_START_CREATIVE : IDS_CONFIRM_START_HOST_PRIVILEGES;
+        __weak MinecraftViewController* weakSelf = self;
+        [self presentDialogWithTitle:MCLEStr(IDS_TITLE_START_GAME)
+                             content:MCLEStr(textId)
+                             buttons:@[MCLEStr(IDS_CONFIRM_OK), MCLEStr(IDS_CONFIRM_CANCEL)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r) {
+            // ConfirmCreateReturned
+            if (r == MCLEDialogResultAccept) [weakSelf createWorldCreateGame];
+            else g_create_ignore_input = false;
+        }];
+        return;
+    }
+    [self createWorldCreateGame];
+}
+
+// UIScene_CreateWorldMenu::CreateGame, the game side is mcle_game_create_world
+- (void)createWorldCreateGame {
+    if (g_loading_world) return;
+    int difficulty = MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3));
+    std::wstring worldName = MCLEWideString(g_create_world_name);
+    [self navigateForwardTo:@"FullscreenProgress1080.swf"];
+    if (mcle_game_create_world(g_start_options, worldName, g_create_game_mode_id, difficulty)) {
+        g_loading_world = true;
+    } else {
+        NSLog(@"[createworld] mcle_game_create_world refused");
     }
 }
 
@@ -3617,6 +3867,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self initLoadOrJoinMenu];
         } else if ([swfName isEqualToString:@"LoadMenu1080.swf"]) {
             [self initLoadMenu];
+        } else if ([swfName isEqualToString:@"CreateWorldMenu1080.swf"]) {
+            [self initCreateWorldMenu];
         } else if ([swfName isEqualToString:@"FullscreenProgress1080.swf"]) {
             [self initFullscreenProgress];
         } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
@@ -3880,7 +4132,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                 { 0x00800000u, 12 },  // LT    -> LeftTrigger2
                 { 0x00400000u, 13 },  // RT    -> RightTrigger2
             };
-            uint32_t now = pad.buttons;
+            // The scene's m_bIgnoreInput while the keyboard is up: nothing changes
+            uint32_t now = g_text_input_open ? self.lastPadButtons : pad.buttons;
             uint32_t prev = self.lastPadButtons;
             uint32_t changed = now ^ prev;
             for (size_t i = 0; i < sizeof(btnMap)/sizeof(btnMap[0]); ++i) {
