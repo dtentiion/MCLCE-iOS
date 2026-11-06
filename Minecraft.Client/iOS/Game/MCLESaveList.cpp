@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -273,13 +274,43 @@ static const SaveEntry *entry(int i) {
 namespace {
 std::mutex g_storageMutex;
 std::string g_saveFolder;
+// SetSaveTitle, what a new save's .ms is called
+std::string g_saveTitle;
 unsigned char *g_saveBuffer = nullptr;
 unsigned int g_saveBufferSize = 0;
+
+// A new save's folder is named by the time it's made, like the GameHDD ones
+std::string new_save_folder(const std::string &savesDir) {
+    time_t now = time(nullptr);
+    for (;;) {
+        char name[32];
+        struct tm local;
+        localtime_r(&now, &local);
+        strftime(name, sizeof(name), "%Y%m%d%H%M%S", &local);
+        struct stat st;
+        if (stat((savesDir + "/" + name).c_str(), &st) != 0) return name;
+        ++now;
+    }
+}
 }
 
 extern "C" void mcle_storage_set_save_folder(const char *folder) {
     std::lock_guard<std::mutex> lock(g_storageMutex);
     g_saveFolder = folder ? folder : "";
+}
+
+// C4JStorage::ResetSaveData: the next save is a new one
+extern "C" void mcle_storage_reset_save_data(void) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    g_saveFolder.clear();
+    g_saveTitle.clear();
+}
+
+extern "C" void mcle_storage_set_save_title(const wchar_t *title) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    g_saveTitle = to_utf8(title ? title : L"");
+    // Not a path, the title is the file's name
+    std::replace(g_saveTitle.begin(), g_saveTitle.end(), '/', '_');
 }
 
 extern "C" void *mcle_storage_allocate_save_data(unsigned int size) {
@@ -293,9 +324,12 @@ extern "C" void *mcle_storage_allocate_save_data(unsigned int size) {
 extern "C" int mcle_storage_save_save_data(void) {
     std::lock_guard<std::mutex> lock(g_storageMutex);
     const char *root = ios_documents_dir();
-    if (!g_saveBuffer || g_saveFolder.empty() || !root) return 0;
+    if (!g_saveBuffer || !root) return 0;
+    std::string savesDir = std::string(root) + "/saves";
+    if (g_saveFolder.empty() && !g_saveTitle.empty()) g_saveFolder = new_save_folder(savesDir);
+    if (g_saveFolder.empty()) return 0;
     // The world's .ms, named after the world, the first one in its folder
-    std::string dir = std::string(root) + "/saves/" + g_saveFolder;
+    std::string dir = savesDir + "/" + g_saveFolder;
     std::string target;
     if (DIR *d = opendir(dir.c_str())) {
         while (struct dirent *e = readdir(d)) {
@@ -307,7 +341,13 @@ extern "C" int mcle_storage_save_save_data(void) {
         }
         closedir(d);
     }
-    if (target.empty()) return 0;
+    if (target.empty()) {
+        // A save that isn't on disk yet goes in its own folder
+        if (g_saveTitle.empty()) return 0;
+        mkdir(savesDir.c_str(), 0755);
+        mkdir(dir.c_str(), 0755);
+        target = dir + "/" + g_saveTitle + ".ms";
+    }
     // Written next to it and swapped in, so a kill mid write leaves the old one
     std::string temp = target + ".tmp";
     FILE *f = fopen(temp.c_str(), "wb");

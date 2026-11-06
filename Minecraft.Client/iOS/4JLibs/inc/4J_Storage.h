@@ -20,6 +20,8 @@
 // The loaded world's save, written out by Game/MCLESaveList.cpp
 extern "C" void *mcle_storage_allocate_save_data(unsigned int size);
 extern "C" int  mcle_storage_save_save_data(void);
+extern "C" void mcle_storage_reset_save_data(void);
+extern "C" void mcle_storage_set_save_title(const wchar_t *title);
 
 // Real SAVE_DETAILS lives in the platform 4J_Storage lib (Xbox/Sony). On
 // iOS we only need a forward decl so upstream UI headers that store
@@ -85,6 +87,10 @@ public:
     // .ms file and calls back
     void *AllocateSaveData(unsigned int size) { return mcle_storage_allocate_save_data(size); }
     template<class... A> void SetSaveImages(A...) {}
+    // Call before a new save to clear out stored save file name
+    void ResetSaveData() { mcle_storage_reset_save_data(); }
+    // A new save's file is named after its title
+    void SetSaveTitle(const wchar_t *pwchDefaultSaveName) { mcle_storage_set_save_title(pwchDefaultSaveName); }
     void SaveSaveData(int (*callback)(LPVOID, bool), LPVOID param) {
         bool ok = mcle_storage_save_save_data() != 0;
         if (callback) callback(param, ok);
