@@ -1761,3 +1761,9 @@ PLA_PY="$REPO_ROOT/scripts/patch-player-local-aistep.py"
 if [ -f "$PLA_PY" ]; then
     python3 "$PLA_PY"
 fi
+
+# Map colours use the little-endian byte order iOS uploads in
+MMC_PY="$REPO_ROOT/scripts/patch-minimap-ios-colours.py"
+if [ -f "$MMC_PY" ]; then
+    python3 "$MMC_PY"
+fi
