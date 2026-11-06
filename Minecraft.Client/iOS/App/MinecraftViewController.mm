@@ -110,6 +110,11 @@ static bool g_world_dead = false;
 static bool g_world_container = false;
 // Exit Game: FullscreenProgress is up while the world is torn down
 static bool g_exiting_world = false;
+// UIScene_ConnectingProgress is up while the player changes level, until the
+// change it waits for is done
+static bool g_world_connecting = false;
+static int g_level_changes_seen = 0;
+extern "C" int  mcle_game_level_changes(int *finished, int *stringId); // MCLEGameLoop.cpp
 extern "C" int mcle_game_exit_world(int save);
 extern "C" int mcle_game_exit_world_done(void);
 
@@ -3984,6 +3989,46 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
+// ClientConnection::handleRespawn going to another dimension:
+// UIScene_ConnectingProgress over the game, the FullscreenProgress movie
+// with the panorama and logo and only the title
+- (void)openConnectingProgress:(int)stringId {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    NSString* title = stringId >= 0 ? MCLEStr(stringId) : @"";
+    if (g_world_connecting) {
+        // The scene it navigates to over the last one only has a new title
+        MCLECallPath(@"Title", @"SetLabel", @[title]);
+        return;
+    }
+    // 4J Stu - Fix for #13543 - Crash: Game crashes if entering a portal with the inventory menu open
+    if (g_world_container) [self closeContainerMenu:NO];
+    g_world_connecting = true;
+    mcle_game_set_menu_displayed(true);
+    mcle_tutorial_show_popup(false);
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"FullscreenProgress1080.swf"];
+    MCLECallPath(@"Title", @"SetLabel", @[title]);
+    MCLESetPathVisible(@"ProgressBar", NO);
+    MCLESetPathVisible(@"Tip", NO);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kLogoDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+    const int none[11] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    MCLESetTooltips(none);
+}
+
+// eAppAction_WaitForDimensionChangeComplete: CloseUIScenes, back to the game
+- (void)closeConnectingProgress {
+    g_world_connecting = false;
+    if (g_world_dead && !mcle_player_is_dead()) g_world_dead = false;
+    mcle_game_set_menu_displayed(false);
+    // UIGroup::closeAllScenes lets the tutorial popup show again
+    mcle_tutorial_show_popup(true);
+    [self enterWorldUI];
+}
+
 - (void)resumeFromPause {
     g_world_paused = false;
     // ~UIScene_PauseMenu lets the tutorial popup show again
@@ -4132,6 +4177,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     g_exiting_world = false;
     g_world_paused = false;
     g_world_dead = false;
+    g_world_connecting = false;
     self.menuStack = nil;
     // UIController::NavigateToHomeMenu: the menus are on the default texture
     // pack, and the home menu comes once its skin is back
@@ -4877,11 +4923,24 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self enterWorldUI];
             // UIScene_LoadMenu starts the autosave timer with the game
             MCLESetAutosaveTimerTime();
+            // Level changes from here on are this world's
+            g_level_changes_seen = mcle_game_level_changes(NULL, NULL);
+        }
+        // ClientConnection::handleRespawn
+        {
+            int finished = 0, titleId = -1;
+            const int started = mcle_game_level_changes(&finished, &titleId);
+            if (started != g_level_changes_seen) {
+                g_level_changes_seen = started;
+                [self openConnectingProgress:titleId];
+            }
+            // eAppAction_WaitForDimensionChangeComplete
+            if (g_world_connecting && finished == g_level_changes_seen) [self closeConnectingProgress];
         }
         // Minecraft::run's autosave: not with the pause menu or a scene
-        // that ignores autosaves up (death, containers), and the timer
-        // starts again once the save has gone
-        if (!g_world_paused && !g_world_dead && !g_world_container) {
+        // that ignores autosaves up (death, containers, a level change), and
+        // the timer starts again once the save has gone
+        if (!g_world_paused && !g_world_dead && !g_world_container && !g_world_connecting) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
@@ -4891,18 +4950,21 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         }
         // Minecraft::tick shows the death menu once the player has died, and
         // goes back to the game when the respawned player is alive
-        if (!g_world_dead && !g_world_paused && mcle_player_is_dead()) {
+        if (!g_world_dead && !g_world_paused && !g_world_connecting && mcle_player_is_dead()) {
             [self openDeathMenu];
         } else if (g_world_dead && !mcle_player_is_dead()) {
             g_world_dead = false;
-            // ~UIScene_DeathMenu
-            mcle_game_set_menu_displayed(false);
-            mcle_tutorial_show_popup(true);
-            [self enterWorldUI];
+            // ~UIScene_DeathMenu, unless ConnectingProgress took its place
+            if (!g_world_connecting) {
+                mcle_game_set_menu_displayed(false);
+                mcle_tutorial_show_popup(true);
+                [self enterWorldUI];
+            }
         }
         // Minecraft::tick: Start opens the pause menu, the inventory action
         // the inventory
-        if (!g_world_paused && !g_world_dead && !g_world_container) {
+        const bool sceneUp = g_world_connecting;
+        if (!g_world_paused && !g_world_dead && !g_world_container && !sceneUp) {
             mcle_ios_pad_state pad;
             if (mcle_ios_input_poll(0, &pad)) {
                 bool startNow = (pad.buttons & 0x00000010u) != 0;
@@ -4914,7 +4976,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             }
         }
         // The crafting action and the server's ContainerOpenPacket
-        if (!g_world_paused && !g_world_dead) {
+        if (!g_world_paused && !g_world_dead && !sceneUp) {
             int request = mcle_container_take_request();
             if (request == MCLE_CONTAINER_CRAFTING_2X2) [self openCraftingMenu:NO];
             else if (request == MCLE_CONTAINER_CRAFTING_3X3) [self openCraftingMenu:YES];
@@ -4926,7 +4988,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self containerMenuFrame];
             return;
         }
-        if (!g_world_paused && !g_world_dead) {
+        if (!g_world_paused && !g_world_dead && !sceneUp) {
             const CFTimeInterval uiStart = CACurrentMediaTime();
             MCLEHudPump();
             MCLEGameTooltipsPump();
