@@ -42,6 +42,7 @@
 #include "../../../upstream/Minecraft.World/AttributeInstance.h"
 #include "../../../upstream/Minecraft.World/BowItem.h"
 #include "../../../upstream/Minecraft.World/SetEntityLinkPacket.h"
+#include "../../../upstream/Minecraft.World/EntityHorse.h"
 
 // LocalPlayer::m_iThirdPersonView: 0 first person, 1 behind, 2 in front
 std::atomic<int> g_thirdPersonView{0};
@@ -810,6 +811,8 @@ struct MoveState {
     unsigned int dpadLast = 0, dpadFiltered = 0;
     // What the client's player rides, as the server's SetEntityLinkPackets say
     bool riding = false;
+    int jumpRidingTicks = 0;
+    float jumpRidingScale = 0;
 };
 
 MoveState m;
@@ -844,6 +847,16 @@ const int SPRINT_DURATION = 20 * 30;
 void setSprinting(bool value) {
     P->setSprinting(value);
     m.sprintTime = value ? SPRINT_DURATION : 0;
+}
+
+// MultiplayerLocalPlayer::sendRidingJump, handled like
+// PlayerConnection::handlePlayerCommand's RIDING_JUMP
+void sendRidingJump() {
+    P->resetLastActionTime();
+    // currently only supported by horses...
+    if ((P->riding != nullptr) && P->riding->GetType() == eTYPE_HORSE) {
+        std::dynamic_pointer_cast<EntityHorse>(P->riding)->onPlayerJump(static_cast<int>(m.jumpRidingScale * 100.0f));
+    }
 }
 
 } // namespace
@@ -992,6 +1005,36 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
         }
     }
 
+    // LocalPlayer::isRidingJumpable
+    if (P->riding != nullptr && P->riding->GetType() == eTYPE_HORSE) {
+        if (m.jumpRidingTicks < 0) {
+            m.jumpRidingTicks++;
+            if (m.jumpRidingTicks == 0) {
+                // reset scale (for gui)
+                m.jumpRidingScale = 0;
+            }
+        }
+        if (wasJumping && !m.jumping) {
+            // jump release
+            m.jumpRidingTicks = -10;
+            sendRidingJump();
+        } else if (!wasJumping && m.jumping) {
+            // jump press
+            m.jumpRidingTicks = 0;
+            m.jumpRidingScale = 0;
+        } else if (wasJumping) {
+            // calc jump scale
+            m.jumpRidingTicks++;
+            if (m.jumpRidingTicks < 10) {
+                m.jumpRidingScale = static_cast<float>(m.jumpRidingTicks) * .1f;
+            } else {
+                m.jumpRidingScale = .8f + (2.f / static_cast<float>(m.jumpRidingTicks - 9)) * .1f;
+            }
+        }
+    } else {
+        m.jumpRidingScale = 0;
+    }
+
     // LocalPlayer::serverAiStep
     P->xxa = m.xa;
     P->yya = m.ya;
@@ -1057,6 +1100,11 @@ void mcle_player_ai_step_end(Player *player) {
         P->yd = 0.0f;
         P->onGround = true;
     }
+}
+
+// LocalPlayer::getJumpRidingScale, for the horse jump bar
+float mcle_player_jump_riding_scale() {
+    return m.jumpRidingScale;
 }
 
 void mcle_player_bob(float a, float *xBob, float *yBob) {
