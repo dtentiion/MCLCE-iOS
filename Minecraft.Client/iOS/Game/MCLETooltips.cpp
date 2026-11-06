@@ -1,7 +1,7 @@
 // The in-game tooltips. scripts/gen-ingame-tooltips.py copies the block
 // that works them out from upstream Minecraft::tick into
 // iOS_IngameTooltips.inc, and it's compiled here against the names it uses:
-// player, level, hitResult, gameMode, ui and InputManager.
+// player, level, hitResult, gameMode and ui.
 
 #include "MCLETooltips.h"
 
@@ -127,20 +127,6 @@ struct TooltipGameMode {
     }
 };
 
-// Windows64_Minecraft.cpp's MAP_STYLE_0, the only layout iOS has
-struct TooltipInput {
-    int GetJoypadMapVal(int) { return 0; }
-    unsigned int GetGameJoypadMaps(int, int action) {
-        switch (action) {
-        case MINECRAFT_ACTION_JUMP: return _360_JOY_BUTTON_A;
-        case MINECRAFT_ACTION_USE: return _360_JOY_BUTTON_LT;
-        case MINECRAFT_ACTION_ACTION: return _360_JOY_BUTTON_RT;
-        case MINECRAFT_ACTION_SNEAK_TOGGLE: return _360_JOY_BUTTON_RTHUMB;
-        }
-        return 0;
-    }
-};
-
 // Where ui.SetTooltips goes
 struct TooltipUI {
     int values[10];
@@ -164,16 +150,13 @@ void mcle_tooltips_update(const std::shared_ptr<ServerPlayer> &serverPlayer, Hit
     TooltipGameMode gameModeImpl;
     gameModeImpl.creative = player->gameMode->isCreative();
     TooltipGameMode *gameMode = &gameModeImpl;
-    TooltipInput tooltipInput;
     TooltipUI tooltipUI;
     for (int i = 0; i < 10; i++) tooltipUI.values[i] = -1;
 
     {
-#define InputManager tooltipInput
 #define ui tooltipUI
 #include "../../../upstream/Minecraft.Client/iOS_IngameTooltips.inc"
 #undef ui
-#undef InputManager
     }
 
     std::lock_guard<std::mutex> lock(g_mutex);

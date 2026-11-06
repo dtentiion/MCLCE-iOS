@@ -18,6 +18,13 @@ extern "C" int  mcle_ios_input_poll_lt(int pad);
 extern "C" int  mcle_ios_input_poll_rt(int pad);
 extern "C" int  mcle_ios_input_poll_buttons(int pad);
 extern "C" int  mcle_ios_input_poll_connected(int pad);
+// The control scheme tables, Windows64's DefineActions (Game/MCLEJoypadMaps.cpp)
+extern "C" unsigned int mcle_joypad_map(int style, int action);
+extern "C" int  mcle_joypad_map_val(int pad);
+
+#define MAP_STYLE_0 0
+#define MAP_STYLE_1 1
+#define MAP_STYLE_2 2
 
 // Real platform 4J_Input.h on Win64 / Xbox / Orbis exposes a global
 // `C4JInput InputManager` plus methods upstream gameplay code reaches
@@ -36,8 +43,8 @@ public:
     template<class... A> void  SetVibration(A...)           {}
     template<class... A> void  ResetIdleTimer(A...)         {}
     template<class... A> int   GetValue(A...)               { return 0; }
-    template<class... A> void* GetGameJoypadMaps(A...)      { return nullptr; }
-    template<class... A> int   GetJoypadMapVal(A...)        { return 0; }
+    unsigned int GetGameJoypadMaps(int style, int action) { return mcle_joypad_map(style, action); }
+    int          GetJoypadMapVal(int pad)                  { return mcle_joypad_map_val(pad); }
 
     // F3-real-input: sticks. Return values are 0..1000 in upstream's
     // 4J convention (signed for sticks, unsigned for triggers). The

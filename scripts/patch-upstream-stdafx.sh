@@ -1658,6 +1658,12 @@ if [ -f "$TT_PY" ]; then
     python3 "$TT_PY"
 fi
 
+# Windows64's DefineActions controller mappings, for Game/MCLEJoypadMaps.cpp
+JM_PY="$REPO_ROOT/scripts/gen-joypad-maps.py"
+if [ -f "$JM_PY" ]; then
+    python3 "$JM_PY"
+fi
+
 # UIScene_Credits' credit table, for Game/MCLECredits.cpp
 CR_PY="$REPO_ROOT/scripts/gen-credits.py"
 if [ -f "$CR_PY" ]; then
