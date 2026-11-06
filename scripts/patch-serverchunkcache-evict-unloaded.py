@@ -52,8 +52,13 @@ replacement = anchor + (
     "\t\t\t\t\t\t\twhile (q.size() > MCLE_UNLOADED_CACHE_MAX) {\n"
     "\t\t\t\t\t\t\t\tint oldIdx = q.front();\n"
     "\t\t\t\t\t\t\t\tq.pop_front();\n"
-    "\t\t\t\t\t\t\t\tif (m_unloadedCache[oldIdx]) {\n"
-    "\t\t\t\t\t\t\t\t\tdelete m_unloadedCache[oldIdx];\n"
+    "\t\t\t\t\t\t\t\tLevelChunk *dead = m_unloadedCache[oldIdx];\n"
+    "\t\t\t\t\t\t\t\tif (dead && dead != chunk) {\n"
+    "\t\t\t\t\t\t\t\t\t/* drop() can queue a chunk more than once. Upstream never frees\n"
+    "\t\t\t\t\t\t\t\t\t   unloaded chunks so a second entry is harmless there; here it\n"
+    "\t\t\t\t\t\t\t\t\t   would be freed memory, so it goes too. The front is this chunk. */\n"
+    "\t\t\t\t\t\t\t\t\tm_toDrop.erase(std::remove(m_toDrop.begin() + 1, m_toDrop.end(), dead), m_toDrop.end());\n"
+    "\t\t\t\t\t\t\t\t\tdelete dead;\n"
     "\t\t\t\t\t\t\t\t\tm_unloadedCache[oldIdx] = nullptr;\n"
     "\t\t\t\t\t\t\t\t\tint &n = _evictCount[this];\n"
     "\t\t\t\t\t\t\t\t\tif (n == 0 || n % 64 == 0) {\n"
@@ -77,6 +82,7 @@ include_addition = (
     "#ifdef __APPLE_IOS__\n"
     "#include <unordered_map>\n"
     "#include <deque>\n"
+    "#include <algorithm>\n"
     "#endif\n"
 )
 if include_anchor not in src:
