@@ -4,10 +4,11 @@
 FormatHTMLString turns the {*...*} tags in How to Play and tutorial text
 into HTML: colours from the skin's colour table, line breaks, and button
 glyph <img> tags from the control scheme (GetActionReplacement,
-GetVKReplacement, GetIconReplacement). Consoles_App.cpp doesn't build on
-iOS, so those four bodies are copied into
-upstream/Minecraft.Client/iOS_FormatHTML.inc and Game/MCLEAppText.cpp
-compiles them as members of its own small class.
+GetVKReplacement, GetIconReplacement). Chat messages use EscapeHTMLString,
+FormatChatMessage and getEntityName. Consoles_App.cpp doesn't build on
+iOS, so those bodies are copied into
+upstream/Minecraft.Client/iOS_FormatHTML.inc and Game/MCLEHowToPlay.cpp
+compiles them as members of its own small class (Game/MCLEAppText.h).
 
 Idempotent, rewrites the .inc every run.
 """
@@ -23,6 +24,9 @@ FUNCS = [
     "wstring CMinecraftApp::GetActionReplacement(int iPad, unsigned char ucAction)",
     "wstring CMinecraftApp::GetVKReplacement(unsigned int uiVKey)",
     "wstring CMinecraftApp::GetIconReplacement(unsigned int uiIcon)",
+    "wstring CMinecraftApp::EscapeHTMLString(const wstring& desc)",
+    "wstring CMinecraftApp::FormatChatMessage(const wstring& desc, bool applyStyling)",
+    "wstring CMinecraftApp::getEntityName(eINSTANCEOF type)",
 ]
 
 

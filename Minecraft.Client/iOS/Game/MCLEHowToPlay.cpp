@@ -1,5 +1,6 @@
 // How to Play: UIScene_HowToPlay's pages and labels, and CMinecraftApp's
-// FormatHTMLString that their text goes through. The tables and function
+// FormatHTMLString that their text goes through (with the few other text
+// helpers chat needs). The tables and function
 // bodies are upstream's, copied out by scripts/gen-howtoplay.py and
 // scripts/gen-html-format.py. The scene side is in MinecraftViewController.mm.
 
@@ -96,6 +97,9 @@ public:
     wstring GetActionReplacement(int iPad, unsigned char ucAction);
     wstring GetVKReplacement(unsigned int uiVKey);
     wstring GetIconReplacement(unsigned int uiIcon);
+    wstring EscapeHTMLString(const wstring &desc);
+    wstring FormatChatMessage(const wstring& desc, bool applyStyling = true);
+    wstring getEntityName(eINSTANCEOF type);
 };
 
 #include "../../../upstream/Minecraft.Client/iOS_FormatHTML.inc"
@@ -144,6 +148,19 @@ std::string toUtf8(const std::wstring &w) {
 // CMinecraftApp::FormatHTMLString, for the other scenes' text
 std::wstring mcle_format_html_string(int iPad, const std::wstring &desc) {
     return g_appText.FormatHTMLString(iPad, desc);
+}
+
+// And the ones chat messages go through
+std::wstring mcle_escape_html_string(const std::wstring &desc) {
+    return g_appText.EscapeHTMLString(desc);
+}
+
+std::wstring mcle_format_chat_message(const std::wstring &desc) {
+    return g_appText.FormatChatMessage(desc);
+}
+
+std::wstring mcle_entity_name(eINSTANCEOF type) {
+    return g_appText.getEntityName(type);
 }
 
 extern "C" int mcle_htp_num_pages(void) { return eHowToPlay_NumPages; }

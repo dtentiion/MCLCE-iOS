@@ -1670,6 +1670,16 @@ for HTP_PY in "$REPO_ROOT/scripts/gen-html-format.py" "$REPO_ROOT/scripts/gen-ho
         python3 "$HTP_PY"
     fi
 done
+# ClientConnection::handleChat, for Game/MCLEChat.cpp
+CHAT_PY="$REPO_ROOT/scripts/gen-chat-handler.py"
+if [ -f "$CHAT_PY" ]; then
+    python3 "$CHAT_PY"
+fi
+# PlayerList broadcasts reach the local player too
+PLB_PY="$REPO_ROOT/scripts/patch-playerlist-broadcast-local.py"
+if [ -f "$PLB_PY" ]; then
+    python3 "$PLB_PY"
+fi
 # IUIScene_AbstractContainerMenu's body, for Game/MCLEContainerMenu.cpp
 CM_PY="$REPO_ROOT/scripts/gen-container-menu.py"
 if [ -f "$CM_PY" ]; then

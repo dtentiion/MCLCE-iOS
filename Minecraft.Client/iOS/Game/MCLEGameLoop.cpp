@@ -1739,6 +1739,24 @@ void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, flo
     if (g_player) g_player->absMoveTo(x, y, z, yRot, xRot);
 }
 
+// PlayerList::broadcastAll's send for the local player, who isn't in its list
+void mcle_local_player_packet(std::shared_ptr<Packet> packet);   // WorldProbe/link_stubs.cpp
+void mcle_broadcast_to_local_player(std::shared_ptr<Packet> packet, bool oneDimension, int dimension) {
+    if (!g_player || (oneDimension && g_player->dimension != dimension)) return;
+    mcle_local_player_packet(packet);
+}
+
+// The chat handler's minecraft->gui calls
+void mcle_gui_add_message(const std::wstring &message, bool bIsDeathMessage) {
+    std::lock_guard<std::mutex> lock(s_guiMutex);
+    if (g_gui) g_gui->addMessage(message, 0, bIsDeathMessage);
+}
+
+void mcle_gui_set_action_bar_message(const std::wstring &message) {
+    std::lock_guard<std::mutex> lock(s_guiMutex);
+    if (g_gui) g_gui->setActionBarMessage(message);
+}
+
 // Held while anything outside this file touches the particle engine
 std::recursive_mutex &mcle_particle_mutex() {
     return g_particleMutex;

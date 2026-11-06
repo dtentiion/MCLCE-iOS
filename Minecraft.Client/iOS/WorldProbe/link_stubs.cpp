@@ -26,6 +26,7 @@
 #include "AddPlayerPacket.h"
 #include "AnimatePacket.h"
 #include "ContainerOpenPacket.h"
+#include "ChatPacket.h"
 #include "EntityEvent.h"
 #include "TileEditorOpenPacket.h"
 #include "Biome.h"
@@ -366,10 +367,17 @@ MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 // ContainerOpenPacket is where the client opens the menu
 // (ClientConnection::handleContainerOpen).
 extern void mcle_container_open_packet(int type, int containerId);
-void PlayerConnection::send(std::shared_ptr<Packet> packet) {
+// What the local player's client would do with a packet sent to it
+void mcle_handle_chat_packet(std::shared_ptr<ChatPacket> packet);   // Game/MCLEChat.cpp
+void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     if (std::shared_ptr<ContainerOpenPacket> open = std::dynamic_pointer_cast<ContainerOpenPacket>(packet)) {
         mcle_container_open_packet(open->type, open->containerId);
+    } else if (std::shared_ptr<ChatPacket> chat = std::dynamic_pointer_cast<ChatPacket>(packet)) {
+        mcle_handle_chat_packet(chat);
     }
+}
+void PlayerConnection::send(std::shared_ptr<Packet> packet) {
+    mcle_local_player_packet(packet);
 }
 bool PlayerConnection::isLocal() { return true; }
 // PlayerConnection::teleport moves the server's player and tells its client
