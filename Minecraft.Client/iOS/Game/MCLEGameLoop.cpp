@@ -185,6 +185,9 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLEPlayerInput.h"
 #include "MCLESound.h"
 #include "MCLEHud.h"
+#include "../../../upstream/Minecraft.Client/EntityTracker.h"
+#include <dispatch/dispatch.h>
+#include <pthread.h>
 #include "MCLETooltips.h"
 #include "MCLEWeather.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
@@ -305,6 +308,7 @@ enum InitState {
     kStateUnstarted = 0,
     kStateReadyIdle = 1,   // bootstrap finished, no save to drive simulation
     kStateTicking   = 2,   // Level constructed, ticking each frame
+    kStateExiting   = 3,   // leaving the world, ticks and frames stay out
     kStateFailed    = -1,  // an init step crashed/returned null; tick stays idle
 };
 
@@ -336,6 +340,12 @@ std::atomic<bool> g_gamePaused{false};
 std::atomic<bool> g_playerDead{false};
 std::atomic<bool> g_respawnRequested{false};
 std::mutex g_frameMutex;
+// Held by the sim thread for each tick, so leaving the world can wait for
+// the one in flight
+std::mutex g_simTickMutex;
+// Held while the world's objects are saved or deleted, so a background save
+// and leaving the world don't overlap
+std::mutex g_worldLifeMutex;
 // GameRenderer's blr and darkenWorldAmount: ticked on the sim thread, read
 // when the render thread builds the light texture
 std::atomic<float> g_lightBlr{0.0f};
@@ -394,6 +404,8 @@ public:
 private:
     LevelListener *r;
 };
+// The one on the current world's overworld, dropped when leaving it
+ClientLevelListener *g_clientLevelListener = nullptr;
 
 // MultiPlayerLevel::animateTick then animateTickDoWork, for the one local
 // player: random tiles in the 3x3x3 block of 8x8x8 chunks round the player
@@ -489,8 +501,7 @@ std::atomic<bool>             g_autoSaveInFlight{ false };
 // Walks levels in reverse to mirror upstream MinecraftServer::saveAllLevels
 // and logs start/per-level/done so we can see exactly how far we got if
 // iOS reaps us mid-save.
-static void *mcle_save_now_thread(void *) {
-    MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
+static void mcle_save_world() {
     const auto start = std::chrono::steady_clock::now();
     // Flush compresses on this thread, and the level saves write chunks
     static thread_local bool s_tls = false;
@@ -524,6 +535,19 @@ static void *mcle_save_now_thread(void *) {
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start).count();
     MCLE_LOG("BG_SAVE: done took=%lldms", (long long)ms);
+}
+
+static void *mcle_save_now_thread(void *) {
+    {
+        // Not while the world is being torn down
+        std::lock_guard<std::mutex> life(g_worldLifeMutex);
+        if (g_initState == kStateTicking) {
+            MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
+            mcle_save_world();
+        } else {
+            MCLE_LOG("BG_SAVE: no world to save");
+        }
+    }
     g_autoSaveInFlight.store(false, std::memory_order_release);
     return nullptr;
 }
@@ -684,6 +708,11 @@ void initImpl() {
         try { body; MCLE_LOG("mcle_game_init: " name " done"); } \
         catch (...) { MCLE_LOG("mcle_game_init: " name " threw"); }
 
+    // Minecraft::main runs these once per process, not per world
+    static bool s_staticCtorsDone = false;
+    if (!s_staticCtorsDone) {
+    s_staticCtorsDone = true;
+
     MCLE_STATIC("Packet::staticCtor",          Packet::staticCtor());
     MCLE_STATIC("GameType::staticCtor",        GameType::staticCtor());
     MCLE_STATIC("MaterialColor::staticCtor",   MaterialColor::staticCtor());
@@ -733,6 +762,7 @@ void initImpl() {
     MCLE_STATIC("TileEntityRenderDispatcher::staticCtor", TileEntityRenderDispatcher::staticCtor());
     MCLE_STATIC("User::staticCtor",            User::staticCtor());
     MCLE_STATIC("ColourTable::staticCtor",     ColourTable::staticCtor());
+    }
 
     #undef MCLE_STATIC
 
@@ -1266,12 +1296,22 @@ void initImpl() {
     Minecraft *g_minecraftShim = reinterpret_cast<Minecraft *>(s_minecraftShimBuf);
     MCLE_LOG("mcle_game_init: Minecraft shim at %p (sizeof=%zu)",
              (void*)g_minecraftShim, sizeof(Minecraft));
+    // Like Minecraft itself the shim lives for the whole process. Its
+    // shared_ptr fields are constructed on the first world and assigned
+    // on later ones.
+    static bool s_shimFieldsBuilt = false;
+    const bool shimFieldsBuilt = s_shimFieldsBuilt;
+    s_shimFieldsBuilt = true;
 
     // Wire the player into the shim so renderChunks's cameraTargetPlayer
     // null check doesn't bail. ServerPlayer extends LivingEntity so the
     // shared_ptr conversion is implicit. Done with placement-new on the
     // already-zeroed buffer so the shared_ptr's default ctor runs.
-    new (&g_minecraftShim->cameraTargetPlayer) std::shared_ptr<LivingEntity>(g_player);
+    if (shimFieldsBuilt) {
+        g_minecraftShim->cameraTargetPlayer = g_player;
+    } else {
+        new (&g_minecraftShim->cameraTargetPlayer) std::shared_ptr<LivingEntity>(g_player);
+    }
 
     // G5: localplayers[0] is what LevelRenderer::updateDirtyChunks reads
     // to find the nearest dirty chunk for rebuild (uses player x/y/z).
@@ -1282,8 +1322,12 @@ void initImpl() {
         std::shared_ptr<MultiplayerLocalPlayer> *slot =
             reinterpret_cast<std::shared_ptr<MultiplayerLocalPlayer> *>(
                 &g_minecraftShim->localplayers[0]);
-        new (slot) std::shared_ptr<MultiplayerLocalPlayer>(
-            std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player));
+        if (shimFieldsBuilt) {
+            *slot = std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player);
+        } else {
+            new (slot) std::shared_ptr<MultiplayerLocalPlayer>(
+                std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player));
+        }
         MCLE_LOG("mcle_game_init: G5 wired localplayers[0] = %p (alias of g_player)",
                  (void*)slot->get());
     }
@@ -1295,7 +1339,7 @@ void initImpl() {
     // render path calls (DisableUpdateThread, EnableUpdateThread,
     // turnOnLightLayer, turnOffLightLayer) are stubbed in link_stubs.cpp
     // and don't deref this.
-    try {
+    if (!g_minecraftShim->options) try {
         g_minecraftShim->options = new Options();
         // G5: viewDistance left at Options::init default (0). allChanged
         // is now wired to fire properly via setLevel below.
@@ -1344,7 +1388,7 @@ void initImpl() {
     // state=ticking flip so a crash here doesn't kill the blue-sky
     // milestone.
     MCLE_LOG("mcle_game_init: G2c construct LevelRenderer(shim, nullptr)...");
-    try {
+    if (!g_levelRenderer) try {
         // Allocate the chunk-rebuild event arrays + spawn the 7 worker
         // threads before the renderer ctor so the very first dispatch
         // has them ready. Upstream Minecraft::init calls this; we
@@ -1411,6 +1455,8 @@ void initImpl() {
         // textures once they exist.
         if (!g_minecraftShim->particleEngine)
             g_minecraftShim->particleEngine = new ParticleEngine(lvl, nullptr);
+        else
+            g_minecraftShim->particleEngine->setLevel(lvl);
         // Its calls go to Game/MCLESound.cpp
         if (!g_minecraftShim->soundEngine)
             g_minecraftShim->soundEngine = new SoundEngine();
@@ -1418,7 +1464,8 @@ void initImpl() {
         try {
             g_levelRenderer->setLevel(0, lvl);
             lvl->removeListener(g_levelRenderer);
-            lvl->addListener(new ClientLevelListener(g_levelRenderer));
+            g_clientLevelListener = new ClientLevelListener(g_levelRenderer);
+            lvl->addListener(g_clientLevelListener);
             MCLE_LOG("mcle_game_init: G5 setLevel returned, chunks[0].length=%u",
                      (unsigned)g_levelRenderer->chunks[0].length);
         } catch (const std::exception &e) {
@@ -1471,6 +1518,9 @@ void initImpl() {
     //      stub getSelected returns it
     //   3. g_minecraftShim->skins pointing to our zero-buffer TPR so the
     //      Minecraft::GetInstance()->skins->getSelected() chain reaches it
+    // Minecraft::init: the textures, fonts and hand renderers stay for the
+    // whole process
+    if (!g_minecraftShim->textures) {
     {
         const char *root = StorageManager.GetSaveRootPath();
         if (root && *root) {
@@ -1591,6 +1641,7 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: Textures ctor threw");
         }
     }
+    }
 
     // Wire minecraft->player. Gui::render reads
     // player->m_iScreenSection (patched out in patch-gui-screensection.py),
@@ -1602,15 +1653,19 @@ void initImpl() {
         std::shared_ptr<MultiplayerLocalPlayer> *slot =
             reinterpret_cast<std::shared_ptr<MultiplayerLocalPlayer> *>(
                 &g_minecraftShim->player);
-        new (slot) std::shared_ptr<MultiplayerLocalPlayer>(
-            std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player));
+        if (shimFieldsBuilt) {
+            *slot = std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player);
+        } else {
+            new (slot) std::shared_ptr<MultiplayerLocalPlayer>(
+                std::reinterpret_pointer_cast<MultiplayerLocalPlayer>(g_player));
+        }
         MCLE_LOG("mcle_game_init: minecraft->player aliased to g_player");
     }
 
     // Construct Gui (HUD renderer) - parity with upstream Minecraft::init.
     // Stores minecraft pointer + initialises bookkeeping. Actual render
     // happens in mcle_world_drive_renderer per frame.
-    if (g_minecraftShim) {
+    if (g_minecraftShim && !g_gui) {
         try {
             g_gui = new Gui(g_minecraftShim);
             MCLE_LOG("mcle_game_init: Gui ctor at %p", (void*)g_gui);
@@ -1972,6 +2027,7 @@ extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int uiH
 // UIComponent_Panorama::tick reads the loaded level's game time and the
 // player's dimension. Returns 0 when no level is loaded.
 extern "C" int mcle_world_game_time(long long *gameTime, int *dimension) {
+    if (g_initState != kStateTicking) return 0;
     ServerLevel *level = g_levels[0];
     if (!level) return 0;
     *gameTime = level->getLevelData()->getGameTime();
@@ -2143,6 +2199,9 @@ extern "C" void mcle_game_tick(void) {
         s_tickThreadTlsReady = true;
         MCLE_LOG("mcle_game_tick: tick-thread full TLS init done");
     }
+
+    // Leaving the world waits on this for the tick in flight
+    std::unique_lock<std::mutex> tickLock(g_simTickMutex);
 
     g_tickCount++;
 
@@ -3637,28 +3696,117 @@ extern "C" void mcle_world_g1b_probe_tick(void) {
     } catch (...) { MCLE_LOG("G1B-probe: level->getSkyColor threw"); return; }
 }
 
-extern "C" void mcle_game_shutdown(void) {
-    MCLE_LOG("mcle_game_shutdown: tearing down");
-    // Drop the player first so its dtor runs before the level it lives in.
-    g_player.reset();
-    if (g_playerGameMode) {
-        try { delete g_playerGameMode; } catch (...) {}
-        g_playerGameMode = nullptr;
+// Leaving the world, what IUIScene_PauseMenu::_ExitWorld comes to for a
+// single player host. The player leaves like PlayerList::remove does on
+// disconnect, MinecraftServer::HaltServer -> stopServer saves if asked and
+// deletes the server levels, players and settings, and
+// Minecraft::setLevel(nullptr) lets go of the levels on the client side.
+// What Minecraft keeps for the whole process (textures, LevelRenderer, Gui,
+// the particle and sound engines, the renderers) stays for the next world.
+static void mcle_exit_world(bool save) {
+    MCLE_LOG("EXIT_WORLD: start save=%d", save ? 1 : 0);
+
+    // Ticks and frames check this and stay out from here on. Then wait for
+    // the main thread's current pass, the tick and the frame in flight.
+    g_initState = kStateExiting;
+    if (!pthread_main_np()) dispatch_sync_f(dispatch_get_main_queue(), nullptr, [](void *) {});
+    { std::lock_guard<std::mutex> lock(g_simTickMutex); }
+    { std::lock_guard<std::mutex> lock(g_frameMutex); }
+
+    // A background save in progress finishes first
+    std::lock_guard<std::mutex> life(g_worldLifeMutex);
+
+    // stopServer: saveAll and saveAllChunks when saving on exit
+    if (save) {
+        try { mcle_save_world(); } catch (...) { MCLE_LOG("EXIT_WORLD: save threw"); }
     }
-    // Tear levels down in reverse order: derived levels reference the
-    // overworld, so they must go before levels[0]. Server is destroyed
-    // after the levels because they hold raw pointers to it.
-    for (int i = 2; i >= 0; --i) {
-        if (g_levels[i]) {
-            try { delete g_levels[i]; } catch (...) {}
-            g_levels[i] = nullptr;
+
+    // eAppAction_ExitWorld: gui->clearMessages()
+    {
+        std::lock_guard<std::mutex> lock(s_guiMutex);
+        if (g_gui) g_gui->clearMessages();
+    }
+
+    // Minecraft::setLevel(nullptr)
+    Minecraft *mc = Minecraft::GetInstance();
+    if (mc) {
+        {
+            std::lock_guard<std::mutex> lock(g_itemInHandMutex);
+            for (int i = 0; i < XUSER_MAX_COUNT; ++i) {
+                if (mc->localitemInHandRenderers[i] != nullptr) mc->localitemInHandRenderers[i]->reset();
+            }
+        }
+        if (g_levelRenderer) {
+            if (g_levels[0] && g_clientLevelListener) g_levels[0]->removeListener(g_clientLevelListener);
+            try {
+                for (int p = 0; p < XUSER_MAX_COUNT; ++p) g_levelRenderer->setLevel(p, nullptr);
+            } catch (...) {
+                MCLE_LOG("EXIT_WORLD: LevelRenderer::setLevel threw");
+            }
+        }
+        {
+            std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+            if (mc->particleEngine) mc->particleEngine->setLevel(nullptr);
+        }
+        mc->level = nullptr;
+        mc->localplayers[0] = nullptr;
+        mc->player = nullptr;
+        mc->cameraTargetPlayer = nullptr;
+        if (EntityRenderDispatcher::instance) EntityRenderDispatcher::instance->cameraEntity = nullptr;
+        if (TileEntityRenderDispatcher::instance) TileEntityRenderDispatcher::instance->cameraEntity = nullptr;
+    }
+    delete g_clientLevelListener;
+    g_clientLevelListener = nullptr;
+    mcle_sound_unlisten();
+    mcle_sound_stop_music();
+    mcle_player_input_reset();
+    mcle_hud_reset();
+
+    // PlayerList::remove, as the player's connection closing does. It was
+    // already saved above when saving.
+    std::shared_ptr<ServerPlayer> player = std::move(g_player);
+    if (player) {
+        try {
+            ServerLevel *level = player->getLevel();
+            if (level) {
+                if (player->riding != nullptr) level->removeEntityImmediately(player->riding);
+                level->getTracker()->removeEntity(player);
+                level->removeEntity(player);
+                level->getChunkMap()->remove(player);
+            }
+        } catch (...) {
+            MCLE_LOG("EXIT_WORLD: removing the player threw");
+        }
+        player->connection = nullptr;
+        // The game mode references back to the player
+        delete player->gameMode;
+        player->gameMode = nullptr;
+        player.reset();
+    }
+    g_playerGameMode = nullptr;
+
+    // stopServer: remove the server levels
+    for (int i = 0; i < 3; ++i) {
+        ServerLevel *level = g_levels[i];
+        g_levels[i] = nullptr;
+        if (g_server && i < (int)g_server->levels.length) g_server->levels[i] = nullptr;
+        if (level) {
+            try { delete level; } catch (...) { MCLE_LOG("EXIT_WORLD: level[%d] dtor threw", i); }
         }
     }
     if (g_server) {
+        // No ServerConnection is made on iOS
+        delete g_server->getPlayers();
+        g_server->setPlayers(nullptr);
+        delete g_server->settings;
+        g_server->settings = nullptr;
+        MinecraftServer::server = nullptr;
         try { delete g_server; } catch (...) {}
         g_server = nullptr;
-        MinecraftServer::server = nullptr;
     }
+    // _ExitWorld: MinecraftServer::resetFlags() once the level is gone
+    MinecraftServer::resetFlags();
+
     g_levelStorage.reset();
     if (g_saveFile) {
         try { delete g_saveFile; } catch (...) {}
@@ -3668,9 +3816,66 @@ extern "C" void mcle_game_shutdown(void) {
         try { delete g_levelSource; } catch (...) {}
         g_levelSource = nullptr;
     }
+
+    // Ready for the next world
+    g_renderReady = false;
+    g_haveClearColor.store(false, std::memory_order_release);
+    g_loadStage = 0;
+    g_loadPercent = 0;
+    g_gamePaused.store(false, std::memory_order_relaxed);
+    g_playerDead.store(false, std::memory_order_relaxed);
+    g_respawnRequested.store(false, std::memory_order_relaxed);
+    g_pendingLevelId.clear();
+    g_initStarted = false;
     g_initState = kStateUnstarted;
+    MCLE_LOG("EXIT_WORLD: done");
+}
+
+// 0 nothing going on, 1 leaving the world, 2 left it
+static std::atomic<int> g_exitWorldState{0};
+
+// IUIScene_PauseMenu::ExitWorldThreadProc: the exit runs off the main
+// thread while FullscreenProgress shows "Exiting game"
+extern "C" int mcle_game_exit_world(int save) {
+    if (g_initState != kStateTicking) return 0;
+    int expected = 0;
+    if (!g_exitWorldState.compare_exchange_strong(expected, 1)) return 0;
+    pthread_t t;
+    if (pthread_create(&t, nullptr, [](void *arg) -> void * {
+            const bool saving = arg != nullptr;
+            // The world's thread local pools, like any thread that touches it
+            Tile::CreateNewThreadStorage();
+            Tesselator::CreateNewThreadStorage(16 * 1024);
+            Vec3::CreateNewThreadStorage();
+            IntCache::CreateNewThreadStorage();
+            AABB::CreateNewThreadStorage();
+            OldChunkStorage::CreateNewThreadStorage();
+            Level::enableLightingCache();
+            Chunk::CreateNewThreadStorage();
+            Compression::CreateNewThreadStorage();
+            mcle_exit_world(saving);
+            g_exitWorldState.store(2, std::memory_order_release);
+            return nullptr;
+        }, save ? reinterpret_cast<void *>(1) : nullptr) != 0) {
+        g_exitWorldState.store(0);
+        return 0;
+    }
+    pthread_detach(t);
+    return 1;
+}
+
+// 1 once the world is gone, then back to 0 for the next exit
+extern "C" int mcle_game_exit_world_done(void) {
+    int expected = 2;
+    return g_exitWorldState.compare_exchange_strong(expected, 0) ? 1 : 0;
+}
+
+extern "C" void mcle_game_shutdown(void) {
+    MCLE_LOG("mcle_game_shutdown: tearing down");
+    if (g_initState == kStateTicking) mcle_exit_world(false);
     MCLE_LOG("mcle_game_shutdown: done");
 }
+
 
 // Optional debug helper invoked from a controller chord in
 // MinecraftViewController.mm. Forces a re-init even if the previous

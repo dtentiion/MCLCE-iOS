@@ -38,6 +38,16 @@ void mcle_hud_hotbar(std::shared_ptr<ItemInstance> out[9]) {
     for (int i = 0; i < 9; i++) out[i] = g_hotbar[i];
 }
 
+void mcle_hud_reset() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    // The label counters carry on so the scene doesn't replay an old label
+    g_state.valid = 0;
+    g_label[0] = 0;
+    g_selectedItemOpacityCountDown = 0;
+    g_opacityCountDown = 0;
+    for (int i = 0; i < 9; i++) g_hotbar[i].reset();
+}
+
 void mcle_hud_scrolled() {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_opacityCountDown = 120; // 6 seconds

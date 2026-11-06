@@ -35,3 +35,6 @@ HitResult *mcle_player_hit_result();
 
 // The block the player was targeting at the last tick, if any.
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f);
+
+// Forget the player, its target and the mining state when leaving the world
+void mcle_player_input_reset();

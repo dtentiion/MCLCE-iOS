@@ -12,6 +12,9 @@
 #include <cstring>
 #include <mutex>
 #include <strings.h>
+#include <unistd.h>
+#include <utility>
+#include <vector>
 
 #include "MCLESound.h"
 
@@ -73,6 +76,9 @@ MCLEUpstreamSoundEngine *g_engine = nullptr;
 // Sounds come from the sim thread, settings from the main thread
 std::recursive_mutex g_mutex;
 std::shared_ptr<ServerPlayer> g_listenerPlayer;
+class ClientSoundListener;
+// The listeners added to the current world's levels, dropped on exit
+std::vector<std::pair<Level *, ClientSoundListener *>> g_listeners;
 
 // There's no client level, so instead of ServerLevelListener's packets
 // reaching ClientConnection::handleSoundEvent, the level's sounds come
@@ -143,7 +149,44 @@ void mcle_sound_init(const char *documentsPath) {
 void mcle_sound_listen(const std::shared_ptr<ServerPlayer> &player, Level *level) {
     std::lock_guard<std::recursive_mutex> lock(g_mutex);
     g_listenerPlayer = player;
-    if (level) level->addListener(new ClientSoundListener());
+    if (level) {
+        ClientSoundListener *listener = new ClientSoundListener();
+        level->addListener(listener);
+        g_listeners.emplace_back(level, listener);
+    }
+}
+
+void mcle_sound_unlisten() {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    for (auto &entry : g_listeners) {
+        entry.first->removeListener(entry.second);
+        delete entry.second;
+    }
+    g_listeners.clear();
+    g_listenerPlayer.reset();
+}
+
+// The in-game music stream, as the Stop state of playMusicUpdate leaves it.
+// The menu music is a separate player on iOS.
+void mcle_sound_stop_music() {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    if (!g_engine) return;
+    // A stream still opening finishes on its own thread first
+    for (int i = 0; i < 200 && g_engine->m_openStreamThread && g_engine->m_openStreamThread->isRunning(); ++i) {
+        usleep(10 * 1000);
+    }
+    if (g_engine->m_openStreamThread && !g_engine->m_openStreamThread->isRunning()) {
+        delete g_engine->m_openStreamThread;
+        g_engine->m_openStreamThread = nullptr;
+    }
+    if (g_engine->m_musicStreamActive) {
+        ma_sound_stop(&g_engine->m_musicStream);
+        ma_sound_uninit(&g_engine->m_musicStream);
+        g_engine->m_musicStreamActive = false;
+    }
+    g_engine->SetIsPlayingStreamingCDMusic(false);
+    g_engine->SetIsPlayingStreamingGameMusic(false);
+    g_engine->m_StreamState = eMusicStreamState_Idle;
 }
 
 void mcle_sound_tick(const std::shared_ptr<ServerPlayer> &player, float a, float musicVolume, float sfxVolume) {

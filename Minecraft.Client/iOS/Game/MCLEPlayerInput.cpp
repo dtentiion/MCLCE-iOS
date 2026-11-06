@@ -911,6 +911,20 @@ bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {
     return true;
 }
 
+// Leaving the world: the next one starts with a new LocalPlayer and
+// MultiPlayerGameMode, so none of this carries over
+void mcle_player_input_reset() {
+    {
+        std::lock_guard<std::mutex> lock(g_hitMutex);
+        g_hitTile = false;
+    }
+    delete s.hitResult;
+    s = ClientState();
+    P.reset();
+    L = nullptr;
+    g_thirdPersonView.store(0, std::memory_order_relaxed);
+}
+
 namespace {
 // GameRenderer's fov / oFov for the one local player
 float g_fov = 1.0f, g_oFov = 1.0f;

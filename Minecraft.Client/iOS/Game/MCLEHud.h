@@ -55,6 +55,8 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player);
 void mcle_hud_set_selected_label(const std::wstring &label);
 // CMinecraftApp::SetOpacityTimer, when the hotbar is scrolled
 void mcle_hud_scrolled();
+// Leaving the world: no state and no hotbar items left over
+void mcle_hud_reset();
 // Copies of the hotbar items from the last tick, for drawing them
 class ItemInstance;
 void mcle_hud_hotbar(std::shared_ptr<ItemInstance> out[9]);

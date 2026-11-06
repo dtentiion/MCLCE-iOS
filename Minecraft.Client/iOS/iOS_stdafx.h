@@ -369,7 +369,8 @@ struct C4JRenderStub {
     template<class... A> void   MatrixGet(A...)               {}
     template<class... A> void   MatrixIdentity(A...)          {}
     template<class... A> void   MatrixLoad(A...)              {}
-    template<class... A> void   CBuffClear(A...)              {}
+    // Drops a chunk list's geometry (Chunk::reset, a layer that came out empty)
+    inline void CBuffClear(int list);
     template<class... A> void   CBuffReset(A...)              {}
     template<class... A> void   CBuffStart(A...)              {}
     template<class... A> void   CBuffEnd(A...)                {}
@@ -466,6 +467,10 @@ inline bool C4JRenderStub::CBuffCall(int list, bool /*first*/) {
 inline bool C4JRenderStub::CBuffCallCutOut(int list, bool /*first*/) {
     mcle_glbridge_call_list(list);
     return true;
+}
+extern "C" void mcle_glbridge_release_lists(int id, int range);
+inline void C4JRenderStub::CBuffClear(int list) {
+    mcle_glbridge_release_lists(list, 1);
 }
 // Now that C4JRender is a known type (alias to C4JRenderStub), pull
 // in the iOS 4J_Render.h header which declares
