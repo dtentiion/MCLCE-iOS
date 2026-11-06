@@ -1169,7 +1169,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCPack.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCAudioFile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Leaderboards/LeaderboardManager.cpp
-  ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_AnvilMenu.cpp
+  # IUIScene_AnvilMenu.cpp builds in Game/MCLEContainerMenus.cpp, see scripts/gen-anvil-menu.py
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_BrewingMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_ContainerMenu.cpp

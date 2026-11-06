@@ -41,6 +41,27 @@
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BrewingMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_EnchantingMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_AnvilMenu.h"
+#include "../../../upstream/Minecraft.World/InputOutputStream.h"
+
+// The anvil's player, the local player's ServerPlayer
+static std::shared_ptr<Player> mcle_container_player() {
+    return mcle_local_player();
+}
+
+// PlayerConnection::handleCustomPayload's SET_ITEM_NAME_PACKET. The server
+// is this same player, so the name goes straight to its menu.
+static void mcle_anvil_set_item_name(const std::wstring &name) {
+    std::shared_ptr<ServerPlayer> player = mcle_local_player();
+    if (!player) return;
+    AnvilMenu *menu = dynamic_cast<AnvilMenu *>(player->containerMenu);
+    if (menu) {
+        if (name.length() <= 30) menu->setItemName(name);
+    }
+}
+
+// IUIScene_AnvilMenu.cpp, see scripts/gen-anvil-menu.py
+#include "../../../upstream/Minecraft.Client/iOS_AnvilMenu.inc"
 
 namespace {
 
@@ -82,6 +103,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::BREWING_STAND:
     case ContainerOpenPacket::ENCHANTMENT:
     case ContainerOpenPacket::BEACON:
+    case ContainerOpenPacket::REPAIR_TABLE:
         return true;
     }
     return isChest(type);
@@ -1256,6 +1278,239 @@ protected:
     }
 };
 
+// UIControl_TextInput: Init with its label and id, the label like a
+// label's, and ChangeState for the focus
+struct AnvilTextInput : MCLEUILabel {
+    MCLEControlRect rect{};
+    bool hasFocus = false;
+
+    explicit AnvilTextInput(const char *p) : MCLEUILabel(p) {}
+
+    void init(const std::wstring &text, int id) {
+        label = text;
+        mcle_ui_call(path, "Init", {mcle_ui_str(text), mcle_ui_num(id)});
+    }
+
+    void setFocus(bool focus) {
+        if (hasFocus == focus) return;
+        hasFocus = focus;
+        mcle_ui_call(path, "ChangeState", {mcle_ui_num(focus ? 0 : 1)});
+    }
+};
+
+// UIScene_AnvilMenu. m_repairMenu is the server's AnvilMenu, so the cost is
+// its own and the scene listens to its slots. The server's broadcastChanges
+// can call slotChanged from the sim thread, which only sets labels for the
+// next tick.
+class AnvilScene : public ServerContainerScene, public IUIScene_AnvilMenu {
+public:
+    enum EControls {
+        eControl_TextInput,
+    };
+
+    AnvilScene(AnvilMenu *menu, const std::shared_ptr<Inventory> &inventory)
+        : m_slotListItem1("MainPanel.Ingredient"), m_slotListItem2("MainPanel.Ingredient2"),
+          m_slotListResult("MainPanel.Result"), m_labelAnvil("MainPanel.AnvilText"),
+          m_textInputAnvil("MainPanel.AnvilTextInput") {
+        mapSharedControls();
+        mapSlotList(m_slotListItem1);
+        mapSlotList(m_slotListItem2);
+        mapSlotList(m_slotListResult);
+        m_textInputAnvil.rect = rectAt(m_textInputAnvil.path.c_str());
+
+        m_showingCross = false;
+        m_textInputAnvil.init(m_itemName, eControl_TextInput);
+
+        m_labelAnvil.init(app.GetString(IDS_REPAIR_AND_NAME));
+
+        m_inventory = inventory;
+
+        // The tutorial state is left out, localgameModes is never set here
+
+        m_repairMenu = menu;
+        m_repairMenu->addSlotListener(this);
+
+        Initialize(0, m_repairMenu, false, AnvilMenu::INV_SLOT_START, eSectionAnvilUsing, eSectionAnvilMax);
+
+        m_slotListItem1.addSlots(AnvilMenu::INPUT_SLOT, 1);
+        m_slotListItem2.addSlots(AnvilMenu::ADDITIONAL_SLOT, 1);
+        m_slotListResult.addSlots(AnvilMenu::RESULT_SLOT, 1);
+
+        bool expensive = false;
+        wstring m_costString = L"";
+
+        if (m_repairMenu->cost > 0) {
+            if (m_repairMenu->cost >= 40 && !mcle_container_player()->abilities.instabuild) {
+                m_costString = app.GetString(IDS_REPAIR_EXPENSIVE);
+                expensive = true;
+            } else if (!m_repairMenu->getSlot(AnvilMenu::RESULT_SLOT)->hasItem()) {
+                // Do nothing
+            } else {
+                LPCWSTR costString = app.GetString(IDS_REPAIR_COST);
+                wchar_t temp[256];
+                swprintf(temp, 256, costString, m_repairMenu->cost);
+                m_costString = temp;
+                if (!m_repairMenu->getSlot(AnvilMenu::RESULT_SLOT)
+                         ->mayPickup(dynamic_pointer_cast<Player>(m_inventory->player->shared_from_this()))) {
+                    expensive = true;
+                }
+            }
+        }
+        setCostLabel(m_costString, expensive);
+
+        setIgnoreInput(false);
+    }
+
+    void tick(double now) override {
+        m_labelAnvil.tick();
+        m_textInputAnvil.tick();
+        ServerContainerScene::tick(now);
+        handleTick();
+    }
+
+    // KeyboardCompleteCallback
+    void keyboardComplete(bool ok, const std::wstring &text) override {
+        setIgnoreInput(false);
+        if (ok) {
+            setEditNameValue(text);
+            m_itemName = text;
+            updateItemName();
+        }
+    }
+
+    // The menu outlives the scene here, so the scene stops listening first
+    void handleDestroy() override {
+        m_repairMenu->removeSlotListener(this);
+        ServerContainerScene::handleDestroy();
+    }
+
+protected:
+    bool m_showingCross = false;
+    MCLEUISlotList m_slotListItem1, m_slotListItem2, m_slotListResult;
+    MCLEUILabel m_labelAnvil;
+    AnvilTextInput m_textInputAnvil;
+    std::wstring m_lastCostLabel;
+    bool m_lastCanAfford = false;
+    bool m_costSent = false;
+
+    int getSectionColumns(ESceneSection eSection) override {
+        int cols = 0;
+        switch (eSection) {
+        case eSectionAnvilItem1: cols = 1; break;
+        case eSectionAnvilItem2: cols = 1; break;
+        case eSectionAnvilResult: cols = 1; break;
+        case eSectionAnvilInventory: cols = 9; break;
+        case eSectionAnvilUsing: cols = 9; break;
+        default: assert(false); break;
+        }
+        return cols;
+    }
+
+    int getSectionRows(ESceneSection eSection) override {
+        int rows = 0;
+        switch (eSection) {
+        case eSectionAnvilItem1: rows = 1; break;
+        case eSectionAnvilItem2: rows = 1; break;
+        case eSectionAnvilResult: rows = 1; break;
+        case eSectionAnvilInventory: rows = 3; break;
+        case eSectionAnvilUsing: rows = 1; break;
+        default: assert(false); break;
+        }
+        return rows;
+    }
+
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionAnvilItem1: return &m_slotListItem1;
+        case eSectionAnvilItem2: return &m_slotListItem2;
+        case eSectionAnvilResult: return &m_slotListResult;
+        case eSectionAnvilInventory: return &m_slotListInventory;
+        case eSectionAnvilUsing: return &m_slotListHotbar;
+        default: return nullptr;
+        }
+    }
+
+    const MCLEControlRect *sectionRect(ESceneSection eSection) {
+        if (eSection == eSectionAnvilName) return &m_textInputAnvil.rect;
+        MCLEUISlotList *list = getSection(eSection);
+        return list ? &list->rect : nullptr;
+    }
+
+    void GetPositionOfSection(ESceneSection eSection, UIVec2D *pPosition) override {
+        const MCLEControlRect *rect = sectionRect(eSection);
+        pPosition->x = rect ? rect->x : 0;
+        pPosition->y = rect ? rect->y : 0;
+    }
+
+    void GetItemScreenData(ESceneSection eSection, int iItemIndex, UIVec2D *pPosition, UIVec2D *pSize) override {
+        const MCLEControlRect *rect = sectionRect(eSection);
+        UIVec2D sectionSize;
+        sectionSize.x = rect ? rect->w : 0;
+        sectionSize.y = rect ? rect->h : 0;
+
+        if (IsSectionSlotList(eSection)) {
+            int rows = getSectionRows(eSection);
+            int cols = getSectionColumns(eSection);
+
+            pSize->x = sectionSize.x / cols;
+            pSize->y = sectionSize.y / rows;
+
+            int itemCol = iItemIndex % cols;
+            int itemRow = iItemIndex / cols;
+
+            pPosition->x = itemCol * pSize->x;
+            pPosition->y = itemRow * pSize->y;
+        } else {
+            GetPositionOfSection(eSection, pPosition);
+            pSize->x = sectionSize.x;
+            pSize->y = sectionSize.y;
+        }
+    }
+
+    // UIControl::setFocus on the name box or the slot list
+    void setControlFocus(ESceneSection eSection, bool focus) {
+        if (eSection == eSectionAnvilName) m_textInputAnvil.setFocus(focus);
+        else if (MCLEUISlotList *list = getSection(eSection)) list->setFocus(focus);
+    }
+
+    void setSectionFocus(ESceneSection eSection, int iPad) override {
+        setControlFocus(eSection, true);
+        if (m_focusSection != eSectionNone && m_focusSection != eSection) setControlFocus(m_focusSection, false);
+        m_focusSection = eSection;
+    }
+
+    void setFocusToPointer(int iPad) override {
+        if (m_focusSection != eSectionNone) setControlFocus(m_focusSection, false);
+        m_focusSection = eSectionNone;
+    }
+
+    void handleEditNamePressed() override {
+        setIgnoreInput(true);
+        mcle_ui_request_keyboard(app.GetString(IDS_TITLE_RENAME), m_textInputAnvil.label, 30);
+    }
+
+    void setEditNameValue(const wstring &name) override { m_textInputAnvil.setLabel(name); }
+
+    void setEditNameEditable(bool enabled) override {}
+
+    // handleTick sets it every tick; the movie keeps the last one, so it's
+    // sent when it changes
+    void setCostLabel(const wstring &label, bool canAfford) override {
+        if (m_costSent && label == m_lastCostLabel && canAfford == m_lastCanAfford) return;
+        m_costSent = true;
+        m_lastCostLabel = label;
+        m_lastCanAfford = canAfford;
+        mcle_ui_call("", "SetCostLabel", {mcle_ui_str(label), mcle_ui_bool(canAfford)});
+    }
+
+    void showCross(bool show) override {
+        if (m_showingCross != show) {
+            mcle_ui_call("", "ShowRedCross", {mcle_ui_bool(show)});
+            m_showingCross = show;
+        }
+    }
+};
+
 // The client's SimpleContainer for the chest packet types, and its getName
 std::wstring chestName(const OpenPacket &packet) {
     int chestString;
@@ -1304,6 +1559,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::BREWING_STAND: return "BrewingStandMenu1080.swf";
     case ContainerOpenPacket::ENCHANTMENT: return "EnchantingMenu1080.swf";
     case ContainerOpenPacket::BEACON: return "BeaconMenu1080.swf";
+    case ContainerOpenPacket::REPAIR_TABLE: return "AnvilMenu1080.swf";
     }
     return "";
 }
@@ -1351,6 +1607,11 @@ bool mcle_container_open_server() {
         case ContainerOpenPacket::BEACON:
             if (BeaconMenu *beaconMenu = dynamic_cast<BeaconMenu *>(menu)) {
                 if (beaconMenu->getBeacon()) scene = new BeaconScene(menu, beaconMenu->getBeacon());
+            }
+            break;
+        case ContainerOpenPacket::REPAIR_TABLE:
+            if (AnvilMenu *anvilMenu = dynamic_cast<AnvilMenu *>(menu)) {
+                scene = new AnvilScene(anvilMenu, player->inventory);
             }
             break;
         }

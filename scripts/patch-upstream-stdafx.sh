@@ -1700,6 +1700,11 @@ CREATIVE_PY="$REPO_ROOT/scripts/gen-creative-menu.py"
 if [ -f "$CREATIVE_PY" ]; then
     python3 "$CREATIVE_PY"
 fi
+# IUIScene_AnvilMenu's body, for Game/MCLEContainerMenus.cpp
+ANVIL_PY="$REPO_ROOT/scripts/gen-anvil-menu.py"
+if [ -f "$ANVIL_PY" ]; then
+    python3 "$ANVIL_PY"
+fi
 
 # DLCManager and DLCPack build and read .pck files with iOS's 4 byte wchar_t
 DLCM_PY="$REPO_ROOT/scripts/patch-dlc-ios.py"
