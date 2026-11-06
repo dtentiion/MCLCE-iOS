@@ -21,6 +21,8 @@
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.World/FurnaceTileEntity.h"
 #include "../../../upstream/Minecraft.World/BrewingStandTileEntity.h"
+#include "../../../upstream/Minecraft.World/BeaconTileEntity.h"
+#include "../../../upstream/Minecraft.World/net.minecraft.world.effect.h"
 #include "../../../upstream/Minecraft.World/PotionBrewing.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/Random.h"
@@ -38,6 +40,7 @@
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_HopperMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BrewingMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_EnchantingMenu.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.h"
 
 namespace {
 
@@ -78,6 +81,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::HOPPER:
     case ContainerOpenPacket::BREWING_STAND:
     case ContainerOpenPacket::ENCHANTMENT:
+    case ContainerOpenPacket::BEACON:
         return true;
     }
     return isChest(type);
@@ -881,6 +885,377 @@ protected:
     }
 };
 
+// UIControl_BeaconEffectButton
+struct BeaconEffectButton {
+    enum EState { eState_Disabled, eState_Enabled_Unselected, eState_Enabled_Selected, eState_Pressed };
+
+    std::string path;
+    MCLEControlRect rect{};
+    int data = 0;
+    int icon = 0;
+    bool selected = false;
+    bool active = false;
+    bool focus = false;
+    bool visible = true;
+    int lastState = -1;
+
+    explicit BeaconEffectButton(const char *p) : path(p) {}
+
+    void setVisible(bool show) {
+        if (show != visible) {
+            mcle_ui_set_visible(path, show);
+            visible = show;
+        }
+    }
+
+    void SetData(int newData, int newIcon, bool newActive, bool newSelected) {
+        data = newData;
+        active = newActive;
+        selected = newSelected;
+        SetIcon(newIcon);
+        UpdateButtonState();
+    }
+
+    void SetButtonSelected(bool newSelected) {
+        if (newSelected != selected) {
+            selected = newSelected;
+            UpdateButtonState();
+        }
+    }
+
+    void SetButtonActive(bool newActive) {
+        if (newActive != active) {
+            active = newActive;
+            UpdateButtonState();
+        }
+    }
+
+    void setFocus(bool newFocus) {
+        if (newFocus != focus) {
+            focus = newFocus;
+            UpdateButtonState();
+        }
+    }
+
+    void SetIcon(int newIcon) {
+        if (newIcon != icon) {
+            icon = newIcon;
+            mcle_ui_call(path, "SetIcon", {mcle_ui_num(icon)});
+        }
+    }
+
+    void UpdateButtonState() {
+        EState state;
+        if (!active) state = eState_Disabled;
+        else if (selected) state = eState_Pressed;
+        else if (focus) state = eState_Enabled_Selected;
+        else state = eState_Enabled_Unselected;
+
+        if (state != lastState) {
+            mcle_ui_call(path, "ChangeState", {mcle_ui_num(state)});
+            lastState = state;
+        }
+    }
+};
+
+// UIScene_BeaconMenu. m_beacon is the client's own beacon, which takes the
+// server's levels and powers when the menu opens and its payment slot as
+// it changes; the powers picked here only reach the server's beacon with
+// the confirm, as on console.
+class BeaconScene : public ServerContainerScene, public IUIScene_BeaconMenu {
+public:
+    enum EControls {
+        eControl_Primary1,
+        eControl_Primary2,
+        eControl_Primary3,
+        eControl_Primary4,
+        eControl_Primary5,
+        eControl_Secondary1,
+        eControl_Secondary2,
+        eControl_EFFECT_COUNT,
+    };
+
+    BeaconScene(AbstractContainerMenu *menu, const std::shared_ptr<BeaconTileEntity> &serverBeacon)
+        : m_serverBeacon(serverBeacon), m_slotListActivator("MainPanel.ActivatorSlot"),
+          m_slotListActivatorIcons("MainPanel.ActivatorList"), m_labelPrimary("MainPanel.PrimaryPowerLabel"),
+          m_labelSecondary("MainPanel.SecondaryPowerLabel"),
+          m_buttonsPowers{BeaconEffectButton("MainPanel.Primary_Slot_01"), BeaconEffectButton("MainPanel.Primary_Slot_02"),
+                          BeaconEffectButton("MainPanel.Primary_Slot_03"), BeaconEffectButton("MainPanel.Primary_Slot_04"),
+                          BeaconEffectButton("MainPanel.Primary_Slot_05"), BeaconEffectButton("MainPanel.Secondary_Slot_01"),
+                          BeaconEffectButton("MainPanel.Secondary_Slot_02")},
+          m_buttonConfirm("MainPanel.ConfirmButton") {
+        mapSharedControls();
+        mapSlotList(m_slotListActivator);
+        mapSlotList(m_slotListActivatorIcons);
+        for (BeaconEffectButton &button : m_buttonsPowers) button.rect = rectAt(button.path.c_str());
+        m_buttonConfirm.rect = rectAt(m_buttonConfirm.path.c_str());
+
+        m_labelPrimary.init(app.GetString(IDS_CONTAINER_BEACON_PRIMARY_POWER));
+        m_labelSecondary.init(app.GetString(IDS_CONTAINER_BEACON_SECONDARY_POWER));
+
+        for (BeaconEffectButton &button : m_buttonsPowers) button.setVisible(false);
+
+        // The tutorial state is left out, localgameModes is never set here
+
+        // BeaconMenu::addSlotListener's setContainerData, then its slot
+        m_beacon = std::make_shared<BeaconTileEntity>();
+        m_beacon->setLevels(m_serverBeacon->getLevels());
+        m_beacon->setPrimaryPower(m_serverBeacon->getPrimaryPower());
+        m_beacon->setSecondaryPower(m_serverBeacon->getSecondaryPower());
+        m_beacon->setItem(0, m_serverBeacon->getItem(0));
+
+        Initialize(0, menu, false, BeaconMenu::INV_SLOT_START, eSectionBeaconUsing, eSectionBeaconMax);
+
+        m_slotListActivator.addSlots(BeaconMenu::PAYMENT_SLOT, 1);
+        m_slotListActivatorIcons.addSlots(m_menu->getSize(), 4);
+    }
+
+    void tick(double now) override {
+        ServerContainerScene::tick(now);
+        // the server's ContainerSetSlot for the payment
+        m_beacon->setItem(0, m_serverBeacon->getItem(0));
+        handleTick();
+    }
+
+    // The activator list's four item icons, then the slots
+    void customDraw(const MCLECustomDrawRegion &region) override {
+        int slotId = -1;
+        if (sscanf(region.name, "slot_%d", &slotId) == 1 && slotId >= 0 &&
+            slotId >= static_cast<int>(m_slotItems.size())) {
+            std::shared_ptr<ItemInstance> item = nullptr;
+            switch (slotId - static_cast<int>(m_slotItems.size())) {
+            case 0: item = std::make_shared<ItemInstance>(Item::emerald); break;
+            case 1: item = std::make_shared<ItemInstance>(Item::diamond); break;
+            case 2: item = std::make_shared<ItemInstance>(Item::goldIngot); break;
+            case 3: item = std::make_shared<ItemInstance>(Item::ironIngot); break;
+            default: break;
+            }
+            if (item != nullptr) mcle_custom_draw_slot(region, item, 1.0f, true);
+        } else {
+            ServerContainerScene::customDraw(region);
+        }
+    }
+
+protected:
+    std::shared_ptr<BeaconTileEntity> m_serverBeacon;
+    MCLEUISlotList m_slotListActivator, m_slotListActivatorIcons;
+    MCLEUILabel m_labelPrimary, m_labelSecondary;
+    BeaconEffectButton m_buttonsPowers[eControl_EFFECT_COUNT];
+    BeaconEffectButton m_buttonConfirm;
+
+    // IUIScene_BeaconMenu::handleOtherClicked, with the confirm's
+    // SET_BEACON_PACKET handled the way PlayerConnection::handleCustomPayload
+    // handles it
+    void handleOtherClicked(int iPad, ESceneSection eSection, int buttonNum, bool quickKey) override {
+        switch (eSection) {
+        case eSectionBeaconConfirm: {
+            if ((m_beacon->getItem(0) == nullptr) || (m_beacon->getPrimaryPower() <= 0)) return;
+            confirm(m_beacon->getPrimaryPower(), m_beacon->getSecondaryPower());
+
+            if (m_beacon->getPrimaryPower() > 0) {
+                int effectId = m_beacon->getPrimaryPower();
+
+                bool active = true;
+                bool selected = false;
+
+                int tier = 3;
+                if (tier >= m_beacon->getLevels()) {
+                    active = false;
+                } else if (effectId == m_beacon->getSecondaryPower()) {
+                    selected = true;
+                }
+
+                AddPowerButton(GetId(tier, m_beacon->getPrimaryPower()),
+                               MobEffect::effects[m_beacon->getPrimaryPower()]->getIcon(), tier, 1, active, selected);
+            }
+        } break;
+        case eSectionBeaconPrimaryTierOneOne:
+        case eSectionBeaconPrimaryTierOneTwo:
+        case eSectionBeaconPrimaryTierTwoOne:
+        case eSectionBeaconPrimaryTierTwoTwo:
+        case eSectionBeaconPrimaryTierThree:
+        case eSectionBeaconSecondaryOne:
+        case eSectionBeaconSecondaryTwo: {
+            if (IsPowerButtonSelected(eSection)) return;
+
+            int id = GetPowerButtonId(eSection);
+            int effectId = (id & 0xff);
+            int tier = (id >> 8);
+
+            if (tier < 3) {
+                m_beacon->setPrimaryPower(effectId);
+            } else {
+                m_beacon->setSecondaryPower(effectId);
+            }
+            SetPowerButtonSelected(eSection);
+        } break;
+        default:
+            break;
+        }
+    }
+
+    void confirm(int primary, int secondary) {
+        std::shared_ptr<ServerPlayer> player = mcle_local_player();
+        if (!player) return;
+        if (dynamic_cast<BeaconMenu *>(player->containerMenu) != nullptr) {
+            BeaconMenu *beaconMenu = static_cast<BeaconMenu *>(player->containerMenu);
+            Slot *slot = beaconMenu->getSlot(0);
+            if (slot->hasItem()) {
+                slot->remove(1);
+                shared_ptr<BeaconTileEntity> beacon = beaconMenu->getBeacon();
+                beacon->setPrimaryPower(primary);
+                beacon->setSecondaryPower(secondary);
+                beacon->setChanged();
+            }
+        }
+    }
+
+    BeaconEffectButton *button(ESceneSection eSection) {
+        switch (eSection) {
+        case eSectionBeaconPrimaryTierOneOne: return &m_buttonsPowers[eControl_Primary1];
+        case eSectionBeaconPrimaryTierOneTwo: return &m_buttonsPowers[eControl_Primary2];
+        case eSectionBeaconPrimaryTierTwoOne: return &m_buttonsPowers[eControl_Primary3];
+        case eSectionBeaconPrimaryTierTwoTwo: return &m_buttonsPowers[eControl_Primary4];
+        case eSectionBeaconPrimaryTierThree: return &m_buttonsPowers[eControl_Primary5];
+        case eSectionBeaconSecondaryOne: return &m_buttonsPowers[eControl_Secondary1];
+        case eSectionBeaconSecondaryTwo: return &m_buttonsPowers[eControl_Secondary2];
+        case eSectionBeaconConfirm: return &m_buttonConfirm;
+        default: return nullptr;
+        }
+    }
+
+    // UIControl::setFocus on whichever control the section is
+    void setControlFocus(ESceneSection eSection, bool focus) {
+        if (BeaconEffectButton *b = button(eSection)) b->setFocus(focus);
+        else if (MCLEUISlotList *list = getSection(eSection)) list->setFocus(focus);
+    }
+
+    void setSectionFocus(ESceneSection eSection, int iPad) override {
+        setControlFocus(eSection, true);
+        if (m_focusSection != eSectionNone && m_focusSection != eSection) setControlFocus(m_focusSection, false);
+        m_focusSection = eSection;
+    }
+
+    void setFocusToPointer(int iPad) override {
+        if (m_focusSection != eSectionNone) setControlFocus(m_focusSection, false);
+        m_focusSection = eSectionNone;
+    }
+
+    int getSectionColumns(ESceneSection eSection) override {
+        int cols = 0;
+        switch (eSection) {
+        case eSectionBeaconItem: cols = 1; break;
+        case eSectionBeaconInventory: cols = 9; break;
+        case eSectionBeaconUsing: cols = 9; break;
+        default: assert(false); break;
+        }
+        return cols;
+    }
+
+    int getSectionRows(ESceneSection eSection) override {
+        int rows = 0;
+        switch (eSection) {
+        case eSectionBeaconItem: rows = 1; break;
+        case eSectionBeaconInventory: rows = 3; break;
+        case eSectionBeaconUsing: rows = 1; break;
+        default: assert(false); break;
+        }
+        return rows;
+    }
+
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionBeaconItem: return &m_slotListActivator;
+        case eSectionBeaconInventory: return &m_slotListInventory;
+        case eSectionBeaconUsing: return &m_slotListHotbar;
+        default: return nullptr;
+        }
+    }
+
+    const MCLEControlRect *sectionRect(ESceneSection eSection) {
+        if (BeaconEffectButton *b = button(eSection)) return &b->rect;
+        MCLEUISlotList *list = getSection(eSection);
+        return list ? &list->rect : nullptr;
+    }
+
+    void GetPositionOfSection(ESceneSection eSection, UIVec2D *pPosition) override {
+        const MCLEControlRect *rect = sectionRect(eSection);
+        pPosition->x = rect ? rect->x : 0;
+        pPosition->y = rect ? rect->y : 0;
+    }
+
+    void GetItemScreenData(ESceneSection eSection, int iItemIndex, UIVec2D *pPosition, UIVec2D *pSize) override {
+        const MCLEControlRect *rect = sectionRect(eSection);
+        UIVec2D sectionSize;
+        sectionSize.x = rect ? rect->w : 0;
+        sectionSize.y = rect ? rect->h : 0;
+
+        if (IsSectionSlotList(eSection)) {
+            int rows = getSectionRows(eSection);
+            int cols = getSectionColumns(eSection);
+
+            pSize->x = sectionSize.x / cols;
+            pSize->y = sectionSize.y / rows;
+
+            int itemCol = iItemIndex % cols;
+            int itemRow = iItemIndex / cols;
+
+            pPosition->x = itemCol * pSize->x;
+            pPosition->y = itemRow * pSize->y;
+        } else {
+            GetPositionOfSection(eSection, pPosition);
+            pSize->x = sectionSize.x;
+            pSize->y = sectionSize.y;
+        }
+    }
+
+    void SetConfirmButtonEnabled(bool enabled) override { m_buttonConfirm.SetButtonActive(enabled); }
+
+    void AddPowerButton(int id, int icon, int tier, int count, bool active, bool selected) override {
+        BeaconEffectButton *target = nullptr;
+        switch (tier) {
+        case 0: target = &m_buttonsPowers[count == 0 ? eControl_Primary1 : eControl_Primary2]; break;
+        case 1: target = &m_buttonsPowers[count == 0 ? eControl_Primary3 : eControl_Primary4]; break;
+        case 2: target = &m_buttonsPowers[eControl_Primary5]; break;
+        case 3: target = &m_buttonsPowers[count == 0 ? eControl_Secondary1 : eControl_Secondary2]; break;
+        }
+        if (!target) return;
+        target->SetData(id, icon, active, selected);
+        target->setVisible(true);
+    }
+
+    int GetPowerButtonId(ESceneSection eSection) override {
+        BeaconEffectButton *b = button(eSection);
+        return (b && b != &m_buttonConfirm) ? b->data : 0;
+    }
+
+    bool IsPowerButtonSelected(ESceneSection eSection) override {
+        BeaconEffectButton *b = button(eSection);
+        return (b && b != &m_buttonConfirm) ? b->selected : false;
+    }
+
+    void SetPowerButtonSelected(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionBeaconPrimaryTierOneOne:
+        case eSectionBeaconPrimaryTierOneTwo:
+        case eSectionBeaconPrimaryTierTwoOne:
+        case eSectionBeaconPrimaryTierTwoTwo:
+        case eSectionBeaconPrimaryTierThree:
+            for (int i = eControl_Primary1; i <= eControl_Primary5; ++i) m_buttonsPowers[i].SetButtonSelected(false);
+            break;
+        case eSectionBeaconSecondaryOne:
+        case eSectionBeaconSecondaryTwo:
+            m_buttonsPowers[eControl_Secondary1].SetButtonSelected(false);
+            m_buttonsPowers[eControl_Secondary2].SetButtonSelected(false);
+            break;
+        default:
+            break;
+        }
+        BeaconEffectButton *b = button(eSection);
+        if (b && b != &m_buttonConfirm) b->SetButtonSelected(true);
+    }
+};
+
 // The client's SimpleContainer for the chest packet types, and its getName
 std::wstring chestName(const OpenPacket &packet) {
     int chestString;
@@ -928,6 +1303,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::HOPPER: return "HopperMenu1080.swf";
     case ContainerOpenPacket::BREWING_STAND: return "BrewingStandMenu1080.swf";
     case ContainerOpenPacket::ENCHANTMENT: return "EnchantingMenu1080.swf";
+    case ContainerOpenPacket::BEACON: return "BeaconMenu1080.swf";
     }
     return "";
 }
@@ -970,6 +1346,11 @@ bool mcle_container_open_server() {
             // LocalPlayer::startEnchanting gets the name only when it's custom
             if (dynamic_cast<EnchantmentMenu *>(menu)) {
                 scene = new EnchantingScene(menu, g_packet.customName ? g_packet.title : std::wstring());
+            }
+            break;
+        case ContainerOpenPacket::BEACON:
+            if (BeaconMenu *beaconMenu = dynamic_cast<BeaconMenu *>(menu)) {
+                if (beaconMenu->getBeacon()) scene = new BeaconScene(menu, beaconMenu->getBeacon());
             }
             break;
         }
