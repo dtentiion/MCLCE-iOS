@@ -246,6 +246,9 @@ extern "C" void         mcle_glbridge_bind_texture(unsigned int tex_id);
 extern "C" void         mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id,
                                                           int width, int height,
                                                           const void *rgba_pixels);
+extern "C" void         mcle_glbridge_tex_sub_image_rgba(unsigned int tex_id, int x, int y,
+                                                           int width, int height,
+                                                           const void *rgba_pixels);
 
 struct C4JRenderStub {
     enum eTextureFormat {
@@ -384,12 +387,16 @@ struct C4JRenderStub {
     // Variadic catch-all for the PSVita and other-arity variants.
     template<class A1, class A2, class A3, class A4, class A5, class A6, class... Rest>
     void   TextureData(A1, A2, A3, A4, A5, A6, Rest...) {}
-    void   TextureDataUpdate(int /*x*/, int /*y*/, int width, int height,
-                              void *pixels, int mipLevel) {
+    // Writes into the bound texture. Callers pass int* (Minimap) or byte*
+    // (Texture::updateOnGPU), so the pixels are a template parameter, a
+    // void* one loses to the catch-all below and the update never happens.
+    template<class P>
+    void   TextureDataUpdate(int x, int y, int width, int height,
+                              P *pixels, int mipLevel) {
         if (mipLevel != 0 || pixels == nullptr || width <= 0 || height <= 0) return;
         unsigned int id = mcle_glbridge_get_bound_texture();
         if (id == 0) return;
-        mcle_glbridge_tex_image_2d_rgba(id, width, height, pixels);
+        mcle_glbridge_tex_sub_image_rgba(id, x, y, width, height, pixels);
     }
     template<class... A> void   TextureDataUpdate(A...)       {}
     template<class... A> void * TextureGetTexture(A...)       { return nullptr; }

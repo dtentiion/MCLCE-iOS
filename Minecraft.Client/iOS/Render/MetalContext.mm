@@ -1390,6 +1390,29 @@ extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, 
     }
 }
 
+// RenderManager.TextureDataUpdate: new pixels for part or all of a texture
+// that's already there (the map, the animated block and item atlases). A
+// texture that isn't there yet is made at the update's size. A whole-texture
+// update of a different size isn't the texture it was meant for, so it's left.
+extern "C" void mcle_glbridge_tex_sub_image_rgba(unsigned int tex_id, int x, int y,
+                                                   int width, int height,
+                                                   const void* rgba_pixels) {
+    if (!g.device || !rgba_pixels || width <= 0 || height <= 0 || x < 0 || y < 0) return;
+    auto it = g_gl_textures.find(tex_id);
+    if (it == g_gl_textures.end() || it->second == nil) {
+        if (x == 0 && y == 0) mcle_glbridge_tex_image_2d_rgba(tex_id, width, height, rgba_pixels);
+        return;
+    }
+    id<MTLTexture> tex = it->second;
+    if ((NSUInteger)(x + width) > tex.width || (NSUInteger)(y + height) > tex.height) return;
+    if (x == 0 && y == 0 && ((NSUInteger)width != tex.width || (NSUInteger)height != tex.height)) return;
+    if (tex.storageMode == MTLStorageModePrivate || tex.pixelFormat != MTLPixelFormatRGBA8Unorm) return;
+    [tex replaceRegion:MTLRegionMake2D((NSUInteger)x, (NSUInteger)y, (NSUInteger)width, (NSUInteger)height)
+            mipmapLevel:0
+              withBytes:rgba_pixels
+            bytesPerRow:(NSUInteger)(width * 4)];
+}
+
 // G3f: GL_CURRENT_COLOR setters. Each draw reads the live values into a
 // vertex-shader uniform and modulates per-vertex color by it. Matches
 // fixed-function D3D9 modulate.
