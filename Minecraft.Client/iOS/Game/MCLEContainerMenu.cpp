@@ -171,6 +171,20 @@ void MCLEUILabel::tick() {
     mcle_ui_call(path, "SetLabel", {mcle_ui_str(label)});
 }
 
+void MCLEUIProgress::init(const std::wstring &label, int id, int minValue, int maxValue, int current) {
+    min = minValue;
+    max = maxValue;
+    mcle_ui_call(path, "Init", {mcle_ui_str(label)});
+}
+
+void MCLEUIProgress::setProgress(int current) {
+    float percent = static_cast<float>(current - min) / (max - min);
+    if (percent != lastPercent) {
+        lastPercent = percent;
+        mcle_ui_call(path, "setProgress", {mcle_ui_num(percent)});
+    }
+}
+
 void MCLEUISlotList::addSlot(int id) { mcle_ui_call(path, "addSlot", {mcle_ui_num(id), mcle_ui_bool(false), mcle_ui_bool(false)}); }
 
 void MCLEUISlotList::addSlots(int start, int count) {
