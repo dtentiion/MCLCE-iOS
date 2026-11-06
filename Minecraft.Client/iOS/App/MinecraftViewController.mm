@@ -2800,6 +2800,29 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     MCLEContainerApplyOps();
 }
 
+// LocalPlayer's open for a container the server opened (openContainer and
+// the rest), from handleContainerOpen
+- (void)openServerContainer {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) {
+        mcle_container_open_failed();
+        return;
+    }
+    mcle_container_set_rect_reader(MCLEControlRectAt);
+    self.menuStack = nil;
+    [self transitionToMenuNamed:[NSString stringWithUTF8String:mcle_container_server_movie()]];
+    if (!mcle_container_is_open()) mcle_container_open_failed();
+    [self showContainerOverWorld];
+}
+
+// The server container's scene, once its movie is up
+- (void)initServerContainer {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    mcle_container_open_server();
+    MCLEContainerApplyOps();
+}
+
 // Minecraft::tick's crafting action in creative: app.LoadCreativeMenu
 - (void)openCreativeMenu {
     extern PlayerHandle* g_ruffle_player;
@@ -3647,6 +3670,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self initCraftingMenu:YES];
         } else if ([swfName isEqualToString:@"CreativeMenu1080.swf"]) {
             [self initCreativeMenu];
+        } else if ([swfName isEqualToString:[NSString stringWithUTF8String:mcle_container_server_movie()]]) {
+            [self initServerContainer];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -3768,6 +3793,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             if (request == MCLE_CONTAINER_CRAFTING_2X2) [self openCraftingMenu:NO];
             else if (request == MCLE_CONTAINER_CRAFTING_3X3) [self openCraftingMenu:YES];
             else if (request == MCLE_CONTAINER_CREATIVE) [self openCreativeMenu];
+            else if (request == MCLE_CONTAINER_SERVER) [self openServerContainer];
         }
         mcle_render_frame();
         if (g_world_container) {
