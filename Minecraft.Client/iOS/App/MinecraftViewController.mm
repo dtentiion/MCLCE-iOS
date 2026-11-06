@@ -1343,11 +1343,13 @@ static void MCLETooltipsOpacityPump(bool menuDisplayed, int opacityTimer) {
         fVal = 0.01f * static_cast<float>(ucAlpha);
     }
     if (fVal == g_tooltips_alpha) return;
-    g_tooltips_alpha = fVal;
     const char* setAlpha = "SetAlpha";
     double value = fVal;
-    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
-        (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1);
+    // Kept only once the strip's movie took it
+    if (ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
+            (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1) == 1) {
+        g_tooltips_alpha = fVal;
+    }
 }
 
 // In game: Minecraft::tick's tooltips
