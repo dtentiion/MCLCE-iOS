@@ -194,6 +194,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
+void mcle_creative_menu_static_ctor();                    // MCLECreativeMenu.cpp
 
 namespace {
 // AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
@@ -591,8 +592,6 @@ extern "C" void mcle_save_now_sync(void) {
     }
     pthread_join(saveThread, nullptr);
 }
-
-void mcle_creative_menu_static_ctor(); // MCLECreativeMenu.cpp
 
 // Leak hunt: atomic counters bracketed around ctor/dtor of suspect
 // upstream classes via patch scripts. If a counter grows unbounded
