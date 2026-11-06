@@ -4,6 +4,7 @@
 // player, level, hitResult, gameMode and ui.
 
 #include "MCLETooltips.h"
+#include "MCLETutorial.h"
 
 #include <mutex>
 
@@ -47,26 +48,31 @@ namespace {
 std::mutex g_mutex;
 int g_tooltips[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
-// MultiPlayerGameMode as the block uses it: useItem and useItemOn with
-// bTestUseOnly set, which only ask whether the use would do anything, and
-// no tutorial
+// The TutorialMode as the block uses it: the tutorial it has, useItem, and
+// useItemOn with bTestUseOnly set, which only asks whether the use would do
+// anything
 struct TooltipGameMode {
-    struct NoTutorial {
-        void onLookAt(int, int) {}
-        void onLookAtEntity(std::shared_ptr<Entity>) {}
-    };
-
     bool creative = false;
 
-    NoTutorial *getTutorial() { return nullptr; }
+    Tutorial *getTutorial() { return mcle_tutorial(); }
 
     bool useItem(std::shared_ptr<Player> player, Level *level, std::shared_ptr<ItemInstance> item, bool) {
         if (!player->isAllowedToUse(item)) return false;
         return item->TestUse(item, level, player);
     }
 
+    // TutorialMode::useItemOn
     bool useItemOn(std::shared_ptr<Player> player, Level *level, std::shared_ptr<ItemInstance> item, int x, int y,
                    int z, int face, Vec3 *hit, bool bTestUseOnly, bool *pbUsedItem = nullptr) {
+        MCLETutorialUse use = mcle_tutorial_use_item_on(level, item, x, y, z, bTestUseOnly);
+        bool result = multiPlayerUseItemOn(player, level, item, x, y, z, face, hit, bTestUseOnly, pbUsedItem);
+        mcle_tutorial_used_item_on(use, result, item, bTestUseOnly);
+        return result;
+    }
+
+    // MultiPlayerGameMode::useItemOn
+    bool multiPlayerUseItemOn(std::shared_ptr<Player> player, Level *level, std::shared_ptr<ItemInstance> item,
+                              int x, int y, int z, int face, Vec3 *hit, bool bTestUseOnly, bool *pbUsedItem) {
         if (pbUsedItem) *pbUsedItem = false;
         float clickX = static_cast<float>(hit->x) - x;
         float clickY = static_cast<float>(hit->y) - y;

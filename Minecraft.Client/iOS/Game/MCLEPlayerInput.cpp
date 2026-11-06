@@ -11,6 +11,7 @@
 #include "MCLEPlayerInput.h"
 #include "MCLEHud.h"
 #include "MCLEContainerMenu.h"
+#include "MCLETutorial.h"
 
 #include <atomic>
 #include <cmath>
@@ -242,10 +243,35 @@ bool sameDestroyTarget(int x, int y, int z) {
     return x == s.xDestroyBlock && y == s.yDestroyBlock && z == s.zDestroyBlock && sameItems;
 }
 
-// MultiPlayerGameMode::startDestroyBlock. The client's own destroyBlock and
-// destroyTileProgress calls are prediction on its level; the server's
-// startDestroyBlock does both on this one.
+// Level::extinguishFire's check: whether the face's neighbour is fire, which
+// the creative break puts out instead of breaking the block
+bool firesAt(int x, int y, int z, int face) {
+    if (face == 0) y--;
+    if (face == 1) y++;
+    if (face == 2) z--;
+    if (face == 3) z++;
+    if (face == 4) x--;
+    if (face == 5) x++;
+    return L->getTile(x, y, z) == Tile::fire_Id;
+}
+
+// A START_DESTROY_BLOCK the server breaks the block on straight away: in
+// creative unless it puts out a fire (creativeDestroyBlock), or a block that
+// breaks in one hit. The client's destroyBlock would run for it, so
+// TutorialMode::destroyBlock's calls are made around the server's.
+void sendStartDestroyBlock(int x, int y, int z, int face, bool breaks) {
+    MCLETutorialDestroy destroy;
+    if (breaks) destroy = mcle_tutorial_destroy_block(L, P->getSelectedItem(), x, y, z);
+    sendAction(START_DESTROY_BLOCK, x, y, z, face);
+    if (breaks) mcle_tutorial_block_destroyed(destroy);
+}
+
+// TutorialMode::startDestroyBlock around MultiPlayerGameMode's. The client's
+// own destroyBlock and destroyTileProgress calls are prediction on its
+// level; the server's startDestroyBlock does both on this one.
 void startDestroyBlock(int x, int y, int z, int face) {
+    mcle_tutorial_start_destroy_block(L, P->inventory->getSelected(), x, y, z);
+
     if (!P->isAllowedToMine()) return;
 
     if (isAdventureRestricted()) {
@@ -255,13 +281,15 @@ void startDestroyBlock(int x, int y, int z, int face) {
     if (isCreative()) {
         // Skip right after breaking a block so one click breaks one block
         if (s.destroyDelay > 0) return;
-        sendAction(START_DESTROY_BLOCK, x, y, z, face);
+        sendStartDestroyBlock(x, y, z, face, !firesAt(x, y, z, face));
         s.destroyDelay = 5;
     } else if (!s.isDestroying || !sameDestroyTarget(x, y, z)) {
         if (s.isDestroying) {
             sendAction(ABORT_DESTROY_BLOCK, s.xDestroyBlock, s.yDestroyBlock, s.zDestroyBlock, face);
         }
-        sendAction(START_DESTROY_BLOCK, x, y, z, face);
+        int t0 = L->getTile(x, y, z);
+        sendStartDestroyBlock(x, y, z, face,
+                              t0 > 0 && Tile::tiles[t0]->getDestroyProgress(P, P->level, x, y, z) >= 1);
         int t = L->getTile(x, y, z);
         if (!(t > 0 && Tile::tiles[t]->getDestroyProgress(P, P->level, x, y, z) >= 1)) {
             s.isDestroying = true;
@@ -297,7 +325,7 @@ void continueDestroyBlock(int x, int y, int z, int face) {
 
     if (isCreative()) {
         s.destroyDelay = 5;
-        sendAction(START_DESTROY_BLOCK, x, y, z, face);
+        sendStartDestroyBlock(x, y, z, face, !firesAt(x, y, z, face));
         return;
     }
 
@@ -324,7 +352,10 @@ void continueDestroyBlock(int x, int y, int z, int face) {
 
         if (s.destroyProgress >= 1) {
             s.isDestroying = false;
+            // the client's destroyBlock goes with the server's
+            MCLETutorialDestroy destroy = mcle_tutorial_destroy_block(L, P->getSelectedItem(), x, y, z);
             sendAction(STOP_DESTROY_BLOCK, x, y, z, face);
+            mcle_tutorial_block_destroyed(destroy);
             s.destroyProgress = 0;
             s.destroyTicks = 0;
             s.destroyDelay = 5;
@@ -340,7 +371,8 @@ void continueDestroyBlock(int x, int y, int z, int face) {
 // MultiPlayerGameMode::useItemOn plus PlayerConnection::handleUseItem. The
 // tile/item use runs once, for real, in the same order as the client so
 // pbUsedItem means the same thing.
-bool useItemOn(std::shared_ptr<ItemInstance> item, int x, int y, int z, int face, Vec3 *hit, bool *pbUsedItem) {
+bool multiPlayerUseItemOn(std::shared_ptr<ItemInstance> item, int x, int y, int z, int face, Vec3 *hit,
+                          bool *pbUsedItem) {
     if (pbUsedItem) *pbUsedItem = false;
 
     float clickX = static_cast<float>(hit->x) - x;
@@ -387,6 +419,14 @@ bool useItemOn(std::shared_ptr<ItemInstance> item, int x, int y, int z, int face
     return didSomething;
 }
 
+// TutorialMode::useItemOn
+bool useItemOn(std::shared_ptr<ItemInstance> item, int x, int y, int z, int face, Vec3 *hit, bool *pbUsedItem) {
+    MCLETutorialUse use = mcle_tutorial_use_item_on(L, item, x, y, z, false);
+    bool result = multiPlayerUseItemOn(item, x, y, z, face, hit, pbUsedItem);
+    mcle_tutorial_used_item_on(use, result, item, false);
+    return result;
+}
+
 // MultiPlayerGameMode::useItem, handled as handleUseItem's face 255 case
 bool useItem(std::shared_ptr<ItemInstance> item) {
     if (!P->isAllowedToUse(item)) return false;
@@ -403,8 +443,11 @@ bool inReach(const std::shared_ptr<Entity> &target) {
     return P->distanceToSqr(target) <= maxDistSq;
 }
 
+// TutorialMode::attack, then MultiPlayerGameMode's
 void attack(const std::shared_ptr<Entity> &entity) {
-    if (entity == nullptr || !inReach(entity)) return;
+    if (entity == nullptr) return;
+    mcle_tutorial_attack(P, entity);
+    if (!inReach(entity)) return;
     if ((entity->GetType() == eTYPE_ITEMENTITY) || (entity->GetType() == eTYPE_EXPERIENCEORB) ||
         (entity->GetType() == eTYPE_ARROW) || entity == P) {
         return;
@@ -641,14 +684,22 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     pick(1);
 
     int wheel = 0;
-    if (pressed & actionButtons(MINECRAFT_ACTION_LEFT_SCROLL)) wheel = 1;
-    else if (pressed & actionButtons(MINECRAFT_ACTION_RIGHT_SCROLL)) wheel = -1;
-    if (wheel != 0) P->inventory->swapPaint(wheel);
+    if ((pressed & actionButtons(MINECRAFT_ACTION_LEFT_SCROLL)) && mcle_tutorial_input_allowed(MINECRAFT_ACTION_LEFT_SCROLL)) {
+        wheel = 1;
+    } else if ((pressed & actionButtons(MINECRAFT_ACTION_RIGHT_SCROLL)) &&
+               mcle_tutorial_input_allowed(MINECRAFT_ACTION_RIGHT_SCROLL)) {
+        wheel = -1;
+    }
+    if (wheel != 0) {
+        P->inventory->swapPaint(wheel);
+        mcle_tutorial_selected_item_changed(P->inventory->getSelected());
+    }
     // the opacity timer
     if (wheel != 0) mcle_hud_scrolled();
 
     // RENDER_THIRD_PERSON is the left stick click
-    if (pressed & actionButtons(MINECRAFT_ACTION_RENDER_THIRD_PERSON)) {
+    if ((pressed & actionButtons(MINECRAFT_ACTION_RENDER_THIRD_PERSON)) &&
+        mcle_tutorial_input_allowed(MINECRAFT_ACTION_RENDER_THIRD_PERSON)) {
         g_thirdPersonView.store((g_thirdPersonView.load(std::memory_order_relaxed) + 1) % 3, std::memory_order_relaxed);
     }
 
@@ -666,7 +717,7 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
         }
     }
     // PlayerConnection::handlePlayerAction(DROP_ITEM)
-    if (dropPressed) {
+    if (dropPressed && mcle_tutorial_input_allowed(MINECRAFT_ACTION_DROP)) {
         P->resetLastActionTime();
         P->drop(false);
     }
@@ -674,7 +725,7 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     // The crafting action. In creative it's the creative menu. Looking at a
     // crafting table it's used like the use button would, which opens the
     // 3x3; anywhere else it's the 2x2.
-    if (pressed & actionButtons(MINECRAFT_ACTION_CRAFTING)) {
+    if ((pressed & actionButtons(MINECRAFT_ACTION_CRAFTING)) && mcle_tutorial_input_allowed(MINECRAFT_ACTION_CRAFTING)) {
         if (isCreative()) {
             mcle_container_request(MCLE_CONTAINER_CREATIVE);
         } else if (s.hitResult != nullptr && s.hitResult->type == HitResult::TILE &&
@@ -686,21 +737,25 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
         }
     }
 
-    // ullButtonsPressed and ButtonPressed both fire on the same press
-    if (pressed & actionButtons(MINECRAFT_ACTION_ACTION)) {
-        handleMouseClick(0);
-        s.lastClickTick[0] = s.ticks;
+    if (mcle_tutorial_input_allowed(MINECRAFT_ACTION_ACTION)) {
+        // ullButtonsPressed and ButtonPressed both fire on the same press
+        if (pressed & actionButtons(MINECRAFT_ACTION_ACTION)) {
+            handleMouseClick(0);
+            s.lastClickTick[0] = s.ticks;
+        }
+        if (pressed & actionButtons(MINECRAFT_ACTION_ACTION)) {
+            handleMouseClick(0);
+            s.lastClickTick[0] = s.ticks;
+        }
+        handleMouseDown(0, (buttons & actionButtons(MINECRAFT_ACTION_ACTION)) != 0);
     }
-    if (pressed & actionButtons(MINECRAFT_ACTION_ACTION)) {
-        handleMouseClick(0);
-        s.lastClickTick[0] = s.ticks;
-    }
-    handleMouseDown(0, (buttons & actionButtons(MINECRAFT_ACTION_ACTION)) != 0);
 
     const bool useHeld = (buttons & actionButtons(MINECRAFT_ACTION_USE)) != 0;
     const int ticksPerSecond = 20;
     if (P->isUsingItem()) {
         if (!useHeld) P->releaseUsingItem();
+    } else if (!mcle_tutorial_input_allowed(MINECRAFT_ACTION_USE)) {
+        // the tutorial isn't letting it be used
     } else if (P->abilities.instabuild) {
         // Special creative handling, for placing blocks at regular intervals
         bool didClick = creativeModeHandleMouseClick(1, useHeld);
@@ -784,25 +839,41 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     float runTreshold = 0.8f;
     bool wasRunning = m.ya >= runTreshold;
 
-    // Input::tick. Minecraft movement is the wrong way round, so x is inverted.
-    m.xa = -stickX;
-    m.ya = stickY;
+    // Input::tick. Minecraft movement is the wrong way round, so x is
+    // inverted. The tutorial can hold back each direction.
+    m.xa = 0.0f;
+    m.ya = 0.0f;
+    if (mcle_tutorial_input_allowed(MINECRAFT_ACTION_LEFT) || mcle_tutorial_input_allowed(MINECRAFT_ACTION_RIGHT)) {
+        m.xa = -stickX;
+    }
+    if (mcle_tutorial_input_allowed(MINECRAFT_ACTION_FORWARD) || mcle_tutorial_input_allowed(MINECRAFT_ACTION_BACKWARD)) {
+        m.ya = stickY;
+    }
 
     // In flying mode don't toggle sneaking, unless riding (sneak dismounts)
     if (!P->abilities.flying || P->riding != nullptr) {
-        if (pressed & actionButtons(MINECRAFT_ACTION_SNEAK_TOGGLE)) m.sneaking = !m.sneaking;
+        if ((pressed & actionButtons(MINECRAFT_ACTION_SNEAK_TOGGLE)) &&
+            mcle_tutorial_input_allowed(MINECRAFT_ACTION_SNEAK_TOGGLE)) {
+            m.sneaking = !m.sneaking;
+        }
     }
     if (m.sneaking) {
         m.xa *= 0.3f;
         m.ya *= 0.3f;
     }
-    m.jumping = (buttons & actionButtons(MINECRAFT_ACTION_JUMP)) != 0;
+    m.jumping = (buttons & actionButtons(MINECRAFT_ACTION_JUMP)) != 0 && mcle_tutorial_input_allowed(MINECRAFT_ACTION_JUMP);
 
     // Look: squared so small pushes aim finely, scaled by the in-game
     // sensitivity, applied once a tick
     float turnSpeed = 50.0f;
-    float tx = lookX * sensitivity;
-    float ty = lookY * sensitivity;
+    float tx = 0.0f;
+    float ty = 0.0f;
+    if (mcle_tutorial_input_allowed(MINECRAFT_ACTION_LOOK_LEFT) || mcle_tutorial_input_allowed(MINECRAFT_ACTION_LOOK_RIGHT)) {
+        tx = lookX * sensitivity;
+    }
+    if (mcle_tutorial_input_allowed(MINECRAFT_ACTION_LOOK_UP) || mcle_tutorial_input_allowed(MINECRAFT_ACTION_LOOK_DOWN)) {
+        ty = lookY * sensitivity;
+    }
     if (invertLook) ty = -ty;
     float turnX = tx * fabsf(tx) * turnSpeed;
     float turnY = ty * fabsf(ty) * turnSpeed;

@@ -18,9 +18,8 @@ What changes:
   the achievements) would then happen twice, so it's left out. The menu
   still plays the sound and refreshes the recipes after.
 - FormatHTMLString is MCLEHowToPlay.cpp's copy of CMinecraftApp's.
-- The tutorial checks are left out. They only run when
-  Minecraft::localgameModes holds the tutorial's game mode, which is never
-  set here, and the iOS Tutorial is a stand-in without those calls.
+- The tutorial is Game/MCLETutorial.cpp's, there's no game mode in
+  Minecraft::localgameModes to ask for it.
 
 Idempotent, rewrites the .inc every run.
 """
@@ -34,11 +33,12 @@ OUT = REPO / "upstream" / "Minecraft.Client" / "iOS_CraftingMenu.inc"
 
 START = "Recipy::_eGroupType IUIScene_CraftingMenu::m_GroupTypeMapping4GridA[IUIScene_CraftingMenu::m_iMaxGroup2x2]=\n"
 
-# if-statements on Minecraft::localgameModes, the tutorial's
-TUTORIAL_GUARDS = [
-    "if( pMinecraft->localgameModes[getPad()] != nullptr )",
-    "if( pMinecraft->localgameModes[iPad] != nullptr)",
-    "if( pMinecraft->localgameModes[iPad] != nullptr )",
+# The tutorial the game mode has, and the game mode's being there
+TUTORIAL = [
+    ("pMinecraft->localgameModes[getPad()] != nullptr", "mcle_tutorial() != nullptr", 1),
+    ("pMinecraft->localgameModes[iPad] != nullptr", "mcle_tutorial() != nullptr", 2),
+    ("pMinecraft->localgameModes[getPad()]->getTutorial()", "mcle_tutorial()", 1),
+    ("pMinecraft->localgameModes[iPad]->getTutorial()", "mcle_tutorial()", 2),
 ]
 
 CRAFT_CALL = "pMinecraft->localgameModes[iPad]->handleCraftItem(iRecipe,m_pPlayer);"
@@ -53,44 +53,15 @@ def fail(msg):
     sys.exit(1)
 
 
-def strip_if(text, guard):
-    """Drop the whole if-statement `guard` starts, leaving a comment."""
-    at = text.find(guard)
-    if at < 0:
-        return text, False
-    line_start = text.rfind("\n", 0, at) + 1
-    indent = text[line_start:at]
-    open_brace = text.index("{", at)
-    depth = 0
-    i = open_brace
-    while True:
-        c = text[i]
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                break
-        i += 1
-    line_end = text.index("\n", i) + 1
-    comment = indent + "// tutorial check left out, localgameModes is never set here\n"
-    return text[:line_start] + comment + text[line_end:], True
-
-
 src = SRC.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
 if src.count(START) != 1:
     fail(f"group table not found once in {SRC}")
 block = src[src.index(START):]
 
-stripped = 0
-for guard in TUTORIAL_GUARDS:
-    while True:
-        block, found = strip_if(block, guard)
-        if not found:
-            break
-        stripped += 1
-if stripped != 3:
-    fail(f"expected 3 tutorial checks, found {stripped}")
+for old, new, count in TUTORIAL:
+    if block.count(old) != count:
+        fail(f"expected {count} of {old!r}, found {block.count(old)}")
+    block = block.replace(old, new)
 
 if block.count(CRAFT_CALL) != 2:
     fail(f"expected 2 handleCraftItem calls, found {block.count(CRAFT_CALL)}")
@@ -121,8 +92,8 @@ if "m_pPlayer" not in block:
 block = re.sub(r"\bm_pPlayer\b", "mcle_crafting_player()", block)
 
 code = "\n".join(l for l in block.split("\n") if not l.lstrip().startswith("//"))
-if "localgameModes" in code or "Tutorial" in code or "handleCraftItem" in code:
-    fail("tutorial or game mode code left in the crafting menu body")
+if "localgameModes" in code or "TutorialMode" in code or "handleCraftItem" in code:
+    fail("game mode code left in the crafting menu body")
 
 OUT.write_text(block, encoding="utf-8")
 print(f"wrote {OUT} ({block.count(chr(10))} lines)")

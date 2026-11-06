@@ -70,9 +70,18 @@ public:
     template<class... A> int   GetTriggerValue(A...)        { return 0; }
     template<class... A> void  SetVibration(A...)           {}
     template<class... A> void  ResetIdleTimer(A...)         {}
-    template<class... A> int   GetValue(A...)               { return 0; }
     unsigned int GetGameJoypadMaps(int style, int action) { return mcle_joypad_map(style, action); }
     int          GetJoypadMapVal(int pad)                  { return mcle_joypad_map_val(pad); }
+    // Whether the action's buttons are down, in the pad's control scheme.
+    // The tutorial's tasks ask this for the actions they wait on. There's
+    // the one pad.
+    unsigned int GetValue(int iPad, int action, bool bRepeat = false) {
+        (void)iPad;
+        (void)bRepeat;
+        if (action < 0 || action > 255) return 0;
+        unsigned int buttons = static_cast<unsigned int>(mcle_ios_input_poll_buttons(0));
+        return (buttons & GetGameJoypadMaps(GetJoypadMapVal(0), action)) != 0 ? 1 : 0;
+    }
 
     // F3-real-input: sticks. Return values are 0..1000 in upstream's
     // 4J convention (signed for sticks, unsigned for triggers). The

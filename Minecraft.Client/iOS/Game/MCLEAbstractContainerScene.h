@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "MCLEContainerScene.h"
+#include "MCLETutorial.h"
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.World/HtmlString.h"
@@ -51,11 +52,13 @@ public:
         return true;
     }
 
-    // There's no tutorial state to put back. The client's closeContainer()
-    // ends up in the server's handleContainerClose, which is just
-    // doCloseContainer(). ServerPlayer's own closeContainer() would send a
-    // ContainerClosePacket.
+    // The tutorial goes back to the state it was in before the menu. The
+    // client's closeContainer() ends up in the server's handleContainerClose,
+    // which is just doCloseContainer(). ServerPlayer's own closeContainer()
+    // would send a ContainerClosePacket.
     void handleDestroy() override {
+        leaveTutorialState();
+
         std::shared_ptr<ServerPlayer> player = mcle_local_player();
         if (player != nullptr && player->containerMenu != nullptr && m_menu != nullptr &&
             player->containerMenu->containerId == m_menu->containerId) {
@@ -119,6 +122,20 @@ protected:
 
     virtual void tickTimers(double now) {}
     virtual MCLEUISlotList *getSection(ESceneSection eSection) { return nullptr; }
+
+    // The UIScene_ menus' constructors put the tutorial in the menu's state
+    // with the scene, remembering the one it was in
+    void enterTutorialState(eTutorial_State state) {
+        if (Tutorial *tutorial = mcle_tutorial()) {
+            m_previousTutorialState = tutorial->getCurrentState();
+            tutorial->changeTutorialState(state, mcle_ui_scene(this));
+        }
+    }
+
+    // UIScene_AbstractContainerMenu::handleDestroy puts it back
+    void leaveTutorialState() {
+        if (Tutorial *tutorial = mcle_tutorial()) tutorial->changeTutorialState(m_previousTutorialState);
+    }
 
     void InitDataAssociations(int iPad, AbstractContainerMenu *menu, int startIndex) override {}
 

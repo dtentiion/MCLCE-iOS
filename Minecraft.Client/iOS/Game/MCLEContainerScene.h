@@ -13,6 +13,8 @@
 #include "MCLEContainerMenu.h"
 
 class ServerPlayer;
+class UIScene;
+class IUIScene_CraftingMenu;
 
 std::mutex &mcle_sim_tick_mutex();                 // MCLEGameLoop.cpp
 std::shared_ptr<ServerPlayer> mcle_local_player(); // MCLEGameLoop.cpp
@@ -41,7 +43,26 @@ public:
 
     // The callback a scene gave InputManager.RequestKeyboard
     virtual void keyboardComplete(bool ok, const std::wstring &text) {}
+
+    // UIScene::slideLeft / slideRight, the tutorial popup moving the menu
+    // out of its way
+    virtual void slideLeft();
+    virtual void slideRight();
+
+    // What XuiCraftingTask casts the tutorial's scene to, the crafting menus'
+    virtual IUIScene_CraftingMenu *craftingMenu() { return nullptr; }
 };
+
+// The UIScene a scene is to the tutorial, the one it gives
+// Tutorial::changeTutorialState and the popup hands back
+inline UIScene *mcle_ui_scene(MCLEContainerScene *scene) {
+    return reinterpret_cast<UIScene *>(scene);
+}
+inline MCLEContainerScene *mcle_container_scene(UIScene *scene) {
+    return reinterpret_cast<MCLEContainerScene *>(scene);
+}
+// The scene that's up, null when none is
+MCLEContainerScene *mcle_container_current_scene();
 
 // Clears what the last scene left, before a new one is made
 void mcle_container_prepare();
@@ -75,7 +96,8 @@ struct MCLEContainerUI {
     void SetTooltips(int iPad, int iA, int iB = -1, int iX = -1, int iY = -1, int iLT = -1, int iRT = -1,
                      int iLB = -1, int iRB = -1, int iLS = -1, int iRS = -1, int iBack = -1,
                      bool forceUpdate = false);
-    bool IsTutorialVisible(int) { return false; }
+    // UIController::IsTutorialVisible, the popup's
+    bool IsTutorialVisible(int iPad);
     // The strip animates from the keys Ruffle gets from the pad
     template <class... A> void AnimateKeyPress(A...) {}
     // UIComponent_Tooltips plays nothing either way

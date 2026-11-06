@@ -7,6 +7,7 @@
 
 #include "MCLEContainerMenu.h"
 #include "MCLEContainerScene.h"
+#include "MCLETutorial.h"
 
 #include <cstdio>
 #include <cstring>
@@ -241,7 +242,15 @@ public:
 
         setGroupText(GetGroupNameText(m_pGroupA[m_iGroupIndex]));
 
-        // The tutorial state is left out, see gen-crafting-menu.py
+        // Update the tutorial state
+        if (Tutorial *tutorial = mcle_tutorial()) {
+            m_previousTutorialState = tutorial->getCurrentState();
+            if (m_iContainerType == RECIPE_TYPE_2x2) {
+                tutorial->changeTutorialState(e_Tutorial_State_2x2Crafting_Menu, mcle_ui_scene(this));
+            } else {
+                tutorial->changeTutorialState(e_Tutorial_State_3x3Crafting_Menu, mcle_ui_scene(this));
+            }
+        }
 
         for (unsigned int i = 0; i < 4; ++i) m_slotListIngredients[i].addSlot(CRAFTING_INGREDIENTS_DESCRIPTION_START + i);
         m_slotListCraftingOutput.addSlot(CRAFTING_OUTPUT_SLOT_START);
@@ -280,6 +289,9 @@ public:
     // X is used to open this menu, so don't let it repeat
     bool allowRepeat(int key) override { return key != ACTION_MENU_X; }
 
+    // XuiCraftingTask's UIScene_CraftingMenu
+    IUIScene_CraftingMenu *craftingMenu() override { return this; }
+
     void handleInput(int key, bool repeat, bool pressed, bool released) override {
         switch (key) {
         case ACTION_MENU_OTHER_STICK_UP:
@@ -309,9 +321,12 @@ public:
         }
     }
 
-    // There's no tutorial state to put back. As for the inventory, the
-    // client's closeContainer() is the server's doCloseContainer() here.
+    // The tutorial goes back to its state before the menu. As for the
+    // inventory, the client's closeContainer() is the server's
+    // doCloseContainer() here.
     void handleDestroy() override {
+        if (Tutorial *tutorial = mcle_tutorial()) tutorial->changeTutorialState(m_previousTutorialState);
+
         if (g_craftingPlayer != nullptr && g_craftingPlayer->containerMenu != nullptr &&
             g_craftingPlayer->containerMenu->containerId == m_menu->containerId) {
             g_craftingPlayer->doCloseContainer();

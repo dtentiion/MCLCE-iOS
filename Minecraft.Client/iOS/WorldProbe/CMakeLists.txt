@@ -940,6 +940,13 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/RideEntityTask.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialHint.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TutorialTask.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/FullTutorial.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/InputConstraint.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/LookAtEntityHint.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/LookAtTileHint.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Tutorial/TakeItemHint.cpp
+  # Tutorial.cpp, ChoiceTask.cpp, InfoTask.cpp, ChangeStateConstraint.cpp and
+  # XuiCraftingTask.cpp build in Game/MCLETutorial.cpp, see scripts/gen-tutorial.py
   ${UPSTREAM_DIR}/Minecraft.Client/Input.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Frustum.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Font.cpp

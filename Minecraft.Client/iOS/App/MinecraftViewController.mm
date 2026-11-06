@@ -16,6 +16,7 @@
 #include "../Game/MCLEHud.h"
 #include "../Game/MCLETooltips.h"
 #include "../Game/MCLEContainerMenu.h"
+#include "../Game/MCLETutorialPopup.h"
 #include "../Game/MCLESkinSelectMenu.h"
 #include "../Game/MCLEDLC.h"
 #include "../Game/MCLEStartGame.h"
@@ -193,6 +194,9 @@ static const int kSafeZoneBottom = 1080 / 20;
 static const int kSafeZoneLeft   = 1920 / 20;
 static const int kMessageBoxDepth  = 200;
 static const int kTooltipsDepth    = 201;
+// UIComponent_TutorialPopup, on the popup layer over the scenes (the HUD
+// and the container menus)
+static const int kTutorialPopupDepth = 150;
 
 // Weak-ish ref to the live VC so C-style ExternalInterface bridge
 // callbacks can reach instance methods (navigateBack,
@@ -220,6 +224,8 @@ static const int kTooltipsDepth    = 201;
 static __weak MinecraftViewController* g_active_vc = nil;
 
 static int MCLECallPath(NSString* path, NSString* method, NSArray* args);
+static void MCLETutorialPopupApplyOps(void);
+void mcle_game_set_menu_displayed(bool displayed); // Game/MCLEGameLoop.cpp
 
 // What each UIScene_Settings*Menu labels a slider with, both in init and
 // in handleSliderMove. value is the slider's own value.
@@ -2047,6 +2053,8 @@ static BOOL MCLEPlayStationPadConnected(void) {
             @[@"MenuBackground1080.swf",@(kMenuBackgroundDepth),@(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
             @[@"MenuBackground1080.swf",@(kDimDepth),           @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
             @[@"ToolTips1080.swf",     @(kTooltipsDepth),       @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
+            // UIGroup's tutorial popup, hidden until the tutorial shows it
+            @[@"TutorialPopup1080.swf", @(kTutorialPopupDepth), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
         ];
         for (NSArray* entry in siblings) {
             NSString* swfName = entry[0];
@@ -2079,6 +2087,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
             g_ruffle_player, kDimDepth, 0);
         ruffle_ios_set_xui_sibling_visible_at_depth(
             g_ruffle_player, kMenuBackgroundDepth, 0);
+        // UILayer adds the tutorial popup hidden
+        ruffle_ios_set_xui_sibling_visible_at_depth(
+            g_ruffle_player, kTutorialPopupDepth, 0);
 
         // Tick the player a few frames so each sibling SWF's
         // ADDED_TO_STAGE event fires and its FJ_Document.init
@@ -2093,6 +2104,10 @@ static BOOL MCLEPlayStationPadConnected(void) {
         for (int i = 0; i < 10; ++i) {
             ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
         }
+
+        // UIComponent_TutorialPopup's constructor, now its movie is up
+        mcle_tutorial_popup_movie_ready();
+        MCLETutorialPopupApplyOps();
     }
 }
 
@@ -3498,6 +3513,8 @@ static NSString* MCLETipHTML(void) {
     if (!g_ruffle_player) return;
     g_world_paused = true;
     mcle_game_set_paused(1);
+    // UIScene_PauseMenu: the tutorial popup stays hidden while it's up
+    mcle_tutorial_show_popup(false);
     self.menuStack = nil;
     [self transitionToMenuNamed:@"PauseMenu1080.swf"];
 }
@@ -3557,6 +3574,66 @@ static void MCLEContainerApplyOps(void) {
         MCLECallPath([NSString stringWithUTF8String:op.path.c_str()],
                      [NSString stringWithUTF8String:op.method.c_str()], args);
     }
+}
+
+// The calls the tutorial popup queued, made on its own movie
+static void MCLETutorialPopupApplyOps(void) {
+    extern PlayerHandle* g_ruffle_player;
+    std::vector<MCLEUIOp> ops = mcle_tutorial_popup_take_ops();
+    if (!g_ruffle_player) return;
+    for (const MCLEUIOp& op : ops) {
+        if (op.kind == MCLEUIOp::Visible) {
+            if (op.args.size() == 1) {
+                ruffle_ios_set_sibling_path_visible(g_ruffle_player, kTutorialPopupDepth,
+                    (const uint8_t*)op.path.c_str(), op.path.size(), op.args[0].number != 0 ? 1 : 0);
+            }
+            continue;
+        }
+        if (op.kind != MCLEUIOp::Call) continue;
+        size_t n = op.args.size();
+        std::vector<int> kinds(n);
+        std::vector<double> nums(n);
+        std::vector<const uint8_t*> strs(n);
+        std::vector<size_t> lens(n);
+        for (size_t i = 0; i < n; ++i) {
+            const MCLEUIArg& a = op.args[i];
+            kinds[i] = a.kind == MCLEUIArg::String ? 2 : (a.kind == MCLEUIArg::Bool ? 1 : 0);
+            nums[i] = a.number;
+            strs[i] = (const uint8_t*)a.str.c_str();
+            lens[i] = a.str.size();
+        }
+        ruffle_ios_call_sibling_path(g_ruffle_player, kTutorialPopupDepth,
+            (const uint8_t*)op.path.c_str(), op.path.size(),
+            (const uint8_t*)op.method.c_str(), op.method.size(),
+            kinds.data(), nums.data(), strs.data(), lens.data(), n);
+    }
+}
+
+// UIComponent_TutorialPopup for this frame: its timers, its calls, and the
+// layer's visible flag for it. Only shown over the HUD and the menus in game.
+static bool g_tutorial_popup_shown = false;
+static void MCLETutorialPopupFrame(bool inGame) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    if (inGame) mcle_tutorial_popup_tick();
+    MCLETutorialPopupApplyOps();
+    bool shown = inGame && mcle_tutorial_popup_is_visible();
+    if (shown != g_tutorial_popup_shown) {
+        g_tutorial_popup_shown = shown;
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTutorialPopupDepth, shown ? 1 : 0);
+    }
+}
+
+// The popup's iggy_ regions after the movie has drawn, for its customDraw
+static void MCLETutorialPopupRegions(void) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    RuffleIosCustomDrawRegion regions[4];
+    int n = g_tutorial_popup_shown
+        ? ruffle_ios_sibling_custom_draw_regions(g_ruffle_player, kTutorialPopupDepth, regions, 4)
+        : 0;
+    n = std::max(0, std::min(n, 4));
+    mcle_tutorial_popup_set_regions(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
 }
 
 // UIControl's x, y, width and height for a control, read when the scene maps it
@@ -3714,6 +3791,10 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     int tips[11];
     mcle_container_tooltips(tips);
     MCLESetTooltips(tips);
+    // The tutorial popup over the menu, and the slide its timers ask the
+    // menu for
+    MCLETutorialPopupFrame(true);
+    MCLEContainerApplyOps();
     if (!g_ruffle_player) return;
     float px = 0, py = 0;
     if (mcle_container_pointer(&px, &py)) ruffle_ios_player_mouse_move_stage(g_ruffle_player, px, py);
@@ -3722,6 +3803,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     RuffleIosCustomDrawRegion regions[128];
     int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 128);
     n = std::max(0, std::min(n, 128));
+    MCLETutorialPopupRegions();
     mcle_container_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
 }
 
@@ -3732,6 +3814,10 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     // Dying closes whatever menu was up
     if (g_world_container) [self closeContainerMenu:NO];
     g_world_dead = true;
+    // The death menu is a menu to the game and the tutorial, and the
+    // tutorial popup stays hidden while it's up
+    mcle_game_set_menu_displayed(true);
+    mcle_tutorial_show_popup(false);
     self.menuStack = nil;
     [self transitionToMenuNamed:@"DeathMenu1080.swf"];
 }
@@ -3751,6 +3837,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 
 - (void)resumeFromPause {
     g_world_paused = false;
+    // ~UIScene_PauseMenu lets the tutorial popup show again
+    mcle_tutorial_show_popup(true);
     mcle_game_set_paused(0);
     [self enterWorldUI];
 }
@@ -4618,6 +4706,9 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self openDeathMenu];
         } else if (g_world_dead && !mcle_player_is_dead()) {
             g_world_dead = false;
+            // ~UIScene_DeathMenu
+            mcle_game_set_menu_displayed(false);
+            mcle_tutorial_show_popup(true);
             [self enterWorldUI];
         }
         // Minecraft::tick: Start opens the pause menu, the inventory action
@@ -4650,6 +4741,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             const CFTimeInterval uiStart = CACurrentMediaTime();
             MCLEHudPump();
             MCLEGameTooltipsPump();
+            MCLETutorialPopupFrame(true);
             // Keep the SWF layer presenting over the world (transparent stage)
             extern PlayerHandle* g_ruffle_player;
             if (g_ruffle_player) {
@@ -4660,6 +4752,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                 RuffleIosCustomDrawRegion regions[32];
                 int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 32);
                 n = std::max(0, std::min(n, 32));
+                MCLETutorialPopupRegions();
                 mcle_hud_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
             }
             mcle_metal_add_phase_ms(2, (CACurrentMediaTime() - uiStart) * 1000.0);
@@ -4671,6 +4764,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         // Paused: the pause menu takes input below like any other menu,
         // drawn over the frozen world
     }
+    // Not over the HUD or a menu in game, so the tutorial popup is hidden
+    MCLETutorialPopupFrame(false);
 
     if (g_loading_world) [self pollWorldLoad];
     if (g_exiting_world && mcle_game_exit_world_done()) [self finishExitWorld];
