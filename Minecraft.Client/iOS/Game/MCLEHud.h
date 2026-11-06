@@ -39,6 +39,11 @@ typedef struct {
 
 void mcle_hud_get_state(MCLEHudState *out);
 
+// UIScene_HUD::tick's boss check on BossMobGuiInfo, which the boss's renderer
+// sets as it draws: 1 with its health and name while it's shown, counting
+// its display time down, 0 with no boss
+int mcle_hud_boss(float *health, char *name, int cap);
+
 // An Iggy custom draw region (an object named iggy_<name>), in pixels of
 // the UI layer. Same layout as RuffleIosCustomDrawRegion.
 typedef struct {

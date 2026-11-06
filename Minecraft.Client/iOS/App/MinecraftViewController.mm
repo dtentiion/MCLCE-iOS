@@ -1027,6 +1027,9 @@ static struct {
     char displayName[64];
     int labelCalls, hideLabelCalls;
     float opacity;
+    float lastDragonHealth;
+    bool showDragonHealth;
+    int ticksWithNoBoss;
 } g_hud;
 
 static void MCLEHudChatReset(void);
@@ -1064,7 +1067,41 @@ static void MCLEHudReset(void) {
     g_hud.hideLabelCalls = st.hideLabelCalls;
     // UIScene sends the opacity once a scene has loaded
     g_hud.opacity = -1.0f;
+    g_hud.lastDragonHealth = 0.0f;
+    g_hud.showDragonHealth = false;
+    g_hud.ticksWithNoBoss = 0;
     MCLEHudChatReset();
+}
+
+// UIScene_HUD::tick: the boss's health bar
+static void MCLEHudBossTick(void) {
+    float health = 0.0f;
+    char name[128];
+    if (!mcle_hud_boss(&health, name, sizeof(name))) {
+        if (g_hud.showDragonHealth) {
+            // No boss and health is visible
+            if (g_hud.ticksWithNoBoss <= 20) {
+                ++g_hud.ticksWithNoBoss;
+            } else {
+                // ShowDragonHealth(false)
+                g_hud.showDragonHealth = false;
+                MCLECallPath(@"", @"ShowDragonHealth", @[@NO]);
+            }
+        }
+    } else {
+        g_hud.ticksWithNoBoss = 0;
+        // SetDragonHealth
+        if (health != g_hud.lastDragonHealth) {
+            g_hud.lastDragonHealth = health;
+            MCLECallPath(@"", @"SetDragonHealth", @[@(health)]);
+        }
+        if (!g_hud.showDragonHealth) {
+            NSString* label = [NSString stringWithUTF8String:name];
+            MCLECallPath(@"", @"SetDragonLabel", @[label ?: @""]);
+            g_hud.showDragonHealth = true;
+            MCLECallPath(@"", @"ShowDragonHealth", @[@YES]);
+        }
+    }
 }
 
 static void MCLEHudShow(NSString* fn, bool show, bool& last) {
@@ -1229,6 +1266,7 @@ static void MCLEHudPump(void) {
     mcle_hud_get_state(&st);
     if (!st.valid) return;
 
+    MCLEHudBossTick();
     MCLEHudChatTimer();
 
     // SetHudSize -> LoadHud

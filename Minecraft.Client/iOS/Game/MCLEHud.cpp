@@ -19,6 +19,7 @@
 #include "../../../upstream/Minecraft.World/ItemInstance.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/LivingEntity.h"
+#include "../../../upstream/Minecraft.Client/BossMobGuiInfo.h"
 
 namespace {
 std::mutex g_mutex;
@@ -70,6 +71,16 @@ static std::string to_utf8(const std::wstring &w) {
         }
     }
     return s;
+}
+
+int mcle_hud_boss(float *health, char *name, int cap) {
+    // Is boss present?
+    bool noBoss = BossMobGuiInfo::name.empty() || BossMobGuiInfo::displayTicks <= 0;
+    if (noBoss) return 0;
+    BossMobGuiInfo::displayTicks--;
+    *health = BossMobGuiInfo::healthProgress;
+    snprintf(name, cap, "%s", to_utf8(BossMobGuiInfo::name).c_str());
+    return 1;
 }
 
 // UIScene_HUD::SetSelectedLabel
