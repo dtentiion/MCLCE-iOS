@@ -17,6 +17,7 @@
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 
 #include <algorithm>
+#include <atomic>
 #include <vector>
 
 extern "C" void mcle_game_tick(void);  // GameBootstrap.cpp
@@ -280,6 +281,44 @@ static int mcle_map_checkbox(int boxId) {
     return -1;
 }
 
+// UIScene_Credits
+extern "C" int mcle_credits_count(void);
+extern "C" int mcle_credits_get(int index, char* out, int cap, int* type);
+static std::atomic<bool> g_credits_add_next{false};
+static int g_credits_index = -1;
+
+// setNextLabel / addImage: the last one tells the movie the credits end there
+static void MCLECreditsAdd(int index) {
+    char text[512];
+    int type = 0;
+    int kind = mcle_credits_get(index, text, sizeof(text), &type);
+    bool last = index == mcle_credits_count() - 1;
+    if (kind == 1) {
+        NSString* label = [NSString stringWithUTF8String:text];
+        MCLECallPath(@"", @"SetNextLabel", @[label ? label : @"", @(type), last ? @YES : @NO]);
+    } else if (kind == 2) {
+        MCLECallPath(@"", @"AddImage", @[@(type), last ? @YES : @NO]);
+    }
+}
+
+// UIScene_Credits constructor: the first 20 lines Flash can cope with
+static void MCLECreditsInit(void) {
+    g_credits_add_next = false;
+    g_credits_index = -1;
+    for (int i = 0; i < 20; ++i) {
+        ++g_credits_index;
+        MCLECreditsAdd(g_credits_index);
+    }
+}
+
+// UIScene_Credits::tick, the next line once the movie asks for it
+static void MCLECreditsTick(void) {
+    if (!g_credits_add_next.exchange(false)) return;
+    ++g_credits_index;
+    if (g_credits_index >= mcle_credits_count()) g_credits_index = 0;
+    MCLECreditsAdd(g_credits_index);
+}
+
 extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
     if (!method) return;
     if (strcmp(method, "handleCheckboxToggled") == 0) {
@@ -458,6 +497,9 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 MCLESelectSaveSize(child - 1);
             });
         }
+    } else if (strcmp(method, "handleRequestMoreData") == 0) {
+        // UIScene_Credits::handleRequestMoreData, picked up by its tick
+        if ([g_current_scene_name isEqualToString:@"Credits1080.swf"]) g_credits_add_next = true;
     } else if (strcmp(method, "handleInitFocus") == 0) {
         // LCE fires this once per scene when SetFocus(-1) finds
         // the tabIndex==1 child (FJ_Document.SetFocus line 81-160,
@@ -1740,6 +1782,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
         // UIScene_DeathMenu: Select only, B does nothing there
         ids[1] = -1;
+    } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
+        // UIScene_Credits: Back only
+        ids[0] = -1;
     }
     MCLESetTooltips(ids);
 }
@@ -3152,6 +3197,8 @@ static NSString* MCLETipHTML(void) {
             [self initDeathMenu];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
+        } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
+            MCLECreditsInit();
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -3328,6 +3375,8 @@ static NSString* MCLETipHTML(void) {
     }
 
     extern PlayerHandle* g_ruffle_player;
+
+    if ([self.currentMenuSwf isEqualToString:@"Credits1080.swf"]) MCLECreditsTick();
 
     // Edge-detect controller buttons and forward press/release events to
     // Ruffle so the menu's AS3 input handlers fire. Bit layout matches

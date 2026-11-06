@@ -1658,6 +1658,12 @@ if [ -f "$TT_PY" ]; then
     python3 "$TT_PY"
 fi
 
+# UIScene_Credits' credit table, for Game/MCLECredits.cpp
+CR_PY="$REPO_ROOT/scripts/gen-credits.py"
+if [ -f "$CR_PY" ]; then
+    python3 "$CR_PY"
+fi
+
 # Renderer / model includes the PC precompiled header gave them
 WI_PY="$REPO_ROOT/scripts/patch-renderer-includes.py"
 if [ -f "$WI_PY" ]; then
