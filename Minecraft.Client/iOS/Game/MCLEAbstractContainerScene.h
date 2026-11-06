@@ -29,8 +29,12 @@ public:
     }
 
     void handleInput(int key, bool repeat, bool pressed, bool released) override {
+        if (m_bIgnoreInput) return;
         if (pressed) handleKeyDown(getPad(), key, repeat);
     }
+
+    bool getIgnoreInput() { return m_bIgnoreInput; }
+    void setIgnoreInput(bool bVal) { m_bIgnoreInput = bVal; }
 
     // UIScene::tick runs the timers and sends any label that changed, then
     // the pointer moves
@@ -102,6 +106,7 @@ protected:
     MCLEUISlotList m_slotListHotbar, m_slotListInventory;
     MCLEUILabel m_labelInventory, m_cursorPath;
     ESceneSection m_focusSection = eSectionNone;
+    bool m_bIgnoreInput = false;
 
     std::vector<std::shared_ptr<ItemInstance>> m_slotItems;
     std::vector<bool> m_slotValid;

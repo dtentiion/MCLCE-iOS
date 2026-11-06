@@ -38,6 +38,9 @@ public:
     // Copies what customDraw reads off the player
     virtual void snapshot() {}
     virtual void customDraw(const MCLECustomDrawRegion &region) = 0;
+
+    // The callback a scene gave InputManager.RequestKeyboard
+    virtual void keyboardComplete(bool ok, const std::wstring &text) {}
 };
 
 // Clears what the last scene left, before a new one is made
@@ -60,6 +63,9 @@ MCLEUIArg mcle_ui_str(const std::wstring &v);
 void mcle_ui_key(int iggyKeyCode, bool down);
 // UIControl::setVisible on a value path
 void mcle_ui_set_visible(const std::string &path, bool visible);
+// InputManager.RequestKeyboard: the system keyboard, answered through the
+// scene's keyboardComplete
+void mcle_ui_request_keyboard(const std::wstring &title, const std::wstring &text, int maxChars);
 
 // The UIController calls the scene logic makes
 struct MCLEContainerUI {

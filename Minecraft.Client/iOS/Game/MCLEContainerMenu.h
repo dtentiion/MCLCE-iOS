@@ -116,6 +116,11 @@ bool mcle_container_pointer(float *x, float *y);
 // ui.CloseUIScenes from the scene
 bool mcle_container_close_requested();
 
+// The keyboard a scene asked for, taken once; then its answer, ok false
+// when it was cancelled
+bool mcle_container_take_keyboard(std::wstring *title, std::wstring *text, int *maxChars);
+void mcle_container_keyboard_done(bool ok, const std::wstring &text);
+
 // The scene's handleDestroy
 void mcle_container_close();
 

@@ -490,6 +490,14 @@ static std::wstring MCLEWideString(NSString* s) {
     return std::wstring(static_cast<const wchar_t*>(d.bytes), d.length / sizeof(wchar_t));
 }
 
+static NSString* MCLEStringFromWide(const std::wstring& w) {
+    if (w.empty()) return @"";
+    NSString* s = [[NSString alloc] initWithBytes:w.data()
+                                           length:w.size() * sizeof(wchar_t)
+                                         encoding:NSUTF32LittleEndianStringEncoding];
+    return s ?: @"";
+}
+
 // A seed in UTF-16 units, Windows' wchar_t, so a text seed hashes the same
 static std::wstring MCLEWideUTF16(NSString* s) {
     std::wstring w;
@@ -3508,12 +3516,25 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     extern PlayerHandle* g_ruffle_player;
     mcle_ios_pad_state pad = {};
     mcle_ios_input_poll(0, &pad);
-    mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
-    self.lastPadButtons = pad.buttons;
+    // The system keyboard has the pad while it's up
+    if (!g_text_input_open) {
+        mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+        self.lastPadButtons = pad.buttons;
+    }
     MCLEContainerApplyOps();
     if (mcle_container_close_requested()) {
         [self closeContainerMenu:YES];
         return;
+    }
+    std::wstring kbTitle, kbText;
+    int kbMaxChars = 0;
+    if (mcle_container_take_keyboard(&kbTitle, &kbText, &kbMaxChars)) {
+        [self requestKeyboardWithTitle:MCLEStringFromWide(kbTitle)
+                                  text:MCLEStringFromWide(kbText)
+                              maxChars:kbMaxChars
+                                  done:^(NSString* text) {
+            mcle_container_keyboard_done(text != nil, text ? MCLEWideString(text) : std::wstring());
+        }];
     }
     int tips[11];
     mcle_container_tooltips(tips);
