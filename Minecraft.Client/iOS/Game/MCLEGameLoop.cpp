@@ -1867,9 +1867,14 @@ std::shared_ptr<ServerPlayer> mcle_local_player() {
 static std::atomic<bool> g_menuDisplayed{false};
 // The pad's buttons as the game sees them this tick
 static unsigned int g_gameButtons = 0;
+// Buttons held down from a menu, which the game doesn't take until let go
+static std::atomic<unsigned int> g_heldFromMenu{0};
 
 void mcle_game_set_menu_displayed(bool displayed) {
-    g_menuDisplayed.store(displayed, std::memory_order_relaxed);
+    // The menu shuts on the press, often between two ticks, so the button
+    // that shut it is marked held here rather than on the next tick
+    if (!displayed) g_heldFromMenu.fetch_or((unsigned int)mcle_ios_input_poll_buttons(0));
+    g_menuDisplayed.store(displayed);
 }
 
 // ClientConnection::handleAnimate's CRITICAL_HIT and MAGIC_CRITICAL_HIT, from
@@ -2604,14 +2609,13 @@ extern "C" void mcle_game_tick(void) {
     // only counts once it's been let go, so the press that shut the menu
     // isn't a press in the game as well
     {
-        static unsigned int s_heldFromMenu = 0;
         const unsigned int raw = (unsigned int)mcle_ios_input_poll_buttons(0);
-        if (g_menuDisplayed.load(std::memory_order_relaxed)) {
-            s_heldFromMenu |= raw;
+        if (g_menuDisplayed.load()) {
+            g_heldFromMenu.fetch_or(raw);
             g_gameButtons = 0;
         } else {
-            s_heldFromMenu &= raw;
-            g_gameButtons = raw & ~s_heldFromMenu;
+            const unsigned int held = g_heldFromMenu.fetch_and(raw) & raw;
+            g_gameButtons = raw & ~held;
         }
     }
 
