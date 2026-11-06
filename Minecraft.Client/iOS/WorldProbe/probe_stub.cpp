@@ -54,6 +54,7 @@ __attribute__((weak)) extern "C" void mcle_glbridge_translate(float, float, floa
 __attribute__((weak)) extern "C" void mcle_glbridge_rotate(float, float, float, float)   {}
 __attribute__((weak)) extern "C" void mcle_glbridge_scale(float, float, float)           {}
 __attribute__((weak)) extern "C" void mcle_glbridge_metal_perspective(float, float, float, float) {}
+__attribute__((weak)) extern "C" void mcle_glbridge_set_texgen_col(int, float, float, float, float, bool) {}
 
 // G3f: weak fallbacks for the GL_CURRENT_COLOR bridge.
 __attribute__((weak)) extern "C" void mcle_glbridge_color4f(float, float, float, float)  {}
@@ -320,9 +321,17 @@ void glLightModel(unsigned int mode, FloatBuffer *values) {
     float *data = values->_getDataPointer();
     if (mode == 0x0B53 /*GL_LIGHT_MODEL_AMBIENT*/) mcle_glbridge_set_light_ambient(data[0], data[1], data[2]);
 }
-void glTexGeni(unsigned int, unsigned int, int)            {} // TheEndPortalRenderer.cpp
-void glTexGenfv(unsigned int, unsigned int, const float*)  {} // TheEndPortalRenderer.cpp
-void glTexGen(int, int, FloatBuffer *)                     {} // TheEndPortalRenderer.cpp
+// glWrapper.cpp's: glTexGeni and the GL_TEXTURE_GEN enables do nothing,
+// the planes from glTexGen are all the 4J renderer uses
+extern "C" void mcle_glbridge_set_texgen_col(int col, float x, float y, float z, float w, bool eyeSpace);
+void glTexGeni(unsigned int, unsigned int, int)            {}
+void glTexGenfv(unsigned int, unsigned int, const float*)  {}
+void glTexGen(int coord, int mode, FloatBuffer *vec) {
+    if (!vec) return;
+    float *data = vec->_getDataPointer();
+    mcle_glbridge_set_texgen_col(coord - 0x2000 /*GL_S*/, data[0], data[1], data[2], data[3],
+                                 mode == 0x2502 /*GL_EYE_PLANE*/);
+}
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
 // Fog parameter shim. Upstream GameRenderer::setupFog issues:
 //   glFog(GL_FOG_COLOR, vec4)        - via glFogfv

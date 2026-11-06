@@ -455,6 +455,9 @@ NSString* const kWorldShaderSrc = @R"(
         float2 uv;
         float2 lightmapUV;
         float  fogDist;  // eye-space depth for distance fog
+        // PIXEL_SHADER_TYPE_PROJECTION: uv is divided by uvw per pixel
+        float  uvw;
+        float  proj [[flat]];
     };
     struct MVPUniforms {
         float4x4 mvp;
@@ -490,13 +493,23 @@ NSString* const kWorldShaderSrc = @R"(
         float4 nm0;
         float4 nm1;
         float4 nm2;
+        // x set for VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1_TEXGEN
+        float4 texgen;
+    };
+    // The 4J renderer's texgen cbuffer: matTexGenView and matTexGenObj,
+    // one plane per column, and the modelview for the eye position
+    struct TexGenParams {
+        float4x4 modelview;
+        float4x4 eyePlanes;
+        float4x4 objPlanes;
     };
 
     vertex V_out world_vert(V_in v [[stage_in]],
                              constant MVPUniforms&   m [[buffer(1)]],
                              constant ColorUniforms& c [[buffer(2)]],
                              constant FogParams&     f [[buffer(3)]],
-                             constant LightParams&   l [[buffer(4)]]) {
+                             constant LightParams&   l [[buffer(4)]],
+                             constant TexGenParams&  tg [[buffer(5)]]) {
         V_out o;
         o.pos   = m.mvp * float4(v.pos, 1.0);
         // Tesselator::color packs as (r<<24)|(g<<16)|(b<<8)|a. On
@@ -523,6 +536,19 @@ NSString* const kWorldShaderSrc = @R"(
         // tile cell when renderAdvancedClouds is active).
         float4 tcoord = m.texMatrix * float4(v.uv, 0.0, 1.0);
         o.uv    = tcoord.xy;
+        o.uvw   = 1.0;
+        o.proj  = 0.0;
+        // The texgen vertex shader: each coordinate is the eye position
+        // against its eye plane plus the vertex against its object plane,
+        // through the texture matrix, with q kept for the divide
+        if (l.texgen.x > 0.5) {
+            float4 p   = float4(v.pos, 1.0);
+            float4 gen = tg.eyePlanes * (tg.modelview * p) + tg.objPlanes * p;
+            float4 tc  = m.texMatrix * gen;
+            o.uv   = tc.xy;
+            o.uvw  = tc.w;
+            o.proj = 1.0;
+        }
         // The light layer's lightmap at the vertex's tex2, or the one set
         // for vertices without one (-512 each, below the set one's). With
         // the layer off the lightmap is white and this doesn't matter.
@@ -546,13 +572,23 @@ NSString* const kWorldShaderSrc = @R"(
         return mix(rgb, f.fogColor.rgb, t * f.fogColor.w);
     }
 
+    // PIXEL_SHADER_TYPE_PROJECTION divides by w first, and past u = 1 it
+    // samples the top level
+    float4 sample_tex(V_out i, texture2d<float> tex, sampler texSamp) {
+        if (i.proj < 0.5) return tex.sample(texSamp, i.uv);
+        float2 uv = i.uv / i.uvw;
+        float4 top = tex.sample(texSamp, uv, level(0.0));
+        float4 mip = tex.sample(texSamp, uv);
+        return uv.x > 1.0 ? top : mip;
+    }
+
     fragment float4 world_frag(V_out i           [[stage_in]],
                                 texture2d<float>     tex      [[texture(0)]],
                                 texture2d<float>     lightmap [[texture(1)]],
                                 sampler              texSamp  [[sampler(0)]],
                                 sampler              lmSamp   [[sampler(1)]],
                                 constant FogParams&  f        [[buffer(3)]]) {
-        float4 t = tex.sample(texSamp, i.uv);
+        float4 t = sample_tex(i, tex, texSamp);
         if (t.a < 0.1) discard_fragment();
         float4 outc = i.color * t;
         // Lightmap sampled with the dedicated linear-filter sampler so
@@ -570,7 +606,7 @@ NSString* const kWorldShaderSrc = @R"(
                                       sampler              texSamp  [[sampler(0)]],
                                       sampler              lmSamp   [[sampler(1)]],
                                       constant FogParams&  f        [[buffer(3)]]) {
-        float4 t = tex.sample(texSamp, i.uv);
+        float4 t = sample_tex(i, tex, texSamp);
         float4 outc = i.color * t;
         float3 lm = lightmap.sample(lmSamp, i.lightmapUV).rgb;
         outc.rgb *= lm;
@@ -599,6 +635,8 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float2 uv;
         float2 lightmapUV;
         float  fogDist;
+        float  uvw;
+        float  proj [[flat]];
     };
     struct MVPUniforms   { float4x4 mvp; float4x4 texMatrix; };
     struct ColorUniforms { float4 currentColor; };
@@ -626,6 +664,8 @@ NSString* const kWorldShaderSrcCompact = @R"(
         float src_b = float((packed      ) & 0x1F) / 31.0;
         o.color = float4(src_r, src_g, src_b, 1.0) * c.currentColor;
         o.uv    = uv;
+        o.uvw   = 1.0;
+        o.proj  = 0.0;
         // Lightmap UV. The chunk vertex's tex2 carries two pre-scaled
         // lightmap UV components: tex2.x holds blockLevel * 16 and
         // tex2.y holds skyLevel * 16 (so level 15 == 240, level 0 ==
@@ -1113,6 +1153,13 @@ thread_local std::vector<Mat4>  g_projection_stack{ mat_identity() };
 // that multiplies the per-vertex UV.
 thread_local std::vector<Mat4>  g_texture_stack  { mat_identity() };
 
+// RenderManager.StateSetTexGenCol's matTexGenView and matTexGenObj, a
+// plane in each column. Draws of the texgen vertex type read them.
+thread_local float g_texgen_eye[16] = {};
+thread_local float g_texgen_obj[16] = {};
+// Whether this encoder has the texgen cbuffer bound yet
+bool g_texgen_bound = false;
+
 // G3f: GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
 // multiplied with this in the world vertex shader so glColor3f /
 // glColor4f take effect across replayed display lists. Matches D3D9
@@ -1185,6 +1232,56 @@ extern "C" void mcle_glbridge_mult_matrix(const float* m16) {
     mat_mul(r, current_matrix_data(), m16);
     memcpy(current_matrix_data(), r, sizeof(r));
 }
+// XMMatrixInverse
+static bool mat_inverse(const float* m, float* out) {
+    float inv[16];
+    inv[0]  =  m[5]*m[10]*m[15] - m[5]*m[11]*m[14] - m[9]*m[6]*m[15] + m[9]*m[7]*m[14] + m[13]*m[6]*m[11] - m[13]*m[7]*m[10];
+    inv[4]  = -m[4]*m[10]*m[15] + m[4]*m[11]*m[14] + m[8]*m[6]*m[15] - m[8]*m[7]*m[14] - m[12]*m[6]*m[11] + m[12]*m[7]*m[10];
+    inv[8]  =  m[4]*m[9]*m[15]  - m[4]*m[11]*m[13] - m[8]*m[5]*m[15] + m[8]*m[7]*m[13] + m[12]*m[5]*m[11] - m[12]*m[7]*m[9];
+    inv[12] = -m[4]*m[9]*m[14]  + m[4]*m[10]*m[13] + m[8]*m[5]*m[14] - m[8]*m[6]*m[13] - m[12]*m[5]*m[10] + m[12]*m[6]*m[9];
+    inv[1]  = -m[1]*m[10]*m[15] + m[1]*m[11]*m[14] + m[9]*m[2]*m[15] - m[9]*m[3]*m[14] - m[13]*m[2]*m[11] + m[13]*m[3]*m[10];
+    inv[5]  =  m[0]*m[10]*m[15] - m[0]*m[11]*m[14] - m[8]*m[2]*m[15] + m[8]*m[3]*m[14] + m[12]*m[2]*m[11] - m[12]*m[3]*m[10];
+    inv[9]  = -m[0]*m[9]*m[15]  + m[0]*m[11]*m[13] + m[8]*m[1]*m[15] - m[8]*m[3]*m[13] - m[12]*m[1]*m[11] + m[12]*m[3]*m[9];
+    inv[13] =  m[0]*m[9]*m[14]  - m[0]*m[10]*m[13] - m[8]*m[1]*m[14] + m[8]*m[2]*m[13] + m[12]*m[1]*m[10] - m[12]*m[2]*m[9];
+    inv[2]  =  m[1]*m[6]*m[15]  - m[1]*m[7]*m[14]  - m[5]*m[2]*m[15] + m[5]*m[3]*m[14] + m[13]*m[2]*m[7]  - m[13]*m[3]*m[6];
+    inv[6]  = -m[0]*m[6]*m[15]  + m[0]*m[7]*m[14]  + m[4]*m[2]*m[15] - m[4]*m[3]*m[14] - m[12]*m[2]*m[7]  + m[12]*m[3]*m[6];
+    inv[10] =  m[0]*m[5]*m[15]  - m[0]*m[7]*m[13]  - m[4]*m[1]*m[15] + m[4]*m[3]*m[13] + m[12]*m[1]*m[7]  - m[12]*m[3]*m[5];
+    inv[14] = -m[0]*m[5]*m[14]  + m[0]*m[6]*m[13]  + m[4]*m[1]*m[14] - m[4]*m[2]*m[13] - m[12]*m[1]*m[6]  + m[12]*m[2]*m[5];
+    inv[3]  = -m[1]*m[6]*m[11]  + m[1]*m[7]*m[10]  + m[5]*m[2]*m[11] - m[5]*m[3]*m[10] - m[9]*m[2]*m[7]   + m[9]*m[3]*m[6];
+    inv[7]  =  m[0]*m[6]*m[11]  - m[0]*m[7]*m[10]  - m[4]*m[2]*m[11] + m[4]*m[3]*m[10] + m[8]*m[2]*m[7]   - m[8]*m[3]*m[6];
+    inv[11] = -m[0]*m[5]*m[11]  + m[0]*m[7]*m[9]   + m[4]*m[1]*m[11] - m[4]*m[3]*m[9]  - m[8]*m[1]*m[7]   + m[8]*m[3]*m[5];
+    inv[15] =  m[0]*m[5]*m[10]  - m[0]*m[6]*m[9]   - m[4]*m[1]*m[10] + m[4]*m[2]*m[9]  + m[8]*m[1]*m[6]   - m[8]*m[2]*m[5];
+    float det = m[0]*inv[0] + m[1]*inv[4] + m[2]*inv[8] + m[3]*inv[12];
+    if (det == 0.0f) return false;
+    det = 1.0f / det;
+    for (int i = 0; i < 16; i++) out[i] = inv[i] * det;
+    return true;
+}
+
+// RenderManager.StateSetTexGenCol. An eye plane is multiplied, as a row,
+// by the inverse of the modelview at the time, its rows taken as the
+// matrix's (the 4J renderer's order, not GL's). The plane goes in column
+// col of its matrix and the same column of the other one is cleared.
+extern "C" void mcle_glbridge_set_texgen_col(int col, float x, float y, float z, float w, bool eyeSpace) {
+    if (col < 0 || col > 3) return;
+    float v[4] = { x, y, z, w };
+    if (eyeSpace) {
+        float inv[16];
+        if (!mat_inverse(g_modelview_stack.back().m, inv)) return;
+        float r[4];
+        for (int j = 0; j < 4; j++) {
+            r[j] = v[0] * inv[j] + v[1] * inv[4 + j] + v[2] * inv[8 + j] + v[3] * inv[12 + j];
+        }
+        memcpy(v, r, sizeof(v));
+    }
+    float* dst   = eyeSpace ? g_texgen_eye : g_texgen_obj;
+    float* other = eyeSpace ? g_texgen_obj : g_texgen_eye;
+    for (int row = 0; row < 4; row++) {
+        dst[row * 4 + col]   = v[row];
+        other[row * 4 + col] = 0.0f;
+    }
+}
+
 extern "C" void mcle_glbridge_push_matrix(void) {
     current_stack().push_back(current_stack().back());
 }
@@ -1747,7 +1844,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         // the 4J renderer's DrawVertexSetup
         if (!isCompact) {
             const bool lit = g_lighting_enabled && fmt == 1;
-            float lightBuf[36] = {};
+            float lightBuf[40] = {};
             for (int i = 0; i < 3; i++) {
                 lightBuf[0 + i]  = g_light_dir[0][i];
                 lightBuf[4 + i]  = g_light_dir[1][i];
@@ -1766,7 +1863,20 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             for (int c = 0; c < 3; c++) {
                 for (int r = 0; r < 3; r++) lightBuf[24 + c * 4 + r] = modelview[c * 4 + r];
             }
+            const bool texgen = (fmt == 2);
+            lightBuf[36] = texgen ? 1.0f : 0.0f;
             [g.enc setVertexBytes:lightBuf length:sizeof(lightBuf) atIndex:4];
+            // the texgen cbuffer, zeroes until a texgen draw needs it
+            if (texgen || !g_texgen_bound) {
+                float tg[48] = {};
+                if (texgen) {
+                    memcpy(tg, modelview, sizeof(modelview));
+                    memcpy(tg + 16, g_texgen_eye, sizeof(g_texgen_eye));
+                    memcpy(tg + 32, g_texgen_obj, sizeof(g_texgen_obj));
+                }
+                [g.enc setVertexBytes:tg length:sizeof(tg) atIndex:5];
+                g_texgen_bound = true;
+            }
         }
     }
 
@@ -2327,6 +2437,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_lastWinding  = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
+    g_texgen_bound   = false;
     g_lastDepthBias  = 0.0f;
     g_lastDepthSlope = 0.0f;
     // Each frame starts with depth test/write enabled, alpha test on
@@ -2402,6 +2513,7 @@ extern "C" void mcle_metal_clear_depth(void) {
     g_lastWinding    = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
+    g_texgen_bound   = false;
     g_lastDepthBias  = 0.0f;
     g_lastDepthSlope = 0.0f;
 }
@@ -2512,6 +2624,7 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g_lastWinding    = MTLWindingClockwise;
     g_lastDepthState = nil;
     g_lastWorldPso   = nil;
+    g_texgen_bound   = false;
     g_lastDepthBias  = 0.0f;
     g_lastDepthSlope = 0.0f;
     g_depth_test_enabled  = true;
