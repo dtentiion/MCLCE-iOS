@@ -206,6 +206,8 @@ public:
         if (!player) return;
         player->inventory->setCarried(nullptr);
         player->doCloseContainer();
+        // LocalPlayer::closeContainer
+        mcleContainerUI.PlayUISFX(eSFX_Back);
     }
 
 protected:

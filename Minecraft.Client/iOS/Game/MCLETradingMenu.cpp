@@ -215,6 +215,8 @@ public:
         if (player != nullptr && player->containerMenu != nullptr &&
             player->containerMenu->containerId == m_menu->containerId) {
             player->doCloseContainer();
+            // LocalPlayer::closeContainer
+            mcleContainerUI.PlayUISFX(eSFX_Back);
         }
     }
 

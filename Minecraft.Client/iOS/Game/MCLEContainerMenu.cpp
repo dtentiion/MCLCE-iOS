@@ -770,7 +770,13 @@ void mcle_container_close() {
         g_scene = nullptr;
         mcle_game_set_menu_displayed(false);
     }
-    g_ops.clear();
+    // The back sound handleDestroy's closeContainer plays is all that's left
+    // to make, the rest is for the movie that's going
+    std::vector<MCLEUIOp> sounds;
+    for (MCLEUIOp &op : g_ops) {
+        if (op.kind == MCLEUIOp::Sound) sounds.push_back(op);
+    }
+    g_ops.swap(sounds);
     g_closeRequested = false;
     g_keyboardRequested = false;
     resetTooltips();

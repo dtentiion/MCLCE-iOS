@@ -330,6 +330,8 @@ public:
         if (g_craftingPlayer != nullptr && g_craftingPlayer->containerMenu != nullptr &&
             g_craftingPlayer->containerMenu->containerId == m_menu->containerId) {
             g_craftingPlayer->doCloseContainer();
+            // LocalPlayer::closeContainer
+            mcleContainerUI.PlayUISFX(eSFX_Back);
         }
         g_craftingPlayer = nullptr;
     }

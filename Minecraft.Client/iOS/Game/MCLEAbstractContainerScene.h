@@ -54,8 +54,9 @@ public:
 
     // The tutorial goes back to the state it was in before the menu. The
     // client's closeContainer() ends up in the server's handleContainerClose,
-    // which is just doCloseContainer(). ServerPlayer's own closeContainer()
-    // would send a ContainerClosePacket.
+    // which is just doCloseContainer(), and plays the back sound like
+    // LocalPlayer::closeContainer. ServerPlayer's own closeContainer() would
+    // send a ContainerClosePacket.
     void handleDestroy() override {
         leaveTutorialState();
 
@@ -63,6 +64,7 @@ public:
         if (player != nullptr && player->containerMenu != nullptr && m_menu != nullptr &&
             player->containerMenu->containerId == m_menu->containerId) {
             player->doCloseContainer();
+            mcleContainerUI.PlayUISFX(eSFX_Back);
         }
     }
 

@@ -3980,6 +3980,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 // handleDestroy, back to the HUD unless another scene is taking over
 - (void)closeContainerMenu:(BOOL)backToGame {
     mcle_container_close();
+    MCLEContainerApplyOps();
     g_world_container = false;
     if (backToGame) [self enterWorldUI];
 }
