@@ -48,7 +48,8 @@ struct MCLEInventoryLayout {
 };
 
 // Minecraft::tick's inventory button: the buttons it's on in the pad's
-// scheme, and whether it would open the inventory menu now
+// scheme, and whether it would open the inventory menu now. Riding a horse
+// it asks the server for the horse's inventory instead.
 unsigned int mcle_container_inventory_buttons();
 bool mcle_container_can_open_inventory();
 
@@ -81,7 +82,8 @@ int mcle_container_take_request();
 // creative menu in creative), and ClientConnection::handleContainerOpen for
 // the ContainerOpenPacket the local player's ServerPlayer sends
 void mcle_container_request(int request);
-void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName, int size);
+void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName, int size,
+                                int entityId);
 
 // How the scenes for the server's containers read their controls' x, y,
 // width and height off the movie

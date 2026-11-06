@@ -43,6 +43,9 @@
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_EnchantingMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_AnvilMenu.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_HorseInventoryMenu.h"
+#include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
+#include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.World/InputOutputStream.h"
 
 // The anvil's player, the local player's ServerPlayer
@@ -94,6 +97,7 @@ struct OpenPacket {
     std::wstring title;
     bool customName = false;
     int size = 0;
+    int entityId = 0;
 };
 OpenPacket g_packet;
 
@@ -127,6 +131,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::BEACON:
     case ContainerOpenPacket::REPAIR_TABLE:
     case ContainerOpenPacket::TRADER_NPC:
+    case ContainerOpenPacket::HORSE:
         return true;
     }
     return isChest(type);
@@ -1469,6 +1474,211 @@ protected:
     }
 };
 
+// UIScene_HorseInventoryMenu. m_horse is the client's copy of the horse and
+// m_container the AnimalChest it makes for the packet; here they're the
+// server's horse and the inventory the menu is over.
+class HorseScene : public ServerContainerScene, public IUIScene_HorseInventoryMenu {
+public:
+    HorseScene(AbstractContainerMenu *menu, const std::shared_ptr<Inventory> &inventory,
+               const std::shared_ptr<Container> &container, const std::shared_ptr<EntityHorse> &horse,
+               const std::wstring &name)
+        : m_slotSaddle("MainPanel.SlotSaddle"), m_slotArmor("MainPanel.SlotArmor"),
+          m_slotListChest("MainPanel.DonkeyInventoryList"), m_labelHorse("MainPanel.horseinventoryText") {
+        mapSharedControls();
+        mapSlotList(m_slotSaddle);
+        mapSlotList(m_slotArmor);
+        mapSlotList(m_slotListChest);
+        m_horseRect = rectAt("MainPanel.iggy_horse");
+
+        m_labelHorse.init(name);
+        m_inventory = inventory;
+        m_container = container;
+        m_horse = horse;
+
+        enterTutorialState(e_Tutorial_State_Horse_Menu);
+
+        int startSlot = EntityHorse::INV_BASE_COUNT;
+        if (m_horse->isChestedHorse()) {
+            startSlot += EntityHorse::INV_DONKEY_CHEST_COUNT;
+        }
+        Initialize(0, menu, false, startSlot, eSectionHorseUsing, eSectionHorseMax);
+
+        m_slotSaddle.addSlots(EntityHorse::INV_SLOT_SADDLE, 1);
+        m_slotArmor.addSlots(EntityHorse::INV_SLOT_ARMOR, 1);
+
+        if (m_horse->isChestedHorse()) {
+            // also starts at one, because a donkey can't wear armor!
+            m_slotListChest.addSlots(EntityHorse::INV_BASE_COUNT, EntityHorse::INV_DONKEY_CHEST_COUNT);
+        }
+
+        // remove horse inventory
+        if (!m_horse->isChestedHorse()) SetHasInventory(false);
+
+        // cannot wear armor? remove armor slot!
+        if (!m_horse->canWearArmor()) SetIsDonkey(true);
+
+        setIgnoreInput(false);
+    }
+
+    // UIScene_HorseInventoryMenu::customDraw: the horse, then the slots
+    void customDraw(const MCLECustomDrawRegion &region) override {
+        if (strcmp(region.name, "horse") == 0) {
+            renderHorse(region);
+            return;
+        }
+        ServerContainerScene::customDraw(region);
+    }
+
+protected:
+    MCLEUISlotList m_slotSaddle, m_slotArmor, m_slotListChest;
+    MCLEUILabel m_labelHorse;
+    // The iggy_horse control, UIControl_MinecraftHorse, MainPanel coordinates
+    MCLEControlRect m_horseRect{};
+
+    int getSectionColumns(ESceneSection eSection) override {
+        int cols = 0;
+        switch (eSection) {
+        case eSectionHorseArmor: cols = 1; break;
+        case eSectionHorseSaddle: cols = 1; break;
+        case eSectionHorseChest: cols = 5; break;
+        case eSectionHorseInventory: cols = 9; break;
+        case eSectionHorseUsing: cols = 9; break;
+        default: assert(false); break;
+        }
+        return cols;
+    }
+
+    int getSectionRows(ESceneSection eSection) override {
+        int rows = 0;
+        switch (eSection) {
+        case eSectionHorseArmor: rows = 1; break;
+        case eSectionHorseSaddle: rows = 1; break;
+        case eSectionHorseChest: rows = 3; break;
+        case eSectionHorseInventory: rows = 3; break;
+        case eSectionHorseUsing: rows = 1; break;
+        default: assert(false); break;
+        }
+        return rows;
+    }
+
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionHorseArmor: return &m_slotArmor;
+        case eSectionHorseSaddle: return &m_slotSaddle;
+        case eSectionHorseChest: return &m_slotListChest;
+        case eSectionHorseInventory: return &m_slotListInventory;
+        case eSectionHorseUsing: return &m_slotListHotbar;
+        default: assert(false); return nullptr;
+        }
+    }
+
+    void GetItemScreenData(ESceneSection eSection, int iItemIndex, UIVec2D *pPosition, UIVec2D *pSize) override {
+        MCLEUISlotList *list = getSection(eSection);
+        UIVec2D sectionSize;
+        sectionSize.x = list ? list->rect.w : 0;
+        sectionSize.y = list ? list->rect.h : 0;
+
+        if (IsSectionSlotList(eSection)) {
+            int rows = getSectionRows(eSection);
+            int cols = getSectionColumns(eSection);
+
+            pSize->x = sectionSize.x / cols;
+            pSize->y = sectionSize.y / rows;
+
+            int itemCol = iItemIndex % cols;
+            int itemRow = iItemIndex / cols;
+
+            pPosition->x = itemCol * pSize->x;
+            pPosition->y = itemRow * pSize->y;
+        } else {
+            GetPositionOfSection(eSection, pPosition);
+            pSize->x = sectionSize.x;
+            pSize->y = sectionSize.y;
+        }
+    }
+
+    void SetHasInventory(bool bHasInventory) { mcle_ui_call("", "SetHasInventory", {mcle_ui_bool(bHasInventory)}); }
+
+    void SetIsDonkey(bool bSetIsDonkey) { mcle_ui_call("", "SetIsDonkey", {mcle_ui_bool(bSetIsDonkey)}); }
+
+    // UIControl_MinecraftHorse::render, the horse turned towards the pointer.
+    // The region is in pixels already, so it's translated to rather than
+    // scaled from Iggy's double size target. m_fScreenWidth /
+    // m_fScreenHeight is the 16:9 screen the movie is laid out for.
+    void renderHorse(const MCLECustomDrawRegion &region) {
+        std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+        Minecraft *pMinecraft = Minecraft::GetInstance();
+        if (!m_horse || !EntityRenderDispatcher::instance || !pMinecraft || !pMinecraft->options) return;
+        float pointerX = m_pointerPos.x, pointerY = m_pointerPos.y;
+
+        // ui.setupCustomDraw
+        mcle_custom_draw_setup_state();
+        glLoadIdentity();
+        glTranslatef(region.x0, region.y0, -2000);
+
+        glEnable(GL_RESCALE_NORMAL);
+        glEnable(GL_COLOR_MATERIAL);
+        glPushMatrix();
+
+        float width = region.x1 - region.x0;
+        float height = region.y1 - region.y0;
+        float xo = width / 2;
+        float yo = height;
+
+        // dynamic y offset according to region height
+        glTranslatef(xo, yo - (height / 7.5f), 50.0f);
+
+        shared_ptr<LivingEntity> entityHorse = m_horse;
+
+        // Base scale on height of this control
+        // Potentially we might want separate x & y scales here
+        float ss = width / (1920.0f / 1080.0f) * 0.71f;
+
+        glScalef(-ss, ss, ss);
+        glRotatef(180, 0, 0, 1);
+
+        float oybr = entityHorse->yBodyRot;
+        float oyr = entityHorse->yRot;
+        float oxr = entityHorse->xRot;
+        float oyhr = entityHorse->yHeadRot;
+
+        float xd = (m_horseRect.x + m_horseRect.w / 2) - pointerX;
+
+        // Need to base Y on head position, not centre of mass
+        float yd = (m_horseRect.y + m_horseRect.h / 2 - 40) - pointerY;
+
+        glRotatef(45 + 90, 0, 1, 0);
+        Lighting::turnOn();
+        glRotatef(-45 - 90, 0, 1, 0);
+
+        glRotatef(-(float)atan(yd / 40.0f) * 20, 1, 0, 0);
+
+        entityHorse->yBodyRot = (float)atan(xd / 40.0f) * 20;
+        entityHorse->yRot = (float)atan(xd / 40.0f) * 40;
+        entityHorse->xRot = -(float)atan(yd / 40.0f) * 20;
+        entityHorse->yHeadRot = entityHorse->yRot;
+        glTranslatef(0, entityHorse->heightOffset, 0);
+        EntityRenderDispatcher::instance->playerRotY = 180;
+
+        // 4J Stu - Turning on hideGui while we do this stops the name rendering in split-screen
+        bool wasHidingGui = pMinecraft->options->hideGui;
+        pMinecraft->options->hideGui = true;
+        try {
+            EntityRenderDispatcher::instance->render(entityHorse, 0, 0, 0, 0, 1, false, false);
+        } catch (...) {
+        }
+        pMinecraft->options->hideGui = wasHidingGui;
+
+        entityHorse->yBodyRot = oybr;
+        entityHorse->yRot = oyr;
+        entityHorse->xRot = oxr;
+        entityHorse->yHeadRot = oyhr;
+        glPopMatrix();
+        Lighting::turnOff();
+        glDisable(GL_RESCALE_NORMAL);
+    }
+};
+
 // The client's SimpleContainer for the chest packet types, and its getName
 std::wstring chestName(const OpenPacket &packet) {
     int chestString;
@@ -1480,6 +1690,16 @@ std::wstring chestName(const OpenPacket &packet) {
     default: chestString = IDS_CHEST; break;
     }
     return packet.title.empty() ? std::wstring(app.GetString(chestString)) : packet.title;
+}
+
+// The client's AnimalChest for the horse packet, and its getName
+std::wstring horseName(const OpenPacket &packet, const std::shared_ptr<EntityHorse> &horse) {
+    int iTitle = IDS_CONTAINER_ANIMAL;
+    switch (horse->getType()) {
+    case EntityHorse::TYPE_DONKEY: iTitle = IDS_DONKEY; break;
+    case EntityHorse::TYPE_MULE: iTitle = IDS_MULE; break;
+    }
+    return packet.title.empty() ? std::wstring(app.GetString(iTitle)) : packet.title;
 }
 
 // The container the menu's slots are over, the one the client's copy mirrors
@@ -1495,13 +1715,14 @@ void mcle_container_set_rect_reader(MCLEControlRect (*reader)(const char *path))
 }
 
 bool mcle_container_take_server_packet(int type, int containerId, const std::wstring &title, bool customName,
-                                       int size) {
+                                       int size, int entityId) {
     if (!hasScene(type)) return false;
     g_packet.type = type;
     g_packet.containerId = containerId;
     g_packet.title = title;
     g_packet.customName = customName;
     g_packet.size = size;
+    g_packet.entityId = entityId;
     return true;
 }
 
@@ -1519,6 +1740,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::BEACON: return "BeaconMenu1080.swf";
     case ContainerOpenPacket::REPAIR_TABLE: return "AnvilMenu1080.swf";
     case ContainerOpenPacket::TRADER_NPC: return "TradingMenu1080.swf";
+    case ContainerOpenPacket::HORSE: return "HorseInventoryMenu1080.swf";
     }
     return "";
 }
@@ -1579,6 +1801,13 @@ bool mcle_container_open_server() {
                 scene = mcle_trading_scene(merchantMenu, player, g_packet.title);
             }
             break;
+        case ContainerOpenPacket::HORSE: {
+            std::shared_ptr<EntityHorse> horse =
+                std::dynamic_pointer_cast<EntityHorse>(player->level->getEntity(g_packet.entityId));
+            if (dynamic_cast<HorseInventoryMenu *>(menu) && horse) {
+                scene = new HorseScene(menu, player->inventory, container, horse, horseName(g_packet, horse));
+            }
+        } break;
         }
     }
     if (!scene) {

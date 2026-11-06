@@ -373,7 +373,7 @@ MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 // ContainerOpenPacket is where the client opens the menu
 // (ClientConnection::handleContainerOpen).
 extern void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName,
-                                       int size);
+                                       int size, int entityId);
 // What the local player's client would do with a packet sent to it
 extern "C" int mcle_log_msg(const char *msg);
 void mcle_handle_chat_packet(std::shared_ptr<ChatPacket> packet);   // Game/MCLEChat.cpp
@@ -389,7 +389,8 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     if (std::shared_ptr<SetEntityLinkPacket> link = std::dynamic_pointer_cast<SetEntityLinkPacket>(packet)) {
         mcle_player_entity_link(link->type, link->sourceId, link->destId);
     } else if (std::shared_ptr<ContainerOpenPacket> open = std::dynamic_pointer_cast<ContainerOpenPacket>(packet)) {
-        mcle_container_open_packet(open->type, open->containerId, open->title, open->customName, open->size);
+        mcle_container_open_packet(open->type, open->containerId, open->title, open->customName, open->size,
+                                   open->entityId);
     } else if (std::shared_ptr<ChatPacket> chat = std::dynamic_pointer_cast<ChatPacket>(packet)) {
         char line[48];
         snprintf(line, sizeof(line), "chat packet type %d", static_cast<int>(chat->m_messageType));

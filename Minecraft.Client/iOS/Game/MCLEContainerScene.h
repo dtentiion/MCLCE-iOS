@@ -81,7 +81,7 @@ MCLEContainerScene *mcle_trading_scene(MerchantMenu *menu, const std::shared_ptr
 // A ContainerOpenPacket for one of the server containers
 // MCLEContainerMenus.cpp has a scene for, kept for it. False for the rest.
 bool mcle_container_take_server_packet(int type, int containerId, const std::wstring &title, bool customName,
-                                       int size);
+                                       int size, int entityId);
 
 // One IggyPlayerCallMethodRS on the scene's movie, "" for the root
 void mcle_ui_call(const std::string &path, const char *method, std::vector<MCLEUIArg> args);

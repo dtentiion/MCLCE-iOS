@@ -30,6 +30,7 @@
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/SoundTypes.h"
 #include "../../../upstream/Minecraft.World/ContainerOpenPacket.h"
+#include "../../../upstream/Minecraft.World/EntityHorse.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
@@ -581,6 +582,7 @@ int g_openPacketContainerId = 0;
 std::wstring g_openPacketTitle;
 bool g_openPacketCustomName = false;
 int g_openPacketSize = 0;
+int g_openPacketEntityId = 0;
 int g_openContainerId = -1;
 
 } // namespace
@@ -590,14 +592,22 @@ unsigned int mcle_container_inventory_buttons() {
 }
 
 // Minecraft::tick's inventory action. Riding a horse the server opens the
-// horse's inventory instead (isServerControlledInventory), which isn't here.
+// horse's inventory instead (isServerControlledInventory): sendOpenInventory
+// goes to PlayerConnection::handlePlayerCommand's OPEN_INVENTORY, on this
+// same player.
 bool mcle_container_can_open_inventory() {
     if (g_scene) return false;
     std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
     std::shared_ptr<ServerPlayer> player = mcle_local_player();
     if (!player || player->getHealth() <= 0) return false;
-    if (player->isRiding() && player->riding != nullptr && player->riding->instanceof(eTYPE_HORSE)) return false;
-    return mcle_tutorial_input_allowed(MINECRAFT_ACTION_INVENTORY);
+    if (!mcle_tutorial_input_allowed(MINECRAFT_ACTION_INVENTORY)) return false;
+    if (player->isRiding() && player->riding != nullptr && player->riding->instanceof(eTYPE_HORSE)) {
+        player->resetLastActionTime();
+        // also only supported by horses...
+        std::dynamic_pointer_cast<EntityHorse>(player->riding)->openInventory(player);
+        return false;
+    }
+    return true;
 }
 
 void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now) {
@@ -616,7 +626,8 @@ void mcle_container_request(int request) {
     g_request = request;
 }
 
-void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName, int size) {
+void mcle_container_open_packet(int type, int containerId, const std::wstring &title, bool customName, int size,
+                                int entityId) {
     std::lock_guard<std::mutex> lock(g_requestMutex);
     g_openPacket = true;
     g_openPacketType = type;
@@ -624,6 +635,7 @@ void mcle_container_open_packet(int type, int containerId, const std::wstring &t
     g_openPacketTitle = title;
     g_openPacketCustomName = customName;
     g_openPacketSize = size;
+    g_openPacketEntityId = entityId;
 }
 
 int mcle_container_open_id() {
@@ -636,7 +648,7 @@ int mcle_container_open_id() {
 // came in while a menu was going up is dropped.
 int mcle_container_take_request() {
     bool packet, customName;
-    int request, type, containerId, size;
+    int request, type, containerId, size, entityId;
     std::wstring title;
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
@@ -647,6 +659,7 @@ int mcle_container_take_request() {
         title = g_openPacketTitle;
         customName = g_openPacketCustomName;
         size = g_openPacketSize;
+        entityId = g_openPacketEntityId;
         g_request = MCLE_CONTAINER_NONE;
         g_openPacket = false;
     }
@@ -654,7 +667,7 @@ int mcle_container_take_request() {
         g_openContainerId = containerId;
         if (!g_scene) {
             if (type == ContainerOpenPacket::WORKBENCH) return MCLE_CONTAINER_CRAFTING_3X3;
-            if (mcle_container_take_server_packet(type, containerId, title, customName, size)) {
+            if (mcle_container_take_server_packet(type, containerId, title, customName, size, entityId)) {
                 return MCLE_CONTAINER_SERVER;
             }
         }
