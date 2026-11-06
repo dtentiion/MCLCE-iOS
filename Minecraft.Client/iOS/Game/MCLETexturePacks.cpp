@@ -274,9 +274,33 @@ void mcle_texture_packs_wait_for_reload() {
     }
 }
 
-// UIController::ReloadSkin. The menus' skin movies are the ones in
-// Documents, a pack's own skin isn't swapped in yet.
-void mcle_ui_reload_skin() {}
+namespace {
+bool s_skinReloadPending = false;
+}
+
+// UIController::ReloadSkin. The movies load their skin libraries again
+// once the reload is back on the main loop (mcle_ui_take_skin_reload).
+void mcle_ui_reload_skin() { s_skinReloadPending = true; }
+
+bool mcle_ui_take_skin_reload() {
+    bool pending = s_skinReloadPending;
+    s_skinReloadPending = false;
+    return pending;
+}
+
+// CMinecraftApp::getArchiveFile's texture pack half
+bool mcle_texture_pack_archive_file(const std::wstring &filename, std::vector<unsigned char> &out) {
+    TexturePack *tPack = nullptr;
+    Minecraft *pMinecraft = Minecraft::GetInstance();
+    if (pMinecraft && pMinecraft->skins) tPack = pMinecraft->skins->getSelected();
+    if (!(tPack && tPack->hasData() && tPack->getArchiveFile() && tPack->getArchiveFile()->hasFile(filename))) {
+        return false;
+    }
+    byteArray ba = tPack->getArchiveFile()->getFile(filename);
+    out.assign(ba.data, ba.data + ba.length);
+    delete[] ba.data;
+    return !out.empty();
+}
 
 void McleAppStub::SetAction(int iPad, eXuiAction action, LPVOID param) {
     if ((m_eXuiAction[iPad] == eAppAction_ReloadTexturePack) && (action == eAppAction_EthernetDisconnected)) {
