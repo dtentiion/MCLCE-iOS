@@ -42,17 +42,6 @@
 #include "../../../upstream/Minecraft.World/Wolf.h"
 #include "../../../upstream/Minecraft.World/Zombie.h"
 
-// The Win64 4J_Input.h values; the iOS one has no button defines
-#ifndef _360_JOY_BUTTON_A
-#define _360_JOY_BUTTON_A            0x00000001
-#define _360_JOY_BUTTON_RB           0x00000040
-#define _360_JOY_BUTTON_LB           0x00000080
-#define _360_JOY_BUTTON_RTHUMB       0x00000100
-#define _360_JOY_BUTTON_LSTICK_RIGHT 0x00004000
-#define _360_JOY_BUTTON_RT           0x00400000
-#define _360_JOY_BUTTON_LT           0x00800000
-#endif
-
 namespace {
 
 std::mutex g_mutex;

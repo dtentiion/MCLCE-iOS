@@ -22,6 +22,34 @@ extern "C" int  mcle_ios_input_poll_connected(int pad);
 extern "C" unsigned int mcle_joypad_map(int style, int action);
 extern "C" int  mcle_joypad_map_val(int pad);
 
+// The Windows64 4J_Input.h button bits, which the pad reader fills in
+#ifndef _360_JOY_BUTTON_A
+#define	_360_JOY_BUTTON_A						0x00000001
+#define	_360_JOY_BUTTON_B						0x00000002
+#define	_360_JOY_BUTTON_X						0x00000004
+#define	_360_JOY_BUTTON_Y						0x00000008
+#define	_360_JOY_BUTTON_START					0x00000010
+#define	_360_JOY_BUTTON_BACK					0x00000020
+#define	_360_JOY_BUTTON_RB						0x00000040
+#define	_360_JOY_BUTTON_LB						0x00000080
+#define	_360_JOY_BUTTON_RTHUMB					0x00000100
+#define	_360_JOY_BUTTON_LTHUMB					0x00000200
+#define	_360_JOY_BUTTON_DPAD_UP					0x00000400
+#define	_360_JOY_BUTTON_DPAD_DOWN				0x00000800
+#define	_360_JOY_BUTTON_DPAD_LEFT				0x00001000
+#define	_360_JOY_BUTTON_DPAD_RIGHT				0x00002000
+#define	_360_JOY_BUTTON_LSTICK_RIGHT			0x00004000
+#define	_360_JOY_BUTTON_LSTICK_LEFT				0x00008000
+#define	_360_JOY_BUTTON_RSTICK_DOWN				0x00010000
+#define	_360_JOY_BUTTON_RSTICK_UP				0x00020000
+#define	_360_JOY_BUTTON_RSTICK_RIGHT			0x00040000
+#define	_360_JOY_BUTTON_RSTICK_LEFT				0x00080000
+#define	_360_JOY_BUTTON_LSTICK_DOWN				0x00100000
+#define	_360_JOY_BUTTON_LSTICK_UP				0x00200000
+#define	_360_JOY_BUTTON_RT						0x00400000
+#define	_360_JOY_BUTTON_LT						0x00800000
+#endif
+
 #define MAP_STYLE_0 0
 #define MAP_STYLE_1 1
 #define MAP_STYLE_2 2
