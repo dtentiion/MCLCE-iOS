@@ -73,8 +73,8 @@ struct DrawCmd {
     // modelview at replay so geometry tracks the camera correctly.
     float                translate[3] = {0, 0, 0};
     bool                 hasTranslate = false;
-    // G5: also capture bound texture so chunks sample terrain.png instead of
-    // whatever happens to be bound at replay time.
+    // A glBindTexture compiled into the list before this draw, 0 if none.
+    // Without one the draw uses whatever is bound when the list is called.
     unsigned int         texId = 0;
 };
 
@@ -95,6 +95,9 @@ thread_local int                      g_recording_list = 0;
 // into g_lists in one shot at glEndList. Avoids hammering g_lists_mu
 // on every per-tile draw - per-chunk locks instead of per-draw.
 thread_local DisplayList              g_recording_buffer;
+// Texture bound inside the list being compiled (GL_COMPILE records the
+// bind instead of doing it)
+thread_local unsigned int             g_recording_tex = 0;
 std::atomic<int>                      g_next_list_id{1};
 
 // Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
@@ -1106,6 +1109,10 @@ extern "C" void mcle_glbridge_delete_texture(unsigned int tex_id) {
     }
 }
 extern "C" void mcle_glbridge_bind_texture(unsigned int tex_id) {
+    if (g_recording_list != 0) {
+        g_recording_tex = tex_id;
+        return;
+    }
     g_bound_tex_id = tex_id;
     if (tex_id == 0) {
         g_current_texture = nil;
@@ -1276,12 +1283,10 @@ void call_list_replay(const DisplayList& dl) {
             mat_translate(g_modelview_stack.back().m,
                           cmd.translate[0], cmd.translate[1], cmd.translate[2]);
         }
-        // Per-cmd texture override - skip for fmt=4 (chunks). Chunks all
-        // use the terrain atlas bound externally before render() runs;
-        // their captured texId at record time is whatever was bound during
-        // boot stitch (often a misc texture) and overriding to it gives
-        // wrong pixels.
-        const bool overrideTex = (cmd.texId != 0 && cmd.fmt != 4);
+        // Only a bind compiled into the list changes the texture. Model
+        // parts are compiled in their model's constructor, so the texture
+        // bound back then means nothing for them.
+        const bool overrideTex = (cmd.texId != 0);
         if (overrideTex) {
             auto tit = g_gl_textures.find(cmd.texId);
             g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
@@ -2074,9 +2079,7 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
             cmd.translate[2] = g_recording_last_translate[2];
             cmd.hasTranslate = true;
         }
-        // G5: capture currently bound texture id so chunks sample terrain.png
-        // at replay even if other things have rebound the texture since.
-        cmd.texId = g_bound_tex_id;
+        cmd.texId = g_recording_tex;
         // Push into the thread-local buffer - no lock. The whole buffer
         // is spliced into g_lists in one shot at glEndList.
         g_recording_buffer.draws.push_back(std::move(cmd));
@@ -2102,6 +2105,7 @@ extern "C" int mcle_glbridge_gen_lists(int range) {
 
 extern "C" void mcle_glbridge_begin_list(int id, int /*mode*/) {
     g_recording_list = id;
+    g_recording_tex = 0;
     g_recording_buffer.draws.clear();
     g_recording_has_translate = false;
     g_recording_last_translate[0] = 0;
