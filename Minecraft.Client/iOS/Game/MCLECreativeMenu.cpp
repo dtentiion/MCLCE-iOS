@@ -19,6 +19,8 @@
 #include "../../../upstream/Minecraft.World/net.minecraft.world.entity.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.world.entity.animal.h"
 #include "../../../upstream/Minecraft.World/ItemEntity.h"
+#include "../../../upstream/Minecraft.World/Level.h"
+#include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/SimpleContainer.h"
 #include "../../../upstream/Minecraft.World/MapItem.h"
 #include "../../../upstream/Minecraft.World/MapItemSavedData.h"
@@ -160,7 +162,8 @@ public:
         m_slotListHotbar.rect = layout.hotbarList;
         m_slotListContainer.rect = layout.containerList;
 
-        shared_ptr<SimpleContainer> creativeContainer = std::make_shared<SimpleContainer>(0, L"", false, TabSpec::MAX_SIZE);
+        int containerSize = TabSpec::MAX_SIZE;
+        shared_ptr<SimpleContainer> creativeContainer = std::make_shared<SimpleContainer>(0, L"", false, containerSize);
         itemPickerMenu = new ItemPickerMenu(creativeContainer, player->inventory);
 
         Initialize(0, itemPickerMenu, false, -1, eSectionInventoryCreativeUsing, eSectionInventoryCreativeMax, false);
