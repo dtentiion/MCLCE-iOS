@@ -2563,6 +2563,33 @@ static void *mcle_sim_thread_loop(void *) {
     return nullptr;
 }
 
+// ServerPlayer::doChunkSendingTick for the local player. Its connection is
+// local, so the chunk isn't sent, the client's chunks are the server's: the
+// nearest finalised one comes off chunksToSend and its render chunks are made
+// dirty, so ones built while it was still loading get built again.
+static void mcle_local_chunk_sending_tick(const std::shared_ptr<ServerPlayer> &player) {
+    if (player->chunksToSend.empty()) return;
+    Level *level = player->level;
+    if (level == nullptr) return;
+    ChunkPos nearest = player->chunksToSend.front();
+    bool nearestValid = false;
+    double dist = DBL_MAX;
+    for (ChunkPos chunk : player->chunksToSend) {
+        if (level->isChunkFinalised(chunk.x, chunk.z)) {
+            double newDist = chunk.distanceToSqr(player->x, player->z);
+            if ((!nearestValid) || (newDist < dist)) {
+                nearest = chunk;
+                dist = chunk.distanceToSqr(player->x, player->z);
+                nearestValid = true;
+            }
+        }
+    }
+    if (!nearestValid) return;
+    player->chunksToSend.remove(nearest);
+    level->setTilesDirty(nearest.x * 16 + 1, 1, nearest.z * 16 + 1, nearest.x * 16 + 14, Level::maxBuildHeight - 2,
+                         nearest.z * 16 + 14);
+}
+
 extern "C" void mcle_game_tick(void) {
     // Install per-thread sigaltstack on whichever thread first calls
     // this. Idempotent. Covers main (UIKit) and sim threads; workers
@@ -3075,6 +3102,10 @@ extern "C" void mcle_game_tick(void) {
                     MCLE_LOG("SLOW_PCM cm->move+tick took=%lldms", (long long)cmMs);
                 }
             }
+        } catch (...) {}
+        // ServerConnection::tick's doChunkSendingTick
+        try {
+            mcle_local_chunk_sending_tick(g_player);
         } catch (...) {}
     }
 
