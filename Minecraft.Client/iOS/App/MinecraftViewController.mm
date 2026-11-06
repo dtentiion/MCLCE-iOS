@@ -69,6 +69,10 @@ static bool g_loading_world = false;
 static bool g_world_paused = false;
 // UIScene_DeathMenu is up
 static bool g_world_dead = false;
+// Exit Game: FullscreenProgress is up while the world is torn down
+static bool g_exiting_world = false;
+extern "C" int mcle_game_exit_world(int save);
+extern "C" int mcle_game_exit_world_done(void);
 
 static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
@@ -2632,6 +2636,88 @@ static NSString* MCLETipHTML(void) {
     }
 }
 
+// UIScene_PauseMenu / UIScene_DeathMenu Exit Game for the host with saving
+// on: RequestAlertMessage(IDS_EXIT_GAME, IDS_CONFIRM_EXIT_GAME) with Cancel,
+// Save and Exit, Exit without Saving
+- (void)requestExitGame {
+    __weak MinecraftViewController* weakSelf = self;
+    [self presentDialogWithTitle:MCLEStr(IDS_EXIT_GAME)
+                         content:MCLEStr(IDS_CONFIRM_EXIT_GAME)
+                         buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_EXIT_GAME_SAVE),
+                                   MCLEStr(IDS_EXIT_GAME_NO_SAVE)]
+                      focusIndex:0
+                        callback:^(MCLEDialogResult r) {
+        [weakSelf exitGameSaveDialogReturned:r];
+    }];
+}
+
+// IUIScene_PauseMenu::ExitGameSaveDialogReturned. The save is there, so
+// saving asks before overwriting it, and not saving asks too.
+- (void)exitGameSaveDialogReturned:(MCLEDialogResult)r {
+    __weak MinecraftViewController* weakSelf = self;
+    if (r == MCLEDialogResultDecline) {
+        [self presentDialogWithTitle:MCLEStr(IDS_TITLE_SAVE_GAME)
+                             content:MCLEStr(IDS_CONFIRM_SAVE_GAME)
+                             buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r2) {
+            [weakSelf exitGameConfirmReturned:r2 saving:YES];
+        }];
+    } else if (r == MCLEDialogResultThird) {
+        [self presentDialogWithTitle:MCLEStr(IDS_TITLE_DECLINE_SAVE_GAME)
+                             content:MCLEStr(IDS_CONFIRM_DECLINE_SAVE_GAME)
+                             buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r2) {
+            [weakSelf exitGameConfirmReturned:r2 saving:NO];
+        }];
+    }
+}
+
+// ExitGameAndSaveReturned / ExitGameDeclineSaveReturned: OK leaves, anything
+// else goes back to the exit choices if the pause menu is up
+- (void)exitGameConfirmReturned:(MCLEDialogResult)r saving:(BOOL)save {
+    if (r == MCLEDialogResultDecline) {
+        [self exitWorldSaving:save];
+    } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
+        [self requestExitGame];
+    }
+}
+
+// eAppAction_ExitWorld then ExitWorldCapturedThumbnail: FullscreenProgress
+// with "Exiting game", the tips, panorama and logo while
+// ExitWorldThreadProc runs
+- (void)exitWorldSaving:(BOOL)save {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player || g_exiting_world) return;
+    if (!mcle_game_exit_world(save ? 1 : 0)) return;
+    g_exiting_world = true;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"FullscreenProgress1080.swf"];
+    MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_EXITING_GAME)]);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kLogoDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+}
+
+// e_ProgressCompletion_NavigateToHomeMenu once the world is gone
+- (void)finishExitWorld {
+    extern PlayerHandle* g_ruffle_player;
+    g_exiting_world = false;
+    g_world_paused = false;
+    g_world_dead = false;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"MainMenu1080.swf"];
+    if (g_ruffle_player) {
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+    }
+    // The menus have their music back
+    mcle_audio_start_menu_music();
+}
+
 // Ports UIScene_HowToPlayMenu constructor
 // (Common/UI/UIScene_HowToPlayMenu.cpp:77-104). Single
 // FJ_ButtonList_Menu named "HowToList" (eControl_Buttons = 0)
@@ -3350,6 +3436,7 @@ static NSString* MCLETipHTML(void) {
     }
 
     if (g_loading_world) [self pollWorldLoad];
+    if (g_exiting_world && mcle_game_exit_world_done()) [self finishExitWorld];
 
     // Splash text pulse + position. Mirrors CXuiCtrlSplashPulser::
     // OnRender (Common/XUI/XUI_Ctrl_SplashPulser.cpp): pulses with
@@ -3545,7 +3632,7 @@ static NSString* MCLETipHTML(void) {
                     } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
                         // UIScene_DeathMenu::handlePress
                         if (id == 0) mcle_game_respawn();
-                        else NSLog(@"[death] exit not wired yet");
+                        else [self requestExitGame];
                     } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
                         // UIScene_PauseMenu::handlePress
                         switch (id) {
@@ -3564,8 +3651,8 @@ static NSString* MCLETipHTML(void) {
                                     if (r == MCLEDialogResultDecline) mcle_save_now();
                                 }];
                                 break;
-                            // Achievements is the platform overlay. Exit
-                            // needs the world torn down first, not yet.
+                            case 5: [self requestExitGame]; break;
+                            // Achievements is the platform overlay
                             default:
                                 NSLog(@"[pause] button %d not wired yet", id);
                                 break;
