@@ -151,6 +151,9 @@ void mcle_sound_init(const char *documentsPath) {
     if (g_haveStreamingSounds) {
         const int *s = g_streamingSounds;
         g_engine->SetStreamingSounds(s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
+        // The texture pack reload's playStreaming, which came before there
+        // was an engine to pick the pack's music
+        g_engine->playStreaming(L"", 0, 0, 0, 1, 1);
     }
 }
 
