@@ -15,6 +15,7 @@
 #include "../Game/MCLEStrings.h"
 #include "../Game/MCLEHud.h"
 #include "../Game/MCLETooltips.h"
+#include "../Game/MCLEContainerMenu.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
@@ -70,6 +71,8 @@ static bool g_loading_world = false;
 static bool g_world_paused = false;
 // UIScene_DeathMenu is up
 static bool g_world_dead = false;
+// A container menu (UIScene_InventoryMenu) is up over the running world
+static bool g_world_container = false;
 // Exit Game: FullscreenProgress is up while the world is torn down
 static bool g_exiting_world = false;
 extern "C" int mcle_game_exit_world(int save);
@@ -2663,10 +2666,109 @@ static NSString* MCLETipHTML(void) {
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
+// The calls a container scene queued, made on the movie
+static void MCLEContainerApplyOps(void) {
+    for (const MCLEUIOp& op : mcle_container_take_ops()) {
+        if (op.kind == MCLEUIOp::Sound) {
+            mcle_audio_play_ui_sfx(op.method.c_str(), 1.0f, 1.0f);
+            continue;
+        }
+        NSMutableArray* args = [NSMutableArray arrayWithCapacity:op.args.size()];
+        for (const MCLEUIArg& a : op.args) {
+            if (a.kind == MCLEUIArg::String) {
+                NSString* s = [NSString stringWithUTF8String:a.str.c_str()];
+                [args addObject:s ? s : @""];
+            } else if (a.kind == MCLEUIArg::Bool) {
+                [args addObject:a.number != 0 ? @YES : @NO];
+            } else {
+                [args addObject:@(a.number)];
+            }
+        }
+        MCLECallPath([NSString stringWithUTF8String:op.path.c_str()],
+                     [NSString stringWithUTF8String:op.method.c_str()], args);
+    }
+}
+
+// UIControl's x, y, width and height for a control, read when the scene maps it
+static MCLEControlRect MCLEControlRectAt(const char* path) {
+    extern PlayerHandle* g_ruffle_player;
+    float r[4] = { 0, 0, 0, 0 };
+    if (g_ruffle_player) ruffle_ios_child_path_rect(g_ruffle_player, (const uint8_t*)path, strlen(path), r);
+    return MCLEControlRect{ r[0], r[1], r[2], r[3] };
+}
+
+// Minecraft::tick's inventory action: app.LoadInventoryMenu
+- (void)openInventoryMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player || !mcle_container_can_open_inventory()) return;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"InventoryMenu1080.swf"];
+    if (!mcle_container_is_open()) {
+        [self enterWorldUI];
+        return;
+    }
+    g_world_container = true;
+    // The container scenes don't change the components, so it's the world
+    // under it like the HUD had. The tooltips show while a menu is up.
+    const int depths[] = { -2, kMenuBackgroundDepth, kLogoDepth, kDimDepth };
+    for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+    MCLEGameTooltipsReset();
+}
+
+// UIScene_InventoryMenu's constructor, once the movie is up
+- (void)initInventoryMenu {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    MCLEInventoryLayout layout;
+    layout.backgroundPanel = MCLEControlRectAt("MainPanel.BackgroundPanel");
+    layout.hotbarList = MCLEControlRectAt("MainPanel.hotbarList");
+    layout.inventoryList = MCLEControlRectAt("MainPanel.inventoryList");
+    layout.armorList = MCLEControlRectAt("MainPanel.armorList");
+    mcle_container_open_inventory(layout, CACurrentMediaTime());
+    MCLEContainerApplyOps();
+}
+
+// handleDestroy, back to the HUD unless another scene is taking over
+- (void)closeContainerMenu:(BOOL)backToGame {
+    mcle_container_close();
+    g_world_container = false;
+    if (backToGame) [self enterWorldUI];
+}
+
+// A UI frame of the container scene: the pad, UIScene::tick, then the
+// mouse move the pointer makes and the movie with its slots drawn in
+- (void)containerMenuFrame {
+    extern PlayerHandle* g_ruffle_player;
+    mcle_ios_pad_state pad = {};
+    mcle_ios_input_poll(0, &pad);
+    mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+    self.lastPadButtons = pad.buttons;
+    MCLEContainerApplyOps();
+    if (mcle_container_close_requested()) {
+        [self closeContainerMenu:YES];
+        return;
+    }
+    int tips[11];
+    mcle_container_tooltips(tips);
+    MCLESetTooltips(tips);
+    if (!g_ruffle_player) return;
+    float px = 0, py = 0;
+    mcle_container_pointer(&px, &py);
+    ruffle_ios_player_mouse_move_stage(g_ruffle_player, px, py);
+    ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+    RuffleIosCustomDrawRegion regions[64];
+    int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 64);
+    n = std::max(0, std::min(n, 64));
+    mcle_container_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
+}
+
 // UIScene_DeathMenu: Respawn and Exit Game under "You died!"
 - (void)openDeathMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
+    // Dying closes whatever menu was up
+    if (g_world_container) [self closeContainerMenu:NO];
     g_world_dead = true;
     self.menuStack = nil;
     [self transitionToMenuNamed:@"DeathMenu1080.swf"];
@@ -3421,6 +3523,8 @@ static NSString* MCLETipHTML(void) {
             [self attachMenuScenery];
             self.menuButtonConfig = nil;
             MCLEControlsInit();
+        } else if ([swfName isEqualToString:@"InventoryMenu1080.swf"]) {
+            [self initInventoryMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -3511,17 +3615,24 @@ static NSString* MCLETipHTML(void) {
             g_world_dead = false;
             [self enterWorldUI];
         }
-        // Minecraft::tick: Start opens the pause menu
-        if (!g_world_paused && !g_world_dead) {
+        // Minecraft::tick: Start opens the pause menu, the inventory action
+        // the inventory
+        if (!g_world_paused && !g_world_dead && !g_world_container) {
             mcle_ios_pad_state pad;
             if (mcle_ios_input_poll(0, &pad)) {
                 bool startNow = (pad.buttons & 0x00000010u) != 0;
                 bool startBefore = (self.lastPadButtons & 0x00000010u) != 0;
+                bool inventoryPressed = (pad.buttons & ~self.lastPadButtons & mcle_container_inventory_buttons()) != 0;
                 self.lastPadButtons = pad.buttons;
                 if (startNow && !startBefore) [self openPauseMenu];
+                else if (inventoryPressed) [self openInventoryMenu];
             }
         }
         mcle_render_frame();
+        if (g_world_container) {
+            [self containerMenuFrame];
+            return;
+        }
         if (!g_world_paused && !g_world_dead) {
             MCLEHudPump();
             MCLEGameTooltipsPump();
