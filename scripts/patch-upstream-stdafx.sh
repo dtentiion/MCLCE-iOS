@@ -1662,6 +1662,11 @@ BEACON_PY="$REPO_ROOT/scripts/gen-beacon-menu.py"
 if [ -f "$BEACON_PY" ]; then
     python3 "$BEACON_PY"
 fi
+# IUIScene_TradingMenu's body, for Game/MCLETradingMenu.cpp
+TRADE_PY="$REPO_ROOT/scripts/gen-trading-menu.py"
+if [ -f "$TRADE_PY" ]; then
+    python3 "$TRADE_PY"
+fi
 
 # DLCManager and DLCPack build and read .pck files with iOS's 4 byte wchar_t
 DLCM_PY="$REPO_ROOT/scripts/patch-dlc-ios.py"

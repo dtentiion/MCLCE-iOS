@@ -15,6 +15,7 @@
 class ServerPlayer;
 class UIScene;
 class IUIScene_CraftingMenu;
+class MerchantMenu;
 
 std::mutex &mcle_sim_tick_mutex();                 // MCLEGameLoop.cpp
 std::shared_ptr<ServerPlayer> mcle_local_player(); // MCLEGameLoop.cpp
@@ -73,6 +74,10 @@ void mcle_container_prepare();
 void mcle_container_begin(MCLEContainerScene *scene);
 // The container id of the last ContainerOpenPacket taken
 int mcle_container_open_id();
+// UIScene_TradingMenu over the server's MerchantMenu, for the
+// TRADER_NPC ContainerOpenPacket and its title (MCLETradingMenu.cpp)
+MCLEContainerScene *mcle_trading_scene(MerchantMenu *menu, const std::shared_ptr<ServerPlayer> &player,
+                                       const std::wstring &title);
 // A ContainerOpenPacket for one of the server containers
 // MCLEContainerMenus.cpp has a scene for, kept for it. False for the rest.
 bool mcle_container_take_server_packet(int type, int containerId, const std::wstring &title, bool customName,

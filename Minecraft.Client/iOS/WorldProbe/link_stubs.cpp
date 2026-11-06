@@ -26,6 +26,7 @@
 #include "AddPlayerPacket.h"
 #include "AnimatePacket.h"
 #include "ContainerOpenPacket.h"
+#include "CustomPayloadPacket.h"
 #include "ChatPacket.h"
 #include "ExplodePacket.h"
 #include "RespawnPacket.h"
@@ -379,6 +380,7 @@ void mcle_handle_chat_packet(std::shared_ptr<ChatPacket> packet);   // Game/MCLE
 void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet);   // Game/MCLEGameLoop.cpp
 void mcle_tutorial_local_player_packet(std::shared_ptr<Packet> packet);   // Game/MCLETutorial.cpp
 void mcle_player_entity_link(int type, int sourceId, int destId);   // Game/MCLEPlayerInput.cpp
+void mcle_container_custom_payload(const std::wstring &identifier, byteArray data);   // Game/MCLETradingMenu.cpp
 void mcle_local_player_respawn_packet(int dimension);   // Game/MCLEGameLoop.cpp
 void mcle_local_player_win_game();   // Game/MCLEGameLoop.cpp
 void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
@@ -399,6 +401,8 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
         mcle_local_player_respawn_packet(respawn->dimension);
     } else if (std::shared_ptr<GameEventPacket> event = std::dynamic_pointer_cast<GameEventPacket>(packet)) {
         if (event->_event == GameEventPacket::WIN_GAME) mcle_local_player_win_game();
+    } else if (std::shared_ptr<CustomPayloadPacket> payload = std::dynamic_pointer_cast<CustomPayloadPacket>(packet)) {
+        mcle_container_custom_payload(payload->identifier, payload->data);
     }
 }
 void PlayerConnection::send(std::shared_ptr<Packet> packet) {

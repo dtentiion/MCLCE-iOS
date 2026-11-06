@@ -29,6 +29,7 @@ set(MCLE_GAME_SOURCES
   MCLECraftingMenu.cpp
   MCLECreativeMenu.cpp
   MCLEContainerMenus.cpp
+  MCLETradingMenu.cpp
   MCLESkinSelectMenu.cpp
   MCLETutorial.cpp
   MCLETutorialPopup.cpp

@@ -126,6 +126,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::ENCHANTMENT:
     case ContainerOpenPacket::BEACON:
     case ContainerOpenPacket::REPAIR_TABLE:
+    case ContainerOpenPacket::TRADER_NPC:
         return true;
     }
     return isChest(type);
@@ -1517,6 +1518,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::ENCHANTMENT: return "EnchantingMenu1080.swf";
     case ContainerOpenPacket::BEACON: return "BeaconMenu1080.swf";
     case ContainerOpenPacket::REPAIR_TABLE: return "AnvilMenu1080.swf";
+    case ContainerOpenPacket::TRADER_NPC: return "TradingMenu1080.swf";
     }
     return "";
 }
@@ -1570,6 +1572,11 @@ bool mcle_container_open_server() {
         case ContainerOpenPacket::REPAIR_TABLE:
             if (AnvilMenu *anvilMenu = dynamic_cast<AnvilMenu *>(menu)) {
                 scene = new AnvilScene(anvilMenu, player->inventory);
+            }
+            break;
+        case ContainerOpenPacket::TRADER_NPC:
+            if (MerchantMenu *merchantMenu = dynamic_cast<MerchantMenu *>(menu)) {
+                scene = mcle_trading_scene(merchantMenu, player, g_packet.title);
             }
             break;
         }
