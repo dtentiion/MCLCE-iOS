@@ -17,10 +17,15 @@
 #include "../../../upstream/Minecraft.Client/Model.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 
-void mcle_ui_handle_dlc_mounting_complete(); // MCLESkinSelectMenu.cpp
+void mcle_ui_handle_dlc_mounting_complete();                // MCLESkinSelectMenu.cpp
+extern "C" void mcle_start_game_dlc_mounting_complete(void); // MinecraftViewController.mm
 
 void mcle_dlc_install_if_needed(int iPad) {
     if (!app.DLCInstallProcessCompleted()) app.StartInstallDLCProcess(iPad);
+}
+
+bool mcle_dlc_start_install_process(int iPad) {
+    return app.StartInstallDLCProcess(iPad);
 }
 
 bool McleAppStub::StartInstallDLCProcess(int iPad) {
@@ -74,6 +79,7 @@ void McleAppStub::MountNextDLC(int iPad) {
 
         // ui.HandleDLCMountingComplete
         mcle_ui_handle_dlc_mounting_complete();
+        mcle_start_game_dlc_mounting_complete();
     }
 }
 

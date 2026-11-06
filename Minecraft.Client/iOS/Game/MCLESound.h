@@ -19,6 +19,10 @@ void mcle_sound_stop_music();
 // Volumes are 0..1 like Options::set(MUSIC / SOUND).
 void mcle_sound_tick(const std::shared_ptr<ServerPlayer> &player, float a, float musicVolume, float sfxVolume);
 
+// SetStreamingSounds with the game's own music, eStream_Overworld_Calm1 to
+// eStream_CD_1. The enum is only in the real SoundEngine.h.
+void mcle_sound_set_default_streaming_sounds();
+
 // MultiPlayerLevel::playLocalSound. scripts/patch-level-local-sound.py has
 // Level::playLocalSound call it.
 void mcle_level_play_local_sound(double x, double y, double z, int iSound, float volume, float pitch,
