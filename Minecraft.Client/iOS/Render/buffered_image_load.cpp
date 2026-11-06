@@ -120,6 +120,17 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
     if (!found && !root.empty()) found = try_path("doc+rel",        root + "/" + rel);
     if (!found)                  found = try_path("rel122",         rel122);
     if (!found && !root.empty()) found = try_path("doc+rel122",     root + "/" + rel122);
+    // Textures::readImage asks the default pack for 1_2_2/<name>; where the
+    // install keeps that file at the res root, look there too
+    if (!found) {
+        const std::string tag = "1_2_2/";
+        const size_t at = rel.find(tag);
+        if (at != std::string::npos) {
+            const std::string flat = rel.substr(0, at) + rel.substr(at + tag.size());
+            found = try_path("flat", flat);
+            if (!found && !root.empty()) found = try_path("doc+flat", root + "/" + flat);
+        }
+    }
     {
         std::string m = std::string("BIL_CKPT path=") + path + " full=" + full +
             " exists=" + (found ? "1" : "0");
