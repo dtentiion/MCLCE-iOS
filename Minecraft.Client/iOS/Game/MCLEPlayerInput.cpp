@@ -427,11 +427,14 @@ bool useItemOn(std::shared_ptr<ItemInstance> item, int x, int y, int z, int face
     return result;
 }
 
-// MultiPlayerGameMode::useItem, handled as handleUseItem's face 255 case
+// MultiPlayerGameMode::useItem, handled as handleUseItem's face 255 case.
+// Its result is the client's, whether the held stack changed.
 bool useItem(std::shared_ptr<ItemInstance> item) {
     if (!P->isAllowedToUse(item)) return false;
     if (item == nullptr) return false;
-    return P->gameMode->useItem(P, L, item);
+    int oldCount = item->count;
+    P->gameMode->useItem(P, L, item);
+    return P->inventory->getSelected() != item || item->count != oldCount;
 }
 
 // MultiPlayerGameMode::attack / interact through handleInteract
