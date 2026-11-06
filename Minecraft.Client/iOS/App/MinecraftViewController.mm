@@ -336,7 +336,6 @@ static NSString* MCLEControlsLayoutString(int scheme) {
 
 // UIScene_ControlsMenu constructor
 static void MCLEControlsInit(void) {
-    extern PlayerHandle* g_ruffle_player;
     // SetPlatform: the Windows64 picture, or the PS4 one when the PS4 skin is in
     MCLECallPath(@"", @"SetPlatform", @[@(MCLEPlayStationPadConnected() ? 3 : 0)]);
 
@@ -355,11 +354,9 @@ static void MCLEControlsInit(void) {
         { "InvertLook", IDS_INVERT_LOOK, 3, MCLE_SETTING_ControlInvertLook },
         { "SouthPaw",   IDS_SOUTHPAW,    4, MCLE_SETTING_ControlSouthPaw },
     };
+    // UIControl_CheckBox::init -> FJ_CheckBox.Init(label, id, checked)
     for (const auto& c : checkboxes) {
-        const char* label = MCLEStr(c.ids).UTF8String;
-        ruffle_ios_call_init_checkbox(g_ruffle_player, (const uint8_t*)c.name, strlen(c.name),
-                                      (const uint8_t*)label, strlen(label), (double)c.id,
-                                      mcle_settings_get(c.setting) ? 1 : 0);
+        MCLECallPath(@(c.name), @"Init", @[MCLEStr(c.ids), @(c.id), mcle_settings_get(c.setting) ? @YES : @NO]);
     }
 
     int selected = MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_ControlScheme), 2));
