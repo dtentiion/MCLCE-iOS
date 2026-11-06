@@ -1218,18 +1218,30 @@ typedef BYTE*  PBYTE2;
 typedef int boolean;
 #endif
 
-// Xbox concurrent free-list stack template. Used in upstream
-// SparseLightStorage as a thread-safe stack. Stub: empty class
-// templated on T - methods absorbed by variadic template.
+// Xbox lock free stack, as Windows64 has it (x64headers/extraX64.h): a
+// vector behind a lock. LevelRenderer queues dirty chunks on one, and the
+// tile / light / data storages queue their old buffers for freeing.
+#include <mutex>
+#include <vector>
 template<class T> class XLockFreeStack {
+    std::vector<T *> intStack;
+    std::mutex m_cs;
 public:
-    template<class... A> XLockFreeStack(A...) {}
-    template<class... A> void Initialize(A...) {}
-    template<class... A> bool push(A...)    { return false; }
-    template<class... A> bool Push(A...)    { return false; }
-    template<class... A> T*   pop(A...)     { return nullptr; }
-    template<class... A> T*   Pop(A...)     { return nullptr; }
-    template<class... A> bool empty(A...) const { return true; }
+    XLockFreeStack() {}
+    void Initialize() {}
+    void Push(T *data) {
+        std::lock_guard<std::mutex> lock(m_cs);
+        intStack.push_back(data);
+    }
+    T *Pop() {
+        std::lock_guard<std::mutex> lock(m_cs);
+        if (intStack.size()) {
+            T *ret = intStack.back();
+            intStack.pop_back();
+            return ret;
+        }
+        return nullptr;
+    }
 };
 
 // Xbox memcompression contexts. Used by compression.cpp's PE-only
