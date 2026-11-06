@@ -66,6 +66,10 @@ new = (
     "\t}\n"
     "\treturn out;\n"
     "}\n"
+    "// The block and item atlases bindTexture has uploaded again, cleared by\n"
+    "// each stitch. A stitch made after a reload can be at the same address as\n"
+    "// the one before.\n"
+    "static Texture *s_mcleUploadedAtlas[2] = {};\n"
     "void Textures::bindTexture(ResourceLocation *resource)\n"
     "{\n"
     "\tif (!resource) return;\n"
@@ -82,8 +86,7 @@ new = (
     "\t\t\t// The stitch runs on the game's init thread, where another\n"
     "\t\t\t// texture can be the bound one when it uploads, so the first\n"
     "\t\t\t// upload goes again here with the atlas bound\n"
-    "\t\t\tstatic Texture *s_uploaded[2] = {};\n"
-    "\t\t\tTexture *&uploaded = s_uploaded[blocks ? 0 : 1];\n"
+    "\t\t\tTexture *&uploaded = s_mcleUploadedAtlas[blocks ? 0 : 1];\n"
     "\t\t\tif (uploaded != stitched)\n"
     "\t\t\t{\n"
     "\t\t\t\tstitched->updateOnGPU();\n"
@@ -144,5 +147,25 @@ new = (
 if old not in src:
     sys.exit(f"anchor not found in {TARGET}")
 src = src.replace(old, new, 1)
+
+stitch_old = (
+    "void Textures::stitch()\n"
+    "{\n"
+    "\tterrain->stitch();\n"
+    "\titems->stitch();\n"
+    "}"
+)
+stitch_new = (
+    "void Textures::stitch()\n"
+    "{\n"
+    "\tterrain->stitch();\n"
+    "\titems->stitch();\n"
+    "\ts_mcleUploadedAtlas[0] = nullptr;\n"
+    "\ts_mcleUploadedAtlas[1] = nullptr;\n"
+    "}"
+)
+if src.count(stitch_old) != 1:
+    sys.exit(f"stitch anchor not found once in {TARGET}")
+src = src.replace(stitch_old, stitch_new, 1)
 TARGET.write_text(src, encoding="utf-8")
 print(f"patched: {TARGET}")
