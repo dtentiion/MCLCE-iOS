@@ -64,6 +64,27 @@ static void mcle_anvil_set_item_name(const std::wstring &name) {
 // IUIScene_AnvilMenu.cpp, see scripts/gen-anvil-menu.py
 #include "../../../upstream/Minecraft.Client/iOS_AnvilMenu.inc"
 
+// PlayerConnection::handleCustomPayload's SET_BEACON_PACKET, on the same
+// player's menu
+static void mcle_beacon_set_powers(int primary, int secondary) {
+    std::shared_ptr<ServerPlayer> player = mcle_local_player();
+    if (!player) return;
+    if (dynamic_cast<BeaconMenu *>(player->containerMenu) != nullptr) {
+        BeaconMenu *beaconMenu = static_cast<BeaconMenu *>(player->containerMenu);
+        Slot *slot = beaconMenu->getSlot(0);
+        if (slot->hasItem()) {
+            slot->remove(1);
+            shared_ptr<BeaconTileEntity> beacon = beaconMenu->getBeacon();
+            beacon->setPrimaryPower(primary);
+            beacon->setSecondaryPower(secondary);
+            beacon->setChanged();
+        }
+    }
+}
+
+// IUIScene_BeaconMenu.cpp, see scripts/gen-beacon-menu.py
+#include "../../../upstream/Minecraft.Client/iOS_BeaconMenu.inc"
+
 namespace {
 
 // The ContainerOpenPacket the scene is for
@@ -1065,73 +1086,6 @@ protected:
     MCLEUILabel m_labelPrimary, m_labelSecondary;
     BeaconEffectButton m_buttonsPowers[eControl_EFFECT_COUNT];
     BeaconEffectButton m_buttonConfirm;
-
-    // IUIScene_BeaconMenu::handleOtherClicked, with the confirm's
-    // SET_BEACON_PACKET handled the way PlayerConnection::handleCustomPayload
-    // handles it
-    void handleOtherClicked(int iPad, ESceneSection eSection, int buttonNum, bool quickKey) override {
-        switch (eSection) {
-        case eSectionBeaconConfirm: {
-            if ((m_beacon->getItem(0) == nullptr) || (m_beacon->getPrimaryPower() <= 0)) return;
-            confirm(m_beacon->getPrimaryPower(), m_beacon->getSecondaryPower());
-
-            if (m_beacon->getPrimaryPower() > 0) {
-                int effectId = m_beacon->getPrimaryPower();
-
-                bool active = true;
-                bool selected = false;
-
-                int tier = 3;
-                if (tier >= m_beacon->getLevels()) {
-                    active = false;
-                } else if (effectId == m_beacon->getSecondaryPower()) {
-                    selected = true;
-                }
-
-                AddPowerButton(GetId(tier, m_beacon->getPrimaryPower()),
-                               MobEffect::effects[m_beacon->getPrimaryPower()]->getIcon(), tier, 1, active, selected);
-            }
-        } break;
-        case eSectionBeaconPrimaryTierOneOne:
-        case eSectionBeaconPrimaryTierOneTwo:
-        case eSectionBeaconPrimaryTierTwoOne:
-        case eSectionBeaconPrimaryTierTwoTwo:
-        case eSectionBeaconPrimaryTierThree:
-        case eSectionBeaconSecondaryOne:
-        case eSectionBeaconSecondaryTwo: {
-            if (IsPowerButtonSelected(eSection)) return;
-
-            int id = GetPowerButtonId(eSection);
-            int effectId = (id & 0xff);
-            int tier = (id >> 8);
-
-            if (tier < 3) {
-                m_beacon->setPrimaryPower(effectId);
-            } else {
-                m_beacon->setSecondaryPower(effectId);
-            }
-            SetPowerButtonSelected(eSection);
-        } break;
-        default:
-            break;
-        }
-    }
-
-    void confirm(int primary, int secondary) {
-        std::shared_ptr<ServerPlayer> player = mcle_local_player();
-        if (!player) return;
-        if (dynamic_cast<BeaconMenu *>(player->containerMenu) != nullptr) {
-            BeaconMenu *beaconMenu = static_cast<BeaconMenu *>(player->containerMenu);
-            Slot *slot = beaconMenu->getSlot(0);
-            if (slot->hasItem()) {
-                slot->remove(1);
-                shared_ptr<BeaconTileEntity> beacon = beaconMenu->getBeacon();
-                beacon->setPrimaryPower(primary);
-                beacon->setSecondaryPower(secondary);
-                beacon->setChanged();
-            }
-        }
-    }
 
     BeaconEffectButton *button(ESceneSection eSection) {
         switch (eSection) {

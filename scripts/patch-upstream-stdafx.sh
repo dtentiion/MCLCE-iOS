@@ -1678,6 +1678,11 @@ ANVIL_PY="$REPO_ROOT/scripts/gen-anvil-menu.py"
 if [ -f "$ANVIL_PY" ]; then
     python3 "$ANVIL_PY"
 fi
+# IUIScene_BeaconMenu's body, for Game/MCLEContainerMenus.cpp
+BEACON_PY="$REPO_ROOT/scripts/gen-beacon-menu.py"
+if [ -f "$BEACON_PY" ]; then
+    python3 "$BEACON_PY"
+fi
 
 # DLCManager and DLCPack build and read .pck files with iOS's 4 byte wchar_t
 DLCM_PY="$REPO_ROOT/scripts/patch-dlc-ios.py"
