@@ -322,7 +322,18 @@ extern "C" void mcle_glbridge_set_polygon_offset(float factor, float units) {
 // glBlendFunc routing: pick additive (srcAlpha, ONE) vs over
 // (srcAlpha, oneMinusSrcAlpha) based on the requested factors.
 // GL_ZERO=0, GL_ONE=1, GL_SRC_ALPHA=0x0302, GL_ONE_MINUS_SRC_ALPHA=0x0303.
+// glBlendFunc's factors and glDepthFunc, as GL enums
+int g_blend_src = 0x0302;  // GL_SRC_ALPHA
+int g_blend_dst = 0x0303;  // GL_ONE_MINUS_SRC_ALPHA
+int g_depth_func = 0x0203; // GL_LEQUAL, what Minecraft::init sets
+
+extern "C" void mcle_glbridge_set_depth_func(int func) {
+    g_depth_func = func;
+}
+
 extern "C" void mcle_glbridge_set_blend_func(int src, int dst) {
+    g_blend_src = src;
+    g_blend_dst = dst;
     if (src == 0x0302 /*GL_SRC_ALPHA*/ && dst == 0x0001 /*GL_ONE*/) {
         g_blend_func_mode = 1; // additive (sun, stars)
     } else if (src == 0x0000 /*GL_ZERO*/ && dst == 0x0001 /*GL_ONE*/) {
@@ -546,6 +557,87 @@ NSString* const kWorldShaderSrcCompact = @R"(
     }
 )";
 
+// Pipelines for whatever glBlendFunc asks for, built the first time a pair
+// is drawn with. The no-blend ones are g_world_pso / g_world_pso_compact.
+MTLRenderPipelineDescriptor* g_world_desc = nil;
+MTLRenderPipelineDescriptor* g_world_desc_compact = nil;
+id<MTLFunction> g_world_frag_nocut = nil;
+std::unordered_map<uint64_t, id<MTLRenderPipelineState>> g_blend_psos;
+
+MTLBlendFactor gl_blend_factor(int f) {
+    switch (f) {
+    case 0x0000: return MTLBlendFactorZero;
+    case 0x0001: return MTLBlendFactorOne;
+    case 0x0300: return MTLBlendFactorSourceColor;
+    case 0x0301: return MTLBlendFactorOneMinusSourceColor;
+    case 0x0302: return MTLBlendFactorSourceAlpha;
+    case 0x0303: return MTLBlendFactorOneMinusSourceAlpha;
+    case 0x0304: return MTLBlendFactorDestinationAlpha;
+    case 0x0305: return MTLBlendFactorOneMinusDestinationAlpha;
+    case 0x0306: return MTLBlendFactorDestinationColor;
+    case 0x0307: return MTLBlendFactorOneMinusDestinationColor;
+    case 0x0308: return MTLBlendFactorSourceAlphaSaturated;
+    case 0x8001: return MTLBlendFactorBlendColor;
+    case 0x8002: return MTLBlendFactorOneMinusBlendColor;
+    case 0x8003: return MTLBlendFactorBlendAlpha;
+    case 0x8004: return MTLBlendFactorOneMinusBlendAlpha;
+    }
+    return MTLBlendFactorOne;
+}
+
+id<MTLRenderPipelineState> blend_pso(bool compact, bool cut, int src, int dst) {
+    const uint64_t key = (compact ? 1ull : 0ull) | (cut ? 2ull : 0ull) |
+                         ((uint64_t)(src & 0xffff) << 2) | ((uint64_t)(dst & 0xffff) << 18);
+    auto it = g_blend_psos.find(key);
+    if (it != g_blend_psos.end()) return it->second;
+    MTLRenderPipelineDescriptor* base = compact ? g_world_desc_compact : g_world_desc;
+    if (!base) return nil;
+    MTLRenderPipelineDescriptor* desc = [base copy];
+    // The chunk format always cuts out
+    if (!compact && !cut && g_world_frag_nocut) desc.fragmentFunction = g_world_frag_nocut;
+    MTLRenderPipelineColorAttachmentDescriptor* ca = desc.colorAttachments[0];
+    ca.blendingEnabled = YES;
+    ca.rgbBlendOperation = MTLBlendOperationAdd;
+    ca.alphaBlendOperation = MTLBlendOperationAdd;
+    ca.sourceRGBBlendFactor = gl_blend_factor(src);
+    ca.destinationRGBBlendFactor = gl_blend_factor(dst);
+    // The layers composite over what's under them, so alpha adds up like
+    // premultiplied instead of being multiplied by itself
+    ca.sourceAlphaBlendFactor = (src == 0x0302) ? MTLBlendFactorOne : gl_blend_factor(src);
+    ca.destinationAlphaBlendFactor = gl_blend_factor(dst);
+    NSError* err = nil;
+    id<MTLRenderPipelineState> pso = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    if (!pso) NSLog(@"[mcle_metal] blend pso %x/%x failed: %@", src, dst, err);
+    g_blend_psos[key] = pso;
+    return pso;
+}
+
+// glDepthFunc and glDepthMask
+std::unordered_map<int, id<MTLDepthStencilState>> g_depth_states;
+
+id<MTLDepthStencilState> depth_state(int func, bool write) {
+    const int key = (func << 1) | (write ? 1 : 0);
+    auto it = g_depth_states.find(key);
+    if (it != g_depth_states.end()) return it->second;
+    MTLCompareFunction cmp = MTLCompareFunctionLessEqual;
+    switch (func) {
+    case 0x0200: cmp = MTLCompareFunctionNever; break;
+    case 0x0201: cmp = MTLCompareFunctionLess; break;
+    case 0x0202: cmp = MTLCompareFunctionEqual; break;
+    case 0x0203: cmp = MTLCompareFunctionLessEqual; break;
+    case 0x0204: cmp = MTLCompareFunctionGreater; break;
+    case 0x0205: cmp = MTLCompareFunctionNotEqual; break;
+    case 0x0206: cmp = MTLCompareFunctionGreaterEqual; break;
+    case 0x0207: cmp = MTLCompareFunctionAlways; break;
+    }
+    MTLDepthStencilDescriptor* dsd = [[MTLDepthStencilDescriptor alloc] init];
+    dsd.depthCompareFunction = cmp;
+    dsd.depthWriteEnabled = write;
+    id<MTLDepthStencilState> ds = [g.device newDepthStencilStateWithDescriptor:dsd];
+    g_depth_states[key] = ds;
+    return ds;
+}
+
 bool ensure_world_pipeline_compact() {
     if (g_world_pso_compact) return true;
     if (!g.device)           return false;
@@ -594,6 +686,7 @@ bool ensure_world_pipeline_compact() {
     desc.colorAttachments[0].pixelFormat  = MTLPixelFormatBGRA8Unorm;
     desc.depthAttachmentPixelFormat       = MTLPixelFormatDepth32Float;
 
+    g_world_desc_compact = [desc copy];
     g_world_pso_compact = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_world_pso_compact) {
         NSLog(@"[mcle_metal G5c] compact pso build failed: %@", err);
@@ -686,6 +779,8 @@ bool ensure_world_pipeline() {
     desc.colorAttachments[0].pixelFormat  = MTLPixelFormatBGRA8Unorm;
     desc.depthAttachmentPixelFormat       = MTLPixelFormatDepth32Float;
 
+    g_world_desc = [desc copy];
+    g_world_frag_nocut = [lib newFunctionWithName:@"world_frag_nocut"];
     g_world_pso = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
     if (!g_world_pso) {
         NSLog(@"[mcle_metal G3c] pso build failed: %@", err);
@@ -1341,59 +1436,18 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     // Pick pipeline variant: no-blend / blend-over / blend-additive /
     // depth-only. Cache last-applied PSO so dispatches don't re-bind
     // unnecessarily.
+    // GL blend state: off, or the pipeline for glBlendFunc's pair. The
+    // non-chunk format has a cut out and a no cut out fragment shader for
+    // GL_ALPHA_TEST.
     id<MTLRenderPipelineState> pso = nil;
-    if (isCompact) {
-        if (!g_blend_enabled)            pso = g_world_pso_compact;
-        else if (g_blend_func_mode == 1) pso = g_world_pso_compact_additive;
-        else if (g_blend_func_mode == 2) pso = g_world_pso_compact_depth_only;
-        else if (g_blend_func_mode == 3) pso = g_world_pso_compact_modulate;
-        else                             pso = g_world_pso_compact_blend;
+    if (!g_blend_enabled) {
+        pso = isCompact ? g_world_pso_compact : g_world_pso;
     } else {
-        // fmt=1 path. When alpha test is disabled (sun/moon/sunrise pass)
-        // use the no-cutout fragment shader so semi-transparent texture
-        // pixels survive. Chunks/fmt=4 always keep the cutout (foliage).
-        if (!g_blend_enabled) {
-            pso = g_world_pso;  // no-blend has no nocut variant; not used by sky
-        } else if (g_blend_func_mode == 1) {
-            pso = g_alpha_test_enabled ? g_world_pso_additive : g_world_pso_additive_nocut;
-        } else if (g_blend_func_mode == 2) {
-            pso = g_world_pso_depth_only;
-        } else if (g_blend_func_mode == 3) {
-            pso = g_world_pso_modulate;
-        } else {
-            pso = g_alpha_test_enabled ? g_world_pso_blend : g_world_pso_blend_nocut;
-        }
+        pso = blend_pso(isCompact, isCompact || g_alpha_test_enabled, g_blend_src, g_blend_dst);
     }
     if (pso && pso != g_lastWorldPso) {
         [g.enc setRenderPipelineState:pso];
         g_lastWorldPso = pso;
-        // Diagnostic: log which PSO variant is active when binding the
-        // texture changes (sun -> moon -> back). Mostly useful right
-        // after BIND_TEX so we can see if alpha-test=off actually picks
-        // the nocut variant.
-        static int s_count = 0;
-        if (s_count < 60) {
-            extern int mcle_log_msg(const char *);
-            const char *name = "?";
-            if      (pso == g_world_pso)                    name = "fmt1_noblend_cut";
-            else if (pso == g_world_pso_blend)              name = "fmt1_blend_cut";
-            else if (pso == g_world_pso_additive)           name = "fmt1_add_cut";
-            else if (pso == g_world_pso_blend_nocut)        name = "fmt1_blend_NOCUT";
-            else if (pso == g_world_pso_additive_nocut)     name = "fmt1_add_NOCUT";
-            else if (pso == g_world_pso_depth_only)         name = "fmt1_depth_only";
-            else if (pso == g_world_pso_compact)            name = "fmt4_noblend";
-            else if (pso == g_world_pso_compact_blend)      name = "fmt4_blend";
-            else if (pso == g_world_pso_compact_additive)   name = "fmt4_add";
-            else if (pso == g_world_pso_compact_depth_only) name = "fmt4_depth_only";
-            char buf[120];
-            snprintf(buf, sizeof(buf),
-                     "PSO_PICK %s atest=%d blend=%d func=%d tex=%u",
-                     name, (int)g_alpha_test_enabled,
-                     (int)g_blend_enabled, g_blend_func_mode,
-                     g_bound_tex_id);
-            mcle_log_msg(buf);
-            s_count++;
-        }
     }
     {
         // Three modes mirroring GL: (test=on,write=on) normal, (test=on,
@@ -1404,10 +1458,8 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         id<MTLDepthStencilState> ds;
         if (!g_depth_test_enabled) {
             ds = g.depthStateNoTest;
-        } else if (!g_depth_write_enabled) {
-            ds = g.depthStateNoWrite;
         } else {
-            ds = g.depthState;
+            ds = depth_state(g_depth_func, g_depth_write_enabled);
         }
         if (ds && ds != g_lastDepthState) {
             [g.enc setDepthStencilState:ds];
@@ -1865,6 +1917,9 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_alpha_test_enabled  = true;
     g_blend_enabled       = false;
     g_blend_func_mode     = 0;
+    g_blend_src           = 0x0302;
+    g_blend_dst           = 0x0303;
+    g_depth_func          = 0x0203;
     g_fog_enabled         = false;
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
@@ -2044,6 +2099,9 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g_alpha_test_enabled  = true;
     g_blend_enabled       = false;
     g_blend_func_mode     = 0;
+    g_blend_src           = 0x0302;
+    g_blend_dst           = 0x0303;
+    g_depth_func          = 0x0203;
     g_fog_enabled         = false;
     return 0;
 }

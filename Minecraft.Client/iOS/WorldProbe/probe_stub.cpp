@@ -193,7 +193,8 @@ void glDeleteLists(int id, int range)                      { mcle_glbridge_relea
 int  glGenLists(int range)                                 { return mcle_glbridge_gen_lists(range); }
 void glBindTexture(unsigned int /*target*/, unsigned int id)  { mcle_glbridge_bind_texture(id); }
 void glTexParameteri(unsigned int, unsigned int, int)      {}
-void glDepthFunc(unsigned int)                             {}
+extern "C" void mcle_glbridge_set_depth_func(int func);
+void glDepthFunc(unsigned int func)                        { mcle_glbridge_set_depth_func((int)func); }
 void glAlphaFunc(unsigned int, float)                      {}
 // glBlendFunc: route src/dst factors to the bridge. Current Metal
 // pipeline bakes srcAlpha/oneMinusSrcAlpha as the static blend func,
