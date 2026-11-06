@@ -364,7 +364,13 @@ MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 // ---------------------------------------------------------------------------
 void PlayerConnection::send(std::shared_ptr<Packet> /*packet*/) {}
 bool PlayerConnection::isLocal() { return true; }
-void PlayerConnection::teleport(double, double, double, float, float, bool) {}
+// PlayerConnection::teleport moves the server's player and tells its client
+// where it went. The one ServerPlayer here is the local player and has no
+// connection, so only the move is left (beds, portals, respawn).
+extern void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot);
+void PlayerConnection::teleport(double x, double y, double z, float yRot, float xRot, bool) {
+    mcle_local_player_abs_move_to(x, y, z, yRot, xRot);
+}
 void PlayerConnection::queueSend(std::shared_ptr<Packet> /*packet*/) {}
 int  PlayerConnection::countDelayedPackets() { return 0; }
 

@@ -1732,6 +1732,11 @@ extern "C" float mcle_hud_jukebox(char *out, int cap) {
     return opacity;
 }
 
+// PlayerConnection::teleport's player->absMoveTo, see WorldProbe/link_stubs.cpp
+void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot) {
+    if (g_player) g_player->absMoveTo(x, y, z, yRot, xRot);
+}
+
 // Held while anything outside this file touches the particle engine
 std::recursive_mutex &mcle_particle_mutex() {
     return g_particleMutex;
