@@ -4279,15 +4279,20 @@ extern "C" void mcle_world_g1b_probe_tick(void) {
 static void mcle_exit_world(bool save) {
     MCLE_LOG("EXIT_WORLD: start save=%d", save ? 1 : 0);
 
-    // Ticks and frames check this and stay out from here on. Then wait for
-    // the main thread's current pass, the tick and the frame in flight.
-    g_initState = kStateExiting;
-    if (!pthread_main_np()) dispatch_sync_f(dispatch_get_main_queue(), nullptr, [](void *) {});
+    // Ticks and frames check this and stay out from here on. Leaving from
+    // the menus marks it on the main thread before this thread starts, so
+    // only a call from elsewhere waits for the main thread's current pass.
+    if (g_initState != kStateExiting) {
+        g_initState = kStateExiting;
+        if (!pthread_main_np()) dispatch_sync_f(dispatch_get_main_queue(), nullptr, [](void *) {});
+    }
+    // The tick and the frame in flight
     { std::lock_guard<std::mutex> lock(g_simTickMutex); }
     { std::lock_guard<std::mutex> lock(g_frameMutex); }
 
     // A background save in progress finishes first
     std::lock_guard<std::mutex> life(g_worldLifeMutex);
+    MCLE_LOG("EXIT_WORLD: world stopped");
 
     // stopServer: saveAll, saveAllChunks, the game rules and saveToDisc
     // when saving on exit
@@ -4426,6 +4431,8 @@ extern "C" int mcle_game_exit_world(int save) {
     if (g_initState != kStateTicking) return 0;
     int expected = 0;
     if (!g_exitWorldState.compare_exchange_strong(expected, 1)) return 0;
+    // Called on the main thread, which stays out of the world from here
+    g_initState = kStateExiting;
     pthread_t t;
     if (pthread_create(&t, nullptr, [](void *arg) -> void * {
             const bool saving = arg != nullptr;
@@ -4440,6 +4447,7 @@ extern "C" int mcle_game_exit_world(int save) {
             g_exitWorldState.store(2, std::memory_order_release);
             return nullptr;
         }, save ? reinterpret_cast<void *>(1) : nullptr) != 0) {
+        g_initState = kStateTicking;
         g_exitWorldState.store(0);
         return 0;
     }
