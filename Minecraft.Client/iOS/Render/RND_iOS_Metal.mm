@@ -32,8 +32,10 @@ extern "C" unsigned long long mcle_metal_draw_count(void);
 
 // G2c: per-frame upstream renderer drive. No-op if g_levelRenderer is null.
 extern "C" void mcle_world_drive_renderer(void);
+extern "C" void mcle_metal_add_phase_ms(int phase, double ms);
 
 #include <atomic>
+#include <mach/mach_time.h>
 
 extern "C" id<MTLDevice> mcle_metal_shared_device_objc(void);
 
@@ -150,7 +152,11 @@ extern "C" void mcle_render_frame(void) {
         // DrawVertices Metal hook every frame. No actual Metal draw calls
         // happen yet (the hook still counts only); G3 is real vertex
         // upload + MTLBuffer dispatch.
+        const uint64_t t0 = mach_absolute_time();
         mcle_world_drive_renderer();
+        static mach_timebase_info_data_t tb = {0};
+        if (tb.denom == 0) mach_timebase_info(&tb);
+        mcle_metal_add_phase_ms(1, (double)((mach_absolute_time() - t0) * tb.numer / tb.denom) / 1.0e6);
     }
 
     mcle_metal_frame_end();

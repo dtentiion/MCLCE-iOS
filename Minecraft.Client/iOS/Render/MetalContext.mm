@@ -1824,12 +1824,27 @@ static bool ensure_gamma_pipeline() {
 
 static uint64_t g_frame_start_ticks = 0;
 
+// Time spent per frame in each part, summed for the frame_ms line:
+// 0 waiting for a drawable, 1 the world, 2 the movie and custom draws
+static double g_phase_ms[3];
+
+extern "C" void mcle_metal_add_phase_ms(int phase, double ms) {
+    if (phase >= 0 && phase < 3) g_phase_ms[phase] += ms;
+}
+
+static double mcle_ticks_to_ms(uint64_t ticks) {
+    static mach_timebase_info_data_t tb = {0};
+    if (tb.denom == 0) mach_timebase_info(&tb);
+    return (double)(ticks * tb.numer / tb.denom) / 1.0e6;
+}
+
 extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_frame_start_ticks = mach_absolute_time();
     if (!g.device || !g.layer) return 1;
     if (g.inFrame) return 0;
 
     g.drawable = [g.layer nextDrawable];
+    g_phase_ms[0] += mcle_ticks_to_ms(mach_absolute_time() - g_frame_start_ticks);
     if (!g.drawable) return 2;
 
     // G3d-step2: ensure a depth texture sized to the current drawable.
@@ -1939,14 +1954,16 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
             s_sumNs += dt;
             s_count++;
             if (s_count >= 60) {
-                char buf[160];
+                char buf[200];
                 snprintf(buf, sizeof(buf),
-                         "frame_ms min=%.2f avg=%.2f max=%.2f n=%d",
+                         "frame_ms min=%.2f avg=%.2f max=%.2f n=%d wait=%.2f world=%.2f ui=%.2f",
                          s_minNs / 1.0e6, (s_sumNs / (double)s_count) / 1.0e6,
-                         s_maxNs / 1.0e6, s_count);
+                         s_maxNs / 1.0e6, s_count,
+                         g_phase_ms[0] / s_count, g_phase_ms[1] / s_count, g_phase_ms[2] / s_count);
                 extern int mcle_log_msg(const char *msg);
                 mcle_log_msg(buf);
                 s_minNs = UINT64_MAX; s_maxNs = 0; s_sumNs = 0; s_count = 0;
+                g_phase_ms[0] = g_phase_ms[1] = g_phase_ms[2] = 0;
             }
         }
         s_lastNs = now;

@@ -81,6 +81,7 @@ extern "C" int mcle_game_exit_world_done(void);
 static void MCLESelectSaveSize(int saveIndex);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
+extern "C" void mcle_metal_add_phase_ms(int phase, double ms);
 extern "C" void mcle_metal_set_gamma(float gamma); // MetalContext.mm
 extern "C" void mcle_metal_attach_ui_layer(void* ca_metal_layer, int width, int height); // MetalContext.mm
 extern "C" void mcle_game_set_paused(int paused);   // MCLEGameLoop.cpp
@@ -3745,6 +3746,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             return;
         }
         if (!g_world_paused && !g_world_dead) {
+            const CFTimeInterval uiStart = CACurrentMediaTime();
             MCLEHudPump();
             MCLEGameTooltipsPump();
             // Keep the SWF layer presenting over the world (transparent stage)
@@ -3759,6 +3761,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                 n = std::max(0, std::min(n, 32));
                 mcle_hud_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
             }
+            mcle_metal_add_phase_ms(2, (CACurrentMediaTime() - uiStart) * 1000.0);
             return;
         }
         // The HUD isn't up, nothing to draw over it
