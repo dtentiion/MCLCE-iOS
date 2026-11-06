@@ -9,6 +9,9 @@
 
 #include <atomic>
 #include <mutex>
+#include <utility>
+
+extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 
 namespace {
 
@@ -54,6 +57,14 @@ mcle_ios_pad_state snapshot(GCExtendedGamepad* p) {
     s.ry = p.rightThumbstick.yAxis.value;
     s.lt = p.leftTrigger.value;
     s.rt = p.rightTrigger.value;
+
+    // ActionGameSettings(eGameSetting_ControlSouthPaw): SetJoypadStickAxisMap
+    // swaps the sticks and SetJoypadStickTriggerMap the triggers
+    if (mcle_settings_get(11 /*ControlSouthPaw*/)) {
+        std::swap(s.lx, s.rx);
+        std::swap(s.ly, s.ry);
+        std::swap(s.lt, s.rt);
+    }
 
     // Synthesize digital stick buttons for games that only look at the bitmask.
     const float kStickThresh = 0.5f;
