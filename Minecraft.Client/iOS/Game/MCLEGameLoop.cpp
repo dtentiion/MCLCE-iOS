@@ -3662,8 +3662,8 @@ static void mcle_gui_animated_character(float a) {
     float bodyRot = (g_player->yBodyRotO + (g_player->yBodyRot - g_player->yBodyRotO));
     glRotatef(bodyRot - (static_cast<float>(atan(xd / 40.0f)) * 20), 0, 1, 0);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    // The light layer is off for the gui
-    glMultiTexCoord2f(GL_TEXTURE1, 240.0f, 240.0f);
+    // The Gui draws with the light layer off
+    Minecraft::GetInstance()->gameRenderer->turnOffLightLayer(a);
 
     // Set head rotation to body rotation to make head static
     g_player->yRot = bodyRot;
