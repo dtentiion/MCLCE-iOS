@@ -1767,3 +1767,9 @@ MMC_PY="$REPO_ROOT/scripts/patch-minimap-ios-colours.py"
 if [ -f "$MMC_PY" ]; then
     python3 "$MMC_PY"
 fi
+
+# Nothing bumping into the local player pushes it, the server's pushes on its own player never reach the client
+LPP_PY="$REPO_ROOT/scripts/patch-local-player-not-pushed.py"
+if [ -f "$LPP_PY" ]; then
+    python3 "$LPP_PY"
+fi
