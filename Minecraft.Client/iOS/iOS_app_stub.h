@@ -218,7 +218,8 @@ struct McleAppStub {
     template<class... A> int            GetGameNewWorldSize(A...) { return 0; }
     template<class... A> bool           GetGameNewWorldSizeUseMoat(A...) { return false; }
     // CMinecraftApp::GetHTMLColour, the texture pack's colour table
-    template<class T> int               GetHTMLColor(T colour)  { return mcle_html_colour(static_cast<int>(colour)); }
+    template<class T> int               GetHTMLColour(T colour) { return mcle_html_colour(static_cast<int>(colour)); }
+    template<class T> int               GetHTMLColor(T colour)  { return GetHTMLColour(colour); }
     template<class... A> bool           GetMobsDontAttackEnabled(A...) { return false; }
     template<class... A> bool           GetMobsDontTickEnabled(A...)   { return false; }
     template<class... A> bool           GetWriteSavesToFolderEnabled(A...) { return false; }

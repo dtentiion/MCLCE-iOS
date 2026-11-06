@@ -1675,6 +1675,11 @@ CM_PY="$REPO_ROOT/scripts/gen-container-menu.py"
 if [ -f "$CM_PY" ]; then
     python3 "$CM_PY"
 fi
+# IUIScene_CraftingMenu's body, for Game/MCLECraftingMenu.cpp
+CRAFT_PY="$REPO_ROOT/scripts/gen-crafting-menu.py"
+if [ -f "$CRAFT_PY" ]; then
+    python3 "$CRAFT_PY"
+fi
 
 # UIScene_Credits' credit table, for Game/MCLECredits.cpp
 CR_PY="$REPO_ROOT/scripts/gen-credits.py"
