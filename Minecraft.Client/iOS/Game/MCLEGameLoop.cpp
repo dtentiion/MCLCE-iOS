@@ -2888,30 +2888,43 @@ extern "C" void mcle_game_tick(void) {
     // mcle_world_drive_renderer) plus food, item use, sleeping and the rest.
     // tickEntities above already saved xOld via Level::tick, so the camera
     // interp anchor is still right.
+    bool published = false;
     if (g_player) {
         try {
             const float xRotBefore = g_player->xRot, yRotBefore = g_player->yRot;
             const bool menu = g_menuDisplayed.load(std::memory_order_relaxed);
-            mcle_player_move_tick(g_player, menu ? 0.0f : mcle_ios_input_poll_lx(0) / 1000.0f,
-                                  menu ? 0.0f : mcle_ios_input_poll_ly(0) / 1000.0f,
-                                  menu ? 0.0f : mcle_ios_input_poll_rx(0) / 1000.0f,
-                                  menu ? 0.0f : mcle_ios_input_poll_ry(0) / 1000.0f,
-                                  g_gameButtons,
-                                  mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
-                                  mcle_settings_get(10 /*ControlInvertLook*/) != 0);
-            const double xBefore = g_player->x, yBefore = g_player->y, zBefore = g_player->z;
-            g_player->doTick(false);
-            // MultiplayerLocalPlayer::tick: a move the tutorial doesn't allow
-            // goes back
-            if (!mcle_tutorial_can_move_to_position(xBefore, yBefore, zBefore, g_player->x, g_player->y,
-                                                    g_player->z)) {
-                g_player->setPos(xBefore, g_player->y, zBefore);
+            {
+                // The camera is drawn between the player's old and new place by
+                // the time since the last tick. Moving the player and setting
+                // that time under the frame lock keeps a frame from seeing the
+                // new place with the old time.
+                std::lock_guard<std::mutex> frameLock(g_frameMutex);
+                mcle_player_move_tick(g_player, menu ? 0.0f : mcle_ios_input_poll_lx(0) / 1000.0f,
+                                      menu ? 0.0f : mcle_ios_input_poll_ly(0) / 1000.0f,
+                                      menu ? 0.0f : mcle_ios_input_poll_rx(0) / 1000.0f,
+                                      menu ? 0.0f : mcle_ios_input_poll_ry(0) / 1000.0f,
+                                      g_gameButtons,
+                                      mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
+                                      mcle_settings_get(10 /*ControlInvertLook*/) != 0);
+                const double xBefore = g_player->x, yBefore = g_player->y, zBefore = g_player->z;
+                g_player->doTick(false);
+                // MultiplayerLocalPlayer::tick: a move the tutorial doesn't allow
+                // goes back
+                if (!mcle_tutorial_can_move_to_position(xBefore, yBefore, zBefore, g_player->x, g_player->y,
+                                                        g_player->z)) {
+                    g_player->setPos(xBefore, g_player->y, zBefore);
+                }
+                // LocalPlayer turns inside aiStep, after baseTick saved the old
+                // rotation, so that's what the camera interpolates from
+                g_player->xRotO = xRotBefore;
+                g_player->yRotO = yRotBefore;
+                // The new place shows from now on, so that's where the
+                // in-between starts
+                g_lastSimTickNs.store((uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                          std::chrono::steady_clock::now().time_since_epoch()).count(),
+                                      std::memory_order_relaxed);
+                published = true;
             }
-            // LocalPlayer turns inside aiStep, after baseTick saved the old
-            // rotation, so that's what the camera interpolates from
-            g_player->xRotO = xRotBefore;
-            g_player->yRotO = yRotBefore;
-            g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
             mcle_player_fov_tick(g_player);
             if (g_itemInHand) {
                 std::lock_guard<std::mutex> lock(g_itemInHandMutex);
@@ -2929,7 +2942,7 @@ extern "C" void mcle_game_tick(void) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
     }
-    g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
+    if (!published) g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
 
     // On-demand chunk streaming. Walk clamp is gone; instead drive
     // PlayerChunkMap each tick so new chunks load as the player moves.
