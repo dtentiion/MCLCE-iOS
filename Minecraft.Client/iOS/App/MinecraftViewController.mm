@@ -5341,9 +5341,14 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                             }];
                         }
                     } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
-                        // UIScene_DeathMenu::handlePress
-                        if (id == 0) mcle_game_respawn();
-                        else [self requestExitGame];
+                        // UIScene_DeathMenu::handlePress: eAppAction_Respawn,
+                        // ConnectingProgress while the player respawns
+                        if (id == 0) {
+                            [self openConnectingProgress:IDS_PROGRESS_RESPAWNING respawn:YES];
+                            mcle_game_respawn();
+                        } else {
+                            [self requestExitGame];
+                        }
                     } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
                         // UIScene_PauseMenu::handlePress
                         switch (id) {
