@@ -8,8 +8,14 @@
 #include "MCLEContainerScene.h"
 #include "MCLEAbstractContainerScene.h"
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <iterator>
 #include <mutex>
+#include <sstream>
 #include <string>
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
@@ -17,6 +23,13 @@
 #include "../../../upstream/Minecraft.World/BrewingStandTileEntity.h"
 #include "../../../upstream/Minecraft.World/PotionBrewing.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
+#include "../../../upstream/Minecraft.World/Random.h"
+#include "../../../upstream/Minecraft.World/EnchantmentMenu.h"
+#include "../../../upstream/Minecraft.Client/Minecraft.h"
+#include "../../../upstream/Minecraft.Client/Font.h"
+#include "../../../upstream/Minecraft.Client/Textures.h"
+#include "../../../upstream/Minecraft.Client/Lighting.h"
+#include "../../../upstream/Minecraft.Client/BookModel.h"
 #include "../../../upstream/Minecraft.World/ContainerOpenPacket.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_ContainerMenu.h"
@@ -24,6 +37,7 @@
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_DispenserMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_HopperMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BrewingMenu.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_EnchantingMenu.h"
 
 namespace {
 
@@ -63,6 +77,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::DROPPER:
     case ContainerOpenPacket::HOPPER:
     case ContainerOpenPacket::BREWING_STAND:
+    case ContainerOpenPacket::ENCHANTMENT:
         return true;
     }
     return isChest(type);
@@ -464,6 +479,408 @@ protected:
     }
 };
 
+// UIControl_EnchantmentButton::EnchantmentNames
+struct EnchantmentNames {
+    Random random;
+    std::vector<std::wstring> words;
+
+    EnchantmentNames() {
+        std::wstring allWords =
+            L"the elder scrolls klaatu berata niktu xyzzy bless curse light darkness fire air earth water hot dry "
+            L"cold wet ignite snuff embiggen twist shorten stretch fiddle destroy imbue galvanize enchant free "
+            L"limited range of towards inside sphere cube self other ball mental physical grow shrink demon "
+            L"elemental spirit animal creature beast humanoid undead fresh stale ";
+        std::wistringstream iss(allWords);
+        std::copy(std::istream_iterator<std::wstring, wchar_t, std::char_traits<wchar_t>>(iss),
+                  std::istream_iterator<std::wstring, wchar_t, std::char_traits<wchar_t>>(),
+                  std::back_inserter(words));
+    }
+
+    std::wstring getRandomName() {
+        int wordCount = random.nextInt(2) + 3;
+        std::wstring word = L"";
+        for (int i = 0; i < wordCount; i++) {
+            if (i > 0) word += L" ";
+            word += words[random.nextInt(static_cast<int>(words.size()))];
+        }
+        return word;
+    }
+
+    static EnchantmentNames &instance() {
+        static EnchantmentNames names;
+        return names;
+    }
+};
+
+// UIControl_EnchantmentButton
+struct EnchantmentButton {
+    enum EState { eState_Inactive = 0, eState_Active = 1, eState_Selected = 2 };
+
+    MCLEUILabel label;
+    MCLEControlRect rect{};
+    int index;
+    EState lastState = eState_Inactive;
+    int lastCost = 0;
+    std::wstring enchantmentString;
+    bool hasFocus = false;
+    unsigned int textColour, textFocusColour, textDisabledColour;
+
+    EnchantmentButton(const char *path, int i)
+        : label(path), index(i), textColour(app.GetHTMLColour(eTextColor_Enchant)),
+          textFocusColour(app.GetHTMLColour(eTextColor_EnchantFocus)),
+          textDisabledColour(app.GetHTMLColour(eTextColor_EnchantDisabled)) {}
+
+    void updateState(EnchantmentMenu *menu, const std::shared_ptr<ServerPlayer> &player) {
+        EState state = eState_Inactive;
+        int cost = menu->costs[index];
+        if (cost > player->experienceLevel && !player->abilities.instabuild) {
+            // Dark background
+            state = eState_Inactive;
+        } else {
+            // Light background and focus background
+            state = hasFocus ? eState_Selected : eState_Active;
+        }
+
+        if (cost != lastCost) {
+            label.setLabel(std::to_wstring(cost));
+            lastCost = cost;
+            enchantmentString = EnchantmentNames::instance().getRandomName();
+        }
+        if (cost == 0) {
+            // Dark background
+            state = eState_Inactive;
+            label.setLabel(L"");
+        }
+
+        if (state != lastState) {
+            mcle_ui_call(label.path, "ChangeState", {mcle_ui_num(static_cast<int>(state))});
+            lastState = state;
+        }
+    }
+
+    // UIControl_EnchantmentButton::render, the made up name in the
+    // enchanting table's font. The region is in pixels already.
+    void render(const MCLECustomDrawRegion &region, EnchantmentMenu *menu, const std::shared_ptr<ServerPlayer> &player) {
+        float width = region.x1 - region.x0;
+        float height = region.y1 - region.y0;
+        if (rect.w <= 0 || rect.h <= 0) return;
+
+        glLoadIdentity();
+        glTranslatef(region.x0, region.y0, -2000);
+
+        // Revert the scale from the setup
+        float ssX = width / rect.w;
+        float ssY = height / rect.h;
+        glScalef(ssX, ssY, 1.0f);
+
+        // eSceneResolution_1080
+        float ss = 3.0f;
+        glScalef(ss, ss, ss);
+
+        int cost = menu->costs[index];
+
+        glColor4f(1, 1, 1, 1);
+        if (cost != 0) {
+            glEnable(GL_ALPHA_TEST);
+            glAlphaFunc(GL_GREATER, 0.1f);
+            Minecraft *pMinecraft = Minecraft::GetInstance();
+            Font *font = pMinecraft->altFont;
+            unsigned int col = textColour;
+            if (player->experienceLevel < cost && !player->abilities.instabuild) {
+                col = textDisabledColour;
+            } else if (hasFocus) {
+                col = textFocusColour;
+            }
+            if (font) {
+                font->drawWordWrap(enchantmentString, 0, 0, static_cast<int>(rect.w / ss), col,
+                                   static_cast<int>(rect.h / ss));
+            }
+            glDisable(GL_ALPHA_TEST);
+        }
+        glDisable(GL_RESCALE_NORMAL);
+    }
+};
+
+// UIScene_EnchantingMenu, over the server's EnchantmentMenu
+class EnchantingScene : public ServerContainerScene, public IUIScene_EnchantingMenu {
+public:
+    EnchantingScene(AbstractContainerMenu *menu, const std::wstring &name)
+        : m_slotListIngredient("MainPanel.ingredient"), m_labelEnchant("MainPanel.enchantLabel"),
+          m_enchantButton{EnchantmentButton("MainPanel.Button1", 0), EnchantmentButton("MainPanel.Button2", 1),
+                          EnchantmentButton("MainPanel.Button3", 2)} {
+        mapSharedControls();
+        mapSlotList(m_slotListIngredient);
+        for (EnchantmentButton &button : m_enchantButton) button.rect = rectAt(button.label.path.c_str());
+        m_bookRect = rectAt("MainPanel.iggy_EnchantmentBook");
+
+        m_labelEnchant.init(name.empty() ? std::wstring(app.GetString(IDS_ENCHANT)) : name);
+
+        // The tutorial state is left out, localgameModes is never set here
+
+        Initialize(0, menu, false, EnchantmentMenu::INV_SLOT_START, eSectionEnchantUsing, eSectionEnchantMax);
+
+        m_slotListIngredient.addSlots(EnchantmentMenu::INGREDIENT_SLOT, 1);
+    }
+
+    ~EnchantingScene() override { delete m_model; }
+
+    // UIScene::tick runs the buttons' tick, their state then their label
+    void tick(double now) override {
+        std::shared_ptr<ServerPlayer> player = mcle_local_player();
+        if (player && getMenu()) {
+            for (EnchantmentButton &button : m_enchantButton) {
+                button.updateState(getMenu(), player);
+                button.label.tick();
+            }
+        }
+        ServerContainerScene::tick(now);
+    }
+
+    // UIScene_EnchantingMenu::customDraw: the book, the buttons' names, then
+    // the slots
+    void customDraw(const MCLECustomDrawRegion &region) override {
+        int slotId = -1;
+        if (strcmp(region.name, "EnchantmentBook") == 0) {
+            renderBook(region);
+        } else if (sscanf(region.name, "slot_Button%d", &slotId) == 1 && slotId >= 1 && slotId <= 3) {
+            std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+            std::shared_ptr<ServerPlayer> player = mcle_local_player();
+            if (player && getMenu()) m_enchantButton[slotId - 1].render(region, getMenu(), player);
+        } else {
+            ServerContainerScene::customDraw(region);
+        }
+    }
+
+protected:
+    MCLEUISlotList m_slotListIngredient;
+    MCLEUILabel m_labelEnchant;
+    EnchantmentButton m_enchantButton[3];
+    MCLEControlRect m_bookRect{};
+
+    // UIControl_EnchantmentBook
+    BookModel *m_model = nullptr;
+    std::shared_ptr<ItemInstance> m_last;
+    Random m_random;
+    int m_time = 0;
+    float m_flip = 0, m_oFlip = 0, m_flipT = 0, m_flipA = 0;
+    float m_open = 0, m_oOpen = 0;
+
+    // IUIScene_EnchantingMenu::handleOtherClicked clicks the button on the
+    // client's menu and handleInventoryButtonClick sends it to the server,
+    // whose handleContainerButtonClick clicks it again. Here that's once,
+    // on the server's menu.
+    void handleOtherClicked(int iPad, ESceneSection eSection, int buttonNum, bool quickKey) override {
+        int index = -1;
+        switch (eSection) {
+        case eSectionEnchantButton1: index = 0; break;
+        case eSectionEnchantButton2: index = 1; break;
+        case eSectionEnchantButton3: index = 2; break;
+        default: break;
+        }
+        std::shared_ptr<ServerPlayer> player = mcle_local_player();
+        if (index < 0 || !player) return;
+        player->resetLastActionTime();
+        if (player->containerMenu == m_menu && m_menu->isSynched(player)) {
+            m_menu->clickMenuButton(player, index);
+            m_menu->broadcastChanges();
+        }
+    }
+
+    EnchantmentButton *button(ESceneSection eSection) {
+        switch (eSection) {
+        case eSectionEnchantButton1: return &m_enchantButton[0];
+        case eSectionEnchantButton2: return &m_enchantButton[1];
+        case eSectionEnchantButton3: return &m_enchantButton[2];
+        default: return nullptr;
+        }
+    }
+
+    // UIControl::setFocus on whichever control the section is
+    void setControlFocus(ESceneSection eSection, bool focus) {
+        if (EnchantmentButton *b = button(eSection)) {
+            b->hasFocus = focus;
+            std::shared_ptr<ServerPlayer> player = mcle_local_player();
+            if (player && getMenu()) b->updateState(getMenu(), player);
+        } else if (MCLEUISlotList *list = getSection(eSection)) {
+            list->setFocus(focus);
+        }
+    }
+
+    void setSectionFocus(ESceneSection eSection, int iPad) override {
+        setControlFocus(eSection, true);
+        if (m_focusSection != eSectionNone && m_focusSection != eSection) setControlFocus(m_focusSection, false);
+        m_focusSection = eSection;
+    }
+
+    void setFocusToPointer(int iPad) override {
+        if (m_focusSection != eSectionNone) setControlFocus(m_focusSection, false);
+        m_focusSection = eSectionNone;
+    }
+
+    int getSectionColumns(ESceneSection eSection) override {
+        int cols = 0;
+        switch (eSection) {
+        case eSectionEnchantSlot: cols = 1; break;
+        case eSectionEnchantInventory: cols = 9; break;
+        case eSectionEnchantUsing: cols = 9; break;
+        default: assert(false); break;
+        }
+        return cols;
+    }
+
+    int getSectionRows(ESceneSection eSection) override {
+        int rows = 0;
+        switch (eSection) {
+        case eSectionEnchantSlot: rows = 1; break;
+        case eSectionEnchantInventory: rows = 3; break;
+        case eSectionEnchantUsing: rows = 1; break;
+        default: assert(false); break;
+        }
+        return rows;
+    }
+
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionEnchantSlot: return &m_slotListIngredient;
+        case eSectionEnchantInventory: return &m_slotListInventory;
+        case eSectionEnchantUsing: return &m_slotListHotbar;
+        default: return nullptr;
+        }
+    }
+
+    const MCLEControlRect *sectionRect(ESceneSection eSection) {
+        if (EnchantmentButton *b = button(eSection)) return &b->rect;
+        MCLEUISlotList *list = getSection(eSection);
+        return list ? &list->rect : nullptr;
+    }
+
+    void GetPositionOfSection(ESceneSection eSection, UIVec2D *pPosition) override {
+        const MCLEControlRect *rect = sectionRect(eSection);
+        pPosition->x = rect ? rect->x : 0;
+        pPosition->y = rect ? rect->y : 0;
+    }
+
+    void GetItemScreenData(ESceneSection eSection, int iItemIndex, UIVec2D *pPosition, UIVec2D *pSize) override {
+        const MCLEControlRect *rect = sectionRect(eSection);
+        UIVec2D sectionSize;
+        sectionSize.x = rect ? rect->w : 0;
+        sectionSize.y = rect ? rect->h : 0;
+
+        if (IsSectionSlotList(eSection)) {
+            int rows = getSectionRows(eSection);
+            int cols = getSectionColumns(eSection);
+
+            pSize->x = sectionSize.x / cols;
+            pSize->y = sectionSize.y / rows;
+
+            int itemCol = iItemIndex % cols;
+            int itemRow = iItemIndex / cols;
+
+            pPosition->x = itemCol * pSize->x;
+            pPosition->y = itemRow * pSize->y;
+        } else {
+            GetPositionOfSection(eSection, pPosition);
+            pSize->x = sectionSize.x;
+            pSize->y = sectionSize.y;
+        }
+    }
+
+    // UIControl_EnchantmentBook::render, the region in pixels
+    void renderBook(const MCLECustomDrawRegion &region) {
+        std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+        Minecraft *pMinecraft = Minecraft::GetInstance();
+        EnchantmentMenu *menu = getMenu();
+        if (!menu || !pMinecraft || !pMinecraft->textures || m_bookRect.w <= 0 || m_bookRect.h <= 0) return;
+
+        glLoadIdentity();
+        glTranslatef(region.x0, region.y0, -2000);
+        glEnable(GL_RESCALE_NORMAL);
+        glPushMatrix();
+
+        float width = region.x1 - region.x0;
+        float height = region.y1 - region.y0;
+
+        // Revert the scale from the setup
+        float ssX = width / m_bookRect.w;
+        float ssY = height / m_bookRect.h;
+        glScalef(ssX, ssY, 1.0f);
+
+        glTranslatef(m_bookRect.w / 2, m_bookRect.h / 2, 50.0f);
+
+        // Add a uniform scale
+        glScalef(-57 / ssX, 57 / ssX, 360.0f);
+
+        glRotatef(45 + 90, 0, 1, 0);
+        Lighting::turnOn();
+        glRotatef(-45 - 90, 0, 1, 0);
+
+        int tex = pMinecraft->textures->loadTexture(TN_ITEM_BOOK);
+        pMinecraft->textures->bind(tex);
+        glRotatef(20, 1, 0, 0);
+
+        float a = 1;
+        float o = m_oOpen + (m_open - m_oOpen) * a;
+        glTranslatef((1 - o) * 0.2f, (1 - o) * 0.1f, (1 - o) * 0.25f);
+        glRotatef(-(1 - o) * 90 - 90, 0, 1, 0);
+        glRotatef(180, 1, 0, 0);
+
+        float ff1 = m_oFlip + (m_flip - m_oFlip) * a + 0.25f;
+        float ff2 = m_oFlip + (m_flip - m_oFlip) * a + 0.75f;
+        ff1 = (ff1 - floor(ff1)) * 1.6f - 0.3f;
+        ff2 = (ff2 - floor(ff2)) * 1.6f - 0.3f;
+
+        if (ff1 < 0) ff1 = 0;
+        if (ff2 < 0) ff2 = 0;
+        if (ff1 > 1) ff1 = 1;
+        if (ff2 > 1) ff2 = 1;
+
+        glEnable(GL_CULL_FACE);
+        // Upstream shares the EnchantTableRenderer's model, which only
+        // UIControl_EnchantmentBook is a friend of, so this is its fallback
+        if (m_model == nullptr) m_model = new BookModel();
+        m_model->render(nullptr, 0, ff1, ff2, o, 0, 1 / 16.0f, true);
+        glDisable(GL_CULL_FACE);
+
+        glPopMatrix();
+        Lighting::turnOff();
+        glDisable(GL_RESCALE_NORMAL);
+
+        tickBook(menu);
+    }
+
+    // UIControl_EnchantmentBook::tickBook, once a draw like upstream
+    void tickBook(EnchantmentMenu *menu) {
+        shared_ptr<ItemInstance> current = menu->getSlot(0)->getItem();
+        if (!ItemInstance::matches(current, m_last)) {
+            m_last = current;
+            do {
+                m_flipT += m_random.nextInt(4) - m_random.nextInt(4);
+            } while (m_flip <= m_flipT + 1 && m_flip >= m_flipT - 1);
+        }
+
+        m_time++;
+        m_oFlip = m_flip;
+        m_oOpen = m_open;
+
+        bool shouldBeOpen = false;
+        for (int i = 0; i < 3; i++) {
+            if (menu->costs[i] != 0) shouldBeOpen = true;
+        }
+
+        if (shouldBeOpen) m_open += 0.2f;
+        else m_open -= 0.2f;
+        if (m_open < 0) m_open = 0;
+        if (m_open > 1) m_open = 1;
+
+        float diff = (m_flipT - m_flip) * 0.4f;
+        float max = 0.2f;
+        if (diff < -max) diff = -max;
+        if (diff > +max) diff = +max;
+        m_flipA += (diff - m_flipA) * 0.9f;
+        m_flip = m_flip + m_flipA;
+    }
+};
+
 // The client's SimpleContainer for the chest packet types, and its getName
 std::wstring chestName(const OpenPacket &packet) {
     int chestString;
@@ -510,6 +927,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::DROPPER: return "DispenserMenu1080.swf";
     case ContainerOpenPacket::HOPPER: return "HopperMenu1080.swf";
     case ContainerOpenPacket::BREWING_STAND: return "BrewingStandMenu1080.swf";
+    case ContainerOpenPacket::ENCHANTMENT: return "EnchantingMenu1080.swf";
     }
     return "";
 }
@@ -548,6 +966,12 @@ bool mcle_container_open_server() {
                 std::dynamic_pointer_cast<BrewingStandTileEntity>(container);
             if (dynamic_cast<BrewingStandMenu *>(menu) && brewingStand) scene = new BrewingScene(menu, brewingStand);
         } break;
+        case ContainerOpenPacket::ENCHANTMENT:
+            // LocalPlayer::startEnchanting gets the name only when it's custom
+            if (dynamic_cast<EnchantmentMenu *>(menu)) {
+                scene = new EnchantingScene(menu, g_packet.customName ? g_packet.title : std::wstring());
+            }
+            break;
         }
     }
     if (!scene) return false;
