@@ -3855,11 +3855,9 @@ static void mcle_exit_world(bool save) {
     // _ExitWorld: MinecraftServer::resetFlags() once the level is gone
     MinecraftServer::resetFlags();
 
+    // DirectoryLevelStorage's destructor deletes the save file it was given
     g_levelStorage.reset();
-    if (g_saveFile) {
-        try { delete g_saveFile; } catch (...) {}
-        g_saveFile = nullptr;
-    }
+    g_saveFile = nullptr;
     if (g_levelSource) {
         try { delete g_levelSource; } catch (...) {}
         g_levelSource = nullptr;
