@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "../../../upstream/Minecraft.World/File.h"
+#include "../../../upstream/Minecraft.World/InputOutputStream.h"
 #include "../../../upstream/Minecraft.Client/ArchiveFile.h"
 #include "../../../upstream/Minecraft.Client/BufferedImage.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
@@ -65,14 +66,11 @@ public:
     std::wstring getDesc1() override { return app.GetString(IDS_DEFAULT_TEXTUREPACK); }
 
     // Images are found by the BufferedImage load path, so every file counts
-    // as there
-    InputStream *getResource(const std::wstring &, bool) override { return nullptr; }
+    // as there, as it does for DefaultTexturePack
     void unload(Textures *) override {}
     void load(Textures *) override {}
     bool hasFile(const std::wstring &name, bool) override { return hasFile(name); }
     bool hasFile(const std::wstring &) override { return true; }
-    std::wstring getAnimationString(const std::wstring &, const std::wstring &, bool) override { return L""; }
-    std::wstring getAnimationString(const std::wstring &, const std::wstring &) override { return L""; }
 
     // FolderTexturePack::getPath is "Common\\" + the folder's absolute path.
     // BufferedImage puts this in front of "res/..." and the load path
@@ -116,6 +114,23 @@ public:
     std::wstring getXuiRootPath() override { return L""; }
 
 protected:
+    // DefaultTexturePack's, from Common\res\TitleUpdate\res. The animation
+    // definitions (water.txt and the rest) come through here. On the phone
+    // the TitleUpdate folder can also be beside res, as the image load path
+    // allows for.
+    InputStream *getResourceImplementation(const std::wstring &name) override {
+        const char *root = StorageManager.GetSaveRootPath();
+        std::wstring base = convStringToWstring(std::string(root ? root : "") + "/Common/");
+        std::wstring file = name;
+        for (wchar_t &c : file) {
+            if (c == L'\\') c = L'/';
+        }
+        if (file.empty() || file[0] != L'/') file = L"/" + file;
+        InputStream *resource = InputStream::getResourceAsStream(base + L"res/TitleUpdate/res" + file);
+        if (resource == nullptr) resource = InputStream::getResourceAsStream(base + L"TitleUpdate/res" + file);
+        return resource;
+    }
+
     // DefaultTexturePack's
     void loadIcon() override {
         if (app.hasArchiveFile(L"Graphics\\TexturePackIcon.png")) {
