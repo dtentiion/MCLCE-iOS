@@ -1470,19 +1470,18 @@ inline void immediate_dispatch(int prim, int count, const void* data,
 void call_list_replay(const DisplayList& dl) {
     for (const auto& cmd : dl.draws) {
         Mat4 savedMv = g_modelview_stack.back();
-        unsigned int savedTexId = g_bound_tex_id;
-        id<MTLTexture> savedTex = g_current_texture;
         if (cmd.hasTranslate) {
             // Apply chunk's world translation on top of current view:
             //   new_top = current_view * translate(chunk_xyz)
             mat_translate(g_modelview_stack.back().m,
                           cmd.translate[0], cmd.translate[1], cmd.translate[2]);
         }
-        // Only a bind compiled into the list changes the texture. Model
-        // parts are compiled in their model's constructor, so the texture
-        // bound back then means nothing for them.
-        const bool overrideTex = (cmd.texId != 0);
-        if (overrideTex) {
+        // Only a bind compiled into the list changes the texture, and it
+        // stays bound after, as glCallList and the 4J command buffers'
+        // COMMAND_BIND_TEXTURE leave it. Model parts are compiled in their
+        // model's constructor, so the texture bound back then means nothing
+        // for them.
+        if (cmd.texId != 0) {
             auto tit = g_gl_textures.find(cmd.texId);
             g_current_texture = (tit != g_gl_textures.end()) ? tit->second : nil;
             g_bound_tex_id    = cmd.texId;
@@ -1495,10 +1494,6 @@ void call_list_replay(const DisplayList& dl) {
                                cmd.fmt, cmd.shader);
         }
         if (cmd.hasTranslate) g_modelview_stack.back() = savedMv;
-        if (overrideTex) {
-            g_current_texture = savedTex;
-            g_bound_tex_id    = savedTexId;
-        }
     }
 }
 
