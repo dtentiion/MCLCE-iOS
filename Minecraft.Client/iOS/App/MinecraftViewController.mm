@@ -446,6 +446,7 @@ extern "C" const char* mcle_htp_label(int i, const char** name);
 static int g_htp_page = 0; // m_eCurrPage
 
 static void MCLESetTooltips(const int ids[11]);
+static void MCLETooltipsApplyOpacity(bool menuDisplayed, int opacityTimer, bool force);
 
 // StartPage, then updateTooltips: Next unless it's the last page, Prev
 // unless it's the first
@@ -656,6 +657,11 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // UIScene_SettingsOptionsMenu restarts the autosave timer
         if (setting == MCLE_SETTING_Autosave) {
             dispatch_async(dispatch_get_main_queue(), ^{ MCLESetAutosaveTimerTime(); });
+        }
+        // The tooltip strip takes the new Interface Opacity, with the
+        // settings menu up
+        if (setting == MCLE_SETTING_InterfaceOpacity) {
+            dispatch_async(dispatch_get_main_queue(), ^{ MCLETooltipsApplyOpacity(true, 0, false); });
         }
         // ActionGameSettings -> Options::set: the game's sound engine
         // changes straight away too, paused or not
@@ -1265,6 +1271,8 @@ static void MCLEHudPump(void) {
             g_hud.opacity = fVal;
             MCLECallPath(@"", @"SetAlpha", @[@(fVal)]);
         }
+        // The tooltip strip follows the same timer, sent when it changes
+        MCLETooltipsApplyOpacity(false, st.opacityTimer, false);
     }
 
     // SetVisible: shown while playing with Display HUD on
@@ -1324,9 +1332,11 @@ static void MCLEGameTooltipsReset(void) {
 
 // UIComponent_Tooltips::tick: the strip follows Interface Opacity, back at
 // 80% for a while after the hotbar scrolls, and never under 15% with a menu
-// up. setOpacity only calls the movie when it changes.
+// up. setOpacity only calls the movie when it changes, or when the scene is
+// fresh (force). It's sent when a scene seeds the strip, when the setting
+// changes, and from the HUD pump in game, never polled.
 static float g_tooltips_alpha = -1.0f;
-static void MCLETooltipsOpacityPump(bool menuDisplayed, int opacityTimer) {
+static void MCLETooltipsApplyOpacity(bool menuDisplayed, int opacityTimer, bool force) {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
     unsigned char ucAlpha = mcle_settings_get(MCLE_SETTING_InterfaceOpacity);
@@ -1342,14 +1352,12 @@ static void MCLETooltipsOpacityPump(bool menuDisplayed, int opacityTimer) {
     } else {
         fVal = 0.01f * static_cast<float>(ucAlpha);
     }
-    if (fVal == g_tooltips_alpha) return;
+    if (!force && fVal == g_tooltips_alpha) return;
+    g_tooltips_alpha = fVal;
     const char* setAlpha = "SetAlpha";
     double value = fVal;
-    // Kept only once the strip's movie took it
-    if (ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
-            (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1) == 1) {
-        g_tooltips_alpha = fVal;
-    }
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
+        (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1);
 }
 
 // In game: Minecraft::tick's tooltips
@@ -2216,6 +2224,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
     ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
         (const uint8_t*)setSafe, strlen(setSafe),
         safe, 4);
+    // UIComponent_Tooltips::tick's opacity for this scene, 15% at least
+    // with a menu up
+    MCLETooltipsApplyOpacity(![swfName isEqualToString:@"HUD1080.swf"], 0, true);
 
     // In game Minecraft::tick sets them, see MCLEGameTooltipsPump
     if ([swfName isEqualToString:@"HUD1080.swf"]) return;
@@ -4747,19 +4758,6 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         then();
     }
 
-    // UIComponent_Tooltips::tick, in the menus and in game
-    {
-        const bool inWorld = mcle_world_is_ticking() != 0;
-        int opacityTimer = 0;
-        if (inWorld) {
-            MCLEHudState st;
-            mcle_hud_get_state(&st);
-            if (st.valid) opacityTimer = st.opacityTimer;
-        }
-        const bool menuDisplayed = !inWorld || g_world_paused || g_world_dead || g_world_container ||
-                                   g_pending_dialog != nil;
-        MCLETooltipsOpacityPump(menuDisplayed, opacityTimer);
-    }
 
     // Phase G phase 1A: once the world simulation is ticking, take over
     // the screen with the legacy Metal path (sky-color clear via
