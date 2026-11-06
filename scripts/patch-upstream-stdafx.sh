@@ -1400,7 +1400,7 @@ if [ -f "$WDI_PY" ]; then
     python3 "$WDI_PY"
 fi
 
-# Chunk::rebuild ckpts to pin the 0xe0 crash inside tessellation
+# Chunk::rebuild null guards
 CRB_PY="$REPO_ROOT/scripts/patch-chunk-rebuild-ckpts.py"
 if [ -f "$CRB_PY" ]; then
     python3 "$CRB_PY"
