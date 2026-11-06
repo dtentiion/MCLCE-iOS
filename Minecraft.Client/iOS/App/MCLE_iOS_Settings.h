@@ -71,6 +71,18 @@ void          mcle_settings_set(int setting, unsigned char value);
 // which we don't track yet so we always reset it), etc.
 void          mcle_settings_reset_to_defaults(void);
 
+// GAME_SETTINGS' skin fields: dwSelectedSkin, dwSelectedCape,
+// uiFavoriteSkinA[MAX_FAVORITE_SKINS] and ucCurrentFavoriteSkinPos.
+// Saved in settings.dat after the table above.
+unsigned int  mcle_settings_get_skin(void);
+void          mcle_settings_set_skin(unsigned int skinId);
+unsigned int  mcle_settings_get_cape(void);
+void          mcle_settings_set_cape(unsigned int capeId);
+unsigned int  mcle_settings_get_favorite_skin(int index);
+void          mcle_settings_set_favorite_skin(int index, unsigned int skinId);
+unsigned char mcle_settings_get_favorite_skins_pos(void);
+void          mcle_settings_set_favorite_skins_pos(unsigned char pos);
+
 #ifdef __cplusplus
 }
 #endif

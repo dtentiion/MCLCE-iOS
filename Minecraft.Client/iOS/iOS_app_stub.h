@@ -18,6 +18,7 @@
 #include <vector>
 #include <cstdarg>
 #include <cstdio>
+#include <sstream>
 #include <os/log.h>
 
 class GAME_SETTINGS;
@@ -31,6 +32,23 @@ extern "C" int mcle_log_msg(const char *msg);
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 extern "C" const wchar_t *mcle_wstring(int id);        // Game/MCLEStrings.cpp
 extern "C" int mcle_html_colour(int colour);           // Game/MCLEContainerMenu.cpp
+
+// GAME_SETTINGS' skin fields, MCLE_iOS_Settings.mm
+extern "C" unsigned int  mcle_settings_get_skin(void);
+extern "C" void          mcle_settings_set_skin(unsigned int skinId);
+extern "C" unsigned int  mcle_settings_get_cape(void);
+extern "C" void          mcle_settings_set_cape(unsigned int capeId);
+extern "C" unsigned int  mcle_settings_get_favorite_skin(int index);
+extern "C" void          mcle_settings_set_favorite_skin(int index, unsigned int skinId);
+extern "C" unsigned char mcle_settings_get_favorite_skins_pos(void);
+extern "C" void          mcle_settings_set_favorite_skins_pos(unsigned char pos);
+
+// The local player's setAndBroadcastCustomSkin / Cape, Game/MCLEGameLoop.cpp
+void mcle_local_player_set_custom_skin(unsigned int skinId);
+void mcle_local_player_set_custom_cape(unsigned int capeId);
+// Player::getCapeIdFromPath / getCapePathFromId, Game/MCLESkinSelectMenu.cpp
+unsigned int mcle_cape_id_from_path(const std::wstring &cape);
+std::wstring mcle_cape_path_from_id(unsigned int capeId);
 
 struct McleAppStub {
     // Heavyweight returning ptr to opaque object; nullptr is fine
@@ -101,6 +119,10 @@ struct McleAppStub {
     int            GetGameSettings(int /*pad*/, int setting) {
         if (setting >= 0 && setting < 32) return mcle_settings_get(setting);
         return 0;
+    }
+    // The primary pad's, CMinecraftApp::GetGameSettings(eGameSetting)
+    unsigned char  GetGameSettings(eGameSetting eVal) {
+        return static_cast<unsigned char>(GetGameSettings(0, static_cast<int>(eVal)));
     }
     template<class... A> int            GetGameSettingsDebugMask(A...) { return 0; }
     // Host options, as in CMinecraftApp (Consoles_App.cpp). Difficulty, game
@@ -230,7 +252,180 @@ struct McleAppStub {
     template<class... A> bool           IsFileInMemoryTextures(A...) { return false; }
     template<class... A> bool           isXuidNotch(A...)       { return false; }
     template<class... A> int64_t        getAppTime(A...)        { return 0; }
-    template<class... A> int            getSkinPathFromId(A...) { return 0; }
+
+    // CMinecraftApp's player skin and cape, kept in the settings store like
+    // GAME_SETTINGS keeps them
+    void SetPlayerSkin(int iPad, const std::wstring &name) {
+        DWORD skinId = getSkinIdFromPath(name);
+
+        SetPlayerSkin(iPad, skinId);
+    }
+
+    void SetPlayerSkin(int iPad, DWORD dwSkinId) {
+        DebugPrintf("Setting skin for %d to %08X\n", iPad, dwSkinId);
+
+        mcle_settings_set_skin(dwSkinId);
+
+        mcle_local_player_set_custom_skin(dwSkinId);
+    }
+
+    std::wstring GetPlayerSkinName(int iPad) {
+        return getSkinPathFromId(mcle_settings_get_skin());
+    }
+
+    DWORD GetPlayerSkinId(int iPad) {
+        // 4J-PB -check the user has rights to use this skin - they may have had at some point but the entitlement has been removed.
+        DLCPack *Pack = nullptr;
+        DLCSkinFile *skinFile = nullptr;
+        DWORD dwSkin = mcle_settings_get_skin();
+        wchar_t chars[256];
+
+        if (GET_IS_DLC_SKIN_FROM_BITMASK(dwSkin)) {
+            // 4J Stu - DLC skins are numbered using decimal rather than hex to make it easier to number manually
+            swprintf(chars, 256, L"dlcskin%08d.png", GET_DLC_SKIN_ID_FROM_BITMASK(dwSkin));
+
+            Pack = m_dlcManager.getPackContainingSkin(chars);
+
+            if (Pack) {
+                skinFile = Pack->getSkinFile(chars);
+
+                bool bSkinIsFree = skinFile->getParameterAsBool(DLCManager::e_DLCParamType_Free);
+                bool bLicensed = Pack->hasPurchasedFile(DLCManager::e_DLCType_Skin, skinFile->getPath());
+
+                if (bSkinIsFree || bLicensed) {
+                    return dwSkin;
+                } else {
+                    return 0;
+                }
+            }
+        }
+
+        return dwSkin;
+    }
+
+    void SetPlayerCape(int iPad, const std::wstring &name) {
+        DWORD capeId = mcle_cape_id_from_path(name);
+
+        SetPlayerCape(iPad, capeId);
+    }
+
+    void SetPlayerCape(int iPad, DWORD dwCapeId) {
+        DebugPrintf("Setting cape for %d to %08X\n", iPad, dwCapeId);
+
+        mcle_settings_set_cape(dwCapeId);
+
+        mcle_local_player_set_custom_cape(dwCapeId);
+    }
+
+    std::wstring GetPlayerCapeName(int iPad) { return mcle_cape_path_from_id(mcle_settings_get_cape()); }
+
+    DWORD GetPlayerCapeId(int iPad) { return mcle_settings_get_cape(); }
+
+    void SetPlayerFavoriteSkin(int iPad, int iIndex, unsigned int uiSkinID) {
+        DebugPrintf("Setting favorite skin for %d to %08X\n", iPad, uiSkinID);
+
+        mcle_settings_set_favorite_skin(iIndex, uiSkinID);
+    }
+
+    unsigned int GetPlayerFavoriteSkin(int iPad, int iIndex) { return mcle_settings_get_favorite_skin(iIndex); }
+
+    unsigned char GetPlayerFavoriteSkinsPos(int iPad) { return mcle_settings_get_favorite_skins_pos(); }
+
+    void SetPlayerFavoriteSkinsPos(int iPad, int iPos) {
+        mcle_settings_set_favorite_skins_pos(static_cast<unsigned char>(iPos));
+    }
+
+    unsigned int GetPlayerFavoriteSkinsCount(int iPad) {
+        unsigned int uiCount = 0;
+        for (int i = 0; i < MAX_FAVORITE_SKINS; i++) {
+            if (mcle_settings_get_favorite_skin(i) != 0xFFFFFFFF) {
+                uiCount++;
+            } else {
+                break;
+            }
+        }
+        return uiCount;
+    }
+
+    void ValidateFavoriteSkins(int iPad) {
+        unsigned int uiCount = GetPlayerFavoriteSkinsCount(iPad);
+
+        // remove invalid skins
+        unsigned int uiValidSkin = 0;
+        wchar_t chars[256];
+
+        for (unsigned int i = 0; i < uiCount; i++) {
+            // get the pack number from the skin id
+            swprintf(chars, 256, L"dlcskin%08d.png", GetPlayerFavoriteSkin(iPad, i));
+
+            // Also check they haven't reverted to a trial pack
+            DLCPack *pDLCPack = m_dlcManager.getPackContainingSkin(chars);
+
+            if (pDLCPack != nullptr) {
+                // 4J-PB - We should let players add the free skins to their favourites as well!
+                DLCSkinFile *pSkinFile = pDLCPack->getSkinFile(chars);
+
+                if (pDLCPack->hasPurchasedFile(DLCManager::e_DLCType_Skin, L"") || (pSkinFile && pSkinFile->isFree())) {
+                    mcle_settings_set_favorite_skin(uiValidSkin++, mcle_settings_get_favorite_skin(i));
+                }
+            }
+        }
+
+        for (unsigned int i = uiValidSkin; i < MAX_FAVORITE_SKINS; i++) {
+            mcle_settings_set_favorite_skin(i, 0xFFFFFFFF);
+        }
+    }
+
+    // CMinecraftApp::StartInstallDLCProcess: there's no install in progress
+    // to wait for, so nothing to do
+    bool StartInstallDLCProcess(int iPad) {
+        DebugPrintf("--- CMinecraftApp::StartInstallDLCProcess: pad=%i.\n", iPad);
+        DebugPrintf("--- CMinecraftApp::StartInstallDLCProcess - nothing to do\n");
+        return false;
+    }
+
+    DWORD getSkinIdFromPath(const std::wstring &skin) {
+        bool dlcSkin = false;
+        unsigned int skinId = 0;
+
+        if (skin.size() >= 14) {
+            dlcSkin = skin.substr(0, 3).compare(L"dlc") == 0;
+
+            std::wstring skinValue = skin.substr(7, skin.size());
+            skinValue = skinValue.substr(0, skinValue.find_first_of(L'.'));
+
+            std::wstringstream ss;
+            // 4J Stu - dlc skins are numbered using decimal to make it easier for artists/people to number manually
+            // Everything else is numbered using hex
+            if (dlcSkin)
+                ss << std::dec << skinValue.c_str();
+            else
+                ss << std::hex << skinValue.c_str();
+            ss >> skinId;
+
+            skinId = MAKE_SKIN_BITMASK(dlcSkin, skinId);
+        }
+        return skinId;
+    }
+
+    std::wstring getSkinPathFromId(DWORD skinId) {
+        // 4J Stu - This function maps the encoded DWORD we store in the player profile
+        // to a filename that is stored as a memory texture and shared between systems in game
+        wchar_t chars[256];
+        if (GET_IS_DLC_SKIN_FROM_BITMASK(skinId)) {
+            // 4J Stu - DLC skins are numbered using decimal rather than hex to make it easier to number manually
+            swprintf(chars, 256, L"dlcskin%08d.png", GET_DLC_SKIN_ID_FROM_BITMASK(skinId));
+        } else {
+            DWORD ugcSkinIndex = GET_UGC_SKIN_ID_FROM_BITMASK(skinId);
+            DWORD defaultSkinIndex = GET_DEFAULT_SKIN_ID_FROM_BITMASK(skinId);
+            if (ugcSkinIndex == 0) {
+                swprintf(chars, 256, L"defskin%08X.png", defaultSkinIndex);
+            } else {
+                swprintf(chars, 256, L"ugcskin%08X.png", ugcSkinIndex);
+            }
+        }
+        return chars;
+    }
     template<class... A> LevelGenerationOptions* getLevelGenerationOptions(A...) { return nullptr; }
     template<class... A> void*          GetSaveThumbnail(A...)  { return nullptr; }
     // Real signature returns `MOJANG_DATA*` - declared in stdafx.
@@ -288,7 +483,6 @@ struct McleAppStub {
     template<class... A> bool           isXuidDeadmau5(A...)          { return false; }
     template<class... A> void*          getArchiveFile(A...)          { return nullptr; }
     template<class... A> int            GetLocalPlayerCount(A...)     { return 1; }
-    template<class... A> int            getSkinIdFromPath(A...)       { return 0; }
     template<class... A> bool           LoadSignEntryMenu(A...)       { return false; }
 
     // Common/* additions: catch-all setters / getters / state
