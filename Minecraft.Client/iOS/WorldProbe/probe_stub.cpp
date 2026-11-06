@@ -82,34 +82,6 @@ const int ChestTile::TYPE_TRAP;
 const int ZonedChunkStorage::CHUNKS_PER_ZONE_BITS = 5;
 const int ZonedChunkStorage::CHUNKS_PER_ZONE = 1 << ZonedChunkStorage::CHUNKS_PER_ZONE_BITS;
 
-// DLCManager constructor + destructor stub bodies. Real upstream
-// implementations live in DLCManager.cpp which is blocked on the UI/
-// Iggy chain (Phase D) and cannot compile until the GL ES 3.0 renderer
-// bringup. Provide trivial bodies here so anything that holds a
-// DLCManager value (CMinecraftApp, ConsoleSaveFileConverter, ...) can
-// link. Real iOS DLC implementation lands under Minecraft.Client/iOS/
-// DLC/ in a later phase.
-DLCManager::DLCManager() {}
-DLCManager::~DLCManager() {}
-// Player::GetAdditionalModelParts asks for DLC skin files. There are no
-// DLC packs on iOS, so the search over m_packs never finds one.
-DLCSkinFile *DLCManager::getSkinFile(const wstring &) { return nullptr; }
-// The skin select menu's lookups over the same empty m_packs
-DWORD DLCManager::getPackCount(EDLCType) { return 0; }
-DLCPack *DLCManager::getPack(DWORD, EDLCType) { return nullptr; }
-DWORD DLCManager::getPackIndex(DLCPack *, bool &found, EDLCType) {
-    found = false;
-    return 0;
-}
-DLCPack *DLCManager::getPackContainingSkin(const wstring &) { return nullptr; }
-// DLCPack.cpp isn't built either. With no packs these are never reached.
-DLCFile *DLCPack::getFile(DLCManager::EDLCType, DWORD) { return nullptr; }
-DLCFile *DLCPack::getFile(DLCManager::EDLCType, const wstring &) { return nullptr; }
-DWORD DLCPack::getDLCItemsCount(DLCManager::EDLCType) { return 0; }
-DWORD DLCPack::getFileIndexAt(DLCManager::EDLCType, const wstring &, bool &found) {
-    found = false;
-    return 0;
-}
 
 // Stubs for upstream gameplay-host class methods whose .cpp files are
 // blocked on the UI / render chain (Minecraft.cpp, MinecraftServer.cpp,

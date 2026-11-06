@@ -17,6 +17,7 @@
 #include "../Game/MCLETooltips.h"
 #include "../Game/MCLEContainerMenu.h"
 #include "../Game/MCLESkinSelectMenu.h"
+#include "../Game/MCLEDLC.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
@@ -2716,6 +2717,8 @@ static NSString* MCLETipHTML(void) {
         @{ @"name": @"Button6", @"label": MCLEStr(IDS_EXIT_GAME),        @"id": @(5) },
     ];
     [self applyMenuButtonConfig:cfg];
+    // UIScene_PauseMenu's constructor
+    mcle_dlc_install_if_needed(0);
     // updateComponents: no panorama, menu background and logo on
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
@@ -4008,6 +4011,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                         // Live platform overlay, not a game SWF, so
                         // there's nothing to transition to on iOS.
                         if (id == 0) {
+                            // 4J-PB - Need to check for installed DLC
+                            mcle_dlc_install_if_needed(0);
                             [self navigateForwardTo:@"LoadOrJoinMenu1080.swf"];
                         } else if (id == 1) {
                             [self navigateForwardTo:@"LeaderboardMenu1080.swf"];

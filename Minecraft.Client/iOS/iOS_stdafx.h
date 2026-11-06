@@ -357,9 +357,9 @@ struct C4JRenderStub {
     // success (matches Win64 ERROR_SUCCESS). Variadic catch-all
     // removed - it was winning overload resolution and shadowing this.
     inline long LoadTextureData(const char *path, D3DXIMAGE_INFO *info, int **data);
-    // 4-arg byte-array variant (BufferedImage(BYTE*, DWORD) ctor uses
-    // this). Stub - not used on iOS yet.
-    long LoadTextureData(unsigned char *, unsigned long, D3DXIMAGE_INFO *, int **) { return -1L; }
+    // 4-arg byte-array variant, BufferedImage(BYTE*, DWORD) for the DLC
+    // skins and capes kept as memory textures
+    inline long LoadTextureData(unsigned char *pbData, unsigned long dwBytes, D3DXIMAGE_INFO *info, int **data);
     template<class... A> void   MatrixMode(A...)              {}
     template<class... A> void   MatrixRotate(A...)            {}
     template<class... A> void   MatrixTranslate(A...)         {}
@@ -389,6 +389,12 @@ inline long C4JRenderStub::LoadTextureData(const char *path, D3DXIMAGE_INFO *inf
     mcle_log_msg(buf);
     if (!info || !data) return -1L;
     return mcle_buffered_image_load_path(path, &info->Width, &info->Height, data);
+}
+extern "C" long mcle_buffered_image_load_bytes(
+    const unsigned char *, unsigned long, unsigned int *, unsigned int *, int **);
+inline long C4JRenderStub::LoadTextureData(unsigned char *pbData, unsigned long dwBytes, D3DXIMAGE_INFO *info, int **data) {
+    if (!info || !data) return -1L;
+    return mcle_buffered_image_load_bytes(pbData, dwBytes, &info->Width, &info->Height, data);
 }
 
 // SharedConstants / C4JThread are real classes in Minecraft.World/

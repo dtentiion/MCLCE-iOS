@@ -81,6 +81,7 @@ struct McleAppStub {
         template<class... A> void  resetGameRules(A...)            {}
         template<class... A> void  unloadCurrentGameRules(A...)    {}
         template<class... A> void  loadCurrentGameRules(A...)      {}
+        template<class... A> void  readRuleFile(A...)              {}
     };
     McleGameRulesStub m_gameRules;
 
@@ -249,7 +250,6 @@ struct McleAppStub {
     template<class... A> bool           DebugArtToolsOn(A...)   { return false; }
     template<class... A> bool           DebugSettingsOn(A...)   { return false; }
     template<class... A> bool           DefaultCapeExists(A...) { return false; }
-    template<class... A> bool           IsFileInMemoryTextures(A...) { return false; }
     template<class... A> bool           isXuidNotch(A...)       { return false; }
     template<class... A> int64_t        getAppTime(A...)        { return 0; }
 
@@ -376,13 +376,26 @@ struct McleAppStub {
         }
     }
 
-    // CMinecraftApp::StartInstallDLCProcess: there's no install in progress
-    // to wait for, so nothing to do
-    bool StartInstallDLCProcess(int iPad) {
-        DebugPrintf("--- CMinecraftApp::StartInstallDLCProcess: pad=%i.\n", iPad);
-        DebugPrintf("--- CMinecraftApp::StartInstallDLCProcess - nothing to do\n");
-        return false;
-    }
+    // CMinecraftApp's DLC install: the installed packs are mounted one at a
+    // time and their .pck files read into m_dlcManager (Game/MCLEDLC.cpp)
+    bool m_bDLCInstallProcessCompleted = false;
+    bool m_bDLCInstallPending = false;
+    int m_iTotalDLC = 0;
+    int m_iTotalDLCInstalled = 0;
+
+    bool DLCInstallProcessCompleted() { return m_bDLCInstallProcessCompleted; }
+    bool DLCInstallPending() { return m_bDLCInstallPending; }
+    bool StartInstallDLCProcess(int iPad);
+    static int DLCInstalledCallback(LPVOID pParam, int iInstalledC, int iPad);
+    void MountNextDLC(int iPad);
+    static int DLCMountedCallback(LPVOID pParam, int iPad, DWORD dwErr, DWORD dwLicenceMask);
+    void HandleDLC(DLCPack *pack);
+
+    // CMinecraftApp's memory texture files: DLC skins and capes, by name
+    void AddMemoryTextureFile(const std::wstring &wName, PBYTE pbData, DWORD dwBytes);
+    void RemoveMemoryTextureFile(const std::wstring &wName);
+    bool IsFileInMemoryTextures(const std::wstring &wName);
+    void GetMemFileDetails(const std::wstring &wName, PBYTE *ppbData, DWORD *pdwBytes);
 
     DWORD getSkinIdFromPath(const std::wstring &skin) {
         bool dlcSkin = false;
@@ -432,16 +445,14 @@ struct McleAppStub {
     template<class... A> struct MOJANG_DATA* GetMojangDataForXuid(A...) { return nullptr; }
     template<class... A> int            GetTerrainFeaturePosition(A...) { return 0; }
     template<class... A> void           AddTerrainFeaturePosition(A...) {}
-    // Real upstream return type is `std::vector<ModelPart*>*`. ModelPart
-    // is forward-declared so the pointer type composes; the body returns
-    // nullptr (Player.cpp checks for null before iterating).
-    template<class... A> std::vector<class ModelPart*>* GetAdditionalModelParts(A...) { return nullptr; }
-    template<class... A> int            GetAnimOverrideBitmask(A...)  { return 0; }
-    template<class... A> void           SetAnimOverrideBitmask(A...)  {}
-    // Real upstream returns `vector<ModelPart*>*`. Player.cpp does
-    // `m_ppAdditionalModelParts = app.SetAdditionalSkinBoxes(...)`.
-    template<class... A> std::vector<class ModelPart*>* SetAdditionalSkinBoxes(A...) { return nullptr; }
-    template<class... A> std::vector<class ModelPart*>* GetAdditionalSkinBoxes(A...) { return nullptr; }
+    // A DLC skin's extra boxes as parts on the player model, and its
+    // animation overrides (Game/MCLEDLC.cpp)
+    void SetAdditionalSkinBoxes(DWORD dwSkinID, SKIN_BOX *SkinBoxA, DWORD dwSkinBoxC);
+    std::vector<class ModelPart*>* SetAdditionalSkinBoxes(DWORD dwSkinID, std::vector<SKIN_BOX *> *pvSkinBoxA);
+    std::vector<class ModelPart*>* GetAdditionalModelParts(DWORD dwSkinID);
+    std::vector<SKIN_BOX *> *GetAdditionalSkinBoxes(DWORD dwSkinID);
+    unsigned int GetAnimOverrideBitmask(DWORD dwSkinID);
+    void SetAnimOverrideBitmask(DWORD dwSkinID, unsigned int uiAnimOverrideBitmask);
     template<class... A> void           SetUniqueMapName(A...)        {}
     template<class... A> void           SetXuiServerAction(A...)      {}
     // Returns the eXuiServerAction enum so MinecraftServer.cpp's
@@ -481,7 +492,9 @@ struct McleAppStub {
     // always ends with en-US then en-EN.
     void getLocale(std::vector<std::wstring> &out) { out.push_back(L"en-US"); out.push_back(L"en-EN"); }
     template<class... A> bool           isXuidDeadmau5(A...)          { return false; }
-    template<class... A> void*          getArchiveFile(A...)          { return nullptr; }
+    // No media archive is mounted, so no file is found in it
+    template<class... A> int            getArchiveFileSize(A...)      { return -1; }
+    template<class... A> byteArray      getArchiveFile(A...)          { return byteArray(); }
     template<class... A> int            GetLocalPlayerCount(A...)     { return 1; }
     template<class... A> bool           LoadSignEntryMenu(A...)       { return false; }
 
@@ -505,7 +518,6 @@ struct McleAppStub {
     template<class... A> void           DisplayNewDLCTip(A...)        {}
     template<class... A> int            FormatHTMLString(A...)        { return 0; }
     template<class... A> void           AddMemoryTPDFile(A...)        {}
-    template<class... A> void           AddMemoryTextureFile(A...)    {}
     template<class... A> void           ClearTerrainFeaturePosition(A...) {}
     // Return LevelRuleset* so PlayerList::placeNewPlayer (and similar)
     // can call ->postProcessPlayer(player) on it. nullptr is fine - the
@@ -513,9 +525,7 @@ struct McleAppStub {
     template<class... A> class LevelRuleset* getGameRuleDefinitions(A...)  { return nullptr; }
     template<class... A> bool           DLCAlreadyPurchased(A...)     { return false; }
     template<class... A> bool           DLCInstalled(A...)            { return false; }
-    template<class... A> bool           DLCInstallPending(A...)       { return false; }
     template<class... A> void           DLCContentRetrieved(A...)     {}
-    template<class... A> void           DLCInstallProcessCompleted(A...) {}
     template<class... A> void           ClearDLCInstalled(A...)       {}
     template<class... A> void           ClearNewDLCAvailable(A...)    {}
     template<class... A> void           ClearAndResetDLCDownloadQueue(A...) {}
@@ -542,7 +552,8 @@ struct McleAppStub {
     template<class... A> void           LoadFireworksMenu(A...)       {}
     template<class... A> void           LoadInventoryMenu(A...)       {}
     template<class... A> const wchar_t* FormatChatMessage(A...)       { return L""; }
-    template<class... A> bool           GetMemFileDetails(A...)       { return false; }
+    // The store's offers aren't there to look a skin's up in
+    template<class... A> bool           GetDLCFullOfferIDForSkinID(A...) { return false; }
     template<class... A> void           SetBanListCheck(A...)         {}
     template<class... A> bool           IsLocalMultiplayerAvailable(A...) { return false; }
     template<class... A> bool           GetBootedFromDiscPatch(A...)  { return false; }

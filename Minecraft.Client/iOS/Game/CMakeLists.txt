@@ -28,6 +28,8 @@ set(MCLE_GAME_SOURCES
   MCLECreativeMenu.cpp
   MCLEContainerMenus.cpp
   MCLESkinSelectMenu.cpp
+  MCLEDLC.cpp
+  MCLEStorageDLC.cpp
   MCLE_iOS_MachHandler.cpp
 )
 

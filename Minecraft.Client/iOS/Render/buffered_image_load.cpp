@@ -170,3 +170,35 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
     *out_data = argb;
     return 0;  // ERROR_SUCCESS
 }
+
+// The same from a PNG already in memory, BufferedImage(BYTE*, DWORD)
+extern "C" long mcle_buffered_image_load_bytes(const unsigned char *bytes,
+                                                  unsigned long length,
+                                                  unsigned int *out_width,
+                                                  unsigned int *out_height,
+                                                  int **out_data) {
+    if (!bytes || length == 0 || !out_width || !out_height || !out_data) return -1;
+    *out_data = nullptr;
+    *out_width = 0;
+    *out_height = 0;
+
+    unsigned char *rgba = nullptr;
+    int w = 0, h = 0;
+    if (!mcle_png_decode_rgba8(bytes, length, &rgba, &w, &h)) return -4;
+
+    int *argb = new int[(size_t)w * (size_t)h];
+    const size_t pixels = (size_t)w * (size_t)h;
+    for (size_t i = 0; i < pixels; ++i) {
+        unsigned int r = rgba[i * 4 + 0];
+        unsigned int g = rgba[i * 4 + 1];
+        unsigned int b = rgba[i * 4 + 2];
+        unsigned int a = rgba[i * 4 + 3];
+        argb[i] = (int)((a << 24) | (r << 16) | (g << 8) | b);
+    }
+    mcle_png_decode_free(rgba);
+
+    *out_width = (unsigned int)w;
+    *out_height = (unsigned int)h;
+    *out_data = argb;
+    return 0;  // ERROR_SUCCESS
+}
