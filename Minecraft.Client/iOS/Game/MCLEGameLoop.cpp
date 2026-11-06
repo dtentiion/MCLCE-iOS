@@ -1544,6 +1544,8 @@ void initImpl() {
         reinterpret_cast<TexturePackRepository *>(s_tprBuf);
     Options *options = reinterpret_cast<Options *>(s_optsBuf);
     g_minecraftShim->skins = skins;
+    // TexturePackRepository's ctor selects the default pack
+    skins->iosSetSelected(TexturePackRepository::DEFAULT_TEXTURE_PACK);
 
     // TextureManager is a singleton - createTextureID() and createTexture()
     // both go through getInstance() which returns nullptr until we allocate

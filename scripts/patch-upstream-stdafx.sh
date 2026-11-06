@@ -1677,6 +1677,12 @@ if [ -f "$CR_PY" ]; then
     python3 "$CR_PY"
 fi
 
+# TexturePackRepository gets its selected pack set on iOS
+TPR_PY="$REPO_ROOT/scripts/patch-texturepackrepository-ios-select.py"
+if [ -f "$TPR_PY" ]; then
+    python3 "$TPR_PY"
+fi
+
 # ConsoleSaveFileOriginal::Flush hands the save to StorageManager like Windows64
 CSF_PY="$REPO_ROOT/scripts/patch-consolesavefile-ios-flush.py"
 if [ -f "$CSF_PY" ]; then
