@@ -1144,6 +1144,43 @@ pub unsafe extern "C" fn ruffle_ios_set_child_path_visible(
     if ok { 1 } else { 0 }
 }
 
+/// UIControl's x, y, width and height for a value path, written to
+/// `out` as four floats. Returns 1 when the path resolved.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_child_path_rect(
+    raw: *mut PlayerHandle,
+    path_ptr: *const u8,
+    path_len: usize,
+    out: *mut f32,
+) -> c_int {
+    if raw.is_null() || out.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Some(path) = utf8_arg(path_ptr, path_len) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let rect = p.child_path_rect(path);
+    drop(p);
+    match rect {
+        Some(r) => {
+            for (i, v) in r.iter().enumerate() {
+                *out.add(i) = *v as f32;
+            }
+            1
+        }
+        None => 0,
+    }
+}
+
+/// IggyMakeEventMouseMove + IggyPlayerDispatchEventRS, at a point given in
+/// stage coordinates.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_mouse_move_stage(raw: *mut PlayerHandle, x: f64, y: f64) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    if let Ok(mut p) = handle.player.lock() {
+        p.mouse_move_stage(x, y);
+    }
+    handle.executor.borrow_mut().run();
+}
+
 #[repr(C)]
 pub struct RuffleIosCustomDrawRegion {
     pub name: [u8; 32],

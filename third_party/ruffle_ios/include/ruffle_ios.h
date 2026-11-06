@@ -296,6 +296,15 @@ int           ruffle_ios_set_child_path_visible(PlayerHandle* h,
                                                 const uint8_t* path, size_t path_len,
                                                 int visible);
 
+// UIControl's x, y, width and height for a value path ("MainPanel.hotbarList"),
+// x and y in the parent's coordinates. out gets 4 floats. 1 when found.
+int           ruffle_ios_child_path_rect(PlayerHandle* h,
+                                         const uint8_t* path, size_t path_len,
+                                         float* out);
+
+// IggyMakeEventMouseMove, the mouse moving to a point in stage coordinates
+void          ruffle_ios_player_mouse_move_stage(PlayerHandle* h, double x, double y);
+
 // Iggy custom draw regions: visible objects named iggy_<name>. name is
 // <name>, NUL terminated, and the rectangle is in viewport pixels.
 typedef struct {
