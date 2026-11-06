@@ -10,11 +10,24 @@
 #include <atomic>
 #include <mutex>
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
+// MAX_FAVORITE_SKINS (Common/App_Defines.h)
+const int kMaxFavoriteSkins = 10;
+
+// The GAME_SETTINGS skin fields
+struct SkinSettings {
+    uint32_t selectedSkin;
+    uint32_t selectedCape;
+    uint32_t favoriteSkins[kMaxFavoriteSkins];
+    uint8_t favoriteSkinsPos;
+};
+
 std::mutex g_mu;
 unsigned char g_values[MCLE_SETTING_MAX] = {};
+SkinSettings g_skin = {};
 std::atomic<bool> g_loaded{false};
 
 NSString* settings_path() {
@@ -69,6 +82,13 @@ void apply_defaults() {
     g_values[MCLE_SETTING_Online] = 1;
     g_values[MCLE_SETTING_InviteOnly] = 0;
     g_values[MCLE_SETTING_FriendsOfFriends] = 1;
+
+    // TU 12, the favourite skins. The selected skin and cape are left as
+    // they are.
+    g_skin.favoriteSkinsPos = 0;
+    for (int i = 0; i < kMaxFavoriteSkins; i++) {
+        g_skin.favoriteSkins[i] = 0xFFFFFFFF;
+    }
 }
 
 void save_locked() {
@@ -79,6 +99,7 @@ void save_locked() {
         return;
     }
     std::fwrite(g_values, 1, MCLE_SETTING_MAX, f);
+    std::fwrite(&g_skin, 1, sizeof(g_skin), f);
     std::fclose(f);
 }
 
@@ -93,15 +114,15 @@ extern "C" void mcle_settings_load(void) {
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         FILE* f = std::fopen(path.UTF8String, "rb");
         if (f) {
-            unsigned char buf[MCLE_SETTING_MAX] = {};
-            size_t n = std::fread(buf, 1, MCLE_SETTING_MAX, f);
+            unsigned char buf[MCLE_SETTING_MAX + sizeof(SkinSettings)] = {};
+            size_t n = std::fread(buf, 1, sizeof(buf), f);
             std::fclose(f);
             // Tolerate shorter files: newer builds may have more
             // settings than an old settings.dat was written with.
             // Copy what we got, leave defaults for the rest.
             if (n > 0) {
-                if (n > MCLE_SETTING_MAX) n = MCLE_SETTING_MAX;
-                std::memcpy(g_values, buf, n);
+                std::memcpy(g_values, buf, n < MCLE_SETTING_MAX ? n : MCLE_SETTING_MAX);
+                if (n == sizeof(buf)) std::memcpy(&g_skin, buf + MCLE_SETTING_MAX, sizeof(g_skin));
                 NSLog(@"[settings] loaded %zu byte(s) from %@", n, path);
             }
         }
@@ -131,4 +152,54 @@ extern "C" void mcle_settings_reset_to_defaults(void) {
     apply_defaults();
     save_locked();
     NSLog(@"[settings] reset to defaults (console SetDefaultOptions parity)");
+}
+
+extern "C" unsigned int mcle_settings_get_skin(void) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    return g_skin.selectedSkin;
+}
+
+extern "C" void mcle_settings_set_skin(unsigned int skinId) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_skin.selectedSkin == skinId) return;
+    g_skin.selectedSkin = skinId;
+    save_locked();
+}
+
+extern "C" unsigned int mcle_settings_get_cape(void) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    return g_skin.selectedCape;
+}
+
+extern "C" void mcle_settings_set_cape(unsigned int capeId) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_skin.selectedCape == capeId) return;
+    g_skin.selectedCape = capeId;
+    save_locked();
+}
+
+extern "C" unsigned int mcle_settings_get_favorite_skin(int index) {
+    if (index < 0 || index >= kMaxFavoriteSkins) return 0xFFFFFFFF;
+    std::lock_guard<std::mutex> lk(g_mu);
+    return g_skin.favoriteSkins[index];
+}
+
+extern "C" void mcle_settings_set_favorite_skin(int index, unsigned int skinId) {
+    if (index < 0 || index >= kMaxFavoriteSkins) return;
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_skin.favoriteSkins[index] == skinId) return;
+    g_skin.favoriteSkins[index] = skinId;
+    save_locked();
+}
+
+extern "C" unsigned char mcle_settings_get_favorite_skins_pos(void) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    return g_skin.favoriteSkinsPos;
+}
+
+extern "C" void mcle_settings_set_favorite_skins_pos(unsigned char pos) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_skin.favoriteSkinsPos == pos) return;
+    g_skin.favoriteSkinsPos = pos;
+    save_locked();
 }

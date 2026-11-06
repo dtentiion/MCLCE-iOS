@@ -1198,6 +1198,11 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
             // PlayerList::getPlayerForLogin, 4J took this out of ServerPlayer's ctor
             g_player->gameMode->player = g_player;
+            // PlayerList::placeNewPlayer, with the skin and cape the client's
+            // LoginPacket carries
+            g_player->setPlayerIndex(0);
+            g_player->setCustomSkin(app.GetPlayerSkinId(0));
+            g_player->setCustomCape(app.GetPlayerCapeId(0));
         } catch (const std::exception &e) {
             MCLE_LOG("mcle_game_init: ServerPlayer ctor threw: %{public}s", e.what());
         } catch (...) {
@@ -1737,6 +1742,19 @@ extern "C" float mcle_hud_jukebox(char *out, int cap) {
 // PlayerConnection::teleport's player->absMoveTo, see WorldProbe/link_stubs.cpp
 void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot) {
     if (g_player) g_player->absMoveTo(x, y, z, yRot, xRot);
+}
+
+// CMinecraftApp::SetPlayerSkin / SetPlayerCape call the local player's
+// setAndBroadcastCustomSkin / Cape. The player the server's
+// TextureAndGeometryChangePacket would update is this same one.
+void mcle_local_player_set_custom_skin(unsigned int skinId) {
+    std::lock_guard<std::mutex> lock(g_simTickMutex);
+    if (g_player) g_player->setCustomSkin(skinId);
+}
+
+void mcle_local_player_set_custom_cape(unsigned int capeId) {
+    std::lock_guard<std::mutex> lock(g_simTickMutex);
+    if (g_player) g_player->setCustomCape(capeId);
 }
 
 // Held while anything outside this file touches the particle engine
