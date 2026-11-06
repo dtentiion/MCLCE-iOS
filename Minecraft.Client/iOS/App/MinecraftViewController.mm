@@ -125,6 +125,19 @@ extern "C" void mcle_game_respawn(void);             // MCLEGameLoop.cpp
 extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MCLEGameLoop.cpp
 extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
 extern "C" void mcle_storage_set_save_folder(const char *folder); // MCLESaveList.cpp
+extern "C" void mcle_capture_save_thumbnail(void);   // MCLESaveList.cpp
+extern "C" int  mcle_metal_thumbnail_pending(void);  // MetalContext.mm
+
+// The eAppAction_*CapturedThumbnail step: Minecraft::run takes the save's
+// thumbnail from the next world frame, then the save or the exit goes ahead
+static void (^g_after_thumbnail)(void) = nil;
+static int g_after_thumbnail_frames = 0;
+static void MCLECaptureThumbnailThen(void (^then)(void)) {
+    void (^before)(void) = g_after_thumbnail;
+    g_after_thumbnail = before ? [^{ before(); then(); } copy] : [then copy];
+    g_after_thumbnail_frames = 0;
+    mcle_capture_save_thumbnail();
+}
 
 // Name of the currently loaded menu SWF, set whenever we enter a
 // new scene. The settings-event bridge reads this to decide which
@@ -3954,6 +3967,18 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 - (void)exitWorldSaving:(BOOL)save {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player || g_exiting_world) return;
+    // The save on the way out has the frame from before leaving
+    if (save) {
+        __weak MinecraftViewController* weakSelf = self;
+        MCLECaptureThumbnailThen(^{ [weakSelf exitWorldAfterThumbnailSaving:YES]; });
+        return;
+    }
+    [self exitWorldAfterThumbnailSaving:NO];
+}
+
+- (void)exitWorldAfterThumbnailSaving:(BOOL)save {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player || g_exiting_world) return;
     if (!mcle_game_exit_world(save ? 1 : 0)) return;
     g_exiting_world = true;
     self.menuStack = nil;
@@ -4666,6 +4691,15 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 
     mcle_game_tick();
 
+    // The thumbnail came back from the world frame drawn last tick (or no
+    // world frame came), so what was waiting on it goes
+    if (g_after_thumbnail &&
+        (!mcle_metal_thumbnail_pending() || ++g_after_thumbnail_frames > 30)) {
+        void (^then)(void) = g_after_thumbnail;
+        g_after_thumbnail = nil;
+        then();
+    }
+
     // Phase G phase 1A: once the world simulation is ticking, take over
     // the screen with the legacy Metal path (sky-color clear via
     // mcle_render_frame). Bypasses Ruffle entirely so the SWF menu
@@ -4687,7 +4721,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
-                mcle_save_now();
+                MCLECaptureThumbnailThen(^{ mcle_save_now(); });
                 MCLESetAutosaveTimerTime();
             }
         }
@@ -4994,7 +5028,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                                                      buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
                                                   focusIndex:0
                                                     callback:^(MCLEDialogResult r) {
-                                    if (r == MCLEDialogResultDecline) mcle_save_now();
+                                    if (r == MCLEDialogResultDecline) MCLECaptureThumbnailThen(^{ mcle_save_now(); });
                                 }];
                                 break;
                             case 5: [self requestExitGame]; break;

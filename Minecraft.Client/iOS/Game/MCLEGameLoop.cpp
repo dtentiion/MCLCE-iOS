@@ -4389,9 +4389,11 @@ static void mcle_exit_world(bool save) {
     // _ExitWorld: MinecraftServer::resetFlags() once the level is gone
     MinecraftServer::resetFlags();
 
-    // DirectoryLevelStorage's destructor deletes the save file it was given
+    // DirectoryLevelStorage's destructor deletes the save file it was given,
+    // and ~ConsoleSaveFileOriginal lets go of a thumbnail no save took
     g_levelStorage.reset();
     g_saveFile = nullptr;
+    app.GetSaveThumbnail(nullptr, nullptr);
     if (g_levelSource) {
         try { delete g_levelSource; } catch (...) {}
         g_levelSource = nullptr;

@@ -42,6 +42,14 @@ void  mcle_metal_current_size(int* out_width, int* out_height);
 // Commit + present + teardown the current frame.
 void mcle_metal_frame_end(void);
 
+// The save thumbnail (CaptureSaveThumbnail): taken from the next world
+// frame, called before that frame begins. Pending until the pixels are back,
+// then taken once as 64x64 RGBA.
+void mcle_metal_capture_thumbnail(void);
+void mcle_metal_thumbnail_world_frame(void);
+int  mcle_metal_thumbnail_pending(void);
+int  mcle_metal_take_thumbnail(unsigned char* rgba);
+
 // G2a: Tesselator -> Metal hook. Upstream Tesselator::end() calls
 // RenderManager.DrawVertices(prim, count, data, fmt, shader). The
 // C4JRenderStub forwards into here. For now this counter-logs only;

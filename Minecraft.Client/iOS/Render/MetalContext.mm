@@ -1990,6 +1990,144 @@ extern "C" void mcle_glbridge_start_frame(void) {
     g_alpha_test_enabled  = true;
 }
 
+// CConsoleMinecraftApp::CaptureSaveThumbnail, RenderManager.CaptureThumbnail
+// on Windows64: after the world is drawn, the square in the middle of the
+// frame goes down to 64x64 for the save's thumbnail. The drawable can only
+// be read when the layer isn't framebuffer only, so that's off until the
+// frame is taken.
+static const int kThumbSize = 64;
+NSString* const kThumbShaderSrc = @R"(
+    #include <metal_stdlib>
+    using namespace metal;
+    struct T_out { float4 pos [[position]]; float2 uv; };
+    vertex T_out thumb_vert(uint id [[vertex_id]]) {
+        T_out o;
+        float2 uv = float2(float((id << 1) & 2), float(id & 2));
+        o.pos = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+        o.uv = uv;
+        return o;
+    }
+    fragment float4 thumb_frag(T_out i [[stage_in]],
+                               texture2d<float> src [[texture(0)]],
+                               constant float4 &rect [[buffer(0)]]) {
+        constexpr sampler s(filter::linear, address::clamp_to_edge);
+        float4 sum = float4(0.0);
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                float2 o = (float2(x, y) + 0.5) / 4.0 - 0.5;
+                sum += src.sample(s, rect.xy + (i.uv + o / 64.0) * rect.zw);
+            }
+        }
+        return float4(sum.rgb / 16.0, 1.0);
+    }
+)";
+
+// 0 nothing, 1 wanted on the next world frame, 2 drawn and on its way back
+static std::atomic<int> g_thumbState{0};
+static bool g_thumbArmed = false;
+static id<MTLRenderPipelineState> g_thumbPso = nil;
+static id<MTLTexture> g_thumbTex = nil;
+static std::mutex g_thumbMutex;
+static std::vector<unsigned char> g_thumbRgba;
+
+extern "C" void mcle_metal_capture_thumbnail(void) {
+    {
+        std::lock_guard<std::mutex> lock(g_thumbMutex);
+        g_thumbRgba.clear();
+    }
+    g_thumbState.store(1);
+}
+
+extern "C" int mcle_metal_thumbnail_pending(void) {
+    return g_thumbState.load() != 0;
+}
+
+// The last capture's 64x64 RGBA pixels, once, 0 if there isn't one
+extern "C" int mcle_metal_take_thumbnail(unsigned char* rgba) {
+    std::lock_guard<std::mutex> lock(g_thumbMutex);
+    if (g_thumbRgba.size() != (size_t)kThumbSize * kThumbSize * 4) return 0;
+    if (rgba) memcpy(rgba, g_thumbRgba.data(), g_thumbRgba.size());
+    g_thumbRgba.clear();
+    return 1;
+}
+
+// Before a world frame's drawable is taken
+extern "C" void mcle_metal_thumbnail_world_frame(void) {
+    if (g_thumbState.load() != 1 || !g.layer) return;
+    g.layer.framebufferOnly = NO;
+    g_thumbArmed = true;
+}
+
+static bool ensure_thumb_pipeline() {
+    if (g_thumbPso && g_thumbTex) return true;
+    NSError* err = nil;
+    id<MTLLibrary> lib = [g.device newLibraryWithSource:kThumbShaderSrc options:nil error:&err];
+    if (!lib) {
+        NSLog(@"[mcle_metal] thumbnail shader compile failed: %@", err);
+        return false;
+    }
+    MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc] init];
+    desc.vertexFunction                  = [lib newFunctionWithName:@"thumb_vert"];
+    desc.fragmentFunction                = [lib newFunctionWithName:@"thumb_frag"];
+    desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    g_thumbPso = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
+    MTLTextureDescriptor* td = [MTLTextureDescriptor
+        texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                      width:kThumbSize
+                                     height:kThumbSize
+                                  mipmapped:NO];
+    td.storageMode = MTLStorageModeShared;
+    td.usage       = MTLTextureUsageRenderTarget;
+    g_thumbTex = [g.device newTextureWithDescriptor:td];
+    return g_thumbPso && g_thumbTex;
+}
+
+// At the end of the world frame, before it's presented
+static void thumb_encode(void) {
+    if (!g_thumbArmed) return;
+    g_thumbArmed = false;
+    id<MTLTexture> src = g.drawable.texture;
+    // A drawable from before the change can't be read, the next one will be
+    if (!src || !(src.usage & MTLTextureUsageShaderRead)) return;
+    g.layer.framebufferOnly = YES;
+    if (!ensure_thumb_pipeline()) {
+        g_thumbState.store(0);
+        return;
+    }
+    const float w = (float)src.width, h = (float)src.height;
+    const float side = std::min(w, h);
+    const float rect[4] = {(w - side) * 0.5f / w, (h - side) * 0.5f / h, side / w, side / h};
+    MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+    rpd.colorAttachments[0].texture     = g_thumbTex;
+    rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
+    rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+    id<MTLRenderCommandEncoder> te = [g.cmd renderCommandEncoderWithDescriptor:rpd];
+    [te setRenderPipelineState:g_thumbPso];
+    [te setFragmentTexture:src atIndex:0];
+    [te setFragmentBytes:rect length:sizeof(rect) atIndex:0];
+    [te drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [te endEncoding];
+    g_thumbState.store(2);
+    id<MTLTexture> tex = g_thumbTex;
+    [g.cmd addCompletedHandler:^(id<MTLCommandBuffer>) {
+        std::vector<unsigned char> px((size_t)kThumbSize * kThumbSize * 4);
+        [tex getBytes:px.data()
+          bytesPerRow:kThumbSize * 4
+           fromRegion:MTLRegionMake2D(0, 0, kThumbSize, kThumbSize)
+          mipmapLevel:0];
+        // BGRA to RGBA
+        for (size_t i = 0; i < px.size(); i += 4) {
+            std::swap(px[i], px[i + 2]);
+            px[i + 3] = 255;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_thumbMutex);
+            g_thumbRgba = std::move(px);
+        }
+        g_thumbState.store(0);
+    }];
+}
+
 static uint64_t g_frame_start_ticks = 0;
 
 // Time spent per frame in each part, summed for the frame_ms line:
@@ -2191,6 +2329,7 @@ extern "C" void mcle_metal_frame_end(void) {
         [pe drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
         [pe endEncoding];
     }
+    thumb_encode();
     [g.cmd presentDrawable:g.drawable];
     [g.cmd commit];
     g.enc = nil;

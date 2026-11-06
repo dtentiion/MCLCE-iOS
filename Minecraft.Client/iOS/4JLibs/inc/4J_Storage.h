@@ -115,6 +115,8 @@ public:
     void SetSaveImages(PBYTE pbThumbnail, DWORD dwThumbnailBytes, PBYTE pbImage, DWORD dwImageBytes, PBYTE pbTextData,
                        DWORD dwTextDataBytes) {
         mcle_storage_set_save_images(pbThumbnail, dwThumbnailBytes, pbTextData, dwTextDataBytes);
+        // The thumbnail is GetSaveThumbnail's copy, Flush never frees it
+        delete[] pbThumbnail;
     }
     // Call before a new save to clear out stored save file name
     void ResetSaveData() { mcle_storage_reset_save_data(); }

@@ -32,6 +32,8 @@ extern "C" int mcle_log_msg(const char *msg);
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 extern "C" const wchar_t *mcle_wstring(int id);        // Game/MCLEStrings.cpp
 extern "C" int mcle_html_colour(int colour);           // Game/MCLEContainerMenu.cpp
+extern "C" void mcle_capture_save_thumbnail(void);     // Game/MCLESaveList.cpp
+extern "C" void mcle_get_save_thumbnail(unsigned char **data, unsigned int *size);
 
 // GAME_SETTINGS' skin fields, MCLE_iOS_Settings.mm
 extern "C" unsigned int  mcle_settings_get_skin(void);
@@ -456,7 +458,14 @@ struct McleAppStub {
         }
         return chars;
     }
-    template<class... A> void*          GetSaveThumbnail(A...)  { return nullptr; }
+    // CConsoleMinecraftApp::CaptureSaveThumbnail / GetSaveThumbnail
+    // (Windows64_App.cpp), the world frame taken for the save (MCLESaveList.cpp)
+    void CaptureSaveThumbnail() { mcle_capture_save_thumbnail(); }
+    void GetSaveThumbnail(PBYTE *pbData, DWORD *pdwSize) {
+        unsigned int size = 0;
+        mcle_get_save_thumbnail(pbData, pdwSize ? &size : nullptr);
+        if (pdwSize) *pdwSize = size;
+    }
     // Real signature returns `MOJANG_DATA*` - declared in stdafx.
     template<class... A> struct MOJANG_DATA* GetMojangDataForXuid(A...) { return nullptr; }
     template<class... A> int            GetTerrainFeaturePosition(A...) { return 0; }

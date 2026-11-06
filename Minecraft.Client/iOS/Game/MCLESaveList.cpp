@@ -290,11 +290,19 @@ void put_be32(std::vector<unsigned char> &out, unsigned int v) {
     out.push_back((unsigned char)v);
 }
 
+void png_chunk(std::vector<unsigned char> &out, const char *type, const unsigned char *data, unsigned int len) {
+    put_be32(out, len);
+    const size_t start = out.size();
+    out.insert(out.end(), type, type + 4);
+    if (len) out.insert(out.end(), data, data + len);
+    put_be32(out, (unsigned int)crc32(0, &out[start], (uInt)(len + 4)));
+}
+
 // The save's thumbnails/thumbData.png, with SetSaveImages' text in a tEXt
 // chunk after the header, which is where LoadMenu reads the seed, the host
-// options and the texture pack back from. No screenshot is taken on iOS
-// yet, so the image already there is kept, and a new save gets the texture
-// pack's icon.
+// options and the texture pack back from. A save with no capture (the one
+// made when a world is created, or on going to the background) keeps the
+// image already there, and a new one gets the texture pack's icon.
 bool write_thumbnail(const std::string &root, const std::string &dir) {
     static const unsigned char kSig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     const std::string path = dir + "/thumbnails/thumbData.png";
@@ -423,6 +431,53 @@ extern "C" void mcle_storage_set_save_images(const unsigned char *thumb, unsigne
     std::lock_guard<std::mutex> lock(g_storageMutex);
     g_saveThumb.assign(thumb, thumb ? thumb + thumbBytes : thumb);
     g_saveText.assign(text, text ? text + textBytes : text);
+}
+
+extern "C" void mcle_metal_capture_thumbnail(void);
+extern "C" int mcle_metal_take_thumbnail(unsigned char *rgba);
+
+// CConsoleMinecraftApp::CaptureSaveThumbnail: the next world frame is taken
+extern "C" void mcle_capture_save_thumbnail(void) {
+    mcle_metal_capture_thumbnail();
+}
+
+// GetSaveThumbnail (Windows64_App.cpp): the capture as a 64x64 RGBA png
+// with an sRGB chunk like RenderManager.CaptureThumbnail makes, handed over
+// once. Nothing if no capture happened, like the first save of a new world.
+// Null arguments just let go of it.
+extern "C" void mcle_get_save_thumbnail(unsigned char **data, unsigned int *size) {
+    if (data) *data = nullptr;
+    if (size) *size = 0;
+    const unsigned int kSize = 64;
+    std::vector<unsigned char> rgba(kSize * kSize * 4);
+    if (!mcle_metal_take_thumbnail(rgba.data()) || !data) return;
+
+    std::vector<unsigned char> raw;
+    raw.reserve(kSize * (kSize * 4 + 1));
+    for (unsigned int y = 0; y < kSize; ++y) {
+        raw.push_back(0);
+        raw.insert(raw.end(), rgba.begin() + y * kSize * 4, rgba.begin() + (y + 1) * kSize * 4);
+    }
+    uLongf zlen = compressBound((uLong)raw.size());
+    std::vector<unsigned char> z(zlen);
+    if (compress2(z.data(), &zlen, raw.data(), (uLong)raw.size(), Z_BEST_COMPRESSION) != Z_OK) return;
+
+    static const unsigned char kSig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    std::vector<unsigned char> png(kSig, kSig + 8);
+    std::vector<unsigned char> ihdr;
+    put_be32(ihdr, kSize);
+    put_be32(ihdr, kSize);
+    const unsigned char rest[5] = {8, 6, 0, 0, 0}; // 8 bit RGBA
+    ihdr.insert(ihdr.end(), rest, rest + 5);
+    png_chunk(png, "IHDR", ihdr.data(), (unsigned int)ihdr.size());
+    const unsigned char intent = 0;
+    png_chunk(png, "sRGB", &intent, 1);
+    png_chunk(png, "IDAT", z.data(), (unsigned int)zlen);
+    png_chunk(png, "IEND", nullptr, 0);
+
+    *data = new unsigned char[png.size()];
+    memcpy(*data, png.data(), png.size());
+    if (size) *size = (unsigned int)png.size();
 }
 
 extern "C" const char *mcle_saves_folder(int i) { auto e = entry(i); return e ? e->folder.c_str() : ""; }

@@ -128,6 +128,8 @@ extern "C" void mcle_render_frame(void) {
     } else {
         cr = 0.07f; cg = 0.07f; cb = 0.09f;
     }
+    // Minecraft::run captures the save thumbnail from the world frame
+    if (worldAlive) mcle_metal_thumbnail_world_frame();
     if (mcle_metal_frame_begin(cr, cg, cb, 1.0f) != 0) return;
 
     int vw = 0, vh = 0;
