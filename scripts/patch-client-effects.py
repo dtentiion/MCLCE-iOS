@@ -2,12 +2,17 @@
 """Client side effects of a few server packets.
 
 There's no client level on iOS, so packets the server sends the local
-player never arrive. Two of them only make particles on the client:
+player never arrive. A few of them only make particles and sounds on the
+client:
 
 - AnimatePacket CRITICAL_HIT / MAGIC_CRITICAL_HIT from ServerPlayer::crit
   and magicCrit: ClientConnection::handleAnimate adds a CritParticle.
-- TakeItemEntityPacket from LivingEntity::take: handleTakeItemEntity adds
-  the TakeAnimationParticle that flies the item into whoever took it.
+- TakeItemEntityPacket from LivingEntity::take: handleTakeItemEntity plays
+  the pickup pop (the orb sound for xp) and adds the TakeAnimationParticle
+  that flies the item into whoever took it.
+- EntityEventPacket from ServerLevel::broadcastEntityEvent:
+  handleEntityEvent's hearts, villager and witch particles, the zombie
+  cure sound and the fireworks explosion.
 
 Game/MCLEGameLoop.cpp does those right where the packets are sent.
 Idempotent.
@@ -67,3 +72,19 @@ patch(UP / "Minecraft.World" / "LivingEntity.cpp", [
      "#endif\n"
      "\t\tEntityTracker *entityTracker"),
 ])
+
+EVENT = "\tserver->getLevel(dimension->id)->getTracker()->broadcastAndSend(e, p);\n}\n"
+patch(UP / "Minecraft.Client" / "ServerLevel.cpp", [
+    ("void ServerLevel::broadcastEntityEvent(shared_ptr<Entity> e, byte event)\n",
+     "#ifdef __APPLE_IOS__\n"
+     "void mcle_client_entity_event(shared_ptr<Entity> e, byte event);\n"
+     "#endif\n\n"
+     "void ServerLevel::broadcastEntityEvent(shared_ptr<Entity> e, byte event)\n"),
+    (EVENT,
+     "\tserver->getLevel(dimension->id)->getTracker()->broadcastAndSend(e, p);\n"
+     "#ifdef __APPLE_IOS__\n"
+     "\tmcle_client_entity_event(e, event);\n"
+     "#endif\n"
+     "}\n"),
+])
+

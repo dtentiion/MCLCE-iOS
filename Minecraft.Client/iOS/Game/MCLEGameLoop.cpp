@@ -133,6 +133,11 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/EnchantmentHelper.h"
 #include "../../../upstream/Minecraft.Client/CritParticle.h"
 #include "../../../upstream/Minecraft.Client/TakeAnimationParticle.h"
+#include "../../../upstream/Minecraft.Client/FireworksParticles.h"
+#include "../../../upstream/Minecraft.World/FireworksItem.h"
+#include "../../../upstream/Minecraft.World/EntityEvent.h"
+#include "../../../upstream/Minecraft.World/SynchedEntityData.h"
+#include "../../../upstream/Minecraft.World/ItemInstance.h"
 #include "../../../upstream/Minecraft.World/CompressedTileStorage.h"
 #include "../../../upstream/Minecraft.World/SparseDataStorage.h"
 #include "../../../upstream/Minecraft.World/McRegionChunkStorage.h"
@@ -1990,6 +1995,54 @@ void mcle_client_take(shared_ptr<Entity> item, shared_ptr<Entity> taker) {
     }
     std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
     mc->particleEngine->add(std::make_shared<TakeAnimationParticle>(item->level, item, taker, -0.5f));
+}
+
+// ClientConnection::handleEntityEvent, for what the client's handleEntityEvent
+// adds to the entity the server already changed: particles and the zombie
+// cure sound. Hurt and death, eating, sheep eating grass, wolves shaking,
+// golem arms and the wolf and ocelot taming particles are made by the
+// server's own entity, so those aren't run again.
+void mcle_client_entity_event(shared_ptr<Entity> e, byte event) {
+    if (!e || !g_player || e->level != g_player->level) return;
+    switch (event) {
+    case EntityEvent::ZOMBIE_CONVERTING:
+        if (e->instanceof(eTYPE_ZOMBIE)) e->handleEntityEvent(event);
+        break;
+    case EntityEvent::WITCH_HAT_MAGIC:
+        if (e->instanceof(eTYPE_WITCH)) e->handleEntityEvent(event);
+        break;
+    case EntityEvent::LOVE_HEARTS:
+    case EntityEvent::VILLAGER_ANGRY:
+    case EntityEvent::VILLAGER_HAPPY:
+        if (e->instanceof(eTYPE_VILLAGER)) e->handleEntityEvent(event);
+        break;
+    case EntityEvent::IN_LOVE_HEARTS:
+        if (e->instanceof(eTYPE_ANIMAL)) e->handleEntityEvent(event);
+        break;
+    case EntityEvent::TAMING_SUCCEEDED:
+    case EntityEvent::TAMING_FAILED:
+        if (e->instanceof(eTYPE_HORSE)) e->handleEntityEvent(event);
+        break;
+    case EntityEvent::FIREWORKS_EXPLODE:
+        // FireworksRocketEntity::handleEntityEvent only does it on a client
+        // level, then MultiPlayerLevel::createFireworks
+        if (e->instanceof(eTYPE_FIREWORKS_ROCKET)) {
+            Minecraft *mc = Minecraft::GetInstance();
+            if (!mc || !mc->particleEngine) break;
+            const int DATA_ID_FIREWORKS_ITEM = 8;  // FireworksRocketEntity's
+            shared_ptr<ItemInstance> sourceItem = e->getEntityData()->getItemInstance(DATA_ID_FIREWORKS_ITEM);
+            CompoundTag *tag = nullptr;
+            if (sourceItem != nullptr && sourceItem->hasTag()) {
+                tag = sourceItem->getTag()->getCompound(FireworksItem::TAG_FIREWORKS);
+            }
+            std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+            mc->particleEngine->add(std::make_shared<FireworksParticles::FireworksStarter>(
+                e->level, e->x, e->y, e->z, e->xd, e->yd, e->zd, mc->particleEngine, tag));
+        }
+        break;
+    default:
+        break;
+    }
 }
 
 // minecraft->level->destroyTileProgress from MultiPlayerGameMode
