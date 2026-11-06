@@ -2973,7 +2973,7 @@ extern "C" void mcle_game_tick(void) {
     // PlayerConnection::handleMovePlayer runs doTick(false) on the server
     // player every tick. Player::tick in there does the aiStep movement
     // (xxa/yya/jumping are set per frame from the controller in
-    // mcle_world_drive_renderer) plus food, item use, sleeping and the rest.
+    // mcle_world_drive_renderer) plus food and the rest.
     // tickEntities above already saved xOld via Level::tick, so the camera
     // interp anchor is still right.
     bool published = false;
@@ -2987,6 +2987,9 @@ extern "C" void mcle_game_tick(void) {
                 // that time under the frame lock keeps a frame from seeing the
                 // new place with the old time.
                 std::lock_guard<std::mutex> frameLock(g_frameMutex);
+                // ServerConnection::tick, before the player's packets: the
+                // item in use counting down, sleeping and the xp pickup delay
+                g_player->updateFrameTick();
                 mcle_player_move_tick(g_player, menu ? 0.0f : mcle_ios_input_poll_lx(0) / 1000.0f,
                                       menu ? 0.0f : mcle_ios_input_poll_ly(0) / 1000.0f,
                                       menu ? 0.0f : mcle_ios_input_poll_rx(0) / 1000.0f,
