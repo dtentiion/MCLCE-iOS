@@ -89,6 +89,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/LevelData.h"
 #include "../../../upstream/Minecraft.World/LevelSettings.h"
 #include "../../../upstream/Minecraft.World/LevelType.h"
+#include "../../../upstream/Minecraft.World/BiomeSource.h"
 #include "../../../upstream/Minecraft.World/MaterialColor.h"
 #include "../../../upstream/Minecraft.World/Material.h"
 #include "../../../upstream/Minecraft.World/Recipes.h"
@@ -184,6 +185,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/ItemInHandRenderer.h"
 #include "MCLEPlayerInput.h"
 #include "MCLESound.h"
+#include "MCLEStartGame.h"
 #include "MCLEHud.h"
 #include "../../../upstream/Minecraft.Client/EntityTracker.h"
 #include <dispatch/dispatch.h>
@@ -487,6 +489,19 @@ std::atomic<bool>             g_simThreadStarted{ false };
 
 // Save folder picked in LoadMenu. Written before the init thread starts.
 std::wstring                  g_pendingLevelId;
+// CreateWorldMenu's NetworkGameInitData for a new level, no save data
+struct NewWorldParams {
+    bool active = false;
+    int64_t seed = 0;
+    bool findSeed = false;
+    int xzSize = LEVEL_MAX_WIDTH;
+    int hellScale = HELL_LEVEL_MAX_SCALE;
+};
+NewWorldParams                g_newWorld;
+// The level being loaded was made new, and findSeed is looking for its
+// seed, for the loading screen
+std::atomic<bool>             g_loadIsNew{ false };
+std::atomic<bool>             g_loadFindingSeed{ false };
 // Loading screen state for the view controller: 0 initialising server,
 // 1 loading spawn area, 2 finalizing. g_renderReady flips once the
 // renderer, textures and HUD exist, so the menu stays up until then.
@@ -934,7 +949,13 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
 
-    if (!mcle_open_save_bundle(savesDir + L"/" + levelId)) return;
+    if (g_newWorld.active) {
+        // MinecraftServer::loadLevel with no save data: a new, empty save file
+        g_saveFile = new ConsoleSaveFileOriginal(L"");
+        g_saveFile->ConvertToLocalPlatform();
+    } else if (!mcle_open_save_bundle(savesDir + L"/" + levelId)) {
+        return;
+    }
 
     // Step 3: build the storage directly. Parity with MinecraftServer.cpp:919
     // (`storage = make_shared<McRegionLevelStorage>(pSave, File(L"."), name, true)`).
@@ -966,12 +987,14 @@ void initImpl() {
         g_initState = kStateFailed;
         return;
     }
-    if (!levelData) {
+    // A new level has no level.dat yet, the level makes its data from the settings
+    if (!levelData && !g_newWorld.active) {
         MCLE_LOG("mcle_game_init: prepareLevel returned null");
         g_initState = kStateFailed;
         return;
     }
-    g_levelName = levelData->getLevelName();
+    // loadLevel's name is the world name for a new level
+    g_levelName = levelData ? levelData->getLevelName() : levelId;
     MCLE_LOG("mcle_game_init: prepareLevel succeeded, name = %{public}s",
              narrow(g_levelName).c_str());
 
@@ -979,7 +1002,27 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: building LevelSettings...");
     LevelSettings *settings = nullptr;
     try {
-        settings = new LevelSettings(levelData);
+        if (g_newWorld.active) {
+            // MinecraftServer::initServer picks the level type and finds a
+            // seed if there wasn't one, then loadLevel makes the settings
+            LevelType *pLevelType = LevelType::getLevelType(
+                app.GetGameHostOption(eGameHostOption_LevelType) > 0 ? L"flat" : L"default");
+            if (pLevelType == nullptr) pLevelType = LevelType::lvl_normal;
+            if (g_newWorld.findSeed) {
+                g_loadFindingSeed = true;
+                g_newWorld.seed = BiomeSource::findSeed(pLevelType);
+                g_loadFindingSeed = false;
+            }
+            GameType *gameType = LevelSettings::validateGameType(app.GetGameHostOption(eGameHostOption_GameType));
+            // isHardcore() is false
+            settings = new LevelSettings(g_newWorld.seed, gameType,
+                                         app.GetGameHostOption(eGameHostOption_Structures) > 0, false, true,
+                                         pLevelType, g_newWorld.xzSize, g_newWorld.hellScale);
+            if (app.GetGameHostOption(eGameHostOption_BonusChest)) settings->enableStartingBonusItems();
+            MCLE_LOG("mcle_game_init: new level, seed %lld", (long long)g_newWorld.seed);
+        } else {
+            settings = new LevelSettings(levelData);
+        }
         MCLE_LOG("mcle_game_init: LevelSettings at %p", (void*)settings);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: LevelSettings ctor threw: %{public}s", e.what());
@@ -1115,6 +1158,10 @@ void initImpl() {
             g_levels[i]->setSpawnSettings(true, true);
             g_levels[i]->getLevelData()->setGameType(gameType);
         }
+        g_loadIsNew = g_levels[0]->isNew;
+        app.SetGameHostOption(eGameHostOption_HasBeenInCreative,
+                              gameType == GameType::CREATIVE || g_levels[0]->getHasBeenInCreative());
+        app.SetGameHostOption(eGameHostOption_Structures, g_levels[0]->isGenerateMapFeatures());
     }
 
     // Step 7: preload chunks around spawn for the overworld. Parity with
@@ -1685,6 +1732,11 @@ void initImpl() {
 
     g_loadPercent = 100;
     g_renderReady = true;
+
+    // MinecraftServer::loadLevel saves a newly created level straight away.
+    // saveToDisc looks at Minecraft's texture packs, which only exist from
+    // here, so the save goes now, the way an autosave does.
+    if (g_loadIsNew) mcle_save_now();
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
@@ -1982,48 +2034,75 @@ extern "C" void mcle_game_init(void) {
 extern "C" void mcle_game_tick(void); // forward decl for the sim loop
 extern "C" void mcle_delete_reassigned_storage(void); // link_stubs.cpp
 
-// LoadMenu calls this once a save is picked. Same spot where
-// UIScene_LoadMenu::StartGameFromSave hands RunNetworkGameThreadProc to
-// the FullscreenProgress scene. Init runs on its own thread so the
-// loading screen keeps animating.
-// UIScene_LoadMenu: the save's host options fill the More Options params
-// (or their defaults), then StartGameFromSave sets the app's host options
-// from them, the difficulty slider and the game mode toggle.
-extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int uiHostOptions,
-                                           int difficulty, int gameModeId) {
-    bool bPVP = true, bTrust = true, bFireSpreads = true, bTNT = true, bHostPrivileges = false;
-    bool bMobGriefing = true, bKeepInventory = false, bDoMobSpawning = true, bDoMobLoot = true;
-    bool bDoTileDrops = true, bNaturalRegeneration = true, bDoDaylightCycle = true;
-    const int worldSize = 3;
-    bool bIsSaveOwner = true;
+// LoadMenu and CreateWorldMenu start the game here. Same spot where they
+// hand RunNetworkGameThreadProc to the FullscreenProgress scene. Init runs
+// on its own thread so the loading screen keeps animating.
+static int mcle_start_game_thread() {
+    g_loadStage = 0;
+    g_loadPercent = 0;
+    g_loadIsNew = false;
+    g_loadFindingSeed = false;
+    g_initStarted = true;
+    pthread_t t;
+    if (pthread_create(&t, nullptr, [](void *) -> void * {
+            mcle_game_init();
+            return nullptr;
+        }, nullptr) != 0) {
+        g_initStarted = false;
+        return 0;
+    }
+    pthread_detach(t);
+    return 1;
+}
 
-    if (hostOptionsRead) {
-        bPVP = app.GetGameHostOption(uiHostOptions, eGameHostOption_PvP) > 0;
-        bTrust = app.GetGameHostOption(uiHostOptions, eGameHostOption_TrustPlayers) > 0;
-        bFireSpreads = app.GetGameHostOption(uiHostOptions, eGameHostOption_FireSpreads) > 0;
-        bTNT = app.GetGameHostOption(uiHostOptions, eGameHostOption_TNT) > 0;
-        bHostPrivileges = app.GetGameHostOption(uiHostOptions, eGameHostOption_CheatsEnabled) > 0;
+// UIScene_LoadMenu's constructor: the More Options params for the save,
+// from its host options when its thumbnail had them
+void mcle_load_menu_options(MCLELaunchMoreOptions &params, bool hostOptionsRead, unsigned int uiHostOptions,
+                            bool &isSaveOwner) {
+    params.bGenerateOptions = false;
+    params.bPVP = true;
+    params.bTrust = true;
+    params.bFireSpreads = true;
+    params.bHostPrivileges = false;
+    params.bTNT = true;
+    params.iPad = 0;
+    isSaveOwner = true;
+    if (!hostOptionsRead) return;
 
-        bMobGriefing = app.GetGameHostOption(uiHostOptions, eGameHostOption_MobGriefing);
-        bKeepInventory = app.GetGameHostOption(uiHostOptions, eGameHostOption_KeepInventory);
-        bDoMobSpawning = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoMobSpawning);
-        bDoMobLoot = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoMobLoot);
-        bDoTileDrops = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoTileDrops);
-        bNaturalRegeneration = app.GetGameHostOption(uiHostOptions, eGameHostOption_NaturalRegeneration);
-        bDoDaylightCycle = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoDaylightCycle);
+    // Setup all the text and checkboxes to match what the game was saved with on
+    params.bPVP = app.GetGameHostOption(uiHostOptions, eGameHostOption_PvP) > 0;
+    params.bTrust = app.GetGameHostOption(uiHostOptions, eGameHostOption_TrustPlayers) > 0;
+    params.bFireSpreads = app.GetGameHostOption(uiHostOptions, eGameHostOption_FireSpreads) > 0;
+    params.bTNT = app.GetGameHostOption(uiHostOptions, eGameHostOption_TNT) > 0;
+    params.bHostPrivileges = app.GetGameHostOption(uiHostOptions, eGameHostOption_CheatsEnabled) > 0;
+    params.bDisableSaving = app.GetGameHostOption(uiHostOptions, eGameHostOption_DisableSaving) > 0;
+    params.currentWorldSize = static_cast<int>(app.GetGameHostOption(uiHostOptions, eGameHostOption_WorldSize));
+    params.newWorldSize = params.currentWorldSize;
 
-        if (!bHostPrivileges) {
-            // Set defaults
-            bMobGriefing = true;
-            bKeepInventory = false;
-            bDoMobSpawning = true;
-            bDoDaylightCycle = true;
-        }
+    params.bMobGriefing = app.GetGameHostOption(uiHostOptions, eGameHostOption_MobGriefing);
+    params.bKeepInventory = app.GetGameHostOption(uiHostOptions, eGameHostOption_KeepInventory);
+    params.bDoMobSpawning = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoMobSpawning);
+    params.bDoMobLoot = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoMobLoot);
+    params.bDoTileDrops = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoTileDrops);
+    params.bNaturalRegeneration = app.GetGameHostOption(uiHostOptions, eGameHostOption_NaturalRegeneration);
+    params.bDoDaylightCycle = app.GetGameHostOption(uiHostOptions, eGameHostOption_DoDaylightCycle);
 
-        if (app.GetGameHostOption(uiHostOptions, eGameHostOption_WasntSaveOwner) > 0) bIsSaveOwner = false;
+    if (!params.bHostPrivileges) {
+        // Set defaults
+        params.bMobGriefing = true;
+        params.bKeepInventory = false;
+        params.bDoMobSpawning = true;
+        params.bDoDaylightCycle = true;
     }
 
-    app.SetGameHostOption(eGameHostOption_WasntSaveOwner, (!bIsSaveOwner));
+    if (app.GetGameHostOption(uiHostOptions, eGameHostOption_WasntSaveOwner) > 0) isSaveOwner = false;
+}
+
+// UIScene_LoadMenu::LaunchGame and StartGameFromSave: the app's host options
+// from the params, the difficulty setting and the game mode toggle
+void mcle_game_set_load_options(const MCLELaunchMoreOptions &params, bool isSaveOwner, int difficulty,
+                                int gameModeId) {
+    app.SetGameHostOption(eGameHostOption_WasntSaveOwner, (!isSaveOwner));
 
     const int pad = 0;
     app.SetGameHostOption(eGameHostOption_Difficulty, difficulty);
@@ -2031,28 +2110,143 @@ extern "C" void mcle_game_set_load_options(int hostOptionsRead, unsigned int uiH
     app.SetGameHostOption(eGameHostOption_Gamertags, app.GetGameSettings(pad, eGameSetting_GamertagsVisible));
     app.SetGameHostOption(eGameHostOption_BedrockFog, app.GetGameSettings(pad, eGameSetting_BedrockFog) ? 1 : 0);
 
-    app.SetGameHostOption(eGameHostOption_PvP, bPVP);
-    app.SetGameHostOption(eGameHostOption_TrustPlayers, bTrust);
-    app.SetGameHostOption(eGameHostOption_FireSpreads, bFireSpreads);
-    app.SetGameHostOption(eGameHostOption_TNT, bTNT);
-    app.SetGameHostOption(eGameHostOption_HostCanFly, bHostPrivileges);
-    app.SetGameHostOption(eGameHostOption_HostCanChangeHunger, bHostPrivileges);
-    app.SetGameHostOption(eGameHostOption_HostCanBeInvisible, bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_PvP, params.bPVP);
+    app.SetGameHostOption(eGameHostOption_TrustPlayers, params.bTrust);
+    app.SetGameHostOption(eGameHostOption_FireSpreads, params.bFireSpreads);
+    app.SetGameHostOption(eGameHostOption_TNT, params.bTNT);
+    app.SetGameHostOption(eGameHostOption_HostCanFly, params.bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_HostCanChangeHunger, params.bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_HostCanBeInvisible, params.bHostPrivileges);
 
-    app.SetGameHostOption(eGameHostOption_MobGriefing, bMobGriefing);
-    app.SetGameHostOption(eGameHostOption_KeepInventory, bKeepInventory);
-    app.SetGameHostOption(eGameHostOption_DoMobSpawning, bDoMobSpawning);
-    app.SetGameHostOption(eGameHostOption_DoMobLoot, bDoMobLoot);
-    app.SetGameHostOption(eGameHostOption_DoTileDrops, bDoTileDrops);
-    app.SetGameHostOption(eGameHostOption_NaturalRegeneration, bNaturalRegeneration);
-    app.SetGameHostOption(eGameHostOption_DoDaylightCycle, bDoDaylightCycle);
+    app.SetGameHostOption(eGameHostOption_MobGriefing, params.bMobGriefing);
+    app.SetGameHostOption(eGameHostOption_KeepInventory, params.bKeepInventory);
+    app.SetGameHostOption(eGameHostOption_DoMobSpawning, params.bDoMobSpawning);
+    app.SetGameHostOption(eGameHostOption_DoMobLoot, params.bDoMobLoot);
+    app.SetGameHostOption(eGameHostOption_DoTileDrops, params.bDoTileDrops);
+    app.SetGameHostOption(eGameHostOption_NaturalRegeneration, params.bNaturalRegeneration);
+    app.SetGameHostOption(eGameHostOption_DoDaylightCycle, params.bDoDaylightCycle);
 
-    app.SetGameHostOption(eGameHostOption_WorldSize, worldSize + 1); // 0 is GAME_HOST_OPTION_WORLDSIZE_UNKNOWN
+    app.SetGameHostOption(eGameHostOption_WorldSize, params.worldSize + 1); // 0 is GAME_HOST_OPTION_WORLDSIZE_UNKNOWN
+
+    // flag if the user wants to reset the Nether to force a Fortress with netherwart etc.
+    app.SetResetNether(params.bResetNether);
+    // clear out the app's terrain features list
+    app.ClearTerrainFeaturePosition();
 
     app.SetGameHostOption(eGameHostOption_GameType, gameModeId);
 
     MCLE_LOG("load options: host=%08x difficulty=%d gameType=%d", app.GetGameHostOption(eGameHostOption_All),
              difficulty, gameModeId);
+}
+
+// UIScene_CreateWorldMenu::CreateGame. The game thread then starts on a
+// level with no save data, like RunNetworkGameThreadProc with saveData null.
+int mcle_game_create_world(const MCLELaunchMoreOptions &params, const std::wstring &worldName, int gameModeId,
+                           int difficulty) {
+    if (g_initStarted || g_initState != kStateUnstarted) return 0;
+
+    // clear out the app's terrain features list
+    app.ClearTerrainFeaturePosition();
+
+    StorageManager.ResetSaveData();
+    // Make our next save default to the name of the level
+    StorageManager.SetSaveTitle(worldName.c_str());
+
+    const std::wstring &wSeed = params.seed;
+    NewWorldParams param;
+    param.active = true;
+    if (wSeed.length() != 0) {
+        int64_t value = 0;
+        unsigned int len = static_cast<unsigned int>(wSeed.length());
+
+        // Check if the input string contains a numerical value
+        bool isNumber = true;
+        for (unsigned int i = 0; i < len; ++i) {
+            if (wSeed.at(i) < L'0' || wSeed.at(i) > L'9') {
+                if (!(i == 0 && wSeed.at(i) == L'-')) {
+                    isNumber = false;
+                    break;
+                }
+            }
+        }
+
+        // If the input string is a numerical value, convert it to a number
+        if (isNumber) value = _fromString<int64_t>(wSeed);
+
+        // If the value is not 0 use it, otherwise use the algorithm from the java String.hashCode() function to hash it
+        if (value != 0) {
+            param.seed = value;
+        } else {
+            // Wraps like the int arithmetic it's copied from
+            unsigned int hashValue = 0;
+            for (unsigned int i = 0; i < len; ++i) hashValue = 31u * hashValue + static_cast<unsigned int>(wSeed.at(i));
+            param.seed = static_cast<int>(hashValue);
+        }
+    } else {
+        // the seed is found in initServer
+        param.findSeed = true;
+    }
+
+    const int pad = 0;
+    // Minecraft's options->difficulty is the Difficulty setting
+    app.SetGameHostOption(eGameHostOption_Difficulty, difficulty);
+    app.SetGameHostOption(eGameHostOption_FriendsOfFriends, params.bAllowFriendsOfFriends);
+    app.SetGameHostOption(eGameHostOption_Gamertags, app.GetGameSettings(pad, eGameSetting_GamertagsVisible) ? 1 : 0);
+
+    app.SetGameHostOption(eGameHostOption_BedrockFog, app.GetGameSettings(pad, eGameSetting_BedrockFog) ? 1 : 0);
+
+    app.SetGameHostOption(eGameHostOption_GameType, gameModeId);
+    app.SetGameHostOption(eGameHostOption_LevelType, params.bFlatWorld);
+    app.SetGameHostOption(eGameHostOption_Structures, params.bStructures);
+    app.SetGameHostOption(eGameHostOption_BonusChest, params.bBonusChest);
+
+    app.SetGameHostOption(eGameHostOption_PvP, params.bPVP);
+    app.SetGameHostOption(eGameHostOption_TrustPlayers, params.bTrust);
+    app.SetGameHostOption(eGameHostOption_FireSpreads, params.bFireSpreads);
+    app.SetGameHostOption(eGameHostOption_TNT, params.bTNT);
+    app.SetGameHostOption(eGameHostOption_HostCanFly, params.bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_HostCanChangeHunger, params.bHostPrivileges);
+    app.SetGameHostOption(eGameHostOption_HostCanBeInvisible, params.bHostPrivileges);
+
+    app.SetGameHostOption(eGameHostOption_MobGriefing, params.bMobGriefing);
+    app.SetGameHostOption(eGameHostOption_KeepInventory, params.bKeepInventory);
+    app.SetGameHostOption(eGameHostOption_DoMobSpawning, params.bDoMobSpawning);
+    app.SetGameHostOption(eGameHostOption_DoMobLoot, params.bDoMobLoot);
+    app.SetGameHostOption(eGameHostOption_DoTileDrops, params.bDoTileDrops);
+    app.SetGameHostOption(eGameHostOption_NaturalRegeneration, params.bNaturalRegeneration);
+    app.SetGameHostOption(eGameHostOption_DoDaylightCycle, params.bDoDaylightCycle);
+
+    app.SetGameHostOption(eGameHostOption_WasntSaveOwner, false);
+    app.SetGameHostOption(eGameHostOption_WorldSize, params.worldSize + 1); // 0 is GAME_HOST_OPTION_WORLDSIZE_UNKNOWN
+
+    switch (params.worldSize) {
+    case 0:
+        // Classic
+        param.xzSize = LEVEL_WIDTH_CLASSIC;
+        param.hellScale = HELL_LEVEL_SCALE_CLASSIC; // hellsize = 54/3 = 18
+        break;
+    case 1:
+        // Small
+        param.xzSize = LEVEL_WIDTH_SMALL;
+        param.hellScale = HELL_LEVEL_SCALE_SMALL; // hellsize = ceil(64/3) = 22
+        break;
+    case 2:
+        // Medium
+        param.xzSize = LEVEL_WIDTH_MEDIUM;
+        param.hellScale = HELL_LEVEL_SCALE_MEDIUM; // hellsize= ceil(3*64/6) = 32
+        break;
+    case 3:
+        // Large
+        param.xzSize = LEVEL_WIDTH_LARGE;
+        param.hellScale = HELL_LEVEL_SCALE_LARGE; // hellsize = ceil(5*64/8) = 40
+        break;
+    }
+
+    MCLE_LOG("create world: host=%08x seed=%lld findSeed=%d xz=%d", app.GetGameHostOption(eGameHostOption_All),
+             (long long)param.seed, param.findSeed ? 1 : 0, param.xzSize);
+    g_newWorld = param;
+    g_pendingLevelId = worldName;
+    return mcle_start_game_thread();
 }
 
 // UIComponent_Panorama::tick reads the loaded level's game time and the
@@ -2141,19 +2335,18 @@ extern "C" void mcle_game_set_paused(int paused) {
 extern "C" int mcle_game_start(const char *levelFolder) {
     if (g_initStarted || g_initState != kStateUnstarted) return 0;
     g_pendingLevelId = widen(levelFolder ? levelFolder : "");
-    g_loadStage = 0;
-    g_loadPercent = 0;
-    g_initStarted = true;
-    pthread_t t;
-    if (pthread_create(&t, nullptr, [](void *) -> void * {
-            mcle_game_init();
-            return nullptr;
-        }, nullptr) != 0) {
-        g_initStarted = false;
-        return 0;
-    }
-    pthread_detach(t);
-    return 1;
+    g_newWorld = NewWorldParams();
+    return mcle_start_game_thread();
+}
+
+// FullscreenProgress says it's generating the spawn area for a new level
+extern "C" int mcle_game_load_is_new(void) {
+    return g_loadIsNew.load() ? 1 : 0;
+}
+
+// and that it's finding a seed while findSeed runs
+extern "C" int mcle_game_load_finding_seed(void) {
+    return g_loadFindingSeed.load() ? 1 : 0;
 }
 
 // -1 failed, 0-2 g_loadStage, 3 ready to draw.
@@ -3900,6 +4093,8 @@ static void mcle_exit_world(bool save) {
     g_playerDead.store(false, std::memory_order_relaxed);
     g_respawnRequested.store(false, std::memory_order_relaxed);
     g_pendingLevelId.clear();
+    g_newWorld = NewWorldParams();
+    g_loadIsNew = false;
     g_initStarted = false;
     g_initState = kStateUnstarted;
     MCLE_LOG("EXIT_WORLD: done");

@@ -1722,3 +1722,9 @@ SEL_PY="$REPO_ROOT/scripts/patch-savedentities-leak.py"
 if [ -f "$SEL_PY" ]; then
     python3 "$SEL_PY"
 fi
+
+# BiomeSource::findSeed runs before the port has a progress renderer
+BFS_PY="$REPO_ROOT/scripts/patch-biomesource-findseed-progress.py"
+if [ -f "$BFS_PY" ]; then
+    python3 "$BFS_PY"
+fi

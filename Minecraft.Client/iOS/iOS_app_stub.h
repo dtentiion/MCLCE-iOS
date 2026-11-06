@@ -223,7 +223,10 @@ struct McleAppStub {
     template<class... A> bool           GetMobsDontAttackEnabled(A...) { return false; }
     template<class... A> bool           GetMobsDontTickEnabled(A...)   { return false; }
     template<class... A> bool           GetWriteSavesToFolderEnabled(A...) { return false; }
-    template<class... A> bool           GetResetNether(A...)    { return false; }
+    // LoadMenu's More Options can ask for the Nether to be made again
+    bool m_bResetNether = false;
+    void SetResetNether(bool bResetNether) { m_bResetNether = bResetNether; }
+    bool GetResetNether() { return m_bResetNether; }
     template<class... A> bool           DebugArtToolsOn(A...)   { return false; }
     template<class... A> bool           DebugSettingsOn(A...)   { return false; }
     template<class... A> bool           DefaultCapeExists(A...) { return false; }
