@@ -671,18 +671,18 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
         P->drop(false);
     }
 
-    // The crafting action. In creative it's the creative menu, which isn't
-    // here yet. Looking at a crafting table it's used like the use button
-    // would, which opens the 3x3; anywhere else it's the 2x2.
+    // The crafting action. In creative it's the creative menu. Looking at a
+    // crafting table it's used like the use button would, which opens the
+    // 3x3; anywhere else it's the 2x2.
     if (pressed & actionButtons(MINECRAFT_ACTION_CRAFTING)) {
         if (isCreative()) {
-            // app.LoadCreativeMenu
+            mcle_container_request(MCLE_CONTAINER_CREATIVE);
         } else if (s.hitResult != nullptr && s.hitResult->type == HitResult::TILE &&
                    L->getTile(s.hitResult->x, s.hitResult->y, s.hitResult->z) == Tile::workBench_Id) {
             bool usedItem = false;
             useItemOn(nullptr, s.hitResult->x, s.hitResult->y, s.hitResult->z, 0, s.hitResult->pos, &usedItem);
         } else {
-            mcle_container_request_crafting();
+            mcle_container_request(MCLE_CONTAINER_CRAFTING_2X2);
         }
     }
 

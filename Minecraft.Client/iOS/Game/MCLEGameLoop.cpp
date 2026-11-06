@@ -594,6 +594,8 @@ extern "C" void mcle_save_now_sync(void) {
     pthread_join(saveThread, nullptr);
 }
 
+void mcle_creative_menu_static_ctor(); // MCLECreativeMenu.cpp
+
 // Leak hunt: atomic counters bracketed around ctor/dtor of suspect
 // upstream classes via patch scripts. If a counter grows unbounded
 // each chunk rebuild, that class is leaking. Tags:
@@ -764,6 +766,8 @@ void initImpl() {
     MCLE_STATIC("TileEntityRenderDispatcher::staticCtor", TileEntityRenderDispatcher::staticCtor());
     MCLE_STATIC("User::staticCtor",            User::staticCtor());
     MCLE_STATIC("ColourTable::staticCtor",     ColourTable::staticCtor());
+    // Common for all platforms, the creative menu's item table
+    MCLE_STATIC("IUIScene_CreativeMenu::staticCtor", mcle_creative_menu_static_ctor());
     }
 
     #undef MCLE_STATIC

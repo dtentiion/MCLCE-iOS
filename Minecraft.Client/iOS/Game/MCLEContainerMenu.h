@@ -54,18 +54,31 @@ bool mcle_container_can_open_inventory();
 // UIScene_InventoryMenu's constructor
 void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now);
 
+// CreativeMenu1080's MainPanel children the scene maps
+struct MCLECreativeLayout {
+    MCLEControlRect backgroundPanel;
+    MCLEControlRect containerList;
+    MCLEControlRect hotbarList;
+    MCLEControlRect tabs[8]; // TouchPanel_0 to TouchPanel_7
+    MCLEControlRect slider;  // TouchPanel_Slider
+};
+
+// UIScene_CreativeMenu's constructor
+void mcle_container_open_creative(const MCLECreativeLayout &layout);
+
 // The menu the world asked for, taken once a frame while none is up
 enum MCLEContainerRequest {
     MCLE_CONTAINER_NONE,
     MCLE_CONTAINER_CRAFTING_2X2, // app.LoadCrafting2x2Menu
     MCLE_CONTAINER_CRAFTING_3X3, // the server opened a crafting table
+    MCLE_CONTAINER_CREATIVE,     // app.LoadCreativeMenu
 };
 int mcle_container_take_request();
 
-// From the sim thread: Minecraft::tick's crafting action away from a
-// crafting table, and ClientConnection::handleContainerOpen for the
-// ContainerOpenPacket the local player's ServerPlayer sends
-void mcle_container_request_crafting();
+// From the sim thread: Minecraft::tick's crafting action (the 2x2, or the
+// creative menu in creative), and ClientConnection::handleContainerOpen for
+// the ContainerOpenPacket the local player's ServerPlayer sends
+void mcle_container_request(int request);
 void mcle_container_open_packet(int type, int containerId);
 
 // UIScene_CraftingMenu's constructor, for the 2x2 or the table's 3x3.
