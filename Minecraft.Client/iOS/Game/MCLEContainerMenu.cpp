@@ -605,6 +605,7 @@ void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now
     mcle_container_prepare();
     // Minecraft::tick plays the press unless riding
     if (!player->isRiding()) mcleContainerUI.PlayUISFX(eSFX_Press);
+    mcle_game_set_menu_displayed(true);
     mcle_container_begin(new InventoryScene(layout, player, now));
 }
 

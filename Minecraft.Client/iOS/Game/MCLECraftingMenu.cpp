@@ -562,6 +562,7 @@ bool mcle_container_open_crafting(bool table) {
     }
     mcle_container_prepare();
     mcleContainerUI.PlayUISFX(eSFX_Press);
+    mcle_game_set_menu_displayed(true);
     mcle_container_begin(new CraftingScene(table, player));
     return true;
 }

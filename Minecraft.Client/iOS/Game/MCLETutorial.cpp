@@ -160,7 +160,12 @@ Tutorial *mcle_tutorial() {
 }
 
 void mcle_tutorial_start() {
-    if (g_tutorial) return;
+    // One left from a world that never got going
+    if (g_tutorial) {
+        mcle_tutorial_popup_reset();
+        delete g_tutorial;
+        g_tutorial = nullptr;
+    }
     Minecraft *minecraft = Minecraft::GetInstance();
     int iPad = ProfileManager.GetPrimaryPad();
     if (app.GetTutorialMode()) {
