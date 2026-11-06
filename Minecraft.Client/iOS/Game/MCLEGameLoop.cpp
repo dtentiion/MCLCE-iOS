@@ -103,6 +103,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/CommonStats.h"
 #include "../../../upstream/Minecraft.World/Stats.h"
 #include "../../../upstream/Minecraft.World/Packet.h"
+#include "../../../upstream/Minecraft.World/ExplodePacket.h"
+#include "../../../upstream/Minecraft.World/Explosion.h"
 #include "../../../upstream/Minecraft.World/HatchetItem.h"
 #include "../../../upstream/Minecraft.World/PickaxeItem.h"
 #include "../../../upstream/Minecraft.World/ShovelItem.h"
@@ -1744,6 +1746,17 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet);   // WorldProbe/l
 void mcle_broadcast_to_local_player(std::shared_ptr<Packet> packet, bool oneDimension, int dimension) {
     if (!g_player || (oneDimension && g_player->dimension != dimension)) return;
     mcle_local_player_packet(packet);
+}
+
+// ClientConnection::handleExplosion. The server's explosion already moved
+// this player (it is the server's own), played the sound and drew the big
+// particle, so what the client adds here is finalizeExplosion's debris; the
+// blown tiles are already air, so nothing is removed twice.
+void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet) {
+    if (!g_player || !g_player->level || packet->m_bKnockbackOnly) return;
+    Explosion *e = new Explosion(g_player->level, nullptr, packet->x, packet->y, packet->z, packet->r);
+    e->finalizeExplosion(true, &packet->toBlow);
+    delete e;
 }
 
 // The chat handler's minecraft->gui calls

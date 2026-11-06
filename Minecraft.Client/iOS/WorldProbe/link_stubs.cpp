@@ -27,6 +27,7 @@
 #include "AnimatePacket.h"
 #include "ContainerOpenPacket.h"
 #include "ChatPacket.h"
+#include "ExplodePacket.h"
 #include "EntityEvent.h"
 #include "TileEditorOpenPacket.h"
 #include "Biome.h"
@@ -369,11 +370,14 @@ MultiPlayerLevel *Minecraft::getLevel(int /*dimension*/) { return nullptr; }
 extern void mcle_container_open_packet(int type, int containerId);
 // What the local player's client would do with a packet sent to it
 void mcle_handle_chat_packet(std::shared_ptr<ChatPacket> packet);   // Game/MCLEChat.cpp
+void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet);   // Game/MCLEGameLoop.cpp
 void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     if (std::shared_ptr<ContainerOpenPacket> open = std::dynamic_pointer_cast<ContainerOpenPacket>(packet)) {
         mcle_container_open_packet(open->type, open->containerId);
     } else if (std::shared_ptr<ChatPacket> chat = std::dynamic_pointer_cast<ChatPacket>(packet)) {
         mcle_handle_chat_packet(chat);
+    } else if (std::shared_ptr<ExplodePacket> explode = std::dynamic_pointer_cast<ExplodePacket>(packet)) {
+        mcle_local_player_explosion(explode);
     }
 }
 void PlayerConnection::send(std::shared_ptr<Packet> packet) {
