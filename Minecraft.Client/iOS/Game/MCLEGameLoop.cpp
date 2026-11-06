@@ -2588,6 +2588,7 @@ static void mcle_client_follow_player() {
         g_levelRenderer->playStreamingMusic(L"", 0, 0, 0);
         mcle_client_set_level(g_player->getLevel());
         // respawnPlayer makes the client a new player
+        mcle_player_new_local_player();
         mcle_portal_client_reset();
         mc->gameRenderer->EnableUpdateThread();
     }
