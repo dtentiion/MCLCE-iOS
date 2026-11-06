@@ -134,3 +134,5 @@ bool mcle_custom_draw_begin();
 void mcle_custom_draw_slot(const MCLECustomDrawRegion &region, std::shared_ptr<ItemInstance> item, float alpha,
                            bool decorations);
 void mcle_custom_draw_end();
+// UIController::setupCustomDrawGameState, for a region that isn't a slot
+void mcle_custom_draw_setup_state();

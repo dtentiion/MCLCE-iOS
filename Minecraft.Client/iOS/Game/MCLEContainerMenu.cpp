@@ -492,6 +492,8 @@ protected:
         if (!player || !EntityRenderDispatcher::instance || !pMinecraft || !pMinecraft->options) return;
         float pointerX = m_pointerPos.x, pointerY = m_pointerPos.y;
 
+        // ui.setupCustomDraw
+        mcle_custom_draw_setup_state();
         glLoadIdentity();
         glTranslatef(region.x0, region.y0, -2000);
 

@@ -492,11 +492,7 @@ void UIScene_SkinSelectMenu::customDraw(const MCLECustomDrawRegion &region) {
         app.DebugPrintf("Invalid character to render found\n");
     } else if (characterId >= 0 && characterId < eCharacter_COUNT) {
         // UIController::setupCustomDrawGameState and setupCustomDrawMatrices
-        glEnable(GL_ALPHA_TEST);
-        glAlphaFunc(GL_GREATER, 0.1f);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glDepthMask(true);
+        mcle_custom_draw_setup_state();
         glLoadIdentity();
         glTranslatef(0, 0, -2000);
         glTranslatef(region.x0, region.y0, 0);

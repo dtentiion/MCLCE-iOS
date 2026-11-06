@@ -21,6 +21,7 @@ extern "C" int  mcle_metal_ui_frame_begin(void);         // MetalContext.mm
 extern "C" void mcle_metal_ui_frame_end(void);
 extern "C" void mcle_metal_ui_size(int *out_width, int *out_height);
 extern "C" void mcle_glbridge_metal_ortho(float left, float right, float bottom, float top, float zNear, float zFar);
+extern "C" void mcle_glbridge_start_frame(void);
 
 namespace {
 
@@ -109,8 +110,11 @@ float slotAlpha(int opacityTimer) {
     return fVal;
 }
 
-// UIController::setupCustomDrawGameState
+// UIController::setupCustomDrawGameState. Windows64 starts a renderer frame
+// first, so each region begins from the default render state and white
+// rather than whatever the last one left.
 void setupCustomDrawGameState() {
+    mcle_glbridge_start_frame();
     int w = 0, h = 0;
     mcle_metal_ui_size(&w, &h);
     glMatrixMode(GL_PROJECTION);
@@ -143,10 +147,16 @@ bool mcle_custom_draw_begin() {
     return true;
 }
 
+// UIController::setupCustomDrawGameState for a region of another scene
+void mcle_custom_draw_setup_state() {
+    setupCustomDrawGameState();
+}
+
 // UIScene::customDrawSlotControl for one region, already in pixels
 void mcle_custom_draw_slot(const MCLECustomDrawRegion &region, std::shared_ptr<ItemInstance> item, float alpha,
                            bool decorations) {
     if (item == nullptr) return;
+    setupCustomDrawGameState();
     glLoadIdentity();
     glTranslatef(0, 0, -2000);
     try {
