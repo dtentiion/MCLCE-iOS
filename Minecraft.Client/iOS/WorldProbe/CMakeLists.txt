@@ -825,8 +825,11 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCUIDataFile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/AddEnchantmentRuleDefinition.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/AddItemRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/ApplySchematicRuleDefinition.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/BiomeOverride.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/CollectItemRuleDefinition.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/GameRuleManager.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/LevelGenerationOptions.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/LevelRules.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/NamedAreaRuleDefinition.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/GameRules/StartFeature.cpp

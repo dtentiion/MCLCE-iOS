@@ -400,44 +400,6 @@ inline long C4JRenderStub::LoadTextureData(unsigned char *pbData, unsigned long 
 // SharedConstants / C4JThread are real classes in Minecraft.World/
 // and get pre-included below. Do not define stubs here.
 
-// LevelGenerationOptions: full stub. Upstream uses it as a pointer
-// returned from app.getLevelGenerationOptions() and called for
-// methods like checkIntersects / requiresBaseSave / etc. Variadic
-// template methods absorb whatever signature.
-struct LevelGenerationOptions {
-    template<class... A> bool checkIntersects(A...)    { return false; }
-    template<class... A> bool requiresBaseSave(A...)   { return false; }
-    template<class... A> void* getBaseSaveData(A...)   { return nullptr; }
-    template<class... A> void deleteBaseSaveData(A...) {}
-    template<class... A> bool isFromDLC(A...)          { return false; }
-    template<class... A> bool isFromMashup(A...)       { return false; }
-    template<class... A> bool isFeatureChunk(A...)     { return false; }
-    template<class... A> int  getFeatureSeed(A...)     { return 0; }
-    template<class... A> bool hasLoadedData(A...)      { return false; }
-    template<class... A> bool isReady(A...)            { return true; }
-    template<class... A> bool ready(A...)              { return true; }
-    template<class... A> bool getuseFlatWorld(A...)    { return false; }
-    template<class... A> bool useFlatWorld(A...)       { return false; }
-    template<class... A> int  getWorldSeed(A...)       { return 0; }
-    // Pos* return so MinecraftServer's `Pos *spawnPos = ...` typechecks.
-    // Pos.h is pre-included further down so the type is visible by the
-    // time this method body is instantiated; forward-decl keeps the
-    // declaration parseable here too.
-    class Pos* getSpawnPos() { return nullptr; }
-    template<class... A> int  getDifficulty(A...)      { return 0; }
-    template<class... A> int  getGameMode(A...)        { return 0; }
-    template<class... A> bool getLevelHasBeenInCreative(A...) { return false; }
-    template<class... A> bool getMapInteractionEnabled(A...)  { return false; }
-    template<class... A> bool getCommandBlocksEnabled(A...)   { return false; }
-    template<class... A> int  getInitialSpawnRadius(A...)     { return 0; }
-    template<class... A> void getBiomeOverride(A...)          {}
-    template<class... A> bool requiresTexturePack(A...)       { return false; }
-    template<class... A> int  getRequiredTexturePackId(A...)  { return 0; }
-    template<class... A> void setDisplayName(A...)            {}
-    template<class... A> std::wstring getDisplayName(A...)    { return std::wstring(); }
-    template<class... A> void* getSchematicFile(A...)         { return nullptr; }
-};
-
 // DLCSkinFile is the real upstream class (Minecraft.Client/Common/DLC/
 // DLCSkinFile.h). Header is pre-included further down in this file so
 // every TU sees the real definition.
@@ -1012,6 +974,11 @@ public:
 #include "FileHeader.h"
 #include "SharedConstants.h"
 #include "C4JThread.h"
+// Real LevelGenerationOptions and GameRuleManager, which app.m_gameRules is,
+// last like ConsoleGameRules.h in stdafx.h. The tutorial and the mash-up
+// worlds are level generators from it.
+#include "../Minecraft.Client/Common/GameRules/LevelGenerationOptions.h"
+#include "../Minecraft.Client/Common/GameRules/GameRuleManager.h"
 // iOS_app_stub.h is pre-included LAST so the McleAppStub has full
 // access to upstream types like DLCManager, ModelPart, MOJANG_DATA
 // without forward-decl gymnastics.

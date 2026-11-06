@@ -481,39 +481,6 @@ fi
 # fixed instead by adding `operator>>(wistream&, PlayerUID&)` to the iOS
 # PlayerUID stub in 4JLibs/inc/4J_Profile.h. No source patch needed here.
 
-# LevelGenerationOptions.h's class is redefined when both the iOS_stdafx.h
-# stub and the real header are visible (e.g. ConsoleSaveFileOriginal.cpp
-# pulls the real one). iOS only needs the stub, so wrap the real header
-# body in #ifndef __APPLE_IOS__.
-LGOHDR="$REPO_ROOT/upstream/Minecraft.Client/Common/GameRules/LevelGenerationOptions.h"
-if grep -q '__APPLE_IOS__' "$LGOHDR"; then
-    echo "patch-upstream-stdafx: LevelGenerationOptions.h already patched, skipping"
-else
-python3 - "$LGOHDR" <<'PY'
-import sys
-path = sys.argv[1]
-with open(path, 'r', encoding='utf-8', errors='replace') as f:
-    src = f.read()
-pragma = '#pragma once'
-idx = src.find(pragma)
-if idx < 0:
-    sys.exit("patch-upstream-stdafx: #pragma once not found in LevelGenerationOptions.h")
-split_at = idx + len(pragma)
-prefix = src[:split_at]
-body   = src[split_at:]
-wrapped = (
-    prefix
-    + '\n\n// iOS provides a stub LevelGenerationOptions in iOS_stdafx.h\n'
-    + '#ifndef __APPLE_IOS__\n'
-    + body
-    + '\n#endif // !__APPLE_IOS__\n'
-)
-with open(path, 'w', encoding='utf-8', newline='\n') as f:
-    f.write(wrapped)
-print(f"patch-upstream-stdafx: wrapped LevelGenerationOptions.h body in #ifndef __APPLE_IOS__")
-PY
-fi
-
 # WeighedTreasure.h forward-declares DispenserTileEntity in a shared_ptr<>.
 # The real header isn't reachable from EnchantedBookItem.cpp's include set on
 # iOS, so add a forward declaration at the top.
@@ -1770,4 +1737,16 @@ fi
 BFS_PY="$REPO_ROOT/scripts/patch-biomesource-findseed-progress.py"
 if [ -f "$BFS_PY" ]; then
     python3 "$BFS_PY"
+fi
+
+# GameRuleManager reads Tutorial.pck from the Documents media set
+GRM_PY="$REPO_ROOT/scripts/patch-gamerulemanager-ios-tutorial.py"
+if [ -f "$GRM_PY" ]; then
+    python3 "$GRM_PY"
+fi
+
+# iOS compresses with zlib, so that's the type its files are tagged with
+CPT_PY="$REPO_ROOT/scripts/patch-compression-ios-type.py"
+if [ -f "$CPT_PY" ]; then
+    python3 "$CPT_PY"
 fi
