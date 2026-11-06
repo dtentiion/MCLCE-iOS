@@ -420,38 +420,63 @@ pthread_t                     g_simThread{};
 // Auto-save flag - file-scope so the detached save thread can clear it.
 std::atomic<bool>             g_autoSaveInFlight{ false };
 
-// Body of the on-demand save - runs on whichever pthread we hand it to.
-// Walks levels in reverse to mirror upstream MinecraftServer::saveAllLevels
-// and logs start/per-level/done so we can see exactly how far we got if
-// iOS reaps us mid-save.
-static void mcle_save_world() {
+// The thread storage ServerThreadProc makes for the server thread, for a
+// thread here that saves or leaves the world, and what it lets go of when
+// the thread ends
+static void mcle_world_thread_begin() {
+    Tile::CreateNewThreadStorage();
+    AABB::CreateNewThreadStorage();
+    Vec3::CreateNewThreadStorage();
+    IntCache::CreateNewThreadStorage();
+    Compression::CreateNewThreadStorage();
+    OldChunkStorage::CreateNewThreadStorage();
+    Level::enableLightingCache();
+}
+
+static void mcle_world_thread_end() {
+    Tile::ReleaseThreadStorage();
+    AABB::ReleaseThreadStorage();
+    Vec3::ReleaseThreadStorage();
+    IntCache::ReleaseThreadStorage();
+    Compression::ReleaseThreadStorage();
+    OldChunkStorage::ReleaseThreadStorage();
+    Level::destroyLightingCache();
+}
+
+// MinecraftServer's SaveGame action, or stopServer's save when leaving the
+// world: PlayerList::saveAll, the levels in reverse so the nether's level
+// data doesn't overwrite the overworld's, the game rules, then the save
+// file goes to disc. Leaving also closes the level storage after the last
+// level (saveAllChunks) and unloads the rules before the flush.
+static void mcle_save_world(bool exiting) {
     const auto start = std::chrono::steady_clock::now();
-    // Flush compresses on this thread, and the level saves write chunks
-    static thread_local bool s_tls = false;
-    if (!s_tls) {
-        s_tls = true;
-        Compression::CreateNewThreadStorage();
-        OldChunkStorage::CreateNewThreadStorage();
-        Tile::CreateNewThreadStorage();
-        AABB::CreateNewThreadStorage();
-        Vec3::CreateNewThreadStorage();
-    }
-    // MinecraftServer::saveAllChunks saves the players first
-    if (g_player && g_levelStorage) {
-        try { g_levelStorage->getPlayerIO()->save(g_player); }
-        catch (...) { MCLE_LOG("BG_SAVE: player save threw"); }
+    // PlayerList::saveAll for the one player
+    if (g_levelStorage) {
+        PlayerIO *playerIo = g_levelStorage->getPlayerIO();
+        try {
+            playerIo->saveAllCachedData();
+            if (g_player) playerIo->save(g_player);
+            playerIo->clearOldPlayerFiles();
+            playerIo->saveMapIdLookup();
+        } catch (...) {
+            MCLE_LOG("BG_SAVE: player save threw");
+        }
     }
     for (int i = 2; i >= 0; --i) {
         if (!g_levels[i]) continue;
         const auto t0 = std::chrono::steady_clock::now();
-        try { g_levels[i]->save(true, nullptr); }
-        catch (...) { MCLE_LOG("BG_SAVE: level[%d] threw", i); }
+        try {
+            g_levels[i]->save(true, nullptr);
+            if (exiting && i == 0) g_levels[i]->closeLevelStorage();
+        } catch (...) {
+            MCLE_LOG("BG_SAVE: level[%d] threw", i);
+        }
         const auto dms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - t0).count();
         MCLE_LOG("BG_SAVE: level[%d] done took=%lldms", i, (long long)dms);
     }
-    // MinecraftServer's SaveGame action: saveGameRules, then levels[0]->saveToDisc
     if (g_levels[0]) {
+        // MinecraftServer::saveGameRules
         byteArray ba;
         ba.data = nullptr;
         app.m_gameRules.saveGameRules(&ba.data, &ba.length);
@@ -464,6 +489,7 @@ static void mcle_save_world() {
             delete[] ba.data;
             csf->closeHandle(fe);
         }
+        if (exiting) app.m_gameRules.unloadCurrentGameRules();
         try { g_levels[0]->saveToDisc(nullptr, false); }
         catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
     }
@@ -473,16 +499,18 @@ static void mcle_save_world() {
 }
 
 static void *mcle_save_now_thread(void *) {
+    mcle_world_thread_begin();
     {
         // Not while the world is being torn down
         std::lock_guard<std::mutex> life(g_worldLifeMutex);
         if (g_initState == kStateTicking) {
-            MCLE_LOG("BG_SAVE: starting on backgrounded lifecycle event");
-            mcle_save_world();
+            MCLE_LOG("BG_SAVE: starting");
+            mcle_save_world(false);
         } else {
             MCLE_LOG("BG_SAVE: no world to save");
         }
     }
+    mcle_world_thread_end();
     g_autoSaveInFlight.store(false, std::memory_order_release);
     return nullptr;
 }
@@ -510,12 +538,14 @@ extern "C" void mcle_save_now(void) {
 // finishes. Without this, the detached pthread above raced against
 // iOS suspension and never logged a "done" line.
 extern "C" void mcle_save_now_sync(void) {
-    if (g_autoSaveInFlight.load(std::memory_order_acquire)) {
-        MCLE_LOG("BG_SAVE: sync requested but save already in flight, skipping");
+    // A save already going is the one this waits for, so the app isn't
+    // suspended halfway through it
+    bool expected = false;
+    if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) {
+        MCLE_LOG("BG_SAVE: sync requested, waiting for the save in flight");
+        while (g_autoSaveInFlight.load(std::memory_order_acquire)) usleep(10 * 1000);
         return;
     }
-    bool expected = false;
-    if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) return;
 
     pthread_t saveThread;
     int rc = pthread_create(&saveThread, nullptr, &mcle_save_now_thread, nullptr);
@@ -620,6 +650,7 @@ bool mcle_open_save_bundle(const std::wstring &saveFolder) {
         fis.close();
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: saveData.ms read threw: %{public}s", e.what());
+        delete[] saveBytes.data;
         g_initState = kStateFailed;
         return false;
     }
@@ -645,9 +676,14 @@ bool mcle_open_save_bundle(const std::wstring &saveFolder) {
             /*plat*/          SAVE_FILE_PLATFORM_LOCAL);
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor threw: %{public}s", e.what());
+        delete[] saveBytes.data;
         g_initState = kStateFailed;
         return false;
     }
+    // MinecraftServer::main deletes the passed in save data once it's loaded,
+    // the save file has its own copy
+    delete[] saveBytes.data;
+    saveBytes.data = nullptr;
     if (!g_saveFile) {
         MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor returned null");
         g_initState = kStateFailed;
@@ -2090,6 +2126,10 @@ static int mcle_start_game_thread() {
     pthread_t t;
     if (pthread_create(&t, nullptr, [](void *) -> void * {
             mcle_game_init();
+            // ServerThreadProc lets go of its pools once the level is done
+            // with, so the generation caches don't outlive the load
+            Chunk::ReleaseThreadStorage();
+            mcle_world_thread_end();
             return nullptr;
         }, nullptr) != 0) {
         g_initStarted = false;
@@ -2875,57 +2915,6 @@ extern "C" void mcle_game_tick(void) {
             }
         }
 
-        // Periodic chunk save. Parity in spirit with
-        // MinecraftServer::saveAllChunks (MinecraftServer.cpp:1355) but
-        // dispatched onto a detached pthread so the sim thread keeps
-        // ticking while disk I/O runs. Upstream blocks the sim thread
-        // here too, but Win64's NAND finishes in milliseconds; iOS
-        // takes seconds and a blocked sim tick stops player movement.
-        //
-        // TEMPORARILY DISABLED: even on its own thread, save() holds
-        // m_csLoadCreate inside ServerChunkCache::save while iterating
-        // chunks. Sim thread's getChunk/move/tick all need that section
-        // so it blocks for the save's duration. On iOS NAND that has
-        // been hanging indefinitely. Real fix is on-background save
-        // via iOS lifecycle hook + a different snapshot pattern that
-        // doesn't hold the cache lock during disk I/O. For now bump
-        // the interval to 1 hour so the freeze can't bite mid-session.
-        {
-            using sclock = std::chrono::steady_clock;
-            static auto s_lastSave = sclock::now();
-            if (std::chrono::duration_cast<std::chrono::seconds>(
-                    sclock::now() - s_lastSave).count() >= 3600 &&
-                !g_autoSaveInFlight.load(std::memory_order_acquire))
-            {
-                s_lastSave = sclock::now();
-                bool expected = false;
-                if (g_autoSaveInFlight.compare_exchange_strong(expected, true)) {
-                    pthread_t saveThread;
-                    if (pthread_create(&saveThread, nullptr,
-                            [](void *) -> void * {
-                                MCLE_LOG("AUTO_SAVE: saving all chunks");
-                                const auto start = std::chrono::steady_clock::now();
-                                for (int i = 2; i >= 0; --i) {
-                                    if (!g_levels[i]) continue;
-                                    try { g_levels[i]->save(true, nullptr); }
-                                    catch (...) { MCLE_LOG("AUTO_SAVE: level[%d] threw", i); }
-                                }
-                                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                    std::chrono::steady_clock::now() - start).count();
-                                MCLE_LOG("AUTO_SAVE: done took=%lldms", (long long)ms);
-                                g_autoSaveInFlight.store(false, std::memory_order_release);
-                                return nullptr;
-                            },
-                            nullptr) == 0)
-                    {
-                        pthread_detach(saveThread);
-                    } else {
-                        // Spawn failed - reset so the next interval can retry.
-                        g_autoSaveInFlight.store(false, std::memory_order_release);
-                    }
-                }
-            }
-        }
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_tick: tick threw: %{public}s; pausing simulation", e.what());
         g_initState = kStateFailed;
@@ -4300,11 +4289,12 @@ static void mcle_exit_world(bool save) {
     // A background save in progress finishes first
     std::lock_guard<std::mutex> life(g_worldLifeMutex);
 
-    // stopServer: saveAll and saveAllChunks when saving on exit
+    // stopServer: saveAll, saveAllChunks, the game rules and saveToDisc
+    // when saving on exit
     if (save) {
-        try { mcle_save_world(); } catch (...) { MCLE_LOG("EXIT_WORLD: save threw"); }
+        try { mcle_save_world(true); } catch (...) { MCLE_LOG("EXIT_WORLD: save threw"); }
     }
-    // stopServer unloads the game rules after saving them
+    // _ExitWorld unloads the game rules once the server has stopped
     app.m_gameRules.unloadCurrentGameRules();
 
     // eAppAction_ExitWorld: gui->clearMessages()
@@ -4437,17 +4427,14 @@ extern "C" int mcle_game_exit_world(int save) {
     pthread_t t;
     if (pthread_create(&t, nullptr, [](void *arg) -> void * {
             const bool saving = arg != nullptr;
-            // The world's thread local pools, like any thread that touches it
-            Tile::CreateNewThreadStorage();
+            // The world's thread local pools, like any thread that touches
+            // it, given back when the thread ends
+            mcle_world_thread_begin();
             Tesselator::CreateNewThreadStorage(16 * 1024);
-            Vec3::CreateNewThreadStorage();
-            IntCache::CreateNewThreadStorage();
-            AABB::CreateNewThreadStorage();
-            OldChunkStorage::CreateNewThreadStorage();
-            Level::enableLightingCache();
             Chunk::CreateNewThreadStorage();
-            Compression::CreateNewThreadStorage();
             mcle_exit_world(saving);
+            Chunk::ReleaseThreadStorage();
+            mcle_world_thread_end();
             g_exitWorldState.store(2, std::memory_order_release);
             return nullptr;
         }, save ? reinterpret_cast<void *>(1) : nullptr) != 0) {
