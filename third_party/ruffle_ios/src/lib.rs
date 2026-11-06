@@ -1266,6 +1266,98 @@ pub unsafe extern "C" fn ruffle_ios_custom_draw_regions(
     regions.len() as c_int
 }
 
+/// ruffle_ios_custom_draw_regions for the movie at a stage depth, the root
+/// clip for 0 or the sibling SWF there
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_sibling_custom_draw_regions(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    out: *mut RuffleIosCustomDrawRegion,
+    max: usize,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let regions = p.sibling_custom_draw_regions(depth);
+    drop(p);
+    if !out.is_null() {
+        for (i, (name, rect)) in regions.iter().take(max).enumerate() {
+            let slot = &mut *out.add(i);
+            slot.name = [0; 32];
+            let bytes = name.as_bytes();
+            let n = bytes.len().min(31);
+            slot.name[..n].copy_from_slice(&bytes[..n]);
+            slot.x0 = rect[0];
+            slot.y0 = rect[1];
+            slot.x1 = rect[2];
+            slot.y1 = rect[3];
+        }
+    }
+    regions.len() as c_int
+}
+
+/// ruffle_ios_call_child_path on the movie at a stage depth, the root clip
+/// for 0 or the sibling SWF there
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_sibling_path(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    path_ptr: *const u8,
+    path_len: usize,
+    method_ptr: *const u8,
+    method_len: usize,
+    kinds: *const c_int,
+    nums: *const f64,
+    strs: *const *const u8,
+    str_lens: *const usize,
+    argc: usize,
+) -> c_int {
+    if raw.is_null() || method_ptr.is_null() || method_len == 0 { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Some(path) = utf8_arg(path_ptr, path_len) else { return 0; };
+    let Some(method) = utf8_arg(method_ptr, method_len) else { return 0; };
+    let mut args = Vec::with_capacity(argc);
+    for i in 0..argc {
+        let kind = if kinds.is_null() { 0 } else { *kinds.add(i) };
+        let num = if nums.is_null() { 0.0 } else { *nums.add(i) };
+        args.push(match kind {
+            1 => HostCallArg::Bool(num != 0.0),
+            2 => {
+                if strs.is_null() || str_lens.is_null() { return 0; }
+                let Some(v) = utf8_arg(*strs.add(i), *str_lens.add(i)) else { return 0; };
+                HostCallArg::Str(v.to_string())
+            }
+            _ => HostCallArg::Number(num),
+        });
+    }
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let status = p.call_method_on_sibling_path(depth, path, method, &args);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_sibling_path(depth={}, '{}', '{}', {:?}) -> {}",
+        depth, path, method, args, status
+    ));
+    if status.starts_with("ok:") { 1 } else { -2 }
+}
+
+/// ruffle_ios_set_child_path_visible on the movie at a stage depth
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_sibling_path_visible(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    path_ptr: *const u8,
+    path_len: usize,
+    visible: c_int,
+) -> c_int {
+    if raw.is_null() { return 0; }
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Some(path) = utf8_arg(path_ptr, path_len) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let ok = p.set_sibling_path_visible(depth, path, visible != 0);
+    drop(p);
+    if ok { 1 } else { 0 }
+}
+
 /// Init(id) on an FJ_ButtonList child. Wrapper around
 /// Player::call_list_init. Mirrors UIControl_ButtonList::init
 /// (UIControl_ButtonList.cpp:28-50) on console.
