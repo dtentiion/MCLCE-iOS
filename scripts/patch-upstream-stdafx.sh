@@ -1664,6 +1664,13 @@ if [ -f "$JM_PY" ]; then
     python3 "$JM_PY"
 fi
 
+# How to Play's pages and CMinecraftApp::FormatHTMLString, for Game/MCLEHowToPlay.cpp
+for HTP_PY in "$REPO_ROOT/scripts/gen-html-format.py" "$REPO_ROOT/scripts/gen-howtoplay.py"; do
+    if [ -f "$HTP_PY" ]; then
+        python3 "$HTP_PY"
+    fi
+done
+
 # UIScene_Credits' credit table, for Game/MCLECredits.cpp
 CR_PY="$REPO_ROOT/scripts/gen-credits.py"
 if [ -f "$CR_PY" ]; then

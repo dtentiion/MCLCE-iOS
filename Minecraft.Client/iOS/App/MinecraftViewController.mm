@@ -371,6 +371,46 @@ static void MCLEControlsInit(void) {
     MCLEControlsPositionAllText();
 }
 
+// UIScene_HowToPlay (Game/MCLEHowToPlay.cpp has the pages)
+extern "C" int mcle_htp_num_pages(void);
+extern "C" int mcle_htp_menu_page(int button);
+extern "C" int mcle_htp_flash_page(int page);
+extern "C" const char* mcle_htp_page_text(int page);
+extern "C" int mcle_htp_label_count(void);
+extern "C" const char* mcle_htp_label(int i, const char** name);
+static int g_htp_page = 0; // m_eCurrPage
+
+static void MCLESetTooltips(const int ids[11]);
+
+// StartPage, then updateTooltips: Next unless it's the last page, Prev
+// unless it's the first
+static void MCLEHowToPlayStartPage(int page) {
+    g_htp_page = page;
+    NSString* text = [NSString stringWithUTF8String:mcle_htp_page_text(page)];
+    MCLECallPath(@"", @"LoadHowToPlayPage", @[@(mcle_htp_flash_page(page)), text ? text : @""]);
+    int iA = -1, iX = -1;
+    if (page == 0) {
+        iA = IDS_HOW_TO_PLAY_NEXT;
+    } else if (page + 1 == mcle_htp_num_pages()) {
+        iX = IDS_HOW_TO_PLAY_PREV;
+    } else {
+        iA = IDS_HOW_TO_PLAY_NEXT;
+        iX = IDS_HOW_TO_PLAY_PREV;
+    }
+    int ids[11] = { iA, IDS_TOOLTIPS_BACK, iX, -1, -1, -1, -1, -1, -1, -1, -1 };
+    MCLESetTooltips(ids);
+}
+
+// UIScene_HowToPlay constructor
+static void MCLEHowToPlayInit(void) {
+    for (int i = 0; i < mcle_htp_label_count(); ++i) {
+        const char* name = "";
+        NSString* text = [NSString stringWithUTF8String:mcle_htp_label(i, &name)];
+        MCLECallPath(@(name), @"Init", @[text ? text : @""]);
+    }
+    MCLEHowToPlayStartPage(g_htp_page);
+}
+
 // CMinecraftApp::SetAutosaveTimerTime: the Autosave setting is in 15
 // minute steps
 static CFTimeInterval g_autosave_due = 0;
@@ -546,15 +586,12 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                       itemId);
             }
         } else if ([g_current_scene_name isEqualToString:@"HowToPlayMenu1080.swf"]) {
-            // HowToList item press. Console routes each topic to
-            // its own tutorial scene via m_uiHTPSceneA
-            // (UIScene_HowToPlayMenu.cpp:42-75 + handlePress at
-            // line 230+). Those scenes are gameplay-facing pages
-            // (UIScene_HowToPlay_Basics, _Inventory, etc.) that
-            // will land once the gameplay layer is in; for now
-            // pressing a topic just logs which one.
-            NSLog(@"[howtoplay] topic press idx=%d (topic scenes are a follow-up)",
-                  itemId);
+            // UIScene_HowToPlayMenu::handlePress: the topic's page
+            int page = mcle_htp_menu_page(itemId);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                g_htp_page = page;
+                [g_active_vc navigateForwardTo:@"HowToPlay1080.swf"];
+            });
         } else if ([g_current_scene_name isEqualToString:@"DLCMainMenu1080.swf"]) {
             // Console's UIScene_DLCMainMenu::handlePress opens
             // DLCOffersMenu for the selected offer category. Not
@@ -1931,6 +1968,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
     } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
         // UIScene_Credits: Back only
         ids[0] = -1;
+    } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
+        // UIScene_HowToPlay::StartPage set them for its page
+        return;
     }
     MCLESetTooltips(ids);
 }
@@ -3428,6 +3468,10 @@ static NSString* MCLETipHTML(void) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
             MCLECreditsInit();
+        } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
+            [self attachMenuScenery];
+            self.menuButtonConfig = nil;
+            MCLEHowToPlayInit();
         } else if ([swfName isEqualToString:@"Controls1080.swf"]) {
             [self attachMenuScenery];
             self.menuButtonConfig = nil;
@@ -3869,6 +3913,16 @@ static NSString* MCLETipHTML(void) {
             //      UIScene_MessageBox::handleInput line 99-105.
             //   2. Otherwise on a non-MainMenu scene -> back.
             //   3. MainMenu B is a no-op (no scene to pop to).
+            // UIScene_HowToPlay::handleInput: A next page, X previous
+            if (!g_pending_dialog && [self.currentMenuSwf isEqualToString:@"HowToPlay1080.swf"]) {
+                if ((pressedNow & 0x00000001u) && g_htp_page + 1 != mcle_htp_num_pages()) {
+                    MCLEHowToPlayStartPage(g_htp_page + 1);
+                    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+                } else if ((pressedNow & 0x00000004u) && g_htp_page > 0) {
+                    MCLEHowToPlayStartPage(g_htp_page - 1);
+                    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+                }
+            }
             if (pressedNow & 0x00000002u) {
                 if (g_pending_dialog) {
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
