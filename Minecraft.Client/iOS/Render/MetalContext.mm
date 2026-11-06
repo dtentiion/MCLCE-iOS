@@ -1954,6 +1954,9 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     return 0;
 }
 
+// The UI layer's depth target while it's the frame being drawn
+static id<MTLTexture> g_uiFrameDepthTex = nil;
+
 // glClear(GL_DEPTH_BUFFER_BIT) mid frame, renderLevel does it before the
 // hand. Metal can only clear at the start of a pass, so start a new one that
 // keeps the colour.
@@ -1964,7 +1967,7 @@ extern "C" void mcle_metal_clear_depth(void) {
     rpd.colorAttachments[0].texture     = g.gammaThisFrame ? g.sceneTex : g.drawable.texture;
     rpd.colorAttachments[0].loadAction  = MTLLoadActionLoad;
     rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-    rpd.depthAttachment.texture         = g.depthTex;
+    rpd.depthAttachment.texture         = g_uiFrameDepthTex ? g_uiFrameDepthTex : g.depthTex;
     rpd.depthAttachment.loadAction      = MTLLoadActionClear;
     rpd.depthAttachment.storeAction     = MTLStoreActionDontCare;
     rpd.depthAttachment.clearDepth      = 1.0;
@@ -2087,6 +2090,7 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g.enc = [g.cmd renderCommandEncoderWithDescriptor:rpd];
     g.inFrame = true;
     g.gammaThisFrame = false;
+    g_uiFrameDepthTex = g_uiDepthTex;
     g_lastCullMode   = MTLCullModeNone;
     g_lastWinding    = MTLWindingClockwise;
     g_lastDepthState = nil;
@@ -2115,6 +2119,7 @@ extern "C" void mcle_metal_ui_frame_end(void) {
     g.cmd = nil;
     g.drawable = nil;
     g.inFrame = false;
+    g_uiFrameDepthTex = nil;
 }
 
 // G2a: Tesselator -> Metal hook. G3a: routes into the display-list

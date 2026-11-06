@@ -1681,6 +1681,12 @@ if [ -f "$CRAFT_PY" ]; then
     python3 "$CRAFT_PY"
 fi
 
+# UIScene_SkinSelectMenu and its skin previews, for Game/MCLESkinSelectMenu.cpp
+SKIN_PY="$REPO_ROOT/scripts/gen-skin-select-menu.py"
+if [ -f "$SKIN_PY" ]; then
+    python3 "$SKIN_PY"
+fi
+
 # UIScene_Credits' credit table, for Game/MCLECredits.cpp
 CR_PY="$REPO_ROOT/scripts/gen-credits.py"
 if [ -f "$CR_PY" ]; then

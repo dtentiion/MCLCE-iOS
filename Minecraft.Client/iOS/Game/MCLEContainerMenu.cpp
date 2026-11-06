@@ -98,6 +98,10 @@ void mcle_ui_key(int iggyKeyCode, bool down) {
     g_ops.push_back(MCLEUIOp{MCLEUIOp::Key, std::string(), std::string(), {mcle_ui_num(iggyKeyCode), mcle_ui_bool(down)}});
 }
 
+void mcle_ui_set_visible(const std::string &path, bool visible) {
+    g_ops.push_back(MCLEUIOp{MCLEUIOp::Visible, path, std::string(), {mcle_ui_bool(visible)}});
+}
+
 MCLEContainerUI mcleContainerUI;
 
 // UIController::PlayUISFX

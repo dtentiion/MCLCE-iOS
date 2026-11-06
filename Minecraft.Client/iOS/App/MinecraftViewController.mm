@@ -16,6 +16,7 @@
 #include "../Game/MCLEHud.h"
 #include "../Game/MCLETooltips.h"
 #include "../Game/MCLEContainerMenu.h"
+#include "../Game/MCLESkinSelectMenu.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
@@ -660,6 +661,10 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
     } else if (strcmp(method, "handleRequestMoreData") == 0) {
         // UIScene_Credits::handleRequestMoreData, picked up by its tick
         if ([g_current_scene_name isEqualToString:@"Credits1080.swf"]) g_credits_add_next = true;
+    } else if (strcmp(method, "handleAnimationEnd") == 0) {
+        // UIScene_SkinSelectMenu::handleAnimationEnd only changes the
+        // scene's own state, so it's safe from inside the movie's tick
+        if ([g_current_scene_name isEqualToString:@"SkinSelectMenu1080.swf"]) mcle_skin_select_animation_end();
     } else if (strcmp(method, "handleInitFocus") == 0) {
         // LCE fires this once per scene when SetFocus(-1) finds
         // the tabIndex==1 child (FJ_Document.SetFocus line 81-160,
@@ -1971,6 +1976,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
     } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
         // UIScene_HowToPlay::StartPage set them for its page
         return;
+    } else if ([swfName isEqualToString:@"SkinSelectMenu1080.swf"]) {
+        // UIScene_SkinSelectMenu::updateTooltips set them
+        return;
     }
     MCLESetTooltips(ids);
 }
@@ -2729,6 +2737,12 @@ static void MCLEContainerApplyOps(void) {
             }
             continue;
         }
+        if (op.kind == MCLEUIOp::Visible) {
+            if (op.args.size() == 1) {
+                MCLESetPathVisible([NSString stringWithUTF8String:op.path.c_str()], op.args[0].number != 0);
+            }
+            continue;
+        }
         NSMutableArray* args = [NSMutableArray arrayWithCapacity:op.args.size()];
         for (const MCLEUIArg& a : op.args) {
             if (a.kind == MCLEUIArg::String) {
@@ -3199,47 +3213,50 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     self.menuFocusIndex = 0;
 }
 
-// Ports UIScene_SkinSelectMenu constructor
-// (Common/UI/UIScene_SkinSelectMenu.cpp). No list widget - a
-// carousel of 9 UIControl_PlayerSkinPreview slots (eCharacter_
-// Current + 4 on each side) wrapped in "IggyCharacters". Console
-// renders per-pack skin thumbnails via custom draw and swaps the
-// centre preview as you navigate. Without DLC texture loading and
-// the skin registry wired, none of that renders yet. For this
-// skeleton we seed the SkinNamePlate labels and the "Selected"
-// pill so the scene has readable text instead of authoring-time
-// "FJ_Label_Black" placeholders. Logo is already hidden by the
-// scene-transition dispatcher (SkinSelectMenu1080.swf is in the
-// logo-off set matching UIScene_SkinSelectMenu.cpp:143).
+// UIScene_SkinSelectMenu's constructor, once the movie is up. The logo is
+// already off for the scene (applyLogoVisibilityForScene).
 - (void)initSkinSelectMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
     [self attachMenuScenery];
-
-    // SkinNamePlate.SkinTitle1 / SkinTitle2 are nested labels on
-    // the name-plate movieclip. call_init_on_named_child walks
-    // root children only, not grand-children, so this targets the
-    // top-level SkinNamePlate clip and uses SetLabel there. If
-    // SkinNamePlate exposes its own Init we can switch once the
-    // label seeds prove the skeleton is reachable.
-    const char* namePlate = "SkinNamePlate";
-    const char* selectedPanel = "SelectedPanel";
-    ruffle_ios_call_init_on_named_child(
-        g_ruffle_player,
-        (const uint8_t*)namePlate, strlen(namePlate),
-        (const uint8_t*)"SetLabel", 8,
-        (const uint8_t*)"Default Skin", strlen("Default Skin"),
-        0.0);
-    ruffle_ios_call_init_on_named_child(
-        g_ruffle_player,
-        (const uint8_t*)selectedPanel, strlen(selectedPanel),
-        (const uint8_t*)"SetLabel", 8,
-        (const uint8_t*)"Selected", strlen("Selected"),
-        0.0);
-
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
+
+    mcle_skin_select_open(CACurrentMediaTime());
+    MCLEContainerApplyOps();
+    int tips[11];
+    mcle_container_tooltips(tips);
+    MCLESetTooltips(tips);
+}
+
+// The scene's handleDestroy, and its characters off the UI layer
+- (void)closeSkinSelectMenu {
+    mcle_skin_select_close();
+    mcle_hud_custom_draw(NULL, 0);
+}
+
+// A UI frame of the skin select menu: the pad (UIController::handleInput),
+// the scene's tick, then the movie with the characters drawn in
+- (void)skinSelectMenuFrame {
+    extern PlayerHandle* g_ruffle_player;
+    mcle_ios_pad_state pad = {};
+    mcle_ios_input_poll(0, &pad);
+    mcle_skin_select_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+    self.lastPadButtons = pad.buttons;
+    MCLEContainerApplyOps();
+    if (mcle_skin_select_close_requested()) {
+        [self navigateBack];
+        return;
+    }
+    int tips[11];
+    mcle_container_tooltips(tips);
+    MCLESetTooltips(tips);
+    ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+    RuffleIosCustomDrawRegion regions[16];
+    int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 16);
+    n = std::max(0, std::min(n, 16));
+    mcle_skin_select_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
 }
 
 // Present a MessageBox-style dialog overlay. Matches console's
@@ -3539,6 +3556,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         (const uint8_t*)url.UTF8String, strlen(url.UTF8String));
     NSLog(@"[MinecraftVC] transition -> %@ rc=%d", swfName, rc);
     if (rc == 1) {
+        if (mcle_skin_select_is_open()) [self closeSkinSelectMenu];
         self.currentMenuSwf = swfName;
         g_current_scene_name = swfName ?: @"";
         self.menuFocusIndex = 0;
@@ -3761,8 +3779,9 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             }
             return;
         }
-        // The HUD isn't up, nothing to draw over it
-        mcle_hud_custom_draw(NULL, 0);
+        // The HUD isn't up, nothing to draw over it. Change Skin draws its
+        // characters on the same layer.
+        if (!mcle_skin_select_is_open()) mcle_hud_custom_draw(NULL, 0);
         // Paused: the pause menu takes input below like any other menu,
         // drawn over the frozen world
     }
@@ -3825,6 +3844,13 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     // UIScene_ControlsMenu::tick
     if ([self.currentMenuSwf isEqualToString:@"Controls1080.swf"] && g_controls_layout_changed) {
         MCLEControlsPositionAllText();
+    }
+
+    // UIScene_SkinSelectMenu takes the pad itself, the way UIController
+    // hands it to the scene
+    if (g_ruffle_player && mcle_skin_select_is_open() && !g_pending_dialog) {
+        [self skinSelectMenuFrame];
+        return;
     }
 
     // Edge-detect controller buttons and forward press/release events to

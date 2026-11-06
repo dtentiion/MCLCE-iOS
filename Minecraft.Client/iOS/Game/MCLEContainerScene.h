@@ -54,6 +54,8 @@ MCLEUIArg mcle_ui_bool(bool v);
 MCLEUIArg mcle_ui_str(const std::wstring &v);
 // UIScene::sendInputToMovie, a key down or up by its Iggy key code
 void mcle_ui_key(int iggyKeyCode, bool down);
+// UIControl::setVisible on a value path
+void mcle_ui_set_visible(const std::string &path, bool visible);
 
 // The UIController calls the scene logic makes
 struct MCLEContainerUI {
