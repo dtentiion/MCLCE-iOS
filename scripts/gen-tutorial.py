@@ -11,6 +11,10 @@ which go to Game/MCLETutorialPopup.cpp's UIComponent_TutorialPopup.
 What changes:
 - The tutorial's completion bits come from the settings store instead of
   the profile's GAME_SETTINGS (mcle_tutorial_profile_data).
+- Freezing the time sets it on mc->level with Level's setDayTime, which
+  is all MultiPlayerLevel's does. mc->level is the server level cast to a
+  MultiPlayerLevel, and that setDayTime is a virtual only MultiPlayerLevel
+  has, so called on it the server level runs off the end of its vtable.
 - The tasks read the pad as the tutorial's own. mc->player is the
   ServerPlayer aliased as a MultiplayerLocalPlayer, so GetXboxPad would
   read whatever ServerPlayer has at LocalPlayer's m_iPad.
@@ -89,6 +93,10 @@ tutorial = body("Tutorial.cpp")
 tutorial = replace(tutorial, "static_cast<GAME_SETTINGS *>(ProfileManager.GetGameDefinedProfileData(",
                    "static_cast<GAME_SETTINGS *>(mcle_tutorial_profile_data(", 3, "Tutorial.cpp")
 tutorial = tutorial.replace("GAME_SETTINGS", "MCLETutorialProfile")
+tutorial = replace(tutorial, "pMinecraft->level->setDayTime(m_iTutorialFreezeTimeValue);",
+                   "pMinecraft->level->Level::setDayTime(m_iTutorialFreezeTimeValue);", 2, "Tutorial.cpp")
+if "level->setDayTime" in tutorial:
+    fail("MultiPlayerLevel setDayTime call left in Tutorial.cpp")
 
 # ChoiceTask.cpp / InfoTask.cpp
 choice = body("ChoiceTask.cpp")
