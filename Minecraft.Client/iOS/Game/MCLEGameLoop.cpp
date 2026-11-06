@@ -3162,8 +3162,21 @@ static bool mcle_view_bob_on() {
     return mcle_settings_get(8 /*ViewBob*/) && !g_player->abilities.flying;
 }
 
+// Where the world frame's time goes, logged with frame_ms every 60 frames:
+// setup, sky+cull, solid chunks, entities, opaque particles, water,
+// translucent particles to clouds, the hand to the end
+static double s_worldPhaseMs[8];
+static int s_worldPhaseFrames = 0;
+static std::chrono::steady_clock::time_point s_worldPhaseMark;
+static void mcle_world_phase(int phase) {
+    const auto now = std::chrono::steady_clock::now();
+    if (phase > 0) s_worldPhaseMs[phase - 1] += std::chrono::duration<double, std::milli>(now - s_worldPhaseMark).count();
+    s_worldPhaseMark = now;
+}
+
 extern "C" void mcle_world_drive_renderer(void) {
     std::lock_guard<std::mutex> frameLock(g_frameMutex);
+    mcle_world_phase(0);
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
 
     // Render-thread TLS init - mirrors the bootstrap + tick threads.
@@ -3446,6 +3459,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
 
+        mcle_world_phase(1);
         Frustum::getFrustum();
         if (mc->options->viewDistance < 2) {
             try { mcle_setup_fog(-1, a); } catch (...) {}
@@ -3459,6 +3473,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         frustum->prepare(xOff, yOff, zOff);
         try { g_levelRenderer->cull(frustum, a); } catch (...) {}
 
+        mcle_world_phase(2);
         // prepareAndRenderClouds, below the clouds' height
         auto renderClouds = [&]() {
             if (!mc->options->isCloudsOn()) return;
@@ -3492,6 +3507,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
+        mcle_world_phase(3);
         // Entities don't use the "a" factor for culling, their AABBs are
         // already at the new position
         if (EntityRenderDispatcher::instance && TileEntityRenderDispatcher::instance) {
@@ -3510,6 +3526,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
+        mcle_world_phase(4);
         ParticleEngine *particleEngine = mc->particleEngine;
         if (particleEngine) {
             try {
@@ -3535,6 +3552,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             } catch (...) {}
         }
 
+        mcle_world_phase(5);
         glDisable(GL_BLEND);
         glEnable(GL_CULL_FACE);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3558,6 +3576,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
 
+        mcle_world_phase(6);
         // Translucent particles go after the water
         if (particleEngine) {
             try {
@@ -3606,6 +3625,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         }
 
         if (cameraEntity->y >= Level::genDepth) renderClouds();
+        mcle_world_phase(7);
 
         // Rain and snow after the clouds so they blend onto them
         try {
@@ -3670,6 +3690,14 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
+        mcle_world_phase(8);
+        if (++s_worldPhaseFrames >= 60) {
+            MCLE_LOG("world_ms setup=%.2f skycull=%.2f solid=%.2f ent=%.2f part=%.2f water=%.2f trans=%.2f hand=%.2f",
+                     s_worldPhaseMs[0] / 60, s_worldPhaseMs[1] / 60, s_worldPhaseMs[2] / 60, s_worldPhaseMs[3] / 60,
+                     s_worldPhaseMs[4] / 60, s_worldPhaseMs[5] / 60, s_worldPhaseMs[6] / 60, s_worldPhaseMs[7] / 60);
+            for (double &ms : s_worldPhaseMs) ms = 0;
+            s_worldPhaseFrames = 0;
+        }
         // GameRenderer::render: then the Gui over the world
         try {
             mcle_gui_overlays(a);
