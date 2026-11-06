@@ -305,6 +305,9 @@ int           ruffle_ios_child_path_rect(PlayerHandle* h,
 // IggyMakeEventMouseMove, the mouse moving to a point in stage coordinates
 void          ruffle_ios_player_mouse_move_stage(PlayerHandle* h, double x, double y);
 
+// IggyMakeEventKey, a key down (down != 0) or up by its Flash key code
+void          ruffle_ios_player_key(PlayerHandle* h, int code, int down);
+
 // Iggy custom draw regions: visible objects named iggy_<name>. name is
 // <name>, NUL terminated, and the rectangle is in viewport pixels.
 typedef struct {
