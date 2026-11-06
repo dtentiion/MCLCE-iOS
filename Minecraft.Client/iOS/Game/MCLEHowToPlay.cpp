@@ -5,6 +5,7 @@
 // scripts/gen-html-format.py. The scene side is in MinecraftViewController.mm.
 
 #include <cstdio>
+#include <regex>
 #include <string>
 #include <vector>
 
