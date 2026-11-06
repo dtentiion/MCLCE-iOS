@@ -79,8 +79,12 @@ static NSString* g_create_world_name = @"";   // m_worldName
 static int  g_create_game_mode_id = 0;         // m_iGameModeId
 static bool g_create_game_mode_creative = false;
 static bool g_create_ignore_input = false;
+// UIScene_LaunchMoreOptionsMenu: m_tabIndex, 0 world options, 1 game options
+static int  g_more_options_tab = 0;
+static bool g_more_options_ignore_input = false;
 // InputManager.RequestKeyboard is up, the pad doesn't reach the menus
 static bool g_text_input_open = false;
+static void MCLEMoreOptionsTooltips(void);
 // UIScene_PauseMenu is up and the single player game is paused under it
 static bool g_world_paused = false;
 // UIScene_DeathMenu is up
@@ -190,6 +194,10 @@ static const int kTooltipsDepth    = 201;
 - (void)loadMenuSlider:(int)sliderId value:(int)value;
 - (void)createWorldPress:(int)controlId;
 - (void)createWorldSlider:(int)sliderId value:(int)value;
+- (void)moreOptionsPress:(int)controlId;
+- (void)moreOptionsSlider:(int)sliderId value:(int)value;
+- (void)moreOptionsCheckbox:(int)controlId checked:(BOOL)selected;
+- (void)moreOptionsFocus:(int)controlId;
 @end
 static __weak MinecraftViewController* g_active_vc = nil;
 
@@ -479,6 +487,19 @@ static std::wstring MCLEWideString(NSString* s) {
     return std::wstring(static_cast<const wchar_t*>(d.bytes), d.length / sizeof(wchar_t));
 }
 
+// A seed in UTF-16 units, Windows' wchar_t, so a text seed hashes the same
+static std::wstring MCLEWideUTF16(NSString* s) {
+    std::wstring w;
+    for (NSUInteger i = 0; i < s.length; ++i) w.push_back(static_cast<wchar_t>([s characterAtIndex:i]));
+    return w;
+}
+
+static NSString* MCLEStringFromUTF16(const std::wstring& w) {
+    if (w.empty()) return @"";
+    std::vector<unichar> units(w.begin(), w.end());
+    return [NSString stringWithCharacters:units.data() length:units.size()];
+}
+
 // IUIScene_StartGame scenes aren't signed in to an online service, so
 // multiplayer isn't allowed: the online params are off, and if the Online
 // setting is on it was changed by the system
@@ -522,6 +543,14 @@ static void MCLECreateWorldReset(void) {
 extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
     if (!method) return;
     if (strcmp(method, "handleCheckboxToggled") == 0) {
+        if ([g_current_scene_name isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
+            int cid = (int)id;
+            BOOL checked = value != 0.0;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc moreOptionsCheckbox:cid checked:checked];
+            });
+            return;
+        }
         int setting = mcle_map_checkbox((int)id);
         if (setting < 0) return;
         unsigned char v = (value != 0.0) ? 1 : 0;
@@ -544,6 +573,14 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             int v = (int)value;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [g_active_vc createWorldSlider:sid value:v];
+            });
+            return;
+        }
+        if ([g_current_scene_name isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
+            int sid = (int)id;
+            int v = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc moreOptionsSlider:sid value:v];
             });
             return;
         }
@@ -690,6 +727,11 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             dispatch_async(dispatch_get_main_queue(), ^{
                 [g_active_vc createWorldPress:cid];
             });
+        } else if ([g_current_scene_name isEqualToString:@"LaunchMoreOptionsMenu1080.swf"] && !g_pending_dialog) {
+            int cid = listId;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc moreOptionsPress:cid];
+            });
         } else if (g_pending_dialog) {
             // MessageBox button press. Mirrors
             // UIScene_MessageBox::handlePress (UIScene_MessageBox.cpp:120):
@@ -728,6 +770,13 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 g_controls_layout = control;
                 g_controls_layout_changed = true;
             }
+            return;
+        }
+        if ([g_current_scene_name isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
+            int cid = (int)id;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc moreOptionsFocus:cid];
+            });
             return;
         }
         // UIScene_LoadOrJoinMenu::handleFocusChange -> m_bUpdateSaveSize
@@ -2051,6 +2100,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
     } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
         // UIScene_HowToPlay::StartPage set them for its page
         return;
+    } else if ([swfName isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
+        MCLEMoreOptionsTooltips();
+        return;
     }
     MCLESetTooltips(ids);
 }
@@ -2699,34 +2751,58 @@ static void MCLEAddDefaultTexturePack(void) {
             break;
         }
         case 2:     // eControl_MoreOptions
-            NSLog(@"[loadmenu] more options (LaunchMoreOptionsMenu not wired yet)");
+            [self navigateForwardTo:@"LaunchMoreOptionsMenu1080.swf"];
             break;
         case 3:     // eControl_LoadWorld
-            [self loadMenuLaunchGame];
+            [self loadMenuStartSharedLaunchFlow];
             break;
         default:
             break;
     }
 }
 
-// UIScene_LoadMenu::LaunchGame: creative confirm prompts, then load.
+// UIScene_LoadMenu::StartSharedLaunchFlow: confirm a Nether reset, then LaunchGame
+- (void)loadMenuStartSharedLaunchFlow {
+    if (g_start_options.bResetNether) {
+        __weak MinecraftViewController* weakSelf = self;
+        [self presentDialogWithTitle:MCLEStr(IDS_RESETNETHER_TITLE)
+                             content:MCLEStr(IDS_RESETNETHER_TEXT)
+                             buttons:@[MCLEStr(IDS_DONT_RESET_NETHER), MCLEStr(IDS_RESET_NETHER)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r) {
+            // CheckResetNetherReturned: results switched for this dialog
+            if (r == MCLEDialogResultDecline) {
+                [weakSelf loadMenuLaunchGame];
+            } else if (r == MCLEDialogResultAccept) {
+                g_start_options.bResetNether = false;
+                [weakSelf loadMenuLaunchGame];
+            }
+        }];
+        return;
+    }
+    [self loadMenuLaunchGame];
+}
+
+// UIScene_LoadMenu::LaunchGame: creative and host privileges confirm prompts, then load.
 - (void)loadMenuLaunchGame {
     BOOL creative = (g_load_game_mode == 1);
+    int textId = 0;
     if (creative || g_load_has_been_in_creative) {
-        int textId = 0;
         if (!creative) textId = IDS_CONFIRM_START_SAVEDINCREATIVE;
         else if (!g_load_has_been_in_creative) textId = IDS_CONFIRM_START_CREATIVE;
-        if (textId) {
-            __weak MinecraftViewController* weakSelf = self;
-            [self presentDialogWithTitle:MCLEStr(IDS_TITLE_START_GAME)
-                                 content:MCLEStr(textId)
-                                 buttons:@[MCLEStr(IDS_CONFIRM_OK), MCLEStr(IDS_CONFIRM_CANCEL)]
-                              focusIndex:0
-                                callback:^(MCLEDialogResult r) {
-                if (r == MCLEDialogResultAccept) [weakSelf startLoadingSelectedSave];
-            }];
-            return;
-        }
+    } else if (g_start_options.bHostPrivileges) {
+        textId = IDS_CONFIRM_START_HOST_PRIVILEGES;
+    }
+    if (textId) {
+        __weak MinecraftViewController* weakSelf = self;
+        [self presentDialogWithTitle:MCLEStr(IDS_TITLE_START_GAME)
+                             content:MCLEStr(textId)
+                             buttons:@[MCLEStr(IDS_CONFIRM_OK), MCLEStr(IDS_CONFIRM_CANCEL)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r) {
+            if (r == MCLEDialogResultAccept) [weakSelf startLoadingSelectedSave];
+        }];
+        return;
     }
     [self startLoadingSelectedSave];
 }
@@ -2878,6 +2954,9 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
             }
             MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel", @[MCLECreateWorldGameModeLabel()]);
             break;
+        case 4:     // eControl_MoreOptions
+            [self navigateForwardTo:@"LaunchMoreOptionsMenu1080.swf"];
+            break;
         case 1:     // eControl_TexturePackList, the default pack is the only one
             break;
         case 5:     // eControl_NewWorld
@@ -2928,6 +3007,265 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
     } else {
         NSLog(@"[createworld] mcle_game_create_world refused");
     }
+}
+
+// UIScene_LaunchMoreOptionsMenu's checkboxes, by EControls id
+static const char* const kMoreOptionsCheckboxes[21] = {
+    "GameOptions.CheckboxOnline",               // eLaunchCheckbox_Online
+    "GameOptions.CheckboxInviteOnly",           // eLaunchCheckbox_InviteOnly
+    "GameOptions.CheckboxAllowFoF",             // eLaunchCheckbox_AllowFoF
+    "GameOptions.CheckboxPVP",                  // eLaunchCheckbox_PVP
+    "WorldOptions.CheckboxTrustSystem",         // eLaunchCheckbox_TrustSystem
+    "WorldOptions.CheckboxFireSpreads",         // eLaunchCheckbox_FireSpreads
+    "WorldOptions.CheckboxTNT",                 // eLaunchCheckbox_TNT
+    "GameOptions.CheckboxHostPrivileges",       // eLaunchCheckbox_HostPrivileges
+    "WorldOptions.CheckboxResetNether",         // eLaunchCheckbox_ResetNether
+    "WorldOptions.CheckboxStructures",          // eLaunchCheckbox_Structures
+    "WorldOptions.CheckboxFlatWorld",           // eLaunchCheckbox_FlatWorld
+    "WorldOptions.CheckboxBonusChest",          // eLaunchCheckbox_BonusChest
+    "WorldOptions.CheckboxDisableSaving",       // eLaunchCheckbox_DisableSaving
+    "WorldOptions.CheckboxResizeType",          // eLaunchCheckbox_WorldResizeType
+    "GameOptions.CheckboxKeepInventory",        // eLaunchCheckbox_KeepInventory
+    "GameOptions.CheckboxMobSpawning",          // eLaunchCheckbox_MobSpawning
+    "GameOptions.CheckboxMobLoot",              // eLaunchCheckbox_MobLoot
+    "GameOptions.CheckboxMobGriefing",          // eLaunchCheckbox_MobGriefing
+    "GameOptions.CheckboxTileDrops",            // eLaunchCheckbox_TileDrops
+    "GameOptions.CheckboxNaturalRegeneration",  // eLaunchCheckbox_NaturalRegeneration
+    "GameOptions.CheckboxDayLightCycle",        // eLaunchCheckbox_DayLightCycle
+};
+static const int kMoreOptionsEditSeed = 22;
+static const int kMoreOptionsWorldSize = 23;
+static const int kMoreOptionsWorldResize = 24;
+
+static const int kWorldSizeTitles[4] = {
+    IDS_WORLD_SIZE_TITLE_CLASSIC,
+    IDS_WORLD_SIZE_TITLE_SMALL,
+    IDS_WORLD_SIZE_TITLE_MEDIUM,
+    IDS_WORLD_SIZE_TITLE_LARGE,
+};
+
+static void MCLEMoreOptionsCheckbox(int box, NSString* method, BOOL value) {
+    MCLECallPath(@(kMoreOptionsCheckboxes[box]), method, @[value ? @YES : @NO]);
+}
+
+static void MCLEMoreOptionsInitCheckbox(int box, int ids, bool checked) {
+    MCLECallPath(@(kMoreOptionsCheckboxes[box]), @"Init", @[MCLEStr(ids), @(box), checked ? @YES : @NO]);
+}
+
+// UIScene_LaunchMoreOptionsMenu::UpdateCheats: the game rules that need host privileges
+static void MCLEMoreOptionsUpdateCheats(void) {
+    MCLELaunchMoreOptions& p = g_start_options;
+    bool cheatsOn = p.bHostPrivileges;
+
+    MCLEMoreOptionsCheckbox(14, @"EnableCheckBox", cheatsOn);   // KeepInventory
+    MCLEMoreOptionsCheckbox(15, @"EnableCheckBox", cheatsOn);   // MobSpawning
+    MCLEMoreOptionsCheckbox(17, @"EnableCheckBox", cheatsOn);   // MobGriefing
+    MCLEMoreOptionsCheckbox(20, @"EnableCheckBox", cheatsOn);   // DayLightCycle
+
+    if (!cheatsOn) {
+        // Set defaults
+        p.bMobGriefing = true;
+        p.bKeepInventory = false;
+        p.bDoMobSpawning = true;
+        p.bDoDaylightCycle = true;
+
+        MCLEMoreOptionsCheckbox(14, @"SetCheckBox", p.bKeepInventory);
+        MCLEMoreOptionsCheckbox(15, @"SetCheckBox", p.bDoMobSpawning);
+        MCLEMoreOptionsCheckbox(17, @"SetCheckBox", p.bMobGriefing);
+        MCLEMoreOptionsCheckbox(20, @"SetCheckBox", p.bDoDaylightCycle);
+    }
+}
+
+// UIScene_LaunchMoreOptionsMenu::UpdateOnline
+static void MCLEMoreOptionsUpdateOnline(void) {
+    bool bOnline = g_start_options.bOnlineGame;
+    MCLEMoreOptionsCheckbox(1, @"EnableCheckBox", bOnline);   // InviteOnly
+    MCLEMoreOptionsCheckbox(2, @"EnableCheckBox", bOnline);   // AllowFoF
+}
+
+// The active tab's description text, in eHTMLColor_White
+static void MCLEMoreOptionsSetDescription(int stringId) {
+    NSString* text = [NSString stringWithFormat:@"<font color=\"#%08x\">%@", 0xffffffffu, MCLEStr(stringId)];
+    MCLECallPath(g_more_options_tab == 0 ? @"WorldOptions.Description_WorldOptions"
+                                         : @"GameOptions.Description_GameOptions",
+                 @"SetLabel", @[text]);
+}
+
+// UIScene_LaunchMoreOptionsMenu::updateTooltips: LB shows without text, RB names the other tab
+static void MCLEMoreOptionsTooltips(void) {
+    int changeTabTooltip = g_more_options_tab == 1 ? IDS_WORLD_OPTIONS : IDS_GAME_OPTIONS;
+    int ids[11] = { IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK, -1, -1, -1, -1, -2, changeTabTooltip, -1, -1, -1 };
+    MCLESetTooltips(ids);
+}
+
+// UIScene_LaunchMoreOptionsMenu::handleInput, LB or RB
+static void MCLEMoreOptionsChangeTab(void) {
+    // Toggle tab index
+    g_more_options_tab = g_more_options_tab == 0 ? 1 : 0;
+    MCLEMoreOptionsTooltips();
+    MCLECallPath(@"", @"ChangeTab", @[]);
+}
+
+// UIScene_LaunchMoreOptionsMenu constructor, on the params of the
+// CreateWorldMenu or LoadMenu that opened it
+- (void)initMoreOptionsMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    [self attachMenuScenery];
+    MCLELaunchMoreOptions& p = g_start_options;
+    g_more_options_ignore_input = false;
+
+    MCLECallPath(@"LabelWorld", @"Init", @[MCLEStr(IDS_WORLD_OPTIONS)]);
+
+    // don't show the increase world size stuff if we're already large, or the size is unknown
+    bool showResize = p.currentWorldSize == 1 || p.currentWorldSize == 2 || p.currentWorldSize == 3;
+    MCLECallPath(@"", @"SetMenuType", @[@(p.bGenerateOptions ? 0 : 1), showResize ? @YES : @NO]);
+
+    bool bOnlineGame = p.bOnlineGame;
+    bool bInviteOnly = p.bInviteOnly;
+    bool bAllowFriendsOfFriends = p.bAllowFriendsOfFriends;
+
+    // Not signed in to an online service, so multiplayer isn't allowed
+    MCLEMoreOptionsCheckbox(0, @"EnableCheckBox", NO);
+    if (p.bOnlineSettingChangedBySystem) {
+        MCLEMoreOptionsCheckbox(0, @"EnableCheckBox", NO);
+        MCLEMoreOptionsCheckbox(1, @"EnableCheckBox", NO);
+        MCLEMoreOptionsCheckbox(2, @"EnableCheckBox", NO);
+        bOnlineGame = bInviteOnly = bAllowFriendsOfFriends = false;
+    } else if (!p.bOnlineGame) {
+        MCLEMoreOptionsCheckbox(1, @"EnableCheckBox", NO);
+        MCLEMoreOptionsCheckbox(2, @"EnableCheckBox", NO);
+    }
+
+    MCLEMoreOptionsUpdateCheats();
+
+    MCLEMoreOptionsInitCheckbox(0, IDS_ONLINE_GAME, bOnlineGame);
+    MCLEMoreOptionsInitCheckbox(1, IDS_INVITE_ONLY, bInviteOnly);
+    MCLEMoreOptionsInitCheckbox(2, IDS_ALLOWFRIENDSOFFRIENDS, bAllowFriendsOfFriends);
+    MCLEMoreOptionsInitCheckbox(3, IDS_PLAYER_VS_PLAYER, p.bPVP);
+    MCLEMoreOptionsInitCheckbox(4, IDS_TRUST_PLAYERS, p.bTrust);
+    MCLEMoreOptionsInitCheckbox(5, IDS_FIRE_SPREADS, p.bFireSpreads);
+    MCLEMoreOptionsInitCheckbox(6, IDS_TNT_EXPLODES, p.bTNT);
+    MCLEMoreOptionsInitCheckbox(7, IDS_HOST_PRIVILEGES, p.bHostPrivileges);
+    MCLEMoreOptionsInitCheckbox(8, IDS_RESET_NETHER, p.bResetNether);
+    MCLEMoreOptionsInitCheckbox(9, IDS_GENERATE_STRUCTURES, p.bStructures);
+    MCLEMoreOptionsInitCheckbox(10, IDS_SUPERFLAT_WORLD, p.bFlatWorld);
+    MCLEMoreOptionsInitCheckbox(11, IDS_BONUS_CHEST, p.bBonusChest);
+
+    MCLEMoreOptionsInitCheckbox(14, IDS_KEEP_INVENTORY, p.bKeepInventory);
+    MCLEMoreOptionsInitCheckbox(15, IDS_MOB_SPAWNING, p.bDoMobSpawning);
+    MCLEMoreOptionsInitCheckbox(16, IDS_MOB_LOOT, p.bDoMobLoot);
+    MCLEMoreOptionsInitCheckbox(17, IDS_MOB_GRIEFING, p.bMobGriefing);
+    MCLEMoreOptionsInitCheckbox(18, IDS_TILE_DROPS, p.bDoTileDrops);
+    MCLEMoreOptionsInitCheckbox(19, IDS_NATURAL_REGEN, p.bNaturalRegeneration);
+    MCLEMoreOptionsInitCheckbox(20, IDS_DAYLIGHT_CYCLE, p.bDoDaylightCycle);
+
+    MCLECallPath(@"LabelGame", @"Init", @[MCLEStr(IDS_GAME_OPTIONS)]);
+    MCLECallPath(@"WorldOptions.Seed", @"Init", @[MCLEStr(IDS_CREATE_NEW_WORLD_SEED)]);
+    MCLECallPath(@"WorldOptions.RandomSeed", @"Init", @[MCLEStr(IDS_CREATE_NEW_WORLD_RANDOM_SEED)]);
+    MCLECallPath(@"WorldOptions.EditSeed", @"Init", @[MCLEStringFromUTF16(p.seed), @(kMoreOptionsEditSeed)]);
+
+    int worldSize = MAX(0, MIN(p.worldSize, 3));
+    MCLECallPath(@"WorldOptions.WorldSize", @"Init", @[MCLEStr(IDS_WORLD_SIZE)]);
+    MCLECallPath(@"WorldOptions.WorldSizeSlider", @"Init",
+                 @[MCLEStr(kWorldSizeTitles[worldSize]), @(kMoreOptionsWorldSize), @0, @3, @(worldSize)]);
+
+    MCLEMoreOptionsInitCheckbox(12, IDS_DISABLE_SAVING, p.bDisableSaving);
+
+    if (p.currentWorldSize != 0) {
+        MCLECallPath(@"WorldOptions.ResizeLabel", @"Init", @[MCLEStr(IDS_INCREASE_WORLD_SIZE)]);
+        int min = p.currentWorldSize - 1;
+        int curr = MAX(0, MIN(p.newWorldSize - 1, 3));
+        MCLECallPath(@"WorldOptions.ChangeWorldSizeSlider", @"Init",
+                     @[MCLEStr(kWorldSizeTitles[curr]), @(kMoreOptionsWorldResize), @(min), @3, @(curr)]);
+        MCLEMoreOptionsInitCheckbox(13, IDS_INCREASE_WORLD_SIZE_OVERWRITE_EDGES, p.newWorldSizeOverwriteEdges);
+    }
+
+    g_more_options_tab = p.bGenerateOptions ? 0 : 1;
+    // set the default text
+    MCLEMoreOptionsSetDescription(p.bGenerateOptions ? IDS_GAMEOPTION_SEED : IDS_GAMEOPTION_ONLINE);
+
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+}
+
+// UIScene_LaunchMoreOptionsMenu::handleCheckboxToggled
+- (void)moreOptionsCheckbox:(int)controlId checked:(BOOL)selected {
+    // A box that hasn't had its Init yet
+    if (controlId < 0) return;
+    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+    MCLELaunchMoreOptions& p = g_start_options;
+    switch (controlId) {
+        case 0:  p.bOnlineGame = selected; MCLEMoreOptionsUpdateOnline(); break;
+        case 1:  p.bInviteOnly = selected; break;
+        case 2:  p.bAllowFriendsOfFriends = selected; break;
+        case 3:  p.bPVP = selected; break;
+        case 4:  p.bTrust = selected; break;
+        case 5:  p.bFireSpreads = selected; break;
+        case 6:  p.bTNT = selected; break;
+        case 7:  p.bHostPrivileges = selected; MCLEMoreOptionsUpdateCheats(); break;
+        case 8:  p.bResetNether = selected; break;
+        case 9:  p.bStructures = selected; break;
+        case 10: p.bFlatWorld = selected; break;
+        case 11: p.bBonusChest = selected; break;
+        case 12: p.bDisableSaving = selected; break;
+        case 13: p.newWorldSizeOverwriteEdges = selected; break;
+        case 14: p.bKeepInventory = selected; break;
+        case 15: p.bDoMobSpawning = selected; break;
+        // upstream's MobLoot case has no break and carries on into MobGriefing
+        case 16: p.bDoMobLoot = selected; p.bMobGriefing = selected; break;
+        case 17: p.bMobGriefing = selected; break;
+        case 18: p.bDoTileDrops = selected; break;
+        case 19: p.bNaturalRegeneration = selected; break;
+        case 20: p.bDoDaylightCycle = selected; break;
+        default: break;
+    }
+}
+
+// UIScene_LaunchMoreOptionsMenu::handleFocusChange: the focused option's description
+- (void)moreOptionsFocus:(int)controlId {
+    static const int kDescriptions[25] = {
+        IDS_GAMEOPTION_ONLINE, IDS_GAMEOPTION_INVITEONLY, IDS_GAMEOPTION_ALLOWFOF, IDS_GAMEOPTION_PVP,
+        IDS_GAMEOPTION_TRUST, IDS_GAMEOPTION_FIRE_SPREADS, IDS_GAMEOPTION_TNT_EXPLODES,
+        IDS_GAMEOPTION_HOST_PRIVILEGES, IDS_GAMEOPTION_RESET_NETHER, IDS_GAMEOPTION_STRUCTURES,
+        IDS_GAMEOPTION_SUPERFLAT, IDS_GAMEOPTION_BONUS_CHEST, IDS_GAMEOPTION_DISABLE_SAVING,
+        IDS_GAMEOPTION_INCREASE_WORLD_SIZE_OVERWRITE_EDGES, IDS_GAMEOPTION_KEEP_INVENTORY,
+        IDS_GAMEOPTION_MOB_SPAWNING, IDS_GAMEOPTION_MOB_LOOT, IDS_GAMEOPTION_MOB_GRIEFING,
+        IDS_GAMEOPTION_TILE_DROPS, IDS_GAMEOPTION_NATURAL_REGEN, IDS_GAMEOPTION_DAYLIGHT_CYCLE,
+        0, IDS_GAMEOPTION_SEED, IDS_GAMEOPTION_WORLD_SIZE, IDS_GAMEOPTION_INCREASE_WORLD_SIZE,
+    };
+    int stringId = (controlId >= 0 && controlId < 25) ? kDescriptions[controlId] : 0;
+    MCLEMoreOptionsSetDescription(stringId);
+}
+
+// UIScene_LaunchMoreOptionsMenu::handleSliderMove
+- (void)moreOptionsSlider:(int)sliderId value:(int)value {
+    if (value < 0 || value > 3) return;
+    if (sliderId == kMoreOptionsWorldSize) {
+        g_start_options.worldSize = value;
+        MCLECallPath(@"WorldOptions.WorldSizeSlider", @"SetLabel", @[MCLEStr(kWorldSizeTitles[value])]);
+    } else if (sliderId == kMoreOptionsWorldResize) {
+        if (value + 1 >= g_start_options.currentWorldSize) {
+            g_start_options.newWorldSize = value + 1;
+            MCLECallPath(@"WorldOptions.ChangeWorldSizeSlider", @"SetLabel", @[MCLEStr(kWorldSizeTitles[value])]);
+        }
+    }
+}
+
+// UIScene_LaunchMoreOptionsMenu::handlePress, the seed's keyboard
+- (void)moreOptionsPress:(int)controlId {
+    if (g_more_options_ignore_input || controlId != kMoreOptionsEditSeed) return;
+    g_more_options_ignore_input = true;
+    [self requestKeyboardWithTitle:MCLEStr(IDS_CREATE_NEW_WORLD_SEED)
+                              text:MCLEStringFromUTF16(g_start_options.seed)
+                          maxChars:60
+                              done:^(NSString* text) {
+        // KeyboardCompleteSeedCallback
+        g_more_options_ignore_input = false;
+        if (!text) return;
+        MCLECallPath(@"WorldOptions.EditSeed", @"SetLabel", @[text]);
+        g_start_options.seed = MCLEWideUTF16(text);
+    }];
 }
 
 static int g_progress_stage = -2;
@@ -3869,6 +4207,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self initLoadMenu];
         } else if ([swfName isEqualToString:@"CreateWorldMenu1080.swf"]) {
             [self initCreateWorldMenu];
+        } else if ([swfName isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
+            [self initMoreOptionsMenu];
         } else if ([swfName isEqualToString:@"FullscreenProgress1080.swf"]) {
             [self initFullscreenProgress];
         } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
@@ -4361,6 +4701,11 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                     MCLEHowToPlayStartPage(g_htp_page - 1);
                     mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
                 }
+            }
+            // UIScene_LaunchMoreOptionsMenu::handleInput: LB and RB swap the tab
+            if (!g_pending_dialog && (pressedNow & (0x00000080u | 0x00000040u)) &&
+                [self.currentMenuSwf isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
+                MCLEMoreOptionsChangeTab();
             }
             if (pressedNow & 0x00000002u) {
                 if (g_pending_dialog) {
