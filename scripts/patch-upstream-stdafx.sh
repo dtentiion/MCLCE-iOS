@@ -1681,6 +1681,12 @@ if [ -f "$CRAFT_PY" ]; then
     python3 "$CRAFT_PY"
 fi
 
+# DLCManager builds and reads .pck files with iOS's 4 byte wchar_t
+DLCM_PY="$REPO_ROOT/scripts/patch-dlcmanager-ios.py"
+if [ -f "$DLCM_PY" ]; then
+    python3 "$DLCM_PY"
+fi
+
 # UIScene_SkinSelectMenu and its skin previews, for Game/MCLESkinSelectMenu.cpp
 SKIN_PY="$REPO_ROOT/scripts/gen-skin-select-menu.py"
 if [ -f "$SKIN_PY" ]; then

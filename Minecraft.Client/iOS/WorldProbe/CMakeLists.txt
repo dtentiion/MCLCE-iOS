@@ -1165,6 +1165,10 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/VideoSettingsScreen.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCGameRulesFile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCSkinFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCManager.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCPack.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCAudioFile.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCGameRulesHeader.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/Leaderboards/LeaderboardManager.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_AnvilMenu.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.cpp
