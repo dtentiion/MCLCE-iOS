@@ -1917,7 +1917,9 @@ NSString* const kGammaShaderSrc = @R"(
     struct G_out { float4 pos [[position]]; float2 uv; };
     vertex G_out gamma_vert(uint id [[vertex_id]]) {
         G_out o;
-        float2 uv = float2((id << 1) & 2, id & 2);
+        // Metal won't narrow a uint into a float2 constructor, so they're
+        // converted first
+        float2 uv = float2(float((id << 1) & 2), float(id & 2));
         o.pos = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
         o.uv = uv;
         return o;
@@ -1941,6 +1943,10 @@ extern "C" void mcle_metal_set_gamma(float gamma) {
 
 static bool ensure_gamma_pipeline() {
     if (g.gammaPso) return true;
+    // A pipeline that didn't build isn't tried again every frame
+    static bool s_failed = false;
+    if (s_failed) return false;
+    s_failed = true;
     NSError* err = nil;
     id<MTLLibrary> lib = [g.device newLibraryWithSource:kGammaShaderSrc options:nil error:&err];
     if (!lib) {
@@ -1956,6 +1962,7 @@ static bool ensure_gamma_pipeline() {
         NSLog(@"[mcle_metal] gamma pso build failed: %@", err);
         return false;
     }
+    s_failed = false;
     return true;
 }
 
