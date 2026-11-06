@@ -660,6 +660,8 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // the iOS port already targets the Windows64 string set on the
 // menu side.
 #include "../Minecraft.Client/Windows64Media/strings.h"
+// stdafx.h's Common/BuildVer.h, made from this one on Windows
+#include "../Minecraft.Client/Windows64/Xbox_BuildVer.h"
 #include "../Minecraft.Client/Common/Console_Awards_enum.h"
 #include "../Minecraft.Client/Common/Console_Debug_enum.h"
 #include "../Minecraft.Client/Common/Minecraft_Macros.h"

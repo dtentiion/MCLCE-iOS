@@ -205,6 +205,13 @@ enum ESen_SubModeId
     eTelem_SubModeId_Normal    = 2,
 };
 
+// Windows64 Sentient/TelemetryEnum.h
+enum ETelem_LevelId
+{
+    eTelem_LevelId_Undefined = 0,
+    eTelem_LevelId_PlayerGeneratedLevel = 1,
+};
+
 enum ESen_SubLevelId
 {
     eTelem_SubLevelId_Undefined = 0,

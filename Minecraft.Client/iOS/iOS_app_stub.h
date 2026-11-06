@@ -401,6 +401,7 @@ struct McleNetworkManagerStub {
     template<class... A> bool  SessionHasSpace(A...)     { return true; }
     template<class... A> int   GetLocalPlayerCount(A...) { return 0; }
     template<class... A> int   GetRemotePlayerCount(A...) { return 0; }
+    template<class... A> int   GetOnlinePlayerCount(A...) { return 0; }
     template<class... A> class INetworkPlayer* GetPlayerByIndex(A...) { return nullptr; }
     template<class... A> class INetworkPlayer* GetPlayerBySessionIndex(A...) { return nullptr; }
     template<class... A> class INetworkPlayer* AddLocalPlayerByUserIndex(A...) { return nullptr; }
