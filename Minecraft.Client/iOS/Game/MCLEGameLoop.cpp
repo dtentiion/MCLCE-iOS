@@ -639,6 +639,114 @@ std::string narrow(const std::wstring &w) {
     return out;
 }
 
+// Reads a save's .ms bundle into g_saveFile, for initImpl
+bool mcle_open_save_bundle(const std::wstring &saveFolder) {
+    // Step 2.5: locate the .ms bundle inside the save folder. Win64 LCE
+    // names it after the world ("New World.ms" by default), not a fixed
+    // filename - so list the dir and pick the first .ms entry.
+    std::wstring saveDataPath;
+    {
+        File saveDir(saveFolder);
+        std::vector<File *> *contents = saveDir.listFiles();
+        if (contents) {
+            for (File *entry : *contents) {
+                if (!entry) continue;
+                std::wstring name = entry->getName();
+                if (name.size() >= 3 &&
+                    name.compare(name.size() - 3, 3, L".ms") == 0) {
+                    saveDataPath = saveFolder + L"/" + name;
+                    break;
+                }
+            }
+            for (File *entry : *contents) delete entry;
+            delete contents;
+        }
+    }
+    if (saveDataPath.empty()) {
+        MCLE_LOG("mcle_game_init: no .ms bundle in save folder, idling");
+        g_initState = kStateReadyIdle;
+        return false;
+    }
+    File saveDataFile(saveDataPath);
+    int64_t saveSize = saveDataFile.length();
+    if (saveSize <= 0) {
+        MCLE_LOG("mcle_game_init: .ms missing or empty (%lld bytes)",
+                 (long long)saveSize);
+        g_initState = kStateFailed;
+        return false;
+    }
+    MCLE_LOG("mcle_game_init: .ms bundle = %{public}s, size = %lld bytes",
+             narrow(saveDataPath).c_str(), (long long)saveSize);
+
+    byteArray saveBytes((unsigned int)saveSize);
+    try {
+        FileInputStream fis(saveDataFile);
+        fis.read(saveBytes);
+        fis.close();
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: saveData.ms read threw: %{public}s", e.what());
+        g_initState = kStateFailed;
+        return false;
+    }
+    if (saveBytes.length >= 16 && saveBytes.data) {
+        unsigned char *b = (unsigned char *)saveBytes.data;
+        unsigned int u0 = (unsigned int)b[0] | ((unsigned int)b[1]<<8) | ((unsigned int)b[2]<<16) | ((unsigned int)b[3]<<24);
+        unsigned int u1 = (unsigned int)b[4] | ((unsigned int)b[5]<<8) | ((unsigned int)b[6]<<16) | ((unsigned int)b[7]<<24);
+        MCLE_LOG("mcle_game_init: .ms head: u0(LE)=%u u1(LE)=%u "
+                 "raw=%02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
+                 u0, u1,
+                 b[0],b[1],b[2],b[3], b[4],b[5],b[6],b[7],
+                 b[8],b[9],b[10],b[11], b[12],b[13],b[14],b[15]);
+    }
+
+    // Construct the upstream save-file wrapper around the in-memory bytes.
+    // Matches MinecraftServer.cpp:913 exactly.
+    try {
+        g_saveFile = new ConsoleSaveFileOriginal(
+            /*fileName*/      saveDataPath,
+            /*pvSaveData*/    saveBytes.data,
+            /*fileSize*/      saveBytes.length,
+            /*forceCleanSave*/false,
+            /*plat*/          SAVE_FILE_PLATFORM_LOCAL);
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor threw: %{public}s", e.what());
+        g_initState = kStateFailed;
+        return false;
+    }
+    if (!g_saveFile) {
+        MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor returned null");
+        g_initState = kStateFailed;
+        return false;
+    }
+    g_saveFile->ConvertToLocalPlatform();
+    MCLE_LOG("mcle_game_init: saveData.ms parsed at %p", (void*)g_saveFile);
+
+    // Diagnostic: enumerate the parsed bundle's file table. If level.dat
+    // isn't here, prepareLevel() will return null and the bootstrap idles
+    // with "simulation idle, state=-1".
+    try {
+        std::vector<FileEntry *> *files = g_saveFile->getFilesWithPrefix(std::wstring(L""));
+        if (!files) {
+            MCLE_LOG("mcle_game_init: bundle file table is null");
+        } else {
+            MCLE_LOG("mcle_game_init: bundle has %zu file entries", files->size());
+            int n = 0;
+            for (FileEntry *fe : *files) {
+                if (!fe) continue;
+                std::wstring fn(fe->data.filename);
+                MCLE_LOG("mcle_game_init: file[%d] = %{public}s (%u bytes)",
+                         n++, narrow(fn).c_str(), (unsigned)fe->getFileSize());
+                if (n >= 64) { MCLE_LOG("mcle_game_init: ...truncated"); break; }
+            }
+        }
+    } catch (const std::exception &e) {
+        MCLE_LOG("mcle_game_init: file-table dump threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("mcle_game_init: file-table dump threw non-std exception");
+    }
+    return true;
+}
+
 void initImpl() {
     MCLE_LOG("mcle_game_init: starting");
 
@@ -826,110 +934,7 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
 
-    // Step 2.5: locate the .ms bundle inside the save folder. Win64 LCE
-    // names it after the world ("New World.ms" by default), not a fixed
-    // filename - so list the dir and pick the first .ms entry.
-    std::wstring saveFolder = savesDir + L"/" + levelId;
-    std::wstring saveDataPath;
-    {
-        File saveDir(saveFolder);
-        std::vector<File *> *contents = saveDir.listFiles();
-        if (contents) {
-            for (File *entry : *contents) {
-                if (!entry) continue;
-                std::wstring name = entry->getName();
-                if (name.size() >= 3 &&
-                    name.compare(name.size() - 3, 3, L".ms") == 0) {
-                    saveDataPath = saveFolder + L"/" + name;
-                    break;
-                }
-            }
-            for (File *entry : *contents) delete entry;
-            delete contents;
-        }
-    }
-    if (saveDataPath.empty()) {
-        MCLE_LOG("mcle_game_init: no .ms bundle in save folder, idling");
-        g_initState = kStateReadyIdle;
-        return;
-    }
-    File saveDataFile(saveDataPath);
-    int64_t saveSize = saveDataFile.length();
-    if (saveSize <= 0) {
-        MCLE_LOG("mcle_game_init: .ms missing or empty (%lld bytes)",
-                 (long long)saveSize);
-        g_initState = kStateFailed;
-        return;
-    }
-    MCLE_LOG("mcle_game_init: .ms bundle = %{public}s, size = %lld bytes",
-             narrow(saveDataPath).c_str(), (long long)saveSize);
-
-    byteArray saveBytes((unsigned int)saveSize);
-    try {
-        FileInputStream fis(saveDataFile);
-        fis.read(saveBytes);
-        fis.close();
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: saveData.ms read threw: %{public}s", e.what());
-        g_initState = kStateFailed;
-        return;
-    }
-    if (saveBytes.length >= 16 && saveBytes.data) {
-        unsigned char *b = (unsigned char *)saveBytes.data;
-        unsigned int u0 = (unsigned int)b[0] | ((unsigned int)b[1]<<8) | ((unsigned int)b[2]<<16) | ((unsigned int)b[3]<<24);
-        unsigned int u1 = (unsigned int)b[4] | ((unsigned int)b[5]<<8) | ((unsigned int)b[6]<<16) | ((unsigned int)b[7]<<24);
-        MCLE_LOG("mcle_game_init: .ms head: u0(LE)=%u u1(LE)=%u "
-                 "raw=%02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
-                 u0, u1,
-                 b[0],b[1],b[2],b[3], b[4],b[5],b[6],b[7],
-                 b[8],b[9],b[10],b[11], b[12],b[13],b[14],b[15]);
-    }
-
-    // Construct the upstream save-file wrapper around the in-memory bytes.
-    // Matches MinecraftServer.cpp:913 exactly.
-    try {
-        g_saveFile = new ConsoleSaveFileOriginal(
-            /*fileName*/      saveDataPath,
-            /*pvSaveData*/    saveBytes.data,
-            /*fileSize*/      saveBytes.length,
-            /*forceCleanSave*/false,
-            /*plat*/          SAVE_FILE_PLATFORM_LOCAL);
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor threw: %{public}s", e.what());
-        g_initState = kStateFailed;
-        return;
-    }
-    if (!g_saveFile) {
-        MCLE_LOG("mcle_game_init: ConsoleSaveFileOriginal ctor returned null");
-        g_initState = kStateFailed;
-        return;
-    }
-    g_saveFile->ConvertToLocalPlatform();
-    MCLE_LOG("mcle_game_init: saveData.ms parsed at %p", (void*)g_saveFile);
-
-    // Diagnostic: enumerate the parsed bundle's file table. If level.dat
-    // isn't here, prepareLevel() will return null and the bootstrap idles
-    // with "simulation idle, state=-1".
-    try {
-        std::vector<FileEntry *> *files = g_saveFile->getFilesWithPrefix(std::wstring(L""));
-        if (!files) {
-            MCLE_LOG("mcle_game_init: bundle file table is null");
-        } else {
-            MCLE_LOG("mcle_game_init: bundle has %zu file entries", files->size());
-            int n = 0;
-            for (FileEntry *fe : *files) {
-                if (!fe) continue;
-                std::wstring fn(fe->data.filename);
-                MCLE_LOG("mcle_game_init: file[%d] = %{public}s (%u bytes)",
-                         n++, narrow(fn).c_str(), (unsigned)fe->getFileSize());
-                if (n >= 64) { MCLE_LOG("mcle_game_init: ...truncated"); break; }
-            }
-        }
-    } catch (const std::exception &e) {
-        MCLE_LOG("mcle_game_init: file-table dump threw: %{public}s", e.what());
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: file-table dump threw non-std exception");
-    }
+    if (!mcle_open_save_bundle(savesDir + L"/" + levelId)) return;
 
     // Step 3: build the storage directly. Parity with MinecraftServer.cpp:919
     // (`storage = make_shared<McRegionLevelStorage>(pSave, File(L"."), name, true)`).
