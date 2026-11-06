@@ -1779,3 +1779,9 @@ LPJ_PY="$REPO_ROOT/scripts/patch-local-player-jump-exhaustion.py"
 if [ -f "$LPJ_PY" ]; then
     python3 "$LPJ_PY"
 fi
+
+# Portals for the local player, the server's own ServerPlayer
+DIM_PY="$REPO_ROOT/scripts/patch-dimension-ios.py"
+if [ -f "$DIM_PY" ]; then
+    python3 "$DIM_PY"
+fi

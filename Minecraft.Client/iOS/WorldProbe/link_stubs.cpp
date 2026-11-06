@@ -28,6 +28,7 @@
 #include "ContainerOpenPacket.h"
 #include "ChatPacket.h"
 #include "ExplodePacket.h"
+#include "RespawnPacket.h"
 #include "EntityEvent.h"
 #include "TileEditorOpenPacket.h"
 #include "Biome.h"
@@ -378,6 +379,7 @@ void mcle_handle_chat_packet(std::shared_ptr<ChatPacket> packet);   // Game/MCLE
 void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet);   // Game/MCLEGameLoop.cpp
 void mcle_tutorial_local_player_packet(std::shared_ptr<Packet> packet);   // Game/MCLETutorial.cpp
 void mcle_player_entity_link(int type, int sourceId, int destId);   // Game/MCLEPlayerInput.cpp
+void mcle_local_player_respawn_packet(int dimension);   // Game/MCLEGameLoop.cpp
 void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     // what ClientConnection's handlers pass on to the tutorial
     mcle_tutorial_local_player_packet(packet);
@@ -392,6 +394,8 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
         mcle_handle_chat_packet(chat);
     } else if (std::shared_ptr<ExplodePacket> explode = std::dynamic_pointer_cast<ExplodePacket>(packet)) {
         mcle_local_player_explosion(explode);
+    } else if (std::shared_ptr<RespawnPacket> respawn = std::dynamic_pointer_cast<RespawnPacket>(packet)) {
+        mcle_local_player_respawn_packet(respawn->dimension);
     }
 }
 void PlayerConnection::send(std::shared_ptr<Packet> packet) {

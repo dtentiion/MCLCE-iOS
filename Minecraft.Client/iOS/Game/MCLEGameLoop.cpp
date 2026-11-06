@@ -336,8 +336,87 @@ public:
 private:
     LevelListener *r;
 };
-// The one on the current world's overworld, dropped when leaving it
+// The one on the client's level, dropped when leaving the world
 ClientLevelListener *g_clientLevelListener = nullptr;
+// The level the client is in, the one the renderer, the particles and that
+// listener follow. It changes with the player's dimension, the way
+// ClientConnection::handleRespawn sets its level, under g_frameMutex.
+ServerLevel *g_clientLevel = nullptr;
+// From the start of a level change until the client has the new level the
+// world isn't drawn, ConnectingProgress is over it
+std::atomic<bool> g_levelChanging{false};
+
+// Minecraft::setLevel's levelRenderer->setLevel and particleEngine->setLevel,
+// for the level the local player is in. The renderer hears the level through
+// ClientLevelListener instead of as its own listener. Once the world is drawn
+// this runs with g_frameMutex held.
+//
+// G3e: the live ServerLevel is mc->level so upstream renderSky can read
+// getSkyColor / dimension / time-of-day. ServerLevel and MultiPlayerLevel
+// are siblings under Level - the cast keeps virtual dispatch routed through
+// the actual ServerLevel vtable.
+//
+// G5: LevelRenderer::setLevel(0, lvl) sets level[0] and calls allChanged(0)
+// to allocate the chunk mesh array. Without this, chunks[0].length stays at
+// 0 and renderChunks dispatches no geometry.
+void mcle_client_set_level(ServerLevel *level) {
+    Minecraft *mc = Minecraft::GetInstance();
+    MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(level);
+    if (g_clientLevel && g_clientLevelListener) g_clientLevel->removeListener(g_clientLevelListener);
+    g_clientLevel = level;
+    mc->level = lvl;
+    {
+        std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+        if (mc->particleEngine) mc->particleEngine->setLevel(lvl);
+    }
+    MCLE_LOG("client level: dimension %d at %p", level->dimension->id, (void*)lvl);
+    try {
+        g_levelRenderer->setLevel(0, lvl);
+        lvl->removeListener(g_levelRenderer);
+        if (!g_clientLevelListener) g_clientLevelListener = new ClientLevelListener(g_levelRenderer);
+        lvl->addListener(g_clientLevelListener);
+        MCLE_LOG("client level: setLevel returned, chunks[0].length=%u",
+                 (unsigned)g_levelRenderer->chunks[0].length);
+    } catch (const std::exception &e) {
+        MCLE_LOG("client level: setLevel threw: %{public}s", e.what());
+    } catch (...) {
+        MCLE_LOG("client level: setLevel threw unknown");
+    }
+
+    // G5-step16: re-center the render grid around the player.
+    // setLevel -> allChanged calls resortChunks but only if mc->
+    // cameraTargetPlayer was wired BEFORE setLevel ran. Calling
+    // it explicitly here with current player coords guarantees
+    // the grid covers the loaded chunks.
+    try {
+        int px = (int)floorf(g_player->x);
+        int py = (int)floorf(g_player->y);
+        int pz = (int)floorf(g_player->z);
+        g_levelRenderer->resortChunks(px, py, pz);
+        MCLE_LOG("client level: resortChunks(%d,%d,%d) done", px, py, pz);
+    } catch (...) {
+        MCLE_LOG("client level: resortChunks threw");
+    }
+
+    // Force-dirty every render chunk in the now-recentered grid +
+    // signal the rebuild thread.
+    try {
+        int dirtied = 0;
+        for (size_t i = 0; i < g_levelRenderer->chunks[0].length; i++) {
+            Chunk *c = g_levelRenderer->chunks[0][i].chunk;
+            if (!c) continue;
+            g_levelRenderer->setGlobalChunkFlag(
+                c->x, c->y, c->z, lvl,
+                LevelRenderer::CHUNK_FLAG_DIRTY);
+            dirtied++;
+        }
+        MCLE_LOG("client level: force-dirty %d chunks", dirtied);
+        g_levelRenderer->nonStackDirtyChunksAdded();
+        MCLE_LOG("client level: nonStackDirtyChunksAdded done");
+    } catch (...) {
+        MCLE_LOG("client level: force-dirty / nonStackDirtyChunksAdded threw");
+    }
+}
 
 // MultiPlayerLevel::animateTick then animateTickDoWork, for the one local
 // player: random tiles in the 3x3x3 block of 8x8x8 chunks round the player
@@ -1564,76 +1643,20 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: LevelRenderer ctor threw unknown");
     }
 
-    // G3e: wire the live ServerLevel as mc->level so upstream renderSky
-    // can read getSkyColor / dimension / time-of-day. ServerLevel and
-    // MultiPlayerLevel are siblings under Level - the cast keeps virtual
-    // dispatch routed through the actual ServerLevel vtable.
-    //
-    // G5: also call LevelRenderer::setLevel(0, lvl) which sets level[0]
-    // and calls allChanged(0) to allocate the chunk mesh array. Without
-    // this, chunks[0].length stays at 0 and renderChunks dispatches no
-    // geometry. Wrapped: SIGSEGV bypasses but a C++ throw is caught.
-    if (g_levelRenderer && g_levels[0]) {
-        MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(g_levels[0]);
-        g_minecraftShim->level = lvl;
+    // Minecraft::setLevel with the level of the player's dimension, which
+    // the LoginPacket gives the client
+    if (g_levelRenderer && g_player) {
+        MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(g_player->getLevel());
         // Minecraft::init builds this before any level is set. LevelRenderer
         // routes block break / crack events into it as soon as it listens to
         // the level, so it has to exist first. It's made again with the
         // textures once they exist.
         if (!g_minecraftShim->particleEngine)
             g_minecraftShim->particleEngine = new ParticleEngine(lvl, nullptr);
-        else
-            g_minecraftShim->particleEngine->setLevel(lvl);
         // Its calls go to Game/MCLESound.cpp
         if (!g_minecraftShim->soundEngine)
             g_minecraftShim->soundEngine = new SoundEngine();
-        MCLE_LOG("mcle_game_init: G5 calling LR->setLevel(0, %p)", (void*)lvl);
-        try {
-            g_levelRenderer->setLevel(0, lvl);
-            lvl->removeListener(g_levelRenderer);
-            g_clientLevelListener = new ClientLevelListener(g_levelRenderer);
-            lvl->addListener(g_clientLevelListener);
-            MCLE_LOG("mcle_game_init: G5 setLevel returned, chunks[0].length=%u",
-                     (unsigned)g_levelRenderer->chunks[0].length);
-        } catch (const std::exception &e) {
-            MCLE_LOG("mcle_game_init: G5 setLevel threw: %{public}s", e.what());
-        } catch (...) {
-            MCLE_LOG("mcle_game_init: G5 setLevel threw unknown");
-        }
-
-        // G5-step16: re-center the render grid around the player.
-        // setLevel -> allChanged calls resortChunks but only if mc->
-        // cameraTargetPlayer was wired BEFORE setLevel ran. Calling
-        // it explicitly here with current player coords guarantees
-        // the grid covers our loaded chunks.
-        try {
-            int px = (int)floorf(g_player->x);
-            int py = (int)floorf(g_player->y);
-            int pz = (int)floorf(g_player->z);
-            g_levelRenderer->resortChunks(px, py, pz);
-            MCLE_LOG("mcle_game_init: G5 resortChunks(%d,%d,%d) done", px, py, pz);
-        } catch (...) {
-            MCLE_LOG("mcle_game_init: G5 resortChunks threw");
-        }
-
-        // Force-dirty every render chunk in the now-recentered grid +
-        // signal the rebuild thread.
-        try {
-            int dirtied = 0;
-            for (size_t i = 0; i < g_levelRenderer->chunks[0].length; i++) {
-                Chunk *c = g_levelRenderer->chunks[0][i].chunk;
-                if (!c) continue;
-                g_levelRenderer->setGlobalChunkFlag(
-                    c->x, c->y, c->z, lvl,
-                    LevelRenderer::CHUNK_FLAG_DIRTY);
-                dirtied++;
-            }
-            MCLE_LOG("mcle_game_init: G5 force-dirty %d chunks", dirtied);
-            g_levelRenderer->nonStackDirtyChunksAdded();
-            MCLE_LOG("mcle_game_init: G5 nonStackDirtyChunksAdded done");
-        } catch (...) {
-            MCLE_LOG("mcle_game_init: G5 force-dirty / nonStackDirtyChunksAdded threw");
-        }
+        mcle_client_set_level(g_player->getLevel());
     }
 
     // Minecraft::init: the textures, fonts and hand renderers stay for the
@@ -1662,7 +1685,7 @@ void initImpl() {
             // The one from before only had to catch events and has none.
             {
                 ParticleEngine *early = g_minecraftShim->particleEngine;
-                g_minecraftShim->particleEngine = new ParticleEngine(g_levels[0], textures);
+                g_minecraftShim->particleEngine = new ParticleEngine(g_clientLevel, textures);
                 delete early;
             }
             MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
@@ -2487,6 +2510,55 @@ extern "C" void mcle_game_respawn(void) {
     g_respawnRequested.store(true, std::memory_order_relaxed);
 }
 
+// ClientConnection::handleRespawn's ConnectingProgress, for the view
+// controller: the level changes started, the ones the client has finished
+// (eAppAction_WaitForDimensionChangeComplete) and the last one's title
+static std::atomic<int> g_levelChangesStarted{0};
+static std::atomic<int> g_levelChangesFinished{0};
+static std::atomic<int> g_levelChangeTitle{-1};
+
+extern "C" int mcle_game_level_changes(int *finished, int *stringId) {
+    if (stringId) *stringId = g_levelChangeTitle.load();
+    if (finished) *finished = g_levelChangesFinished.load();
+    return g_levelChangesStarted.load();
+}
+
+// ClientConnection::handleRespawn: going to another dimension puts up
+// ConnectingProgress with where the player's going. The client takes the
+// new level once the server is done moving the player.
+void mcle_local_player_respawn_packet(int dimension) {
+    const int oldDimension = g_clientLevel ? g_clientLevel->dimension->id : 0;
+    if (dimension == oldDimension) return;
+    int stringId = -1;
+    if (dimension == -1) {
+        stringId = IDS_PROGRESS_ENTERING_NETHER;
+    } else if (oldDimension == -1) {
+        stringId = IDS_PROGRESS_LEAVING_NETHER;
+    } else if (dimension == 1) {
+        stringId = IDS_PROGRESS_ENTERING_END;
+    } else if (oldDimension == 1) {
+        stringId = IDS_PROGRESS_LEAVING_END;
+    }
+    g_levelChangeTitle.store(stringId);
+    g_levelChangesStarted.fetch_add(1);
+}
+
+// handleRespawn's Minecraft::setLevel for the level the server put the
+// local player in, then the teleport that starts the client again. With
+// g_frameMutex held.
+static void mcle_client_follow_player() {
+    if (g_player && g_player->level != g_clientLevel) {
+        Minecraft *mc = Minecraft::GetInstance();
+        // 4J - stop update thread from processing this level, which blocks until it is safe to move on
+        mc->gameRenderer->DisableUpdateThread();
+        // Stop any streaming music (e.g. jukebox) when changing dimensions
+        g_levelRenderer->playStreamingMusic(L"", 0, 0, 0);
+        mcle_client_set_level(g_player->getLevel());
+        mc->gameRenderer->EnableUpdateThread();
+    }
+    g_levelChangesFinished.store(g_levelChangesStarted.load());
+}
+
 // PlayerConnection::handleClientCommand(PERFORM_RESPAWN): PlayerList::respawn
 // makes a new player at the spawn. The player has no network connection,
 // and respawn stores the new player in it and sends packets through it, so
@@ -2497,9 +2569,9 @@ static void mcle_do_respawn() {
     if (g_player->getHealth() > 0) return;
     struct alignas(PlayerConnection) ConnectionBuf { char bytes[sizeof(PlayerConnection)]; };
     static ConnectionBuf s_connection = {};
+    PlayerConnection *standIn = reinterpret_cast<PlayerConnection *>(&s_connection);
     // connection is a shared_ptr; this one doesn't own the buffer
-    g_player->connection = std::shared_ptr<PlayerConnection>(reinterpret_cast<PlayerConnection *>(&s_connection),
-                                                             [](PlayerConnection *) {});
+    g_player->connection = std::shared_ptr<PlayerConnection>(standIn, [](PlayerConnection *) {});
     std::shared_ptr<ServerPlayer> fresh;
     try {
         fresh = g_server->getPlayers()->respawn(g_player, 0, false);
@@ -2507,6 +2579,8 @@ static void mcle_do_respawn() {
         MCLE_LOG("respawn threw");
     }
     g_player->connection = nullptr;
+    // respawn gave the connection the new player, which this one keeps
+    standIn->setPlayer(nullptr);
     if (!fresh) return;
     fresh->connection = nullptr;
     // LocalPlayer's step, like the first player's
@@ -2523,11 +2597,12 @@ static void mcle_do_respawn() {
         mc->cameraTargetPlayer = fresh;
         g_playerGameMode = fresh->gameMode;
         g_player = fresh;
+        mcle_client_follow_player();
     }
     mc->gameRenderer->EnableUpdateThread();
     mcle_player_new_local_player();
     mcle_sound_listen(fresh, nullptr);
-    MCLE_LOG("respawned at %.1f %.1f %.1f", fresh->x, fresh->y, fresh->z);
+    MCLE_LOG("respawned at %.1f %.1f %.1f dim %d", fresh->x, fresh->y, fresh->z, fresh->dimension);
 }
 
 // PlayerConnection::handleCraftItem crafts on the server player, and
@@ -2551,6 +2626,52 @@ void mcle_run_with_stand_in_connection(const std::shared_ptr<ServerPlayer> &play
         }
     } restore{player, standIn};
     fn(arg);
+}
+
+// ServerPlayer::changeDimension, from scripts/patch-dimension-ios.py. The
+// server changes the level in the middle of the player's tick, which here
+// holds the frame, so the change waits for the end of the tick. That way
+// ConnectingProgress keeps drawing while the arrival portal is found or
+// built. The first portal of the tick is the one taken, like upstream,
+// where the player is gone from the old level after it.
+static bool g_changeDimensionPending = false;
+static int g_changeDimensionTo = 0;
+static bool g_changingDimension = false;
+
+bool mcle_defer_change_dimension(ServerPlayer *player, int i) {
+    if (g_changingDimension) return false;
+    if (!g_changeDimensionPending) {
+        g_changeDimensionPending = true;
+        g_changeDimensionTo = i;
+    }
+    return true;
+}
+
+static void mcle_do_change_dimension() {
+    if (!g_changeDimensionPending) return;
+    g_changeDimensionPending = false;
+    if (!g_player) return;
+    // Nothing draws the old level while the player leaves it
+    {
+        std::lock_guard<std::mutex> lock(g_frameMutex);
+        g_levelChanging.store(true);
+    }
+    g_changingDimension = true;
+    try {
+        mcle_run_with_stand_in_connection(g_player, [](void *to) {
+            g_player->changeDimension(*static_cast<int *>(to));
+        }, &g_changeDimensionTo);
+    } catch (...) {
+        MCLE_LOG("changeDimension threw");
+    }
+    g_changingDimension = false;
+    {
+        std::lock_guard<std::mutex> lock(g_frameMutex);
+        mcle_client_follow_player();
+        g_levelChanging.store(false);
+    }
+    MCLE_LOG("changeDimension to %d: dim %d at %.1f %.1f %.1f", g_changeDimensionTo, g_player->dimension, g_player->x,
+             g_player->y, g_player->z);
 }
 
 // ActionGameSettings for the host in game: In-Game Gamertags and Bedrock
@@ -3034,7 +3155,7 @@ extern "C" void mcle_game_tick(void) {
     // Minecraft::tick's player input: mining, placing, attacking, hotbar.
     // Before the levels tick, like the client's packets being handled at
     // the start of the server tick.
-    if (g_player && g_levels[0]) {
+    if (g_player && g_player->level) {
         // gameMode->tick(), which for the TutorialMode ticks the tutorial
         try {
             mcle_tutorial_tick();
@@ -3042,7 +3163,7 @@ extern "C" void mcle_game_tick(void) {
             MCLE_LOG("mcle_game_tick: tutorial threw");
         }
         try {
-            mcle_player_input_tick(g_player, g_levels[0], g_gameButtons);
+            mcle_player_input_tick(g_player, g_player->getLevel(), g_gameButtons);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: player input threw");
         }
@@ -3234,11 +3355,14 @@ extern "C" void mcle_game_tick(void) {
     if (!published) g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
     if (entityFrameLock.owns_lock()) entityFrameLock.unlock();
 
+    // A portal the player went through in its tick, with the frame let go
+    mcle_do_change_dimension();
+
     // On-demand chunk streaming. Walk clamp is gone; instead drive
     // PlayerChunkMap each tick so new chunks load as the player moves.
-    if (g_player && g_levels[0]) {
+    if (g_player && g_player->level) {
         try {
-            PlayerChunkMap *cm = g_levels[0]->getChunkMap();
+            PlayerChunkMap *cm = g_player->getLevel()->getChunkMap();
             if (cm) {
                 // Log player pos vs lastMove + addRequests size every
                 // ~30 ticks so we can see whether move() is queuing
@@ -3931,6 +4055,7 @@ extern "C" void mcle_world_drive_renderer(void) {
     std::lock_guard<std::mutex> frameLock(g_frameMutex);
     mcle_world_phase(0);
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
+    if (g_levelChanging.load()) return;
 
     // Render-thread TLS init - mirrors the bootstrap + tick threads.
     // Tile / Tesselator / Vec3 are TLS-singletons; without these on this
@@ -4024,7 +4149,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             double cx = g_player->xo + (g_player->x - g_player->xo) * a;
             double cy = g_player->yo + (g_player->y - g_player->yo) * a + 1.62 - g_player->heightOffset;
             double cz = g_player->zo + (g_player->z - g_player->zo) * a;
-            int t = g_levels[0]->getTile(Mth::floor(cx), Mth::floor(cy), Mth::floor(cz));
+            int t = g_player->level->getTile(Mth::floor(cx), Mth::floor(cy), Mth::floor(cz));
             if (t != 0 && Tile::tiles[t] && Tile::tiles[t]->material == Material::water) fov = fov * 60 / 70;
         }
 
@@ -4054,10 +4179,10 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (g_player->isSleeping()) {
                 heightOffset += 1.0;
                 mcle_glbridge_translate(0.0f, 0.3f, 0);
-                int t = g_levels[0]->getTile(Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
+                int t = g_player->level->getTile(Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
                 if (t == Tile::bed_Id) {
-                    int data = g_levels[0]->getData(Mth::floor(g_player->x), Mth::floor(g_player->y),
-                                                    Mth::floor(g_player->z));
+                    int data = g_player->level->getData(Mth::floor(g_player->x), Mth::floor(g_player->y),
+                                                        Mth::floor(g_player->z));
                     int direction = data & 3;
                     mcle_glbridge_rotate(static_cast<float>(direction) * 90, 0.0f, 1.0f, 0.0f);
                 }
@@ -4085,8 +4210,8 @@ extern "C" void mcle_world_drive_renderer(void) {
                     xo *= 0.1f;
                     yo *= 0.1f;
                     zo *= 0.1f;
-                    HitResult *hr = g_levels[0]->clip(Vec3::newTemp(x + xo, y + yo, z + zo),
-                                                      Vec3::newTemp(x - xd + xo, y - yd + yo, z - zd + zo));
+                    HitResult *hr = g_player->level->clip(Vec3::newTemp(x + xo, y + yo, z + zo),
+                                                          Vec3::newTemp(x - xd + xo, y - yd + yo, z - zd + zo));
                     if (hr != nullptr) {
                         double dist = hr->pos->distanceTo(Vec3::newTemp(x, y, z));
                         if (dist < cameraDist) cameraDist = dist;
@@ -4547,9 +4672,9 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
         if (b) *b = g_fb;
         return;
     }
-    if (g_initState == kStateTicking && g_levels[0] && g_player) {
+    if (g_initState == kStateTicking && g_player && g_player->level) {
         try {
-            Vec3 *sky = g_levels[0]->getSkyColor(g_player, /*alpha*/1.0f);
+            Vec3 *sky = g_player->level->getSkyColor(g_player, /*alpha*/1.0f);
             if (sky) {
                 fr = (float)sky->x;
                 fg = (float)sky->y;
@@ -4659,7 +4784,7 @@ static void mcle_exit_world(bool save) {
             }
         }
         if (g_levelRenderer) {
-            if (g_levels[0] && g_clientLevelListener) g_levels[0]->removeListener(g_clientLevelListener);
+            if (g_clientLevel && g_clientLevelListener) g_clientLevel->removeListener(g_clientLevelListener);
             try {
                 for (int p = 0; p < XUSER_MAX_COUNT; ++p) g_levelRenderer->setLevel(p, nullptr);
             } catch (...) {
@@ -4679,6 +4804,7 @@ static void mcle_exit_world(bool save) {
     }
     delete g_clientLevelListener;
     g_clientLevelListener = nullptr;
+    g_clientLevel = nullptr;
     mcle_sound_unlisten();
     mcle_sound_stop_music();
     mcle_player_input_reset();
