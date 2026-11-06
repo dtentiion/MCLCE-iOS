@@ -43,6 +43,7 @@
 #include "../../../upstream/Minecraft.World/BowItem.h"
 #include "../../../upstream/Minecraft.World/SetEntityLinkPacket.h"
 #include "../../../upstream/Minecraft.World/EntityHorse.h"
+#include "../../../upstream/Minecraft.World/Mth.h"
 
 // LocalPlayer::m_iThirdPersonView: 0 first person, 1 behind, 2 in front
 std::atomic<int> g_thirdPersonView{0};
@@ -849,6 +850,53 @@ void setSprinting(bool value) {
     m.sprintTime = value ? SPRINT_DURATION : 0;
 }
 
+bool isSolidBlock(int x, int y, int z) {
+    return P->level->isSolidBlockingTile(x, y, z);
+}
+
+// LocalPlayer::checkInTile: a player in a block is pushed out its nearest
+// open side
+void checkInTile(double x, double y, double z) {
+    int xTile = Mth::floor(x);
+    int yTile = Mth::floor(y);
+    int zTile = Mth::floor(z);
+
+    double xd = x - xTile;
+    double zd = z - zTile;
+
+    if (isSolidBlock(xTile, yTile, zTile) || isSolidBlock(xTile, yTile + 1, zTile)) {
+        bool west = !isSolidBlock(xTile - 1, yTile, zTile) && !isSolidBlock(xTile - 1, yTile + 1, zTile);
+        bool east = !isSolidBlock(xTile + 1, yTile, zTile) && !isSolidBlock(xTile + 1, yTile + 1, zTile);
+        bool north = !isSolidBlock(xTile, yTile, zTile - 1) && !isSolidBlock(xTile, yTile + 1, zTile - 1);
+        bool south = !isSolidBlock(xTile, yTile, zTile + 1) && !isSolidBlock(xTile, yTile + 1, zTile + 1);
+
+        int dir = -1;
+        double closest = 9999;
+        if (west && xd < closest) {
+            closest = xd;
+            dir = 0;
+        }
+        if (east && 1 - xd < closest) {
+            closest = 1 - xd;
+            dir = 1;
+        }
+        if (north && zd < closest) {
+            closest = zd;
+            dir = 4;
+        }
+        if (south && 1 - zd < closest) {
+            closest = 1 - zd;
+            dir = 5;
+        }
+
+        float speed = 0.1f;
+        if (dir == 0) P->xd = -speed;
+        if (dir == 1) P->xd = +speed;
+        if (dir == 4) P->zd = -speed;
+        if (dir == 5) P->zd = +speed;
+    }
+}
+
 // MultiplayerLocalPlayer::sendRidingJump, handled like
 // PlayerConnection::handlePlayerCommand's RIDING_JUMP
 void sendRidingJump() {
@@ -928,6 +976,11 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     if (m.sneaking) {
         if (P->ySlideOffset < 0.2f) P->ySlideOffset = 0.2f;
     }
+
+    checkInTile(P->x - P->bbWidth * 0.35, P->bb->y0 + 0.5, P->z + P->bbWidth * 0.35);
+    checkInTile(P->x - P->bbWidth * 0.35, P->bb->y0 + 0.5, P->z - P->bbWidth * 0.35);
+    checkInTile(P->x + P->bbWidth * 0.35, P->bb->y0 + 0.5, P->z - P->bbWidth * 0.35);
+    checkInTile(P->x + P->bbWidth * 0.35, P->bb->y0 + 0.5, P->z + P->bbWidth * 0.35);
 
     // PlayerCommandPacket START/STOP_SNEAKING
     if (P->isSneaking() != m.sneaking) P->setSneaking(m.sneaking);
