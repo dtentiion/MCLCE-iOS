@@ -25,6 +25,8 @@
 #include "../../../upstream/Minecraft.World/SoundTypes.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
+#include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
+#include "../../../upstream/Minecraft.Client/Lighting.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/TexturePack.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
@@ -500,6 +502,8 @@ protected:
 };
 
 ContainerScene *g_scene = nullptr;
+// The inventory's iggy_player control, MainPanel coordinates
+MCLEControlRect g_playerRect{};
 
 // What the slots held at the end of the last frame, for drawing
 std::vector<std::shared_ptr<ItemInstance>> g_slotItems;
@@ -539,6 +543,80 @@ void resetTooltips() {
     }
 }
 
+// UIControl_MinecraftPlayer::render, the player turned towards the pointer.
+// The region is in pixels already, so it's translated to rather than
+// scaled from Iggy's double size target. m_fScreenWidth / m_fScreenHeight
+// is the 16:9 screen the movie is laid out for.
+void drawPlayerPreview(const MCLECustomDrawRegion &region) {
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    Minecraft *pMinecraft = Minecraft::GetInstance();
+    std::shared_ptr<ServerPlayer> player = mcle_local_player();
+    if (!player || !g_scene || !EntityRenderDispatcher::instance || !pMinecraft || !pMinecraft->options) return;
+    float pointerX = 0, pointerY = 0;
+    g_scene->pointer(&pointerX, &pointerY);
+
+    glLoadIdentity();
+    glTranslatef(region.x0, region.y0, -2000);
+
+    glEnable(GL_RESCALE_NORMAL);
+    glEnable(GL_COLOR_MATERIAL);
+    glPushMatrix();
+
+    float width = region.x1 - region.x0;
+    float height = region.y1 - region.y0;
+    float xo = width / 2;
+    float yo = height;
+
+    // dynamic y offset according to region height
+    glTranslatef(xo, yo - (height / 9.0f), 50.0f);
+
+    // Base scale on height of this control
+    float ss = width / (1920.0f / 1080.0f);
+
+    glScalef(-ss, ss, ss);
+    glRotatef(180, 0, 0, 1);
+
+    float oybr = player->yBodyRot;
+    float oyr = player->yRot;
+    float oxr = player->xRot;
+    float oyhr = player->yHeadRot;
+
+    float xd = (g_playerRect.x + g_playerRect.w / 2) - pointerX;
+
+    // Need to base Y on head position, not centre of mass
+    float yd = (g_playerRect.y + g_playerRect.h / 2 - 40) - pointerY;
+
+    glRotatef(45 + 90, 0, 1, 0);
+    Lighting::turnOn();
+    glRotatef(-45 - 90, 0, 1, 0);
+
+    glRotatef(-(float)atan(yd / 40.0f) * 20, 1, 0, 0);
+
+    player->yBodyRot = (float)atan(xd / 40.0f) * 20;
+    player->yRot = (float)atan(xd / 40.0f) * 40;
+    player->xRot = -(float)atan(yd / 40.0f) * 20;
+    player->yHeadRot = player->yRot;
+    glTranslatef(0, player->heightOffset, 0);
+    EntityRenderDispatcher::instance->playerRotY = 180;
+
+    // Turning on hideGui while this draws stops the name rendering
+    bool wasHidingGui = pMinecraft->options->hideGui;
+    pMinecraft->options->hideGui = true;
+    try {
+        EntityRenderDispatcher::instance->render(player, 0, 0, 0, 0, 1, false, false);
+    } catch (...) {
+    }
+    pMinecraft->options->hideGui = wasHidingGui;
+
+    player->yBodyRot = oybr;
+    player->yRot = oyr;
+    player->xRot = oxr;
+    player->yHeadRot = oyhr;
+    glPopMatrix();
+    Lighting::turnOff();
+    glDisable(GL_RESCALE_NORMAL);
+}
+
 } // namespace
 
 unsigned int mcle_container_inventory_buttons() {
@@ -565,6 +643,7 @@ void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now
     g_closeRequested = false;
     // Minecraft::tick plays the press unless riding
     if (!player->isRiding()) mcleContainerUI.PlayUISFX(eSFX_Press);
+    g_playerRect = layout.player;
     g_scene = new InventoryScene(layout, player, now);
     mcle_game_set_menu_displayed(true);
     snapshotSlots();
@@ -644,11 +723,15 @@ void mcle_container_custom_draw(const MCLECustomDrawRegion *regions, int count) 
     if (!g_scene) return;
     if (!mcle_custom_draw_begin()) return;
     for (int i = 0; i < count; ++i) {
-        // UIScene_AbstractContainerMenu::customDraw. The player preview
-        // (UIControl_MinecraftPlayer) isn't drawn yet.
+        // UIScene_InventoryMenu::customDraw, then
+        // UIScene_AbstractContainerMenu::customDraw
         std::shared_ptr<ItemInstance> item = nullptr;
         bool valid = true;
         int slotId = -1;
+        if (strcmp(regions[i].name, "player") == 0) {
+            drawPlayerPreview(regions[i]);
+            continue;
+        }
         if (strcmp(regions[i].name, "pointerIcon") == 0) {
             item = g_carried;
             valid = g_carriedValid;
