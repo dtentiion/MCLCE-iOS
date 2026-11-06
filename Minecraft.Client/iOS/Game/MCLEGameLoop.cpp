@@ -1398,17 +1398,30 @@ void initImpl() {
             newPlayer = playerTag == nullptr;
             MCLE_LOG("mcle_game_init: player data %s, pos %.1f %.1f %.1f dim %d",
                      playerTag ? "loaded" : "new", g_player->x, g_player->y, g_player->z, g_player->dimension);
-            // Only the overworld is wired up to render, so a player saved in
-            // another dimension starts at the overworld spawn for now
-            if (playerTag && g_player->dimension != 0) {
-                Pos *spawn = g_levels[0]->getSharedSpawnPos();
-                g_player->dimension = 0;
-                g_player->moveTo(spawn->x + 0.5, spawn->y, spawn->z + 0.5, 0, 0);
-                delete spawn;
-            }
             delete playerTag;
         } catch (...) {
             MCLE_LOG("mcle_game_init: player data load threw");
+        }
+    }
+
+    // placeNewPlayer: the player goes in the level of the dimension it was
+    // saved in. Only the overworld's spawn area is loaded above, so the
+    // chunks round a player in another dimension are loaded the same way.
+    if (g_player && g_player->dimension != 0) {
+        ServerLevel *level = g_server->getLevel(g_player->dimension);
+        g_player->setLevel(level);
+        g_player->gameMode->setLevel(level);
+        const int pcx = Mth::floor(g_player->x) >> 4;
+        const int pcz = Mth::floor(g_player->z) >> 4;
+        for (int dx = -3; dx <= 3; ++dx) {
+            for (int dz = -3; dz <= 3; ++dz) {
+                try {
+                    level->cache->create(pcx + dx, pcz + dz, false);
+                } catch (...) {
+                    MCLE_LOG("mcle_game_init: chunk (%d,%d) in dimension %d threw", pcx + dx, pcz + dz,
+                             g_player->dimension);
+                }
+            }
         }
     }
 
@@ -1437,9 +1450,9 @@ void initImpl() {
     }
 
     if (g_player) {
-        MCLE_LOG("mcle_game_init: addEntity to overworld");
+        MCLE_LOG("mcle_game_init: addEntity to dimension %d", g_player->dimension);
         try {
-            g_levels[0]->addEntity(g_player);
+            g_player->getLevel()->addEntity(g_player);
             MCLE_LOG("mcle_game_init: addEntity returned");
         } catch (const std::exception &e) {
             MCLE_LOG("mcle_game_init: addEntity threw: %{public}s", e.what());
@@ -1453,7 +1466,7 @@ void initImpl() {
         // drains one chunk per call, so the full radius streams in
         // gradually over a few seconds.
         try {
-            PlayerChunkMap *cm = g_levels[0]->getChunkMap();
+            PlayerChunkMap *cm = g_player->getLevel()->getChunkMap();
             MCLE_LOG("mcle_game_init: chunkMap=%p add(player)", (void*)cm);
             if (cm) cm->add(g_player);
             MCLE_LOG("mcle_game_init: chunkMap->add returned, players=%zu",
