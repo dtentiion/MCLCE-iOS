@@ -15,7 +15,8 @@
 
 class ItemInstance;
 
-// One IggyPlayerCallMethodRS, a UI sound to play, or a key for the movie
+// One IggyPlayerCallMethodRS, a UI sound to play, a key for the movie, or a
+// control's visible flag
 struct MCLEUIArg {
     enum Kind { Number, Bool, String } kind;
     double number;
@@ -23,11 +24,11 @@ struct MCLEUIArg {
 };
 
 struct MCLEUIOp {
-    enum Kind { Call, Sound, Key } kind;
+    enum Kind { Call, Sound, Key, Visible } kind;
     std::string path;   // value path, "" for the root
     std::string method; // the method, or the sound's name
     // the call's arguments; a sound's pitch; a key's Iggy key code and
-    // whether it went down
+    // whether it went down; whether the control is visible
     std::vector<MCLEUIArg> args;
 };
 
