@@ -317,6 +317,8 @@ public:
 
     void customDraw(const MCLECustomDrawRegion &region);
 
+    void HandleDLCMountingComplete();
+
 private:
     void initialiseMovie();
 
@@ -587,6 +589,11 @@ void mcle_skin_select_close() {
 
 void mcle_skin_select_animation_end() {
     if (g_scene) g_scene->handleAnimationEnd();
+}
+
+// UIController::HandleDLCMountingComplete, to the scenes that are up
+void mcle_ui_handle_dlc_mounting_complete() {
+    if (g_scene) g_scene->HandleDLCMountingComplete();
 }
 
 // The game's renderer is made with the first world, so there's nothing to

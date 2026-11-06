@@ -12,8 +12,9 @@ What's left out of UIScene_SkinSelectMenu:
   the three tab labels and customDraw. MCLESkinSelectMenu.cpp has them.
 - getMoviePath and updateComponents, the view controller loads the movie
   and hides the logo for the scene.
-- The DLC install and mount callbacks, handleReload and the PS Vita touch
-  input. Nothing calls them here.
+- HandleDLCInstalled, handleReload and the PS Vita touch input. Nothing
+  calls them here.
+- HandleDLCMountingComplete's bInGame, which nothing reads.
 
 What changes in UIControl_PlayerSkinPreview:
 - The constructor reads the screen size off Minecraft, which isn't made
@@ -49,7 +50,12 @@ SCENE_FUNCTIONS = [
     "showNotOnlineDialog",
     "UnlockSkinReturned",
     "AddFavoriteSkin",
+    "HandleDLCMountingComplete",
 ]
+
+# HandleDLCMountingComplete's bInGame is only read under TO_BE_IMPLEMENTED,
+# and there's no Minecraft to ask at the front end before a world loads
+IN_GAME = "\tbool bInGame=(Minecraft::GetInstance()->level!=nullptr);\n"
 
 PREVIEW_FUNCTIONS = [
     "UIControl_PlayerSkinPreview",
@@ -153,6 +159,10 @@ table = scene[table_start:scene.index("};\n", table_start) + 3]
 if preview.count(SCREEN_SIZE) != 1:
     fail(f"screen size block not found once in {PREVIEW}")
 preview = preview.replace(SCREEN_SIZE, SCREEN_SIZE_IOS)
+
+if scene.count(IN_GAME) != 1:
+    fail(f"bInGame not found once in {SCENE}")
+scene = scene.replace(IN_GAME, "")
 
 out = "\n".join([
     defines(scene, "SKIN_SELECT_"),
