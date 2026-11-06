@@ -1337,6 +1337,12 @@ if [ -f "$TBT_PY" ]; then
     python3 "$TBT_PY"
 fi
 
+# Animated textures whose frames didn't load don't cycle
+TAG_PY="$REPO_ROOT/scripts/patch-texture-animation-guards.py"
+if [ -f "$TAG_PY" ]; then
+    python3 "$TAG_PY"
+fi
+
 # expose TexturePackRepository::DEFAULT_TEXTURE_PACK
 TPRD_PY="$REPO_ROOT/scripts/patch-tpr-default-public.py"
 if [ -f "$TPRD_PY" ]; then
