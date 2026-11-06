@@ -582,8 +582,11 @@ void Minecraft::delayTextureReload() {
 // G5: TileRenderer reads this for anaglyph color filtering; we keep it
 // false so the standard non-stereo path runs.
 bool GameRenderer::anaglyph3d = false;
-void GameRenderer::EnableUpdateThread() {}
-void GameRenderer::DisableUpdateThread() {}
+// The chunk update thread is the sim thread's updateDirtyChunks (MCLEGameLoop.cpp)
+void mcle_chunk_update_enable();
+void mcle_chunk_update_disable();
+void GameRenderer::EnableUpdateThread() { mcle_chunk_update_enable(); }
+void GameRenderer::DisableUpdateThread() { mcle_chunk_update_disable(); }
 // RenderManager.TextureBindVertex with the light texture, and -1 for none
 extern "C" void mcle_glbridge_set_light_layer(int on);
 void GameRenderer::turnOnLightLayer(double /*alpha*/) { mcle_glbridge_set_light_layer(1); }

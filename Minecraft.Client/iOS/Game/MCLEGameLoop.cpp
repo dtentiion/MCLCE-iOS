@@ -2563,6 +2563,24 @@ static void *mcle_sim_thread_loop(void *) {
     return nullptr;
 }
 
+// GameRenderer's chunk update thread is the sim thread's updateDirtyChunks
+// here. DisableUpdateThread stops it and waits for the one running, so
+// allChanged can remake the chunks; EnableUpdateThread lets it go again.
+static std::atomic<bool> g_chunkUpdateRunning{true};
+static std::mutex g_chunkUpdateMutex;
+// Set on the sim thread while it's updating, which has nothing to wait for
+static thread_local bool t_inChunkUpdate = false;
+
+void mcle_chunk_update_disable() {
+    if (!g_chunkUpdateRunning.exchange(false)) return;
+    if (t_inChunkUpdate) return;
+    std::lock_guard<std::mutex> wait(g_chunkUpdateMutex);
+}
+
+void mcle_chunk_update_enable() {
+    g_chunkUpdateRunning.store(true);
+}
+
 // ServerPlayer::doChunkSendingTick for the local player. Its connection is
 // local, so the chunk isn't sent, the client's chunks are the server's: the
 // nearest finalised one comes off chunksToSend and its render chunks are made
@@ -3118,7 +3136,10 @@ extern "C" void mcle_game_tick(void) {
         Minecraft *mcShimUDC = Minecraft::GetInstance();
         const bool texturesReadyUDC =
             mcShimUDC != nullptr && mcShimUDC->textures != nullptr;
-        if (texturesReadyUDC) {
+        std::unique_lock<std::mutex> updateLock(g_chunkUpdateMutex, std::defer_lock);
+        if (texturesReadyUDC && g_chunkUpdateRunning.load()) updateLock.lock();
+        if (updateLock.owns_lock() && g_chunkUpdateRunning.load()) {
+            t_inChunkUpdate = true;
             const auto udcStart = hrclock::now();
             try { g_levelRenderer->updateDirtyChunks(); } catch (...) {}
             const auto udcMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -3132,6 +3153,7 @@ extern "C" void mcle_game_tick(void) {
             AABB::resetPool();
             Vec3::resetPool();
             IntCache::Reset();
+            t_inChunkUpdate = false;
         }
     }
 
