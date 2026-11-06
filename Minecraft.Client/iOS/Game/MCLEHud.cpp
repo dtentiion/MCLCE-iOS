@@ -99,7 +99,10 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
     if (invulnerableTime < 10) blink = false;
     st.blink = blink;
     st.health = static_cast<int>(ceil(player->getHealth()));
-    st.lastHealth = static_cast<int>(ceil(player->lastHealth));
+    // The client player's lastHealth. Only LivingEntity::hurt sets it, which
+    // MultiplayerLocalPlayer::hurt never calls, so it stays 0. The server
+    // player's is its health before the last hit, which kept the hearts up.
+    st.lastHealth = 0;
     st.poison = player->hasEffect(MobEffect::poison);
     st.wither = player->hasEffect(MobEffect::wither);
     st.absorption = player->getAbsorptionAmount();
