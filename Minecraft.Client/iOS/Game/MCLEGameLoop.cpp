@@ -186,6 +186,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/JavaMath.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
 #include "../../../upstream/Minecraft.World/MobEffectInstance.h"
+#include "../../../upstream/Minecraft.World/FoodConstants.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/Mth.h"
@@ -3162,6 +3163,7 @@ extern "C" void mcle_game_tick(void) {
                                       mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
                                       mcle_settings_get(10 /*ControlInvertLook*/) != 0);
                 const double xBefore = g_player->x, yBefore = g_player->y, zBefore = g_player->z;
+                const bool onGroundBefore = g_player->onGround;
                 // Level::tick saves where the world is drawn from, but skips a
                 // player whose chunks aren't all in yet, like after a respawn.
                 // The client player doesn't move until then, this one does.
@@ -3188,10 +3190,18 @@ extern "C" void mcle_game_tick(void) {
                                                         g_player->z)) {
                     g_player->setPos(xBefore, g_player->y, zBefore);
                 }
-                // PlayerConnection::handleMovePlayer: ServerPlayer's own
-                // checkFallDamage does nothing, falls count from the move.
-                // A riding player's move returns before that.
-                if (!riding) g_player->doCheckFallDamage(g_player->y - yBefore, g_player->onGround);
+                // PlayerConnection::handleMovePlayer, which a riding player's
+                // move returns before
+                if (!riding) {
+                    // assume the player made a jump (the client's own jump
+                    // exhaustion does nothing, scripts/patch-local-player-jump-exhaustion.py)
+                    if (onGroundBefore && !g_player->onGround && g_player->y - yBefore > 0) {
+                        g_player->causeFoodExhaustion(FoodConstants::EXHAUSTION_JUMP);
+                    }
+                    // ServerPlayer's own checkFallDamage does nothing, falls
+                    // count from the move
+                    g_player->doCheckFallDamage(g_player->y - yBefore, g_player->onGround);
+                }
                 // LocalPlayer turns inside aiStep, after baseTick saved the old
                 // rotation, so that's what the camera interpolates from
                 g_player->xRotO = xRotBefore;
