@@ -137,6 +137,11 @@ static MCLEDialogRequest* g_pending_dialog = nil;
 //       visually overlap the dialog panel.
 static const int kLogoDepth        = 101;
 static const int kDimDepth         = 199;
+// UIScene::getSafeZoneHalfHeight / HalfWidth on a HiDef screen: 5% of the
+// 1920x1080 the movies are laid out for
+static const int kSafeZoneTop    = 1080 / 20;
+static const int kSafeZoneBottom = 1080 / 20;
+static const int kSafeZoneLeft   = 1920 / 20;
 static const int kMessageBoxDepth  = 200;
 static const int kTooltipsDepth    = 201;
 
@@ -1637,11 +1642,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
-    // Push the strip in from the screen edge. Console drives this
-    // via UIScene::updateSafeZone calling FJ_Document.SetSafeZone(
-    // top, bottom, left, right) at UIScene.cpp:200-232.
+    // UIComponent_Tooltips::updateSafeZone, fullscreen
     const char* setSafe = "SetSafeZone";
-    double safe[4] = { 0.0, 60.0, 60.0, 0.0 }; // top, bottom, left, right
+    double safe[4] = { kSafeZoneTop, kSafeZoneBottom, kSafeZoneLeft, 0.0 }; // top, bottom, left, right
     ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
         (const uint8_t*)setSafe, strlen(setSafe),
         safe, 4);
@@ -3035,6 +3038,8 @@ static NSString* MCLETipHTML(void) {
             ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
         }
         ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 1);
+        // UIScene::initialiseMovie -> updateSafeZone, fullscreen
+        MCLECallPath(@"", @"SetSafeZone", @[@(kSafeZoneTop), @(kSafeZoneBottom), @(kSafeZoneLeft), @0]);
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];
         } else if ([swfName isEqualToString:@"HelpAndOptionsMenu1080.swf"]) {
