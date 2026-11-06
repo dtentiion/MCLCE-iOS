@@ -3525,6 +3525,24 @@ extern "C" void mcle_world_drive_renderer(void) {
         MCLE_LOG("mcle_world_drive_renderer: render-thread full TLS init done");
     }
 
+    // Minecraft::tick's `if (!pause) textures->tick(bUpdateTextures)`, once
+    // for the game ticks since the last frame: the animated textures cycle
+    // into the atlases, which upload when they're next bound. A paused game
+    // doesn't tick, so neither do these.
+    {
+        static uint64_t s_texturesTickNs = 0;
+        const uint64_t tickNs = g_lastSimTickNs.load(std::memory_order_relaxed);
+        Minecraft *mcTex = Minecraft::GetInstance();
+        if (tickNs != s_texturesTickNs && mcTex && mcTex->textures) {
+            s_texturesTickNs = tickNs;
+            try {
+                mcTex->textures->tick(true);
+            } catch (...) {
+                MCLE_LOG("mcle_world_drive_renderer: textures tick threw");
+            }
+        }
+    }
+
     try {
         // G3d-step3: set up projection + view via the GL matrix stack
         // each frame. Once upstream renderSky/renderClouds drive replays

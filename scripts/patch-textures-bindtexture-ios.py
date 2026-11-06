@@ -11,7 +11,9 @@ needs a real TexturePack and TextureManager that aren't wired yet.
 This patch replaces the upstream body with the same iOS path the
 removed stub had, for the default pack. With a texture pack selected the
 upstream body runs, so the pack's own textures (and the default ones it
-falls back to through readImage) are what get bound.
+falls back to through readImage) are what get bound. The block and item
+atlases are the stitched ones for every pack, as upstream's loadTexture
+gives, since that's where the animated textures draw.
 
 Idempotent.
 """
@@ -67,6 +69,29 @@ new = (
     "void Textures::bindTexture(ResourceLocation *resource)\n"
     "{\n"
     "\tif (!resource) return;\n"
+    "\t// The block and item atlases are the stitched ones, like loadTexture's,\n"
+    "\t// so what the animated textures draw into them shows\n"
+    "\tif (resource->isPreloaded() && (resource->getTexture() == TN_TERRAIN || resource->getTexture() == TN_GUI_ITEMS))\n"
+    "\t{\n"
+    "\t\tconst bool blocks = resource->getTexture() == TN_TERRAIN;\n"
+    "\t\tPreStitchedTextureMap *atlas = blocks ? terrain : items;\n"
+    "\t\tTexture *stitched = atlas != nullptr ? atlas->getStitchedTexture() : nullptr;\n"
+    "\t\tif (stitched != nullptr)\n"
+    "\t\t{\n"
+    "\t\t\tbind(loadTexture(resource->getTexture()));\n"
+    "\t\t\t// The stitch runs on the game's init thread, where another\n"
+    "\t\t\t// texture can be the bound one when it uploads, so the first\n"
+    "\t\t\t// upload goes again here with the atlas bound\n"
+    "\t\t\tstatic Texture *s_uploaded[2] = {};\n"
+    "\t\t\tTexture *&uploaded = s_uploaded[blocks ? 0 : 1];\n"
+    "\t\t\tif (uploaded != stitched)\n"
+    "\t\t\t{\n"
+    "\t\t\t\tstitched->updateOnGPU();\n"
+    "\t\t\t\tuploaded = stitched;\n"
+    "\t\t\t}\n"
+    "\t\t\treturn;\n"
+    "\t\t}\n"
+    "\t}\n"
     "\t// A texture pack's textures come from the pack, through loadTexture\n"
     "\tif (!skins->isUsingDefaultSkin())\n"
     "\t{\n"
