@@ -160,9 +160,12 @@ extern "C" void mcle_settings_set(int setting, unsigned char value) {
     save_locked();
 }
 
-extern "C" void mcle_settings_reset_to_defaults(void) {
+extern "C" void mcle_settings_reset_to_defaults(int inGame) {
     std::lock_guard<std::mutex> lk(g_mu);
+    // SetDefaultOptions doesn't reset the difficulty in game
+    const unsigned char difficulty = g_values[MCLE_SETTING_Difficulty];
     apply_defaults();
+    if (inGame) g_values[MCLE_SETTING_Difficulty] = difficulty;
     save_locked();
     NSLog(@"[settings] reset to defaults (console SetDefaultOptions parity)");
 }

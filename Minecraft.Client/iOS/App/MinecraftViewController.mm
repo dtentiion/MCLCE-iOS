@@ -126,6 +126,9 @@ extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MC
 extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
 extern "C" void mcle_storage_set_save_folder(const char *folder); // MCLESaveList.cpp
 extern "C" void mcle_capture_save_thumbnail(void);   // MCLESaveList.cpp
+extern "C" void mcle_game_host_settings_changed(void); // MCLEGameLoop.cpp
+void mcle_sound_update_music_volume(float v);          // MCLESound.cpp
+void mcle_sound_update_sfx_volume(float v);
 extern "C" int  mcle_metal_thumbnail_pending(void);  // MetalContext.mm
 
 // The eAppAction_*CapturedThumbnail step: Minecraft::run takes the save's
@@ -611,6 +614,10 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
               g_current_scene_name, (int)id, setting, v);
         // UIScene_ControlsMenu: southpaw swaps move and look
         if (setting == MCLE_SETTING_ControlSouthPaw) g_controls_layout_changed = true;
+        // ActionGameSettings: the host's game options follow these in game
+        if (setting == MCLE_SETTING_GamertagsVisible || setting == MCLE_SETTING_BedrockFog) {
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_game_host_settings_changed(); });
+        }
     } else if (strcmp(method, "handleSliderMove") == 0) {
         if ([g_current_scene_name isEqualToString:@"LoadMenu1080.swf"]) {
             int sid = (int)id;
@@ -650,10 +657,14 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         if (setting == MCLE_SETTING_Autosave) {
             dispatch_async(dispatch_get_main_queue(), ^{ MCLESetAutosaveTimerTime(); });
         }
+        // ActionGameSettings -> Options::set: the game's sound engine
+        // changes straight away too, paused or not
         if (setting == MCLE_SETTING_MusicVolume) {
             mcle_audio_set_music_volume(stored);
+            mcle_sound_update_music_volume(stored / 100.0f);
         } else if (setting == MCLE_SETTING_SoundFXVolume) {
             mcle_audio_set_sfx_volume(stored);
+            mcle_sound_update_sfx_volume(stored / 100.0f);
         }
 
         // Update the slider's displayed label. Console does this in
@@ -4763,9 +4774,10 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             // UIScene_LoadMenu starts the autosave timer with the game
             MCLESetAutosaveTimerTime();
         }
-        // Minecraft::run's autosave: not with the pause menu up, and the
-        // timer starts again once the save has gone
-        if (!g_world_paused && !g_world_dead) {
+        // Minecraft::run's autosave: not with the pause menu or a scene
+        // that ignores autosaves up (death, containers), and the timer
+        // starts again once the save has gone
+        if (!g_world_paused && !g_world_dead && !g_world_container) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
@@ -5132,20 +5144,24 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                                 // Title IDS_DEFAULTS_TITLE / body
                                 // IDS_DEFAULTS_TEXT per
                                 // strings_Misc.txt line 492-496.
-                                [self presentDialogWithTitle:@"Reset Settings"
-                                                     content:@"Are you sure you would like to reset your settings to their default values?"
-                                                     buttons:@[@"OK", @"Cancel"]
-                                                  focusIndex:1
+                                // UIScene_SettingsMenu: Cancel / OK, and
+                                // ResetDefaultsDialogReturned resets on OK
+                                [self presentDialogWithTitle:MCLEStr(IDS_DEFAULTS_TITLE)
+                                                     content:MCLEStr(IDS_DEFAULTS_TEXT)
+                                                     buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
+                                                  focusIndex:0
                                                     callback:^(MCLEDialogResult r) {
-                                    if (r == MCLEDialogResultAccept) {
-                                        mcle_settings_reset_to_defaults();
-                                        // Audio is the one setting
-                                        // that's live-applied, so
-                                        // push it through immediately.
-                                        mcle_audio_set_music_volume(
-                                            mcle_settings_get(MCLE_SETTING_MusicVolume));
-                                        mcle_audio_set_sfx_volume(
-                                            mcle_settings_get(MCLE_SETTING_SoundFXVolume));
+                                    if (r == MCLEDialogResultDecline) {
+                                        mcle_settings_reset_to_defaults(mcle_world_is_ticking());
+                                        // SetGameSettings applies each one,
+                                        // the ones read every tick follow
+                                        unsigned char music = mcle_settings_get(MCLE_SETTING_MusicVolume);
+                                        unsigned char sfx = mcle_settings_get(MCLE_SETTING_SoundFXVolume);
+                                        mcle_audio_set_music_volume(music);
+                                        mcle_audio_set_sfx_volume(sfx);
+                                        mcle_sound_update_music_volume(music / 100.0f);
+                                        mcle_sound_update_sfx_volume(sfx / 100.0f);
+                                        mcle_game_host_settings_changed();
                                     }
                                 }];
                                 break;

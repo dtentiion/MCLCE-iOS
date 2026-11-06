@@ -199,6 +199,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLETutorial.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
+#include "../../../upstream/Minecraft.Client/HumanoidModel.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 
@@ -2435,6 +2436,17 @@ void mcle_run_with_stand_in_connection(const std::shared_ptr<ServerPlayer> &play
     fn(arg);
 }
 
+// ActionGameSettings for the host in game: In-Game Gamertags and Bedrock
+// Fog go to the game host options, which the renderers read, and the
+// players show on maps per the gamertags one
+extern "C" void mcle_game_host_settings_changed(void) {
+    if (g_initState != kStateTicking) return;
+    app.SetGameHostOption(eGameHostOption_Gamertags, mcle_settings_get(13 /*GamertagsVisible*/) ? 1 : 0);
+    app.SetGameHostOption(eGameHostOption_BedrockFog, mcle_settings_get(24 /*BedrockFog*/) ? 1 : 0);
+    std::lock_guard<std::mutex> lock(g_simTickMutex);
+    if (g_player) g_player->setShowOnMaps(app.GetGameHostOption(eGameHostOption_Gamertags) != 0);
+}
+
 extern "C" void mcle_game_set_paused(int paused) {
     g_gamePaused.store(paused != 0, std::memory_order_relaxed);
 }
@@ -3602,9 +3614,12 @@ static void mcle_bob_view(float a) {
     mcle_glbridge_rotate(tilt, 1, 0, 0);
 }
 
-// The view bob runs with the setting on and not flying
+// The view bob runs with the setting on, not flying, and not on a skin
+// whose animation turns the legs or the bobbing off
 static bool mcle_view_bob_on() {
-    return mcle_settings_get(8 /*ViewBob*/) && !g_player->abilities.flying;
+    const unsigned int noBob = (1u << HumanoidModel::eAnim_NoLegAnim) | (1u << HumanoidModel::eAnim_NoBobbing);
+    return mcle_settings_get(8 /*ViewBob*/) && !g_player->abilities.flying &&
+           (g_player->getAnimOverrideBitmask() & noBob) == 0;
 }
 
 // Where the world frame's time goes, logged with frame_ms every 60 frames:
