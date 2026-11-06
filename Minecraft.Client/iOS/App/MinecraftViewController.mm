@@ -192,6 +192,7 @@ static const int kMenuBackgroundDepth = -1;
 static const int kSafeZoneTop    = 1080 / 20;
 static const int kSafeZoneBottom = 1080 / 20;
 static const int kSafeZoneLeft   = 1920 / 20;
+static const int kSafeZoneRight  = 1920 / 20;
 static const int kMessageBoxDepth  = 200;
 static const int kTooltipsDepth    = 201;
 // UIComponent_TutorialPopup, on the popup layer over the scenes (the HUD
@@ -2155,7 +2156,7 @@ static BOOL MCLEPlayStationPadConnected(void) {
 
     // UIComponent_Tooltips::updateSafeZone, fullscreen
     const char* setSafe = "SetSafeZone";
-    double safe[4] = { kSafeZoneTop, kSafeZoneBottom, kSafeZoneLeft, 0.0 }; // top, bottom, left, right
+    double safe[4] = { kSafeZoneTop, kSafeZoneBottom, kSafeZoneLeft, kSafeZoneRight }; // top, bottom, left, right
     ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
         (const uint8_t*)setSafe, strlen(setSafe),
         safe, 4);
@@ -2175,6 +2176,11 @@ static BOOL MCLEPlayStationPadConnected(void) {
     } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
         // UIScene_DeathMenu: Select only, B does nothing there
         ids[1] = -1;
+    } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
+        // UIScene_PauseMenu::updateTooltips: the primary host of a full
+        // game with saving on gets Change Storage Device on X, sharing
+        // is never allowed on Windows64
+        ids[2] = IDS_TOOLTIPS_CHANGEDEVICE;
     } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
         // UIScene_Credits: Back only
         ids[0] = -1;
@@ -3530,8 +3536,6 @@ static NSString* MCLETipHTML(void) {
         @{ @"name": @"Button6", @"label": MCLEStr(IDS_EXIT_GAME),        @"id": @(5) },
     ];
     [self applyMenuButtonConfig:cfg];
-    // UIScene_PauseMenu's constructor
-    mcle_dlc_install_if_needed(0);
     // updateComponents: no panorama, menu background and logo on
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
@@ -4542,7 +4546,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         }
         ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 1);
         // UIScene::initialiseMovie -> updateSafeZone, fullscreen
-        MCLECallPath(@"", @"SetSafeZone", @[@(kSafeZoneTop), @(kSafeZoneBottom), @(kSafeZoneLeft), @0]);
+        MCLECallPath(@"", @"SetSafeZone", @[@(kSafeZoneTop), @(kSafeZoneBottom), @(kSafeZoneLeft), @(kSafeZoneRight)]);
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];
         } else if ([swfName isEqualToString:@"HelpAndOptionsMenu1080.swf"]) {
