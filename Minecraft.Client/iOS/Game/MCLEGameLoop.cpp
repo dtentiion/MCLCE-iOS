@@ -166,6 +166,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/TextureManager.h"
 #include "../../../upstream/Minecraft.Client/TextureAtlas.h"
 #include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
+#include "../../../upstream/Minecraft.Client/EntityRenderer.h"
 #include "../../../upstream/Minecraft.Client/TileEntityRenderDispatcher.h"
 #include "../../../upstream/Minecraft.Client/User.h"
 #include "../../../upstream/Minecraft.Client/Font.h"
@@ -3586,6 +3587,108 @@ static void mcle_gui_overlays(float a) {
     }
 }
 
+// Gui::render's animated character: the player at the top of the screen
+// while sneaking, sprinting or flying, kept up a moment after. Placed on
+// the 16:9 stage the HUD is laid out on, at the Gui's safe zone plus 10.
+static void mcle_gui_animated_character(float a) {
+    static int s_characterDisplayTimer = 0;
+    if (!mcle_settings_get(31 /*AnimatedCharacter*/)) return;
+    const bool bDisplayGui = !g_menuDisplayed.load(std::memory_order_relaxed) &&
+                             mcle_settings_get(25 /*DisplayHUD*/) != 0;
+    if (!bDisplayGui) {
+        s_characterDisplayTimer = 0;
+    } else if (g_player->isSneaking()) {
+        s_characterDisplayTimer = 30;
+    } else if (g_player->isSprinting()) {
+        s_characterDisplayTimer = 30;
+    } else if (g_player->abilities.flying) {
+        s_characterDisplayTimer = 5; // quickly get rid of the player display if they stop flying
+    } else if (s_characterDisplayTimer > 0) {
+        --s_characterDisplayTimer;
+    }
+    const bool displayCrouch = g_player->isSneaking() || s_characterDisplayTimer > 0;
+    const bool displaySprint = g_player->isSprinting() || s_characterDisplayTimer > 0;
+    const bool displayFlying = g_player->abilities.flying || s_characterDisplayTimer > 0;
+    if (!bDisplayGui || !(displayCrouch || displaySprint || displayFlying)) return;
+
+    EntityRenderDispatcher *dispatcher = EntityRenderDispatcher::instance;
+    EntityRenderer *renderer = dispatcher ? dispatcher->getRenderer(g_player) : nullptr;
+    int w = 0, h = 0;
+    mcle_metal_current_size(&w, &h);
+    if (!renderer || w <= 0 || h <= 0) return;
+
+    // GameRenderer::setupGuiScreen
+    mcle_metal_clear_depth();
+    mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
+    mcle_glbridge_load_identity();
+    mcle_glbridge_metal_ortho(0, static_cast<float>(w), static_cast<float>(h), 0, 1000, 3000);
+    mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
+    mcle_glbridge_load_identity();
+    mcle_glbridge_translate(0, 0, -2000);
+    // The state the Gui's earlier draws leave
+    glDisable(GL_BLEND);
+    glEnable(GL_ALPHA_TEST);
+    glEnable(GL_DEPTH_TEST);
+
+    // Gui units are guiScale pixels of the 1920x1080 screen, and the safe
+    // zone is 5% of it
+    const float guiScale = static_cast<float>(mcle_settings_get(29 /*UISize*/) + 2);
+    const float k = static_cast<float>(h) / 1080.0f;
+    const float stageX = (static_cast<float>(w) - 1920.0f * k) * 0.5f;
+    const float xo = stageX + (1920.0f / 20.0f + 10.0f * guiScale) * k;
+    const float yo = (1080.0f / 20.0f + 10.0f * guiScale) * k;
+
+    glEnable(GL_RESCALE_NORMAL);
+    glEnable(GL_COLOR_MATERIAL);
+    glPushMatrix();
+    glTranslatef(xo, yo, 50);
+    float ss = 12 * guiScale * k;
+    glScalef(-ss, ss, ss);
+    glRotatef(180, 0, 0, 1);
+
+    float oyr = g_player->yRot;
+    float oyrO = g_player->yRotO;
+    float oxr = g_player->xRot;
+
+    float xd = -40;
+    float yd = 10;
+
+    glRotatef(45 + 90, 0, 1, 0);
+    Lighting::turnOn();
+    glRotatef(-45 - 90, 0, 1, 0);
+
+    const float xRotAngle = -static_cast<float>(atan(yd / 40.0f)) * 20;
+    glRotatef(xRotAngle, 1, 0, 0);
+    float bodyRot = (g_player->yBodyRotO + (g_player->yBodyRot - g_player->yBodyRotO));
+    glRotatef(bodyRot - (static_cast<float>(atan(xd / 40.0f)) * 20), 0, 1, 0);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    // The light layer is off for the gui
+    glMultiTexCoord2f(GL_TEXTURE1, 240.0f, 240.0f);
+
+    // Set head rotation to body rotation to make head static
+    g_player->yRot = bodyRot;
+    g_player->yRotO = g_player->yRot;
+    g_player->xRot = xRotAngle;
+
+    dispatcher->playerRotY = 180;
+    dispatcher->isGuiRender = true;
+    // The renderer without postRender's flame, as Gui puts the fire out for
+    // the draw
+    try {
+        renderer->SetItemFrame(false);
+        renderer->render(g_player, 0, 0, 0, 0, 1);
+    } catch (...) {
+    }
+    dispatcher->isGuiRender = false;
+
+    g_player->yRot = oyr;
+    g_player->yRotO = oyrO;
+    g_player->xRot = oxr;
+    glPopMatrix();
+    Lighting::turnOff();
+    glDisable(GL_RESCALE_NORMAL);
+}
+
 // GameRenderer::bobHurt: tilt when hit, roll over when dead
 static void mcle_bob_hurt(float a) {
     float hurt = g_player->hurtTime - a;
@@ -4190,6 +4293,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         // GameRenderer::render: then the Gui over the world
         try {
             mcle_gui_overlays(a);
+            mcle_gui_animated_character(a);
         } catch (...) {
             static int s_guiErr = 0;
             if (s_guiErr++ < 3) MCLE_LOG("gui overlays threw");
