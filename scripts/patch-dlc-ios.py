@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Let DLCManager.cpp and DLCPack.cpp build and read .pck files on iOS.
+"""Let the DLC classes build and read .pck files on iOS.
 
 DLCManager.cpp:
 - The Iggy UI header it includes for the corrupt DLC message is swapped for
@@ -9,6 +9,10 @@ DLCManager.cpp:
   (mcle_dlc_widen_pck) once it's read, before it's processed.
 - A texture pack found in a .pck isn't handed to TexturePackRepository,
   which isn't built. It's still added to its parent pack.
+
+DLCSkinFile.cpp:
+- A skin's BOX and ANIM values are read with GCC's swscanf, as on PS3. iOS
+  maps swscanf_s to swscanf, which would take the buffer size for a pointer.
 
 DLCPack.cpp:
 - A mash-up pack's game rules header (its world template) is skipped.
@@ -59,6 +63,18 @@ patch(DLC / "DLCManager.cpp", "mcle_dlc_widen_pck", [
         "#ifndef __APPLE_IOS__",
         "\t\t\t\t\tMinecraft::GetInstance()->skins->addTexturePackFromDLC(dlcTexturePack, dlcTexturePack->GetPackId() );",
         "#endif",
+    ]),
+])
+
+PS3_SCANF = "#ifdef __PS3__\n{tabs}// 4J Stu - The Xbox version used swscanf_s which isn't available in GCC."
+patch(DLC / "DLCSkinFile.cpp", "__APPLE_IOS__", [
+    (PS3_SCANF.format(tabs="\t\t\t"), [
+        "#if defined(__PS3__) || defined(__APPLE_IOS__)",
+        "\t\t\t// 4J Stu - The Xbox version used swscanf_s which isn't available in GCC.",
+    ]),
+    (PS3_SCANF.format(tabs="\t\t"), [
+        "#if defined(__PS3__) || defined(__APPLE_IOS__)",
+        "\t\t// 4J Stu - The Xbox version used swscanf_s which isn't available in GCC.",
     ]),
 ])
 
