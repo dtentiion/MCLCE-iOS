@@ -18,7 +18,7 @@ use ruffle_core::external::{ExternalInterfaceProvider, FsCommandProvider, Value 
 use ruffle_core::context::UpdateContext;
 use ruffle_core::backend::navigator::{NullExecutor, NullNavigatorBackend};
 use ruffle_core::backend::ui::FontDefinition;
-use ruffle_core::events::{GamepadButton, KeyCode, PlayerEvent};
+use ruffle_core::events::{GamepadButton, KeyCode, KeyDescriptor, KeyLocation, LogicalKey, NamedKey, PhysicalKey, PlayerEvent};
 use ruffle_core::HostCallArg;
 use ruffle_core::font::FontFileData;
 use ruffle_core::{Player, PlayerBuilder};
@@ -1177,6 +1177,46 @@ pub unsafe extern "C" fn ruffle_ios_player_mouse_move_stage(raw: *mut PlayerHand
     let Some(handle) = borrow_handle(raw) else { return; };
     if let Ok(mut p) = handle.player.lock() {
         p.mouse_move_stage(x, y);
+    }
+    handle.executor.borrow_mut().run();
+}
+
+/// The keys UIScene::convertGameActionToIggyKeycode makes, by Flash key code
+fn iggy_key(code: c_int) -> Option<(PhysicalKey, NamedKey)> {
+    Some(match code {
+        13 => (PhysicalKey::Enter, NamedKey::Enter),
+        27 => (PhysicalKey::Escape, NamedKey::Escape),
+        33 => (PhysicalKey::PageUp, NamedKey::PageUp),
+        34 => (PhysicalKey::PageDown, NamedKey::PageDown),
+        37 => (PhysicalKey::ArrowLeft, NamedKey::ArrowLeft),
+        38 => (PhysicalKey::ArrowUp, NamedKey::ArrowUp),
+        39 => (PhysicalKey::ArrowRight, NamedKey::ArrowRight),
+        40 => (PhysicalKey::ArrowDown, NamedKey::ArrowDown),
+        112 => (PhysicalKey::F1, NamedKey::F1),
+        113 => (PhysicalKey::F2, NamedKey::F2),
+        114 => (PhysicalKey::F3, NamedKey::F3),
+        115 => (PhysicalKey::F4, NamedKey::F4),
+        116 => (PhysicalKey::F5, NamedKey::F5),
+        117 => (PhysicalKey::F6, NamedKey::F6),
+        122 => (PhysicalKey::F11, NamedKey::F11),
+        123 => (PhysicalKey::F12, NamedKey::F12),
+        _ => return None,
+    })
+}
+
+/// IggyMakeEventKey + IggyPlayerDispatchEventRS, as UIScene::sendInputToMovie
+/// sends it: a key down or up at the standard location.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_key(raw: *mut PlayerHandle, code: c_int, down: c_int) {
+    let Some(handle) = borrow_handle(raw) else { return; };
+    let Some((physical_key, named)) = iggy_key(code) else { return; };
+    let key = KeyDescriptor {
+        physical_key,
+        logical_key: LogicalKey::Named(named),
+        key_location: KeyLocation::Standard,
+    };
+    if let Ok(mut p) = handle.player.lock() {
+        p.handle_event(if down != 0 { PlayerEvent::KeyDown { key } } else { PlayerEvent::KeyUp { key } });
     }
     handle.executor.borrow_mut().run();
 }
