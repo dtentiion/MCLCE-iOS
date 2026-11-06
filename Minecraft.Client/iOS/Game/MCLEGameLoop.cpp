@@ -3071,6 +3071,16 @@ extern "C" void mcle_game_tick(void) {
                     g_player->zOld = zBefore;
                 }
                 g_player->doTick(false);
+                // Entity::rideTick: the client's player ticks inside its ride
+                // tick, then sits back on its mount. It's drawn from where the
+                // mount had it last tick, which Level::tick kept in xOld.
+                const bool riding = g_player->riding != nullptr;
+                if (riding) {
+                    g_player->riding->positionRider();
+                    g_player->xo = g_player->xOld;
+                    g_player->yo = g_player->yOld;
+                    g_player->zo = g_player->zOld;
+                }
                 // MultiplayerLocalPlayer::tick: a move the tutorial doesn't allow
                 // goes back
                 if (!mcle_tutorial_can_move_to_position(xBefore, yBefore, zBefore, g_player->x, g_player->y,
@@ -3078,8 +3088,9 @@ extern "C" void mcle_game_tick(void) {
                     g_player->setPos(xBefore, g_player->y, zBefore);
                 }
                 // PlayerConnection::handleMovePlayer: ServerPlayer's own
-                // checkFallDamage does nothing, falls count from the move
-                g_player->doCheckFallDamage(g_player->y - yBefore, g_player->onGround);
+                // checkFallDamage does nothing, falls count from the move.
+                // A riding player's move returns before that.
+                if (!riding) g_player->doCheckFallDamage(g_player->y - yBefore, g_player->onGround);
                 // LocalPlayer turns inside aiStep, after baseTick saved the old
                 // rotation, so that's what the camera interpolates from
                 g_player->xRotO = xRotBefore;
