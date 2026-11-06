@@ -455,6 +455,9 @@ std::atomic<int>              g_initState{ kStateUnstarted };
 // 20Hz throttle gate fires). Render thread reads this to compute the
 // partial-tick alpha for camera-position interpolation.
 std::atomic<uint64_t>         g_lastSimTickNs{ 0 };
+// When the next 20Hz tick is due, so the sim thread can sleep until then
+std::atomic<uint64_t>         g_nextSimTickNs{ 0 };
+uint64_t                      g_pendingSimTickNs = 0;
 // Gui instance for HUD rendering (hotbar, health bars, crosshair).
 // Constructed in mcle_game_init after textures->stitch (parity with
 // upstream Minecraft::init). Render thread calls g_gui->render() each frame.
@@ -1996,7 +1999,19 @@ static void *mcle_sim_thread_loop(void *) {
     MCLE_LOG("mcle_sim_thread_loop: started, beginning ticks");
     for (;;) {
         mcle_game_tick();
-        usleep(16 * 1000); // 16ms - ~60Hz wake
+        // Sleep until the next tick is due, a few ms at a time so pausing
+        // and loading still get looked at
+        using clock = std::chrono::steady_clock;
+        const uint64_t nowNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   clock::now().time_since_epoch()).count();
+        const uint64_t nextNs = g_nextSimTickNs.load(std::memory_order_relaxed);
+        uint64_t waitUs = 16 * 1000;
+        if (nextNs > nowNs) {
+            waitUs = std::min<uint64_t>((nextNs - nowNs) / 1000, 16 * 1000);
+        } else if (nextNs != 0) {
+            waitUs = 0;
+        }
+        if (waitUs > 0) usleep((useconds_t)waitUs);
     }
     return nullptr;
 }
@@ -2085,18 +2100,25 @@ extern "C" void mcle_game_tick(void) {
     // 3x too fast and walking / gravity / friction all feel sped up.
     // Publish tick start time so the render thread can compute partial-tick
     // alpha for smooth camera interp between 20Hz simulation steps.
+    // Like Minecraft's Timer: ticks fall on a fixed 50ms grid, and the
+    // render's partial tick is measured from the grid, not from when the
+    // thread happened to wake up.
     {
         using clock = std::chrono::steady_clock;
-        static auto s_lastSimTick = clock::now() - std::chrono::milliseconds(50);
-        const auto now = clock::now();
-        const auto sinceMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 now - s_lastSimTick).count();
-        if (sinceMs < 50) return;
-        s_lastSimTick = now;
-        g_lastSimTickNs.store(
-            (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
-                now.time_since_epoch()).count(),
-            std::memory_order_relaxed);
+        const uint64_t tickNs = 50000000ull;
+        const uint64_t nowNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   clock::now().time_since_epoch()).count();
+        static uint64_t s_nextTickNs = 0;
+        if (s_nextTickNs == 0) s_nextTickNs = nowNs;
+        if (nowNs < s_nextTickNs) return;
+        uint64_t thisTickNs = s_nextTickNs;
+        // Timer gives up on catching up after 10 ticks
+        if (nowNs - thisTickNs > 10 * tickNs) thisTickNs = nowNs;
+        s_nextTickNs = thisTickNs + tickNs;
+        // Published once the player has moved, until then the render stays
+        // at the end of the last tick, which is where this one starts
+        g_pendingSimTickNs = thisTickNs;
+        g_nextSimTickNs.store(s_nextTickNs, std::memory_order_relaxed);
     }
 
     if (g_gamePaused.load(std::memory_order_relaxed)) return;
@@ -2315,6 +2337,7 @@ extern "C" void mcle_game_tick(void) {
             // rotation, so that's what the camera interpolates from
             g_player->xRotO = xRotBefore;
             g_player->yRotO = yRotBefore;
+            g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
             mcle_player_fov_tick(g_player);
             if (g_itemInHand) {
                 std::lock_guard<std::mutex> lock(g_itemInHandMutex);
@@ -2332,6 +2355,7 @@ extern "C" void mcle_game_tick(void) {
             MCLE_LOG("mcle_game_tick: doTick threw");
         }
     }
+    g_lastSimTickNs.store(g_pendingSimTickNs, std::memory_order_relaxed);
 
     // On-demand chunk streaming. Walk clamp is gone; instead drive
     // PlayerChunkMap each tick so new chunks load as the player moves.
