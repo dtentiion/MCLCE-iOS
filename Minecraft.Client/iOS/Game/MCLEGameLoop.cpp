@@ -2496,9 +2496,9 @@ extern "C" void mcle_game_tick(void) {
             const float xRotBefore = g_player->xRot, yRotBefore = g_player->yRot;
             const bool menu = g_menuDisplayed.load(std::memory_order_relaxed);
             mcle_player_move_tick(g_player, menu ? 0.0f : mcle_ios_input_poll_lx(0) / 1000.0f,
-                                  menu ? 0.0f : -mcle_ios_input_poll_ly(0) / 1000.0f,
+                                  menu ? 0.0f : mcle_ios_input_poll_ly(0) / 1000.0f,
                                   menu ? 0.0f : mcle_ios_input_poll_rx(0) / 1000.0f,
-                                  menu ? 0.0f : -mcle_ios_input_poll_ry(0) / 1000.0f,
+                                  menu ? 0.0f : mcle_ios_input_poll_ry(0) / 1000.0f,
                                   g_gameButtons,
                                   mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
                                   mcle_settings_get(10 /*ControlInvertLook*/) != 0);
