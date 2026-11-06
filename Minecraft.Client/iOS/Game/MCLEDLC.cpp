@@ -15,6 +15,7 @@
 #include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
 #include "../../../upstream/Minecraft.Client/EntityRenderer.h"
 #include "../../../upstream/Minecraft.Client/Model.h"
+#include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
 
 void mcle_ui_handle_dlc_mounting_complete(); // MCLESkinSelectMenu.cpp
 
@@ -105,9 +106,9 @@ int McleAppStub::DLCMountedCallback(LPVOID pParam, int iPad, DWORD dwErr, DWORD 
 
             app.HandleDLC(pack);
 
-            // Windows64 hands a pack with textures to the texture pack
-            // repository here. TexturePackRepository isn't built, so the pack
-            // stays with the DLC manager only.
+            if (pack->getDLCItemsCount(DLCManager::e_DLCType_Texture) > 0) {
+                Minecraft::GetInstance()->skins->addTexturePackFromDLC(pack, pack->GetPackId());
+            }
         } else {
             app.DebugPrintf("Pack \"%ls\" is already installed. Updating license to %d\n", ContentData.szDisplayName,
                             dwLicenceMask);

@@ -163,7 +163,6 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/MultiPlayerLocalPlayer.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
 #include "../../../upstream/Minecraft.Client/TexturePackRepository.h"
-#include "../../../upstream/Minecraft.Client/FolderTexturePack.h"
 #include "../../../upstream/Minecraft.Client/TextureManager.h"
 #include "../../../upstream/Minecraft.Client/TextureAtlas.h"
 #include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
@@ -196,109 +195,12 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include <pthread.h>
 #include "MCLETooltips.h"
 #include "MCLEWeather.h"
+#include "MCLETexturePacks.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 void mcle_creative_menu_static_ctor();                    // MCLECreativeMenu.cpp
-
-namespace {
-// AbstractTexturePack.cpp can't compile (pulls UIScene_LanguageSelector
-// + Credits which need XC_LANGUAGE/XC_LOCALE enums we don't have).
-// Override every virtual that would normally come from there. Only
-// hasFile/getResourceImplementation/getImageResource matter for the
-// stitch path - the rest can return empty/false.
-class IosFolderTexturePack : public FolderTexturePack {
-public:
-    IosFolderTexturePack(DWORD id, const std::wstring &name,
-                          File *folder, TexturePack *fallback)
-        : FolderTexturePack(id, name, folder, fallback) {}
-
-    // From TexturePack pure virtuals
-    bool hasData() override { return true; }
-    bool isLoadingData() override { return false; }
-    DLCPack *getDLCPack() override { return nullptr; }
-
-    // From AbstractTexturePack virtuals - inlined stubs since the .cpp
-    // doesn't compile for us. Stitch only really needs hasFile + the
-    // image load path; rest are effectively no-ops.
-    void loadIcon() override {}
-    void loadComparison() override {}
-    void loadDescription() override {}
-    void loadName() override {}
-    InputStream *getResource(const std::wstring &, bool) override { return nullptr; }
-    void unload(Textures *) override {}
-    void load(Textures *) override {}
-    bool hasFile(const std::wstring &name, bool) override { return hasFile(name); }
-    bool hasFile(const std::wstring &name) override {
-        // FolderTexturePack uses File-based lookup; we just check the
-        // path under our root folder. Conservative: report yes so stitch
-        // takes the loadable path. Actual file check happens in
-        // BufferedImage::BufferedImage(File) via our LoadTextureData.
-        (void)name;
-        return true;
-    }
-    DWORD getId() override { return 0; }
-    std::wstring getName() override { return L"default"; }
-    std::wstring getDesc1() override { return L""; }
-    std::wstring getDesc2() override { return L""; }
-    std::wstring getWorldName() override { return L""; }
-    std::wstring getAnimationString(const std::wstring &, const std::wstring &, bool) override { return L""; }
-    std::wstring getAnimationString(const std::wstring &, const std::wstring &) override { return L""; }
-    // FolderTexturePack::getPath returns "Common\\" + file->getPath() + "\\"
-    // which embeds the absolute Documents path on iOS. Drop the file path
-    // chunk so callers get a relative "Common/" prefix - BufferedImage
-    // then builds a clean relative name and our load shim resolves it
-    // against Documents/.
-    std::wstring getPath(bool /*bTitleUpdateTexture*/ = false, const char * /*pchBDPatchFilename*/ = nullptr) override {
-        return L"Common/";
-    }
-    BufferedImage *getImageResource(const std::wstring &filename, bool filenameHasExtension, bool bTitleUpdateTexture, const std::wstring &drive) override {
-        // BufferedImage builds path as wDrive + L"res" + filePath... with
-        // no separator. So filePath needs a leading slash for the result
-        // to be "Common/res/<file>.png" not "Common/resterrain.png".
-        std::wstring path = (filename.empty() || filename[0] == L'/')
-            ? filename : (L"/" + filename);
-        return new BufferedImage(path, filenameHasExtension, bTitleUpdateTexture, drive);
-    }
-    // AbstractTexturePack::loadColourTable reads these through getPath(true),
-    // which is relative here, so read them straight out of Documents.
-    void loadColourTable() override {
-        const char *root = StorageManager.GetSaveRootPath();
-        if (!root || !*root) return;
-        std::string base(root);
-        std::vector<unsigned char> col;
-        if (readWhole(base + "/Common/res/TitleUpdate/res/colours.col", col)) {
-            delete m_colourTable;
-            m_colourTable = new ColourTable(col.data(), (DWORD)col.size());
-        }
-        std::vector<unsigned char> html;
-        if (m_colourTable && readWhole(base + "/HTMLColours.col", html))
-            m_colourTable->loadColoursFromData(html.data(), (DWORD)html.size());
-    }
-    static bool readWhole(const std::string &path, std::vector<unsigned char> &out) {
-        FILE *f = fopen(path.c_str(), "rb");
-        if (!f) return false;
-        fseek(f, 0, SEEK_END);
-        long n = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        bool ok = n > 0;
-        if (ok) {
-            out.resize((size_t)n);
-            ok = fread(out.data(), 1, (size_t)n, f) == (size_t)n;
-        }
-        fclose(f);
-        return ok;
-    }
-    void loadUI() override {}
-    void unloadUI() override {}
-    std::wstring getXuiRootPath() override { return L""; }
-    PBYTE getPackIcon(DWORD &) override { return nullptr; }
-    PBYTE getPackComparison(DWORD &) override { return nullptr; }
-    unsigned int getDLCParentPackId() override { return 0; }
-    unsigned char getDLCSubPackId() override { return 0; }
-};
-} // namespace
 
 #include "4JLibs/inc/4J_Storage.h"
 
@@ -777,6 +679,14 @@ bool mcle_open_save_bundle(const std::wstring &saveFolder) {
         MCLE_LOG("mcle_game_init: file-table dump threw non-std exception");
     }
     return true;
+}
+
+// The Minecraft instance, a zero filled buffer standing in for upstream's
+// object (the class has no virtual methods). It lives for the whole process
+// like Minecraft itself, the fields the port uses filled in as they're made.
+static Minecraft *mcle_minecraft_shim() {
+    alignas(Minecraft) static char s_minecraftShimBuf[sizeof(Minecraft)] = {0};
+    return reinterpret_cast<Minecraft *>(s_minecraftShimBuf);
 }
 
 // Minecraft::main runs these once per process, not per world, before the
@@ -1427,13 +1337,9 @@ void initImpl() {
     g_loadPercent = 0;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
-    // G2c-shim: allocate a zero-filled Minecraft-sized buffer and cast to
-    // Minecraft*. Class has no virtual methods (verified) so no vtable
-    // pointer needed. Fields left zero; LevelRenderer::render derefs them
-    // one by one - the auto-probe pins each so we can fill them in
-    // incrementally. Eventual goal: full upstream Minecraft instance.
-    static char s_minecraftShimBuf[sizeof(Minecraft)] = {0};
-    Minecraft *g_minecraftShim = reinterpret_cast<Minecraft *>(s_minecraftShimBuf);
+    // The Minecraft made at launch (mcle_minecraft_main), its world fields
+    // filled in from here
+    Minecraft *g_minecraftShim = mcle_minecraft_shim();
     MCLE_LOG("mcle_game_init: Minecraft shim at %p (sizeof=%zu)",
              (void*)g_minecraftShim, sizeof(Minecraft));
     // Like Minecraft itself the shim lives for the whole process. Its
@@ -1649,43 +1555,13 @@ void initImpl() {
         }
     }
 
-    // Real Textures + stitch path. PreStitchedTextureMap::stitch reads
-    // Minecraft::GetInstance()->skins->getSelected()->getImageResource(
-    // L"terrain.png", ...) so we need:
-    //   1. a real TexturePack pointing at Documents/Common (FolderTexturePack
-    //      walks res/<filename>)
-    //   2. it assigned to TexturePackRepository::DEFAULT_TEXTURE_PACK so the
-    //      stub getSelected returns it
-    //   3. g_minecraftShim->skins pointing to our zero-buffer TPR so the
-    //      Minecraft::GetInstance()->skins->getSelected() chain reaches it
     // Minecraft::init: the textures, fonts and hand renderers stay for the
-    // whole process
+    // whole process. They're made with the texture pack repository from
+    // launch, so PreStitchedTextureMap::stitch reads the selected pack.
     if (!g_minecraftShim->textures) {
-    {
-        const char *root = StorageManager.GetSaveRootPath();
-        if (root && *root) {
-            std::string commonDir = std::string(root) + "/Common";
-            std::wstring wCommonDir(commonDir.begin(), commonDir.end());
-            File *commonFile = new File(wCommonDir);
-            IosFolderTexturePack *pack = new IosFolderTexturePack(
-                TexturePackRepository::DEFAULT_TEXTURE_PACK_ID,
-                L"default", commonFile, nullptr);
-            TexturePackRepository::DEFAULT_TEXTURE_PACK = pack;
-            // TexturePackRepository's ctor does this for the default pack
-            pack->loadColourTable();
-            MCLE_LOG("mcle_game_init: DEFAULT_TEXTURE_PACK at %p (root=%s)",
-                     (void*)pack, root);
-        }
-    }
-
-    static char s_tprBuf[sizeof(TexturePackRepository)] = {0};
     static char s_optsBuf[sizeof(Options)] = {0};
-    TexturePackRepository *skins =
-        reinterpret_cast<TexturePackRepository *>(s_tprBuf);
+    TexturePackRepository *skins = g_minecraftShim->skins;
     Options *options = reinterpret_cast<Options *>(s_optsBuf);
-    g_minecraftShim->skins = skins;
-    // TexturePackRepository's ctor selects the default pack
-    skins->iosSetSelected(TexturePackRepository::DEFAULT_TEXTURE_PACK);
 
     // TextureManager is a singleton - createTextureID() and createTexture()
     // both go through getInstance() which returns nullptr until we allocate
@@ -2498,6 +2374,14 @@ extern "C" void mcle_minecraft_main(void) {
     mcle_world_static_ctors();
     app.loadDefaultGameRules();
     MCLE_LOG("minecraft main: %d level generators", (int)app.getLevelGenerators()->size());
+
+    // Minecraft::start makes the Minecraft: its constructor the sound engine
+    // and the instance, init the texture packs. The DLC mount from the menus
+    // adds the DLC ones to it.
+    Minecraft *minecraft = mcle_minecraft_shim();
+    minecraft->soundEngine = new SoundEngine();
+    Minecraft::m_instance = minecraft;
+    mcle_texture_packs_init(minecraft);
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after

@@ -75,6 +75,10 @@ namespace {
 MCLEUpstreamSoundEngine *g_engine = nullptr;
 // Sounds come from the sim thread, settings from the main thread
 std::recursive_mutex g_mutex;
+// The engine is made with the first world here, after a texture pack set
+// its music. Upstream's is made at launch and has it set by then.
+bool g_haveStreamingSounds = false;
+int g_streamingSounds[7];
 std::shared_ptr<ServerPlayer> g_listenerPlayer;
 class ClientSoundListener;
 // The listeners added to the current world's levels, dropped on exit
@@ -144,6 +148,20 @@ void mcle_sound_init(const char *documentsPath) {
              "%s/music/", documentsPath);
     g_engine = new MCLEUpstreamSoundEngine();
     g_engine->init(nullptr);
+    if (g_haveStreamingSounds) {
+        const int *s = g_streamingSounds;
+        g_engine->SetStreamingSounds(s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
+    }
+}
+
+// SoundEngine::SetStreamingSounds, kept for the engine if it isn't made yet
+void mcle_sound_set_streaming_sounds(int iOverworldMin, int iOverWorldMax, int iNetherMin, int iNetherMax,
+                                     int iEndMin, int iEndMax, int iCD1) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    const int s[7] = {iOverworldMin, iOverWorldMax, iNetherMin, iNetherMax, iEndMin, iEndMax, iCD1};
+    memcpy(g_streamingSounds, s, sizeof(s));
+    g_haveStreamingSounds = true;
+    if (g_engine) g_engine->SetStreamingSounds(iOverworldMin, iOverWorldMax, iNetherMin, iNetherMax, iEndMin, iEndMax, iCD1);
 }
 
 void mcle_sound_listen(const std::shared_ptr<ServerPlayer> &player, Level *level) {

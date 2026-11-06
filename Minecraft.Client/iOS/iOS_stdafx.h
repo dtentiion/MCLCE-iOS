@@ -709,6 +709,8 @@ void mcle_sound_play_streaming(const std::wstring &name, float x, float y, float
 bool mcle_sound_is_playing_game_music();
 void mcle_sound_update_music_volume(float v);
 void mcle_sound_update_sfx_volume(float v);
+void mcle_sound_set_streaming_sounds(int iOverworldMin, int iOverWorldMax, int iNetherMin, int iNetherMax, int iEndMin,
+                                     int iEndMax, int iCD1);
 class SoundEngine {
 public:
     SoundEngine() {}
@@ -748,6 +750,11 @@ public:
     void updateMusicVolume(float fVal) { mcle_sound_update_music_volume(fVal); }
     template<class... A> void updateSFXVolume(A...)   {}
     void updateSoundEffectVolume(float fVal) { mcle_sound_update_sfx_volume(fVal); }
+    // A mash-up pack's music in place of the game's
+    void SetStreamingSounds(int iOverworldMin, int iOverWorldMax, int iNetherMin, int iNetherMax, int iEndMin,
+                            int iEndMax, int iCD1) {
+        mcle_sound_set_streaming_sounds(iOverworldMin, iOverWorldMax, iNetherMin, iNetherMax, iEndMin, iEndMax, iCD1);
+    }
 };
 #endif // _SOUNDENGINE_H_DEFINED
 // Real MultiPlayerGameMode - PlayerList chains through

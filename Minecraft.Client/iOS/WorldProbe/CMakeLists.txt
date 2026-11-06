@@ -898,10 +898,12 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/StitchSlot.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/SuspendedTownParticle.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TeleportCommand.cpp
-  # AbstractTexturePack.cpp transitively pulls UIScene_LanguageSelector
-  # and UIScene_Credits which need XC_LANGUAGE/XC_LOCALE enums we don't
-  # have. Override its virtuals via the IosFolderTexturePack subclass
-  # in MCLEGameLoop.cpp instead.
+  # The texture packs, their UI header swapped by scripts/patch-texturepacks-ios.py
+  ${UPSTREAM_DIR}/Minecraft.Client/AbstractTexturePack.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/DefaultTexturePack.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/DLCTexturePack.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/TexturePackRepository.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/DLC/DLCGameRulesHeader.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/BufferedImage.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MemTexture.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TexOffs.cpp
@@ -909,9 +911,6 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/TextureAtlas.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureManager.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TextureMap.cpp
-  # TexturePackRepository.cpp not compiled - drags in UIScene_LanguageSelector
-  # + UIScene_Credits which need XC_LANGUAGE/XC_LOCALE enums we don't have.
-  # Just stub getSelected + DEFAULT_TEXTURE_PACK in link_stubs.cpp instead.
   ${UPSTREAM_DIR}/Minecraft.Client/Textures.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PreStitchedTextureMap.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TileEntityRenderer.cpp
