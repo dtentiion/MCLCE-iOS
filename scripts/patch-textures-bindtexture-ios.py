@@ -9,7 +9,9 @@ sun/cloud rendering because upstream's body calls loadTexture which
 needs a real TexturePack and TextureManager that aren't wired yet.
 
 This patch replaces the upstream body with the same iOS path the
-removed stub had, for the default pack. With a texture pack selected the
+removed stub had, for the default pack. Preloaded textures that path
+has no file for (mob skins, the map background, the xp orb) bind the id
+the constructor loaded, as upstream does. With a texture pack selected the
 upstream body runs, so the pack's own textures (and the default ones it
 falls back to through readImage) are what get bound. The block and item
 atlases are the stitched ones for every pack, as upstream's loadTexture
@@ -111,7 +113,9 @@ new = (
     "\tstd::string rel;\n"
     "\tif (resource->isPreloaded()) {\n"
     "\t\tconst char *p = texture_name_relpath(resource->getTexture());\n"
-    "\t\tif (!p) return;\n"
+    "\t\t// The rest of the preloaded ones (mob skins, the map, the xp orb)\n"
+    "\t\t// are the ids the constructor loaded, which upstream binds\n"
+    "\t\tif (!p) { bind(loadTexture(resource->getTexture())); return; }\n"
     "\t\trel = std::string(p) + \".png\";\n"
     "\t} else {\n"
     "\t\tstd::wstring wpath = resource->getPath();\n"
@@ -141,6 +145,7 @@ new = (
     "\t\tid = mcle_glbridge_load_or_get_png_path((base + rel).c_str());\n"
     "\t}\n"
     "\tif (id != 0) mcle_glbridge_bind_texture(id);\n"
+    "\telse if (resource->isPreloaded()) bind(loadTexture(resource->getTexture()));\n"
     "}"
 )
 
