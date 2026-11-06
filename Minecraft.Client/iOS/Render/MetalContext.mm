@@ -235,6 +235,23 @@ bool g_blend_enabled  = false;
 int  g_blend_func_mode = 0;
 id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
+// GL_LIGHTING the way the 4J renderer does it for the PF3_TF2_CB4_NB4_XW1
+// format: two directional lights in eye space and an ambient colour, on
+// the normal turned by the modelview and normalised. A light that's off
+// counts as black.
+bool  g_lighting_enabled = false;
+bool  g_light_enabled[2] = { false, false };
+float g_light_dir[2][3]  = { { 0, 0, 0 }, { 0, 0, 0 } };
+float g_light_col[2][3]  = { { 0, 0, 0 }, { 0, 0, 0 } };
+float g_light_ambient[3] = { 0, 0, 0 };
+
+// The light layer (GameRenderer::turnOnLightLayer, TextureBindVertex): the
+// lightmap for the formats other than the chunks', at the vertex's own tex2
+// or, where it has none, at StateSetVertexTextureUV's, which keeps u - 1 and
+// v - 1 like the 4J renderer
+bool  g_light_layer = false;
+float g_vertex_uv[2] = { -1.0f, -1.0f };
+
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
     g_depth_test_enabled = (enabled != 0);
 }
@@ -261,6 +278,33 @@ extern "C" void mcle_glbridge_set_fog_start(float v) { g_fog_start = v; }
 extern "C" void mcle_glbridge_set_fog_end(float v)   { g_fog_end   = v; }
 extern "C" void mcle_glbridge_set_fog_mode(int exp_mode) { g_fog_mode = exp_mode ? 1 : 0; }
 extern "C" void mcle_glbridge_set_fog_density(float v)   { g_fog_density = v; }
+
+// glEnable/glDisable(GL_LIGHTING), (GL_LIGHT0 / GL_LIGHT1)
+extern "C" void mcle_glbridge_set_lighting(int enabled) { g_lighting_enabled = (enabled != 0); }
+extern "C" void mcle_glbridge_set_light_enabled(int light, int enabled) {
+    if (light >= 0 && light < 2) g_light_enabled[light] = (enabled != 0);
+}
+// glLight GL_DIFFUSE and glLightModel GL_LIGHT_MODEL_AMBIENT
+extern "C" void mcle_glbridge_set_light_colour(int light, float r, float gr, float b) {
+    if (light < 0 || light >= 2) return;
+    g_light_col[light][0] = r;
+    g_light_col[light][1] = gr;
+    g_light_col[light][2] = b;
+}
+extern "C" void mcle_glbridge_set_light_ambient(float r, float gr, float b) {
+    g_light_ambient[0] = r;
+    g_light_ambient[1] = gr;
+    g_light_ambient[2] = b;
+}
+// GameRenderer::turnOnLightLayer / turnOffLightLayer
+extern "C" void mcle_glbridge_set_light_layer(int on) { g_light_layer = (on != 0); }
+// glMultiTexCoord2f(GL_TEXTURE1, u, v), the light for vertices without a tex2
+extern "C" void mcle_glbridge_set_vertex_uv(float u, float v) {
+    if (u > 255.0f) u = 255.0f;
+    if (v > 255.0f) v = 255.0f;
+    g_vertex_uv[0] = u / 256.0f - 1.0f;
+    g_vertex_uv[1] = v / 256.0f - 1.0f;
+}
 
 // Lightmap bridge. MCLEGameLoop computes each of the 256 entries from
 // upstream Level::getSkyDarken + dimension->brightnessRamp and writes
@@ -394,7 +438,8 @@ NSString* const kWorldShaderSrc = @R"(
         float3 pos    [[attribute(0)]];
         float2 uv     [[attribute(1)]];
         uchar4 color  [[attribute(2)]];
-        uchar4 normal [[attribute(3)]];
+        float4 normal [[attribute(3)]];
+        short2 tex2   [[attribute(4)]];
     };
     struct V_out {
         float4 pos [[position]];
@@ -424,11 +469,26 @@ NSString* const kWorldShaderSrc = @R"(
         float4 fogRange;        // start in x, end in y, modeLinear in z
         float4 modelviewRow2;   // row 2 of modelview for eye-z calc
     };
+    // The 4J renderer's lighting and light layer. flags: x lit, y the
+    // light layer, zw StateSetVertexTextureUV's u - 1, v - 1. nm0..2 are
+    // the modelview's 3x3 columns for the normal.
+    struct LightParams {
+        float4 dir0;
+        float4 dir1;
+        float4 col0;
+        float4 col1;
+        float4 ambient;
+        float4 flags;
+        float4 nm0;
+        float4 nm1;
+        float4 nm2;
+    };
 
     vertex V_out world_vert(V_in v [[stage_in]],
                              constant MVPUniforms&   m [[buffer(1)]],
                              constant ColorUniforms& c [[buffer(2)]],
-                             constant FogParams&     f [[buffer(3)]]) {
+                             constant FogParams&     f [[buffer(3)]],
+                             constant LightParams&   l [[buffer(4)]]) {
         V_out o;
         o.pos   = m.mvp * float4(v.pos, 1.0);
         // Tesselator::color packs as (r<<24)|(g<<16)|(b<<8)|a. On
@@ -439,16 +499,26 @@ NSString* const kWorldShaderSrc = @R"(
         // high alpha and renders as the bright blue carpet visible
         // opposite the sun at sunrise/sunset.
         float4 vc = float4(v.color).wzyx / 255.0;
+        // GL_LIGHTING: the lit colour takes the vertex colour's place and
+        // its alpha is the lit one
+        if (l.flags.x > 0.5) {
+            float3 n = float3x3(l.nm0.xyz, l.nm1.xyz, l.nm2.xyz) * v.normal.xyz;
+            float len = length(n);
+            if (len > 0.0) n /= len;
+            float d0 = max(0.0, dot(l.dir0.xyz, n));
+            float d1 = max(0.0, dot(l.dir1.xyz, n));
+            float4 lit = saturate(l.ambient + d0 * l.col0 + d1 * l.col1);
+            vc = float4(lit.rgb * vc.rgb, lit.a);
+        }
         o.color = vc * c.currentColor;
         // Apply texture matrix (identity by default, translates per
         // tile cell when renderAdvancedClouds is active).
         float4 tcoord = m.texMatrix * float4(v.uv, 0.0, 1.0);
         o.uv    = tcoord.xy;
-        // fmt=1 vertices (sky/sun/moon/clouds) have no real lightmap UV.
-        // Dispatch binds a 1x1 white lightmap for those passes so the
-        // sample is a no-op. Routing the UV to (0.5, 0.5) keeps it inside
-        // the texture for any sampler clamp mode.
-        o.lightmapUV = float2(0.5, 0.5);
+        // The light layer's lightmap at the vertex's tex2, or the one set
+        // for vertices without one (-512 each, below the set one's). With
+        // the layer off the lightmap is white and this doesn't matter.
+        o.lightmapUV = l.flags.y > 0.5 ? fract(max(l.flags.zw, float2(v.tex2) / 256.0)) : float2(0.5, 0.5);
         o.fogDist = abs(dot(f.modelviewRow2, float4(v.pos, 1.0)));
         return o;
     }
@@ -772,9 +842,14 @@ bool ensure_world_pipeline() {
     vd.attributes[2].format      = MTLVertexFormatUChar4;
     vd.attributes[2].offset      = 20;
     vd.attributes[2].bufferIndex = 0;
-    vd.attributes[3].format      = MTLVertexFormatUChar4;
+    // Tesselator::normal packs signed bytes
+    vd.attributes[3].format      = MTLVertexFormatChar4Normalized;
     vd.attributes[3].offset      = 24;
     vd.attributes[3].bufferIndex = 0;
+    // tex2, u and v as shorts
+    vd.attributes[4].format      = MTLVertexFormatShort2;
+    vd.attributes[4].offset      = 28;
+    vd.attributes[4].bufferIndex = 0;
     vd.layouts[0].stride         = 32;
     vd.layouts[0].stepFunction   = MTLVertexStepFunctionPerVertex;
 
@@ -1118,6 +1193,19 @@ extern "C" void mcle_glbridge_rotate(float angle, float x, float y, float z) {
 }
 extern "C" void mcle_glbridge_scale(float x, float y, float z) {
     mat_scale(current_matrix_data(), x, y, z);
+}
+// glLight GL_POSITION: the direction goes through the modelview of the time
+// and is normalised, as StateSetLightDirection does
+extern "C" void mcle_glbridge_set_light_direction(int light, float x, float y, float z) {
+    if (light < 0 || light >= 2) return;
+    const float *m = g_modelview_stack.back().m;
+    float d[3] = {
+        m[0] * x + m[4] * y + m[8] * z,
+        m[1] * x + m[5] * y + m[9] * z,
+        m[2] * x + m[6] * y + m[10] * z,
+    };
+    const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    for (int i = 0; i < 3; i++) g_light_dir[light][i] = len > 0.0f ? d[i] / len : 0.0f;
 }
 
 // G4-step3: PNG decoder bridge (png_decode.mm) and texture-from-path
@@ -1590,6 +1678,32 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         };
         [g.enc setVertexBytes:fogBuf   length:sizeof(fogBuf) atIndex:3];
         [g.enc setFragmentBytes:fogBuf length:sizeof(fogBuf) atIndex:3];
+
+        // GL_LIGHTING only reaches the PF3_TF2_CB4_NB4_XW1 format, as in
+        // the 4J renderer's DrawVertexSetup
+        if (!isCompact) {
+            const bool lit = g_lighting_enabled && fmt == 1;
+            float lightBuf[36] = {};
+            for (int i = 0; i < 3; i++) {
+                lightBuf[0 + i]  = g_light_dir[0][i];
+                lightBuf[4 + i]  = g_light_dir[1][i];
+                lightBuf[8 + i]  = g_light_enabled[0] ? g_light_col[0][i] : 0.0f;
+                lightBuf[12 + i] = g_light_enabled[1] ? g_light_col[1][i] : 0.0f;
+                lightBuf[16 + i] = g_light_ambient[i];
+            }
+            lightBuf[11] = g_light_enabled[0] ? 1.0f : 0.0f;
+            lightBuf[15] = g_light_enabled[1] ? 1.0f : 0.0f;
+            lightBuf[19] = 1.0f;
+            lightBuf[20] = lit ? 1.0f : 0.0f;
+            lightBuf[21] = g_light_layer ? 1.0f : 0.0f;
+            lightBuf[22] = g_vertex_uv[0];
+            lightBuf[23] = g_vertex_uv[1];
+            // the modelview's 3x3, column by column
+            for (int c = 0; c < 3; c++) {
+                for (int r = 0; r < 3; r++) lightBuf[24 + c * 4 + r] = modelview[c * 4 + r];
+            }
+            [g.enc setVertexBytes:lightBuf length:sizeof(lightBuf) atIndex:4];
+        }
     }
 
     // G4: bind whatever's current (defaults to 1x1 white) + sampler.
@@ -1606,11 +1720,10 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (tex)               [g.enc setFragmentTexture:tex atIndex:0];
     if (g_default_sampler) [g.enc setFragmentSamplerState:g_default_sampler atIndex:0];
 
-    // Lightmap at fragment unit 1. Only chunk vertices (fmt=4) carry a
-    // real tex2 with sky+block light levels; fmt=1 sky/cloud passes get
-    // the 1x1 white sibling so the shader's lightmap multiply is a no-op
-    // for those.
-    id<MTLTexture> lm = isCompact ? g_lightmap_texture : g_lightmap_white_texture;
+    // Lightmap at fragment unit 1. The chunks always have it; the other
+    // formats only inside the light layer, otherwise the 1x1 white
+    // sibling makes the shader's lightmap multiply a no-op.
+    id<MTLTexture> lm = (isCompact || g_light_layer) ? g_lightmap_texture : g_lightmap_white_texture;
     if (lm) [g.enc setFragmentTexture:lm atIndex:1];
     if (g_lightmap_sampler) [g.enc setFragmentSamplerState:g_lightmap_sampler atIndex:1];
 
@@ -1851,6 +1964,30 @@ static bool ensure_gamma_pipeline() {
     return true;
 }
 
+// What RenderManager.StartFrame resets that every frame here starts with
+// too: texturing, white, and no light layer. The bound texture stays, the
+// loading threads bind and upload through the same id.
+static void mcle_start_frame_common() {
+    g_texture_2d_enabled = true;
+    g_current_color[0] = g_current_color[1] = g_current_color[2] = g_current_color[3] = 1.0f;
+    g_light_layer        = false;
+}
+
+// RenderManager.StartFrame's state, Windows64's UIController::setupCustomDrawGameState
+// starts each custom draw with it
+extern "C" void mcle_glbridge_start_frame(void) {
+    mcle_start_frame_common();
+    g_depth_write_enabled = true;
+    g_blend_enabled       = true;
+    g_blend_func_mode     = 0;
+    g_blend_src           = 0x0302;
+    g_blend_dst           = 0x0303;
+    g_depth_func          = 0x0203;
+    g_cull_face_enabled   = true;
+    g_depth_test_enabled  = false;
+    g_alpha_test_enabled  = true;
+}
+
 static uint64_t g_frame_start_ticks = 0;
 
 // Time spent per frame in each part, summed for the frame_ms line:
@@ -1965,6 +2102,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_blend_dst           = 0x0303;
     g_depth_func          = 0x0203;
     g_fog_enabled         = false;
+    mcle_start_frame_common();
 
     // Per-frame timing: log min/avg/max wall-clock between begin_frame calls
     // every 60 frames (~1/sec). Helps diagnose when walking vs rotating
@@ -2153,6 +2291,7 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g_blend_dst           = 0x0303;
     g_depth_func          = 0x0203;
     g_fog_enabled         = false;
+    mcle_start_frame_common();
     return 0;
 }
 

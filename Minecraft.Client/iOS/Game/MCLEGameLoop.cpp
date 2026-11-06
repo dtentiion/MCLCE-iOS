@@ -3922,6 +3922,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             try {
                 std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
                 Camera::prepare(g_player, mcle_third_person_view() == 2);
+                mc->gameRenderer->turnOnLightLayer(a);
                 particleEngine->renderLit(cameraEntity, a, ParticleEngine::OPAQUE_LIST);
                 Lighting::turnOff();
                 try { mcle_setup_fog(0, a); } catch (...) {}
@@ -3930,6 +3931,7 @@ extern "C" void mcle_world_drive_renderer(void) {
                 static int s_particleErr = 0;
                 if (s_particleErr++ < 3) MCLE_LOG("particle render threw");
             }
+            mc->gameRenderer->turnOffLightLayer(a);
         }
         Lighting::turnOff();
 
@@ -3972,6 +3974,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             try {
                 std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
                 Lighting::turnOn();
+                mc->gameRenderer->turnOnLightLayer(a);
                 particleEngine->renderLit(cameraEntity, a, ParticleEngine::TRANSLUCENT_LIST);
                 Lighting::turnOff();
                 try { mcle_setup_fog(0, a); } catch (...) {}
@@ -3980,6 +3983,7 @@ extern "C" void mcle_world_drive_renderer(void) {
                 static int s_particleErr2 = 0;
                 if (s_particleErr2++ < 3) MCLE_LOG("translucent particle render threw");
             }
+            mc->gameRenderer->turnOffLightLayer(a);
         }
         Lighting::turnOff();
 
@@ -4066,7 +4070,14 @@ extern "C" void mcle_world_drive_renderer(void) {
                 mcle_bob_hurt(a);
                 if (mcle_view_bob_on()) mcle_bob_view(a);
                 if (renderHand && mcle_third_person_view() == 0 && !g_player->isSleeping()) {
-                    g_itemInHand->render(a);
+                    mc->gameRenderer->turnOnLightLayer(a);
+                    try {
+                        g_itemInHand->render(a);
+                    } catch (...) {
+                        mc->gameRenderer->turnOffLightLayer(a);
+                        throw;
+                    }
+                    mc->gameRenderer->turnOffLightLayer(a);
                 }
                 glPopMatrix();
                 if (mcle_third_person_view() == 0 && !g_player->isSleeping()) {

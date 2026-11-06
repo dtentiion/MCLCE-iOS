@@ -1399,6 +1399,13 @@ if [ -f "$TDC_PY" ]; then
     python3 "$TDC_PY"
 fi
 
+# Tesselator.cpp: normals pack through a signed byte, ARM makes a negative
+# float 0 as an unsigned one
+TSN_PY="$REPO_ROOT/scripts/patch-tesselator-signed-normal.py"
+if [ -f "$TSN_PY" ]; then
+    python3 "$TSN_PY"
+fi
+
 # LevelRenderer.cpp: renderAdvancedClouds path is now supported on iOS
 # (texture matrix stack added, glMultiTexCoord2f and viewport-clip-plane
 # state stubbed to no-ops). Letting upstream's own fancyGraphics branch

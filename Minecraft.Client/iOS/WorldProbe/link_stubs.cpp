@@ -584,9 +584,10 @@ void Minecraft::delayTextureReload() {
 bool GameRenderer::anaglyph3d = false;
 void GameRenderer::EnableUpdateThread() {}
 void GameRenderer::DisableUpdateThread() {}
-// G2c: LevelRenderer::renderChunks calls these.
-void GameRenderer::turnOnLightLayer(double /*alpha*/) {}
-void GameRenderer::turnOffLightLayer(double /*alpha*/) {}
+// RenderManager.TextureBindVertex with the light texture, and -1 for none
+extern "C" void mcle_glbridge_set_light_layer(int on);
+void GameRenderer::turnOnLightLayer(double /*alpha*/) { mcle_glbridge_set_light_layer(1); }
+void GameRenderer::turnOffLightLayer(double /*alpha*/) { mcle_glbridge_set_light_layer(0); }
 
 #include "LocalPlayer.h"
 void LocalPlayer::updateRichPresence() {}
@@ -657,7 +658,10 @@ unsigned int Minecraft::getCurrentTexturePackId() {
 // don't compile yet. Stubs return safe defaults / no-ops.
 
 class FloatBuffer;
-void glLight(int, int, FloatBuffer *) {}
+void glLight(unsigned int light, unsigned int mode, FloatBuffer *values); // probe_stub.cpp
+void glLight(int light, int mode, FloatBuffer *values) {
+    glLight(static_cast<unsigned int>(light), static_cast<unsigned int>(mode), values);
+}
 
 // Screen size accessed by Gui::render via extern int g_rScreen{Width,Height}.
 // Gui only reads these in a couple of branches we don't hit; default 0.
