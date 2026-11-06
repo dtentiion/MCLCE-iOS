@@ -2773,6 +2773,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     layout.hotbarList = MCLEControlRectAt("MainPanel.hotbarList");
     layout.inventoryList = MCLEControlRectAt("MainPanel.inventoryList");
     layout.armorList = MCLEControlRectAt("MainPanel.armorList");
+    layout.player = MCLEControlRectAt("MainPanel.iggy_player");
     mcle_container_open_inventory(layout, CACurrentMediaTime());
     MCLEContainerApplyOps();
 }

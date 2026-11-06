@@ -40,6 +40,7 @@ struct MCLEInventoryLayout {
     MCLEControlRect hotbarList;
     MCLEControlRect inventoryList;
     MCLEControlRect armorList;
+    MCLEControlRect player; // iggy_player, UIControl_MinecraftPlayer
 };
 
 // Minecraft::tick's inventory button: the buttons it's on in the pad's
