@@ -35,12 +35,14 @@ void mcle_tutorial_popup_set_container_menu_visible(bool visible);
 void mcle_tutorial_popup_set_description(MCLETutorialPopupInfo *info);
 void mcle_tutorial_popup_remove_interact_scene(UIScene *scene);
 void mcle_tutorial_popup_set_visible(bool visible);
-bool mcle_tutorial_popup_is_visible();
 
 // Leaving the world: UIController::CloseAllPlayersScenes empties the popup
 // and the tutorial it was given goes with the game mode
 void mcle_tutorial_popup_reset();
 #endif
+
+// UIController::IsTutorialVisible, the layer's flag for the popup
+bool mcle_tutorial_popup_is_visible();
 
 // The view controller's side, on the main thread.
 // UIScene::initialiseMovie's part after the movie is up: the constructor's

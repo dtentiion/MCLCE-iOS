@@ -224,10 +224,13 @@ extern "C" void mcle_settings_get_tutorial(unsigned char *completion, int bytes,
     if (special) *special = g_tutorial.specialBitmask;
 }
 
+// Written from the sim thread, which has no autorelease pool of its own
 extern "C" void mcle_settings_set_tutorial(const unsigned char *completion, int bytes, unsigned int special) {
-    std::lock_guard<std::mutex> lk(g_mu);
-    int n = bytes < kTutorialCompletionBytes ? bytes : kTutorialCompletionBytes;
-    if (completion && n > 0) std::memcpy(g_tutorial.completion, completion, n);
-    g_tutorial.specialBitmask = special;
-    save_locked();
+    @autoreleasepool {
+        std::lock_guard<std::mutex> lk(g_mu);
+        int n = bytes < kTutorialCompletionBytes ? bytes : kTutorialCompletionBytes;
+        if (completion && n > 0) std::memcpy(g_tutorial.completion, completion, n);
+        g_tutorial.specialBitmask = special;
+        save_locked();
+    }
 }
