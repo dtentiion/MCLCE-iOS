@@ -3056,6 +3056,15 @@ extern "C" void mcle_game_tick(void) {
                                       mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
                                       mcle_settings_get(10 /*ControlInvertLook*/) != 0);
                 const double xBefore = g_player->x, yBefore = g_player->y, zBefore = g_player->z;
+                // Level::tick saves where the world is drawn from, but skips a
+                // player whose chunks aren't all in yet, like after a respawn.
+                // The client player doesn't move until then, this one does.
+                const int pxc = Mth::floor(xBefore), pzc = Mth::floor(zBefore);
+                if (g_player->level && !g_player->level->hasChunksAt(pxc - 32, 0, pzc - 32, pxc + 32, 0, pzc + 32)) {
+                    g_player->xOld = xBefore;
+                    g_player->yOld = yBefore;
+                    g_player->zOld = zBefore;
+                }
                 g_player->doTick(false);
                 // MultiplayerLocalPlayer::tick: a move the tutorial doesn't allow
                 // goes back
