@@ -2998,6 +2998,9 @@ extern "C" void mcle_game_tick(void) {
                                                         g_player->z)) {
                     g_player->setPos(xBefore, g_player->y, zBefore);
                 }
+                // PlayerConnection::handleMovePlayer: ServerPlayer's own
+                // checkFallDamage does nothing, falls count from the move
+                g_player->doCheckFallDamage(g_player->y - yBefore, g_player->onGround);
                 // LocalPlayer turns inside aiStep, after baseTick saved the old
                 // rotation, so that's what the camera interpolates from
                 g_player->xRotO = xRotBefore;
