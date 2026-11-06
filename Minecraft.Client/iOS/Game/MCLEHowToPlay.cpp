@@ -150,6 +150,15 @@ std::wstring mcle_format_html_string(int iPad, const std::wstring &desc) {
     return g_appText.FormatHTMLString(iPad, desc);
 }
 
+std::wstring mcle_format_html_string(int iPad, const std::wstring &desc, int shadowColour) {
+    return g_appText.FormatHTMLString(iPad, desc, shadowColour);
+}
+
+// CMinecraftApp::GetHTMLColour
+int mcle_html_colour(eMinecraftColour colour) {
+    return g_appText.GetHTMLColour(colour);
+}
+
 // And the ones chat messages go through
 std::wstring mcle_escape_html_string(const std::wstring &desc) {
     return g_appText.EscapeHTMLString(desc);

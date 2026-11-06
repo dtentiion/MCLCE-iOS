@@ -111,10 +111,23 @@ static bool g_world_container = false;
 // Exit Game: FullscreenProgress is up while the world is torn down
 static bool g_exiting_world = false;
 // UIScene_ConnectingProgress is up while the player changes level, until the
-// change it waits for is done
+// change it waits for is done (and the respawn, after the End poem)
 static bool g_world_connecting = false;
+static bool g_connecting_respawn = false;
 static int g_level_changes_seen = 0;
+static int g_respawns_seen = 0;
+// UIScene_EndPoem is up after the End's exit portal
+static bool g_world_won = false;
+static int g_wins_seen = 0;
+// UIScene_EndPoem's m_requestedLabel and m_bIgnoreInput
+static std::atomic<int> g_endpoem_requested{-1};
+static bool g_endpoem_ignore_input = false;
 extern "C" int  mcle_game_level_changes(int *finished, int *stringId); // MCLEGameLoop.cpp
+extern "C" int  mcle_game_wins(void);                // MCLEGameLoop.cpp
+extern "C" int  mcle_game_respawns(void);            // MCLEGameLoop.cpp
+extern "C" void mcle_end_poem_init(void);            // MCLEEndPoem.cpp
+extern "C" int  mcle_end_poem_paragraph_count(void); // MCLEEndPoem.cpp
+extern "C" const char *mcle_end_poem_paragraph(int index); // MCLEEndPoem.cpp
 extern "C" int mcle_game_exit_world(int save);
 extern "C" int mcle_game_exit_world_done(void);
 
@@ -539,6 +552,17 @@ static void MCLECreditsTick(void) {
     MCLECreditsAdd(g_credits_index);
 }
 
+// UIScene_EndPoem::tick: the paragraph the movie asked for, and whether
+// it's the last
+static void MCLEEndPoemTick(void) {
+    const int count = mcle_end_poem_paragraph_count();
+    const int requested = g_endpoem_requested.load();
+    if (requested < 0 || requested >= count) return;
+    NSString* label = [NSString stringWithUTF8String:mcle_end_poem_paragraph(requested)];
+    MCLECallPath(@"", @"SetNextLabel", @[label ?: @"", @(requested), requested == count - 1 ? @YES : @NO]);
+    g_endpoem_requested = -1;
+}
+
 // A world name as the game's wide strings hold it
 static std::wstring MCLEWideString(NSString* s) {
     NSData* d = [s dataUsingEncoding:NSUTF32LittleEndianStringEncoding];
@@ -901,6 +925,8 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
     } else if (strcmp(method, "handleRequestMoreData") == 0) {
         // UIScene_Credits::handleRequestMoreData, picked up by its tick
         if ([g_current_scene_name isEqualToString:@"Credits1080.swf"]) g_credits_add_next = true;
+        // UIScene_EndPoem::handleRequestMoreData(startIndex)
+        if ([g_current_scene_name isEqualToString:@"EndPoem1080.swf"]) g_endpoem_requested = (int)id;
     } else if (strcmp(method, "handleAnimationEnd") == 0) {
         // UIScene_SkinSelectMenu::handleAnimationEnd only changes the
         // scene's own state, so it's safe from inside the movie's tick
@@ -2334,6 +2360,10 @@ static BOOL MCLEPlayStationPadConnected(void) {
     } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
         // UIScene_Credits: Back only
         ids[0] = -1;
+    } else if ([swfName isEqualToString:@"EndPoem1080.swf"]) {
+        // UIScene_EndPoem::updateTooltips
+        ids[0] = -1;
+        ids[1] = g_endpoem_ignore_input ? -1 : IDS_TOOLTIPS_CONTINUE;
     } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
         // UIScene_HowToPlay::StartPage set them for its page
         return;
@@ -3989,13 +4019,17 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
-// ClientConnection::handleRespawn going to another dimension:
-// UIScene_ConnectingProgress over the game, the FullscreenProgress movie
-// with the panorama and logo and only the title
-- (void)openConnectingProgress:(int)stringId {
+// ClientConnection::handleRespawn going to another dimension, and
+// eAppAction_Respawn: UIScene_ConnectingProgress over the game, the
+// FullscreenProgress movie with the panorama and logo and only the title
+- (void)openConnectingProgress:(int)stringId respawn:(BOOL)respawn {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
     NSString* title = stringId >= 0 ? MCLEStr(stringId) : @"";
+    if (respawn) {
+        g_connecting_respawn = true;
+        g_respawns_seen = mcle_game_respawns();
+    }
     if (g_world_connecting) {
         // The scene it navigates to over the last one only has a new title
         MCLECallPath(@"Title", @"SetLabel", @[title]);
@@ -4005,7 +4039,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     if (g_world_container) [self closeContainerMenu:NO];
     g_world_connecting = true;
     mcle_game_set_menu_displayed(true);
-    mcle_tutorial_show_popup(false);
+    if (!respawn) mcle_tutorial_show_popup(false);
     self.menuStack = nil;
     [self transitionToMenuNamed:@"FullscreenProgress1080.swf"];
     MCLECallPath(@"Title", @"SetLabel", @[title]);
@@ -4019,14 +4053,41 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     MCLESetTooltips(none);
 }
 
-// eAppAction_WaitForDimensionChangeComplete: CloseUIScenes, back to the game
+// eAppAction_WaitForDimensionChangeComplete / WaitForRespawnComplete:
+// CloseUIScenes, back to the game
 - (void)closeConnectingProgress {
     g_world_connecting = false;
+    g_connecting_respawn = false;
     if (g_world_dead && !mcle_player_is_dead()) g_world_dead = false;
     mcle_game_set_menu_displayed(false);
     // UIGroup::closeAllScenes lets the tutorial popup show again
     mcle_tutorial_show_popup(true);
     [self enterWorldUI];
+}
+
+// ClientConnection::handleGameEvent WIN_GAME: UIScene_EndPoem, fullscreen
+// over the game
+- (void)openEndPoem {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    if (g_world_container) [self closeContainerMenu:NO];
+    g_world_won = true;
+    mcle_game_set_menu_displayed(true);
+    mcle_tutorial_show_popup(false);
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"EndPoem1080.swf"];
+}
+
+// UIScene_EndPoem constructor
+- (void)initEndPoem {
+    extern PlayerHandle* g_ruffle_player;
+    self.menuButtonConfig = nil;
+    g_endpoem_ignore_input = false;
+    mcle_end_poem_init();
+    g_endpoem_requested = 0;
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
 - (void)resumeFromPause {
@@ -4178,6 +4239,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     g_world_paused = false;
     g_world_dead = false;
     g_world_connecting = false;
+    g_connecting_respawn = false;
+    g_world_won = false;
     self.menuStack = nil;
     // UIController::NavigateToHomeMenu: the menus are on the default texture
     // pack, and the home menu comes once its skin is back
@@ -4792,6 +4855,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             MCLECallPath(@"Jukebox", @"Init", @[@""]);
         } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
             [self initDeathMenu];
+        } else if ([swfName isEqualToString:@"EndPoem1080.swf"]) {
+            [self initEndPoem];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
@@ -4923,24 +4988,33 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self enterWorldUI];
             // UIScene_LoadMenu starts the autosave timer with the game
             MCLESetAutosaveTimerTime();
-            // Level changes from here on are this world's
+            // Level changes and wins from here on are this world's
             g_level_changes_seen = mcle_game_level_changes(NULL, NULL);
+            g_wins_seen = mcle_game_wins();
         }
-        // ClientConnection::handleRespawn
+        // ClientConnection::handleRespawn and handleGameEvent's WIN_GAME
         {
             int finished = 0, titleId = -1;
             const int started = mcle_game_level_changes(&finished, &titleId);
             if (started != g_level_changes_seen) {
                 g_level_changes_seen = started;
-                [self openConnectingProgress:titleId];
+                [self openConnectingProgress:titleId respawn:NO];
             }
-            // eAppAction_WaitForDimensionChangeComplete
-            if (g_world_connecting && finished == g_level_changes_seen) [self closeConnectingProgress];
+            const int wins = mcle_game_wins();
+            if (wins != g_wins_seen) {
+                g_wins_seen = wins;
+                [self openEndPoem];
+            }
+            // eAppAction_WaitForDimensionChangeComplete / WaitForRespawnComplete
+            if (g_world_connecting && finished == g_level_changes_seen &&
+                (!g_connecting_respawn || mcle_game_respawns() != g_respawns_seen)) {
+                [self closeConnectingProgress];
+            }
         }
         // Minecraft::run's autosave: not with the pause menu or a scene
-        // that ignores autosaves up (death, containers, a level change), and
-        // the timer starts again once the save has gone
-        if (!g_world_paused && !g_world_dead && !g_world_container && !g_world_connecting) {
+        // that ignores autosaves up (death, containers, a level change,
+        // the End poem), and the timer starts again once the save has gone
+        if (!g_world_paused && !g_world_dead && !g_world_container && !g_world_connecting && !g_world_won) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
@@ -4950,7 +5024,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         }
         // Minecraft::tick shows the death menu once the player has died, and
         // goes back to the game when the respawned player is alive
-        if (!g_world_dead && !g_world_paused && !g_world_connecting && mcle_player_is_dead()) {
+        if (!g_world_dead && !g_world_paused && !g_world_connecting && !g_world_won && mcle_player_is_dead()) {
             [self openDeathMenu];
         } else if (g_world_dead && !mcle_player_is_dead()) {
             g_world_dead = false;
@@ -4963,7 +5037,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         }
         // Minecraft::tick: Start opens the pause menu, the inventory action
         // the inventory
-        const bool sceneUp = g_world_connecting;
+        const bool sceneUp = g_world_connecting || g_world_won;
         if (!g_world_paused && !g_world_dead && !g_world_container && !sceneUp) {
             mcle_ios_pad_state pad;
             if (mcle_ios_input_poll(0, &pad)) {
@@ -5073,6 +5147,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     extern PlayerHandle* g_ruffle_player;
 
     if ([self.currentMenuSwf isEqualToString:@"Credits1080.swf"]) MCLECreditsTick();
+    if ([self.currentMenuSwf isEqualToString:@"EndPoem1080.swf"]) MCLEEndPoemTick();
     // UIScene_ControlsMenu::tick
     if ([self.currentMenuSwf isEqualToString:@"Controls1080.swf"] && g_controls_layout_changed) {
         MCLEControlsPositionAllText();
@@ -5354,6 +5429,18 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
                 } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
                     // UIScene_DeathMenu::handleInput swallows B
+                } else if ([self.currentMenuSwf isEqualToString:@"EndPoem1080.swf"]) {
+                    // UIScene_EndPoem::handleInput: on to eAppAction_Respawn,
+                    // ConnectingProgress while the player respawns
+                    if (!g_endpoem_ignore_input) {
+                        g_endpoem_ignore_input = true;
+                        mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
+                        // This just allows it to be shown
+                        mcle_tutorial_show_popup(true);
+                        g_world_won = false;
+                        [self openConnectingProgress:IDS_PROGRESS_RESPAWNING respawn:YES];
+                        mcle_game_respawn();
+                    }
                 } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
                     // UIScene_PauseMenu::handleInput: B goes back to the game
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);

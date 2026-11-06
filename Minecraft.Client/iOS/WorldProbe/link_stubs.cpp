@@ -380,6 +380,7 @@ void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet);   // Ga
 void mcle_tutorial_local_player_packet(std::shared_ptr<Packet> packet);   // Game/MCLETutorial.cpp
 void mcle_player_entity_link(int type, int sourceId, int destId);   // Game/MCLEPlayerInput.cpp
 void mcle_local_player_respawn_packet(int dimension);   // Game/MCLEGameLoop.cpp
+void mcle_local_player_win_game();   // Game/MCLEGameLoop.cpp
 void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     // what ClientConnection's handlers pass on to the tutorial
     mcle_tutorial_local_player_packet(packet);
@@ -396,6 +397,8 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
         mcle_local_player_explosion(explode);
     } else if (std::shared_ptr<RespawnPacket> respawn = std::dynamic_pointer_cast<RespawnPacket>(packet)) {
         mcle_local_player_respawn_packet(respawn->dimension);
+    } else if (std::shared_ptr<GameEventPacket> event = std::dynamic_pointer_cast<GameEventPacket>(packet)) {
+        if (event->_event == GameEventPacket::WIN_GAME) mcle_local_player_win_game();
     }
 }
 void PlayerConnection::send(std::shared_ptr<Packet> packet) {

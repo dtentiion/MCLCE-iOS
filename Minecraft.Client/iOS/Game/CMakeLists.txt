@@ -19,6 +19,7 @@ set(MCLE_GAME_SOURCES
   MCLEWeather.cpp
   MCLECustomDraw.cpp
   MCLECredits.cpp
+  MCLEEndPoem.cpp
   MCLEPortal.cpp
   MCLEJoypadMaps.cpp
   MCLEControls.cpp

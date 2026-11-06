@@ -2519,11 +2519,23 @@ extern "C" void mcle_game_respawn(void) {
 static std::atomic<int> g_levelChangesStarted{0};
 static std::atomic<int> g_levelChangesFinished{0};
 static std::atomic<int> g_levelChangeTitle{-1};
+// ClientConnection::handleGameEvent's WIN_GAME, for the EndPoem
+static std::atomic<int> g_winGames{0};
+// eAppAction_WaitForRespawnComplete: respawns done
+static std::atomic<int> g_respawnsDone{0};
 
 extern "C" int mcle_game_level_changes(int *finished, int *stringId) {
     if (stringId) *stringId = g_levelChangeTitle.load();
     if (finished) *finished = g_levelChangesFinished.load();
     return g_levelChangesStarted.load();
+}
+
+extern "C" int mcle_game_wins(void) {
+    return g_winGames.load();
+}
+
+extern "C" int mcle_game_respawns(void) {
+    return g_respawnsDone.load();
 }
 
 // ClientConnection::handleRespawn: going to another dimension puts up
@@ -2546,6 +2558,11 @@ void mcle_local_player_respawn_packet(int dimension) {
     g_levelChangesStarted.fetch_add(1);
 }
 
+// ClientConnection::handleGameEvent WIN_GAME
+void mcle_local_player_win_game() {
+    g_winGames.fetch_add(1);
+}
+
 // handleRespawn's Minecraft::setLevel for the level the server put the
 // local player in, then the teleport that starts the client again. With
 // g_frameMutex held.
@@ -2565,13 +2582,13 @@ static void mcle_client_follow_player() {
 }
 
 // PlayerConnection::handleClientCommand(PERFORM_RESPAWN): PlayerList::respawn
-// makes a new player at the spawn. The player has no network connection,
-// and respawn stores the new player in it and sends packets through it, so
-// a zeroed one stands in for the call (send / teleport are the link_stubs
-// ones, which don't touch it).
+// makes a new player at the spawn, or back in the overworld after the End
+// poem. The player has no network connection, and respawn stores the new
+// player in it and sends packets through it, so a zeroed one stands in for
+// the call (send / teleport are the link_stubs ones, which don't touch it).
 static void mcle_do_respawn() {
     if (!g_player || !g_server || !g_server->getPlayers()) return;
-    if (g_player->getHealth() > 0) return;
+    if (!g_player->wonGame && g_player->getHealth() > 0) return;
     struct alignas(PlayerConnection) ConnectionBuf { char bytes[sizeof(PlayerConnection)]; };
     static ConnectionBuf s_connection = {};
     PlayerConnection *standIn = reinterpret_cast<PlayerConnection *>(&s_connection);
@@ -2579,7 +2596,12 @@ static void mcle_do_respawn() {
     g_player->connection = std::shared_ptr<PlayerConnection>(standIn, [](PlayerConnection *) {});
     std::shared_ptr<ServerPlayer> fresh;
     try {
-        fresh = g_server->getPlayers()->respawn(g_player, 0, false);
+        if (g_player->wonGame) {
+            fresh = g_server->getPlayers()->respawn(g_player, g_player->m_enteredEndExitPortal ? 0 : g_player->dimension,
+                                                    true);
+        } else {
+            fresh = g_server->getPlayers()->respawn(g_player, 0, false);
+        }
     } catch (...) {
         MCLE_LOG("respawn threw");
     }
@@ -2608,6 +2630,7 @@ static void mcle_do_respawn() {
     mcle_player_new_local_player();
     mcle_sound_listen(fresh, nullptr);
     mcle_portal_client_reset();
+    g_respawnsDone.fetch_add(1);
     MCLE_LOG("respawned at %.1f %.1f %.1f dim %d", fresh->x, fresh->y, fresh->z, fresh->dimension);
 }
 
@@ -3273,6 +3296,8 @@ extern "C" void mcle_game_tick(void) {
         try {
             const float xRotBefore = g_player->xRot, yRotBefore = g_player->yRot;
             const bool menu = g_menuDisplayed.load(std::memory_order_relaxed);
+            // handleMovePlayer takes no moves from a player who has won
+            if (!g_player->wonGame)
             {
                 // The camera is drawn between the player's old and new place by
                 // the time since the last tick. Moving the player and setting
