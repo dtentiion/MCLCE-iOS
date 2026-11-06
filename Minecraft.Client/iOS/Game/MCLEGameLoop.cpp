@@ -3876,7 +3876,9 @@ static void mcle_bob_hurt(float a) {
     if (hurt < 0 || g_player->hurtDuration <= 0) return;
     hurt /= g_player->hurtDuration;
     hurt = (float)Mth::sin(hurt * hurt * hurt * hurt * PI);
-    float rr = g_player->hurtDir;
+    // The client player's hurtDir, which handleEntityEvent's HURT zeroes.
+    // Only the server's own hurt aims it.
+    float rr = 0;
     mcle_glbridge_rotate(-rr, 0, 1, 0);
     mcle_glbridge_rotate(-hurt * 14, 0, 0, 1);
     mcle_glbridge_rotate(+rr, 0, 1, 0);
