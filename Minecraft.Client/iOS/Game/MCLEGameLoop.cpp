@@ -2625,10 +2625,14 @@ static void *mcle_sim_thread_loop(void *) {
         const uint64_t nowNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    clock::now().time_since_epoch()).count();
         const uint64_t nextNs = g_nextSimTickNs.load(std::memory_order_relaxed);
+        // The tick schedule only moves while a world is ticking, so paused,
+        // loading or back at the menus it just waits a frame
+        const bool running = g_initState == kStateTicking && g_levels[0] &&
+                             !g_gamePaused.load(std::memory_order_relaxed);
         uint64_t waitUs = 16 * 1000;
-        if (nextNs > nowNs) {
+        if (running && nextNs > nowNs) {
             waitUs = std::min<uint64_t>((nextNs - nowNs) / 1000, 16 * 1000);
-        } else if (nextNs != 0) {
+        } else if (running && nextNs != 0) {
             waitUs = 0;
         }
         if (waitUs > 0) usleep((useconds_t)waitUs);
