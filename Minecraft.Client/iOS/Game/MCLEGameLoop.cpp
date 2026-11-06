@@ -1018,6 +1018,10 @@ void initImpl() {
         g_initState = kStateFailed;
         return;
     }
+    // The settings have copied what they need. The level reads its own
+    // level data when it's made.
+    delete levelData;
+    levelData = nullptr;
 
     // Step 5.5: construct a real MinecraftServer instance. Parity with
     // MinecraftServer::main:2251 (`server = new MinecraftServer()`).
