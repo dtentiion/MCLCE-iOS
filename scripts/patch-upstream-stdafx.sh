@@ -1773,3 +1773,9 @@ LPP_PY="$REPO_ROOT/scripts/patch-local-player-not-pushed.py"
 if [ -f "$LPP_PY" ]; then
     python3 "$LPP_PY"
 fi
+
+# A jump costs the local player handleMovePlayer's exhaustion, not the client's own jump's
+LPJ_PY="$REPO_ROOT/scripts/patch-local-player-jump-exhaustion.py"
+if [ -f "$LPJ_PY" ]; then
+    python3 "$LPJ_PY"
+fi
