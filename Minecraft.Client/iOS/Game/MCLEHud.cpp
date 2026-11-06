@@ -17,6 +17,7 @@
 #include "../../../upstream/Minecraft.World/Inventory.h"
 #include "../../../upstream/Minecraft.World/ItemInstance.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
+#include "../../../upstream/Minecraft.World/LivingEntity.h"
 
 namespace {
 std::mutex g_mutex;
@@ -115,6 +116,23 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
             hotbar[i]->popTime = item->popTime;
         }
     }
+
+    // LocalPlayer::isRidingJumpable
+    std::shared_ptr<Entity> riding = player->riding;
+    if (riding != nullptr) {
+        if (riding->instanceof(eTYPE_LIVINGENTITY)) {
+            std::shared_ptr<LivingEntity> living = std::dynamic_pointer_cast<LivingEntity>(riding);
+            st.riding = 2;
+            st.riderHealth = static_cast<int>(ceil(living->getHealth()));
+            st.riderMaxHealth = static_cast<int>(living->getMaxHealth());
+        } else {
+            st.riding = 1;
+        }
+        st.ridingJumpable = riding->GetType() == eTYPE_HORSE;
+    }
+    // LocalPlayer::jumpRidingScale, only charged by the jump key while riding
+    st.jumpRidingScale = 0.0f;
+    snprintf(st.displayName, sizeof(st.displayName), "%s", to_utf8(ProfileManager.GetDisplayName(0)).c_str());
 
     st.expProgress = player->experienceProgress;
     st.expLevel = player->experienceLevel;

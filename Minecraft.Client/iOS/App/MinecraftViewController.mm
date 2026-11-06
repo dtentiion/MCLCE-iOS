@@ -539,7 +539,11 @@ static struct {
     int activeSlot, guiScale, expLevel, maxHealth, food, air, armour, saturation, healthAbsorb;
     float expProgress;
     bool healthBlink, healthPoison, healthWither, foodPoison, regen, visible;
-    bool showHealth, showFood, showAir, showArmour, showExpBar;
+    bool showHealth, showHorseHealth, showFood, showAir, showArmour, showExpBar;
+    bool ridingHorse, isJumpable, tooltipsVisible;
+    int horseMaxHealth, horseHealth;
+    float horseJumpProgress;
+    char displayName[64];
     int labelCalls, hideLabelCalls;
     float opacity;
 } g_hud;
@@ -558,6 +562,14 @@ static void MCLEHudReset(void) {
     g_hud.air = 10;
     g_hud.armour = 0;
     g_hud.showHealth = g_hud.showFood = g_hud.showAir = g_hud.showArmour = g_hud.showExpBar = true;
+    g_hud.showHorseHealth = true;
+    g_hud.ridingHorse = true;
+    g_hud.isJumpable = false;
+    g_hud.horseHealth = 1;
+    g_hud.horseMaxHealth = -1;
+    g_hud.horseJumpProgress = 1.0f;
+    g_hud.tooltipsVisible = true;
+    g_hud.displayName[0] = 0;
     g_hud.regen = false;
     g_hud.saturation = 0;
     g_hud.healthAbsorb = -1;
@@ -585,58 +597,57 @@ static void MCLEHudNumber(NSString* fn, int value, int& last) {
     }
 }
 
-// IUIScene_HUD::updateFrameTick / renderPlayerHealth, called every frame in game
-static void MCLEHudPump(void) {
-    MCLEHudState st;
-    mcle_hud_get_state(&st);
-    if (!st.valid) return;
-
-    // SetHudSize -> LoadHud
-    MCLEHudNumber(@"LoadHud", mcle_settings_get(MCLE_SETTING_UISize), g_hud.guiScale);
-    MCLEHudNumber(@"SetActiveSlot", st.activeSlot, g_hud.activeSlot);
-
-    // A hide comes two seconds after its label, so when both are new the
-    // hide is the older one
-    if (st.hideLabelCalls != g_hud.hideLabelCalls) {
-        g_hud.hideLabelCalls = st.hideLabelCalls;
-        MCLECallPath(@"", @"HideSelectedLabel", @[]);
+// UIScene_HUD::SetRidingHorse
+static void MCLEHudSetRidingHorse(bool ridingHorse, bool isJumpable, int maxHorseHealth) {
+    if (g_hud.ridingHorse != ridingHorse || maxHorseHealth != g_hud.horseMaxHealth) {
+        g_hud.ridingHorse = ridingHorse;
+        g_hud.isJumpable = isJumpable;
+        g_hud.horseMaxHealth = maxHorseHealth;
+        MCLECallPath(@"", @"SetRidingHorse", @[ridingHorse ? @YES : @NO, isJumpable ? @YES : @NO, @(maxHorseHealth)]);
     }
-    if (st.labelCalls != g_hud.labelCalls) {
-        g_hud.labelCalls = st.labelCalls;
-        NSString* label = [NSString stringWithUTF8String:st.label];
-        MCLECallPath(@"", @"SetSelectedLabel", @[label ? label : @""]);
+}
+
+// UIScene_HUD::SetHealthAbsorb
+static void MCLEHudSetHealthAbsorb(int healthAbsorb) {
+    if (g_hud.healthAbsorb != healthAbsorb) {
+        g_hud.healthAbsorb = healthAbsorb;
+        MCLECallPath(@"", @"SetHealthAbsorb", @[healthAbsorb > 0 ? @YES : @NO, @(healthAbsorb)]);
+    }
+}
+
+// IUIScene_HUD::renderPlayerHealth
+static void MCLEHudRenderPlayerHealth(const MCLEHudState& st) {
+    MCLEHudShow(@"ShowHealth", true, g_hud.showHealth);
+    MCLEHudShow(@"SetRegenerationEffect", st.regen != 0, g_hud.regen);
+
+    // SetHealth: the bigger of now and last, so a hit flashes the lost hearts
+    int maxHealth = std::max(st.health, st.lastHealth);
+    bool blink = st.blink != 0, poison = st.poison || st.wither, wither = st.wither != 0;
+    if (maxHealth != g_hud.maxHealth || blink != g_hud.healthBlink ||
+        poison != g_hud.healthPoison || wither != g_hud.healthWither) {
+        g_hud.maxHealth = maxHealth;
+        g_hud.healthBlink = blink;
+        g_hud.healthPoison = poison;
+        g_hud.healthWither = wither;
+        MCLECallPath(@"", @"SetHealth", @[@(maxHealth), blink ? @YES : @NO, poison ? @YES : @NO,
+                                          wither ? @YES : @NO]);
+    }
+    MCLEHudSetHealthAbsorb((int)st.absorption);
+
+    if (st.armour > 0) {
+        MCLEHudShow(@"ShowArmour", true, g_hud.showArmour);
+        MCLEHudNumber(@"SetArmour", st.armour, g_hud.armour);
+    } else {
+        MCLEHudShow(@"ShowArmour", false, g_hud.showArmour);
     }
 
-    if (st.canHurtPlayer) {
-        MCLEHudShow(@"ShowHealth", true, g_hud.showHealth);
-        MCLEHudShow(@"SetRegenerationEffect", st.regen != 0, g_hud.regen);
-
-        // SetHealth: the bigger of now and last, so a hit flashes the lost hearts
-        int maxHealth = std::max(st.health, st.lastHealth);
-        bool blink = st.blink != 0, poison = st.poison || st.wither, wither = st.wither != 0;
-        if (maxHealth != g_hud.maxHealth || blink != g_hud.healthBlink ||
-            poison != g_hud.healthPoison || wither != g_hud.healthWither) {
-            g_hud.maxHealth = maxHealth;
-            g_hud.healthBlink = blink;
-            g_hud.healthPoison = poison;
-            g_hud.healthWither = wither;
-            MCLECallPath(@"", @"SetHealth", @[@(maxHealth), blink ? @YES : @NO, poison ? @YES : @NO,
-                                              wither ? @YES : @NO]);
-        }
-        int absorb = (int)st.absorption;
-        if (absorb != g_hud.healthAbsorb) {
-            g_hud.healthAbsorb = absorb;
-            MCLECallPath(@"", @"SetHealthAbsorb", @[absorb > 0 ? @YES : @NO, @(absorb)]);
-        }
-
-        if (st.armour > 0) {
-            MCLEHudShow(@"ShowArmour", true, g_hud.showArmour);
-            MCLEHudNumber(@"SetArmour", st.armour, g_hud.armour);
-        } else {
-            MCLEHudShow(@"ShowArmour", false, g_hud.showArmour);
-        }
+    if (st.riding != 2) {
+        MCLEHudSetRidingHorse(false, false, 0);
 
         MCLEHudShow(@"ShowFood", true, g_hud.showFood);
+        MCLEHudShow(@"ShowHorseHealth", false, g_hud.showHorseHealth);
+        g_hud.horseHealth = 0;
+
         // Food doesn't flash, so only the current level counts
         bool hunger = st.hunger != 0;
         if (st.food != g_hud.food || hunger != g_hud.foodPoison) {
@@ -653,18 +664,58 @@ static void MCLEHudPump(void) {
             MCLEHudShow(@"ShowAir", false, g_hud.showAir);
         }
     } else {
+        MCLEHudSetRidingHorse(true, st.ridingJumpable != 0, st.riderMaxHealth);
+        // SetHorseHealth
+        if (g_hud.ridingHorse && g_hud.horseHealth != st.riderHealth) {
+            g_hud.horseHealth = st.riderHealth;
+            MCLECallPath(@"", @"SetHorseHealth", @[@(st.riderHealth), @NO]);
+        }
+        MCLEHudShow(@"ShowHorseHealth", true, g_hud.showHorseHealth);
+    }
+}
+
+// IUIScene_HUD::updateFrameTick, called every frame in game
+static void MCLEHudPump(void) {
+    MCLEHudState st;
+    mcle_hud_get_state(&st);
+    if (!st.valid) return;
+
+    // SetHudSize -> LoadHud
+    MCLEHudNumber(@"LoadHud", mcle_settings_get(MCLE_SETTING_UISize), g_hud.guiScale);
+
+    // SetDisplayName
+    if (strcmp(st.displayName, g_hud.displayName) != 0) {
+        snprintf(g_hud.displayName, sizeof(g_hud.displayName), "%s", st.displayName);
+        NSString* name = [NSString stringWithUTF8String:st.displayName];
+        MCLECallPath(@"", @"SetDisplayName", @[name ? name : @""]);
+    }
+
+    // SetTooltipsEnabled, with no menu up while this runs
+    MCLEHudShow(@"SetTooltipsEnabled", mcle_settings_get(MCLE_SETTING_Tooltips) != 0, g_hud.tooltipsVisible);
+
+    MCLEHudNumber(@"SetActiveSlot", st.activeSlot, g_hud.activeSlot);
+
+    if (st.canHurtPlayer) {
+        MCLEHudRenderPlayerHealth(st);
+    } else {
+        MCLEHudSetRidingHorse(st.riding != 0, st.riding != 0 && st.ridingJumpable != 0, 0);
+        MCLEHudShow(@"ShowHorseHealth", false, g_hud.showHorseHealth);
+        g_hud.horseHealth = 0;
         MCLEHudShow(@"ShowHealth", false, g_hud.showHealth);
         MCLEHudShow(@"ShowFood", false, g_hud.showFood);
         MCLEHudShow(@"ShowAir", false, g_hud.showAir);
         MCLEHudShow(@"ShowArmour", false, g_hud.showArmour);
         MCLEHudShow(@"ShowExpBar", false, g_hud.showExpBar);
-        if (g_hud.healthAbsorb != 0) {
-            g_hud.healthAbsorb = 0;
-            MCLECallPath(@"", @"SetHealthAbsorb", @[@NO, @0]);
-        }
+        MCLEHudSetHealthAbsorb(0);
     }
 
-    if (st.hasExperience) {
+    if (st.ridingJumpable) {
+        // SetHorseJumpBarProgress
+        if (g_hud.ridingHorse && g_hud.horseJumpProgress != st.jumpRidingScale) {
+            g_hud.horseJumpProgress = st.jumpRidingScale;
+            MCLECallPath(@"", @"SetHorseJumpBarProgress", @[@(st.jumpRidingScale)]);
+        }
+    } else if (st.hasExperience) {
         MCLEHudShow(@"ShowExpBar", true, g_hud.showExpBar);
         if (st.expProgress != g_hud.expProgress) {
             g_hud.expProgress = st.expProgress;
@@ -674,6 +725,18 @@ static void MCLEHudPump(void) {
     } else {
         MCLEHudShow(@"ShowExpBar", false, g_hud.showExpBar);
         MCLEHudNumber(@"SetPlayerLevel", 0, g_hud.expLevel);
+    }
+
+    // A hide comes two seconds after its label, so when both are new the
+    // hide is the older one
+    if (st.hideLabelCalls != g_hud.hideLabelCalls) {
+        g_hud.hideLabelCalls = st.hideLabelCalls;
+        MCLECallPath(@"", @"HideSelectedLabel", @[]);
+    }
+    if (st.labelCalls != g_hud.labelCalls) {
+        g_hud.labelCalls = st.labelCalls;
+        NSString* label = [NSString stringWithUTF8String:st.label];
+        MCLECallPath(@"", @"SetSelectedLabel", @[label ? label : @""]);
     }
 
     // Interface Opacity, back at the default 80% for a while after the
@@ -3000,6 +3063,10 @@ static NSString* MCLETipHTML(void) {
             // UIScene_HUD constructor
             MCLECallPath(@"", @"SetDragonLabel", @[MCLEStr(IDS_BOSS_ENDERDRAGON_HEALTH)]);
             MCLECallPath(@"", @"SetSelectedLabel", @[@""]);
+            for (int i = 1; i <= 10; ++i) {
+                MCLECallPath([NSString stringWithFormat:@"Label%d", i], @"Init", @[@""]);
+            }
+            MCLECallPath(@"Jukebox", @"Init", @[@""]);
         } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
             [self initDeathMenu];
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {

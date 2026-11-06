@@ -27,6 +27,12 @@ typedef struct {
     char label[128];
     // CMinecraftApp's opacity timer, ticks left at full opacity
     int opacityTimer;
+    // what the player rides: 0 nothing, 1 not a LivingEntity, 2 a LivingEntity
+    int riding;
+    int ridingJumpable;
+    int riderHealth, riderMaxHealth;
+    float jumpRidingScale;
+    char displayName[64];
 } MCLEHudState;
 
 void mcle_hud_get_state(MCLEHudState *out);
