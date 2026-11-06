@@ -24,7 +24,7 @@
 class GAME_SETTINGS;
 class C_4JProfile;
 class CDLCManager;
-struct LevelGenerationOptions;
+class LevelGenerationOptions;
 class CGameSettingsManager;
 class FileNameMap;
 
@@ -65,25 +65,20 @@ struct McleAppStub {
     DLCManager m_dlcManager;
     // Real `std::vector<wstring> vSkinNames` from Consoles_App.h.
     std::vector<std::wstring> vSkinNames;
-    // Real Consoles_App.h:737 has `GameRuleManager m_gameRules;` by
-    // value. MinecraftServer.cpp reads members of it directly. The
-    // probe doesn't run game-rule logic; an empty stub class with the
-    // members upstream touches is enough for compile.
-    struct McleGameRulesStub {
-        template<class... A> void* getLevelGenerators(A...)        { return nullptr; }
-        template<class... A> void* getLevelGenerationOptions(A...) { return nullptr; }
-        template<class... A> class LevelRuleset* getGameRuleDefinitions(A...) { return nullptr; }
-        template<class... A> void  loadFromBytes(A...)             {}
-        template<class... A> void  saveToBytes(A...)               {}
-        template<class... A> void  saveGameRules(A...)             {}
-        template<class... A> void  loadGameRules(A...)             {}
-        template<class... A> void  applyGameRules(A...)            {}
-        template<class... A> void  resetGameRules(A...)            {}
-        template<class... A> void  unloadCurrentGameRules(A...)    {}
-        template<class... A> void  loadCurrentGameRules(A...)      {}
-        template<class... A> void  readRuleFile(A...)              {}
-    };
-    McleGameRulesStub m_gameRules;
+    // Consoles_App.h's game rules, and what CMinecraftApp passes through to them
+    GameRuleManager m_gameRules;
+    void processSchematics(LevelChunk *levelChunk) { m_gameRules.processSchematics(levelChunk); }
+    void processSchematicsLighting(LevelChunk *levelChunk) { m_gameRules.processSchematicsLighting(levelChunk); }
+    void loadDefaultGameRules() { m_gameRules.loadDefaultGameRules(); }
+    std::vector<LevelGenerationOptions *> *getLevelGenerators() { return m_gameRules.getLevelGenerators(); }
+    void setLevelGenerationOptions(LevelGenerationOptions *levelGen) { m_gameRules.setLevelGenerationOptions(levelGen); }
+    LevelRuleset *getGameRuleDefinitions() { return m_gameRules.getGameRuleDefinitions(); }
+    LevelGenerationOptions *getLevelGenerationOptions() { return m_gameRules.getLevelGenerationOptions(); }
+    LPCWSTR GetGameRulesString(const std::wstring &key) { return m_gameRules.GetGameRulesString(key); }
+
+    bool m_bTutorialMode = false;
+    bool GetTutorialMode() { return m_bTutorialMode; }
+    void SetTutorialMode(bool bSet) { m_bTutorialMode = bSet; }
 
     // Generic templates - accept any args, return either a default-
     // constructible value or void. Compile-only, not link-only.
@@ -442,7 +437,6 @@ struct McleAppStub {
         }
         return chars;
     }
-    template<class... A> LevelGenerationOptions* getLevelGenerationOptions(A...) { return nullptr; }
     template<class... A> void*          GetSaveThumbnail(A...)  { return nullptr; }
     // Real signature returns `MOJANG_DATA*` - declared in stdafx.
     template<class... A> struct MOJANG_DATA* GetMojangDataForXuid(A...) { return nullptr; }
@@ -483,14 +477,10 @@ struct McleAppStub {
     template<class... A> bool           GetIsHosting(A...)            { return false; }
     template<class... A> int            GetGameTime(A...)             { return 0; }
     template<class... A> int            GetTickCount(A...)            { return 0; }
-    template<class... A> int            GetTutorialMode(A...)         { return 0; }
-    template<class... A> void           SetTutorialMode(A...)         {}
     template<class... A> bool           IsTutorialActive(A...)        { return false; }
     template<class... A> bool           IsTrialMode(A...)             { return false; }
     template<class... A> bool           IsDemoMode(A...)              { return false; }
     template<class... A> int            CreateImageTextData(A...)     { return 0; }
-    template<class... A> void           processSchematics(A...)       {}
-    template<class... A> void           processSchematicsLighting(A...) {}
     // English only for now: the tail of CMinecraftApp::getLocale, which
     // always ends with en-US then en-EN.
     void getLocale(std::vector<std::wstring> &out) { out.push_back(L"en-US"); out.push_back(L"en-EN"); }
@@ -522,10 +512,6 @@ struct McleAppStub {
     template<class... A> int            FormatHTMLString(A...)        { return 0; }
     template<class... A> void           AddMemoryTPDFile(A...)        {}
     template<class... A> void           ClearTerrainFeaturePosition(A...) {}
-    // Return LevelRuleset* so PlayerList::placeNewPlayer (and similar)
-    // can call ->postProcessPlayer(player) on it. nullptr is fine - the
-    // call site checks for non-null first.
-    template<class... A> class LevelRuleset* getGameRuleDefinitions(A...)  { return nullptr; }
     template<class... A> bool           DLCAlreadyPurchased(A...)     { return false; }
     template<class... A> bool           DLCInstalled(A...)            { return false; }
     template<class... A> void           DLCContentRetrieved(A...)     {}
@@ -541,6 +527,9 @@ struct McleAppStub {
     template<class... A> int            GetXuiAction(A...)            { return 0; }
     template<class... A> bool           AutosaveDue(A...)             { return false; }
     template<class... A> void           SetAction(A...)               {}
+    // CMinecraftApp::getFilePath, a file on a mounted DLC pack. The mash-up
+    // worlds' WPACK mount isn't there on iOS yet, so there's no path.
+    template<class... A> std::wstring   getFilePath(A...)             { return std::wstring(); }
     template<class... A> int            SecondsToAutosave(A...)       { return 0; }
     template<class... A> void           LoadCommandBlockMenu(A...)    {}
     template<class... A> void           LoadContainerMenu(A...)       {}
