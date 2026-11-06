@@ -81,7 +81,6 @@ struct McleAppStub {
         template<class... A> void  resetGameRules(A...)            {}
         template<class... A> void  unloadCurrentGameRules(A...)    {}
         template<class... A> void  loadCurrentGameRules(A...)      {}
-        template<class... A> void  readRuleFile(A...)              {}
     };
     McleGameRulesStub m_gameRules;
 

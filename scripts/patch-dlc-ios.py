@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Let DLCManager.cpp and DLCPack.cpp build and read .pck files on iOS.
+
+DLCManager.cpp:
+- The Iggy UI header it includes for the corrupt DLC message is swapped for
+  iOS_DLC.h, which has a stand-in for that one call.
+- A .pck's strings are UTF-16 laid out for Windows' 2 byte WCHAR, and
+  wchar_t is 4 bytes here. The file is rewritten with this build's structs
+  (mcle_dlc_widen_pck) once it's read, before it's processed.
+- A texture pack found in a .pck isn't handed to TexturePackRepository,
+  which isn't built. It's still added to its parent pack.
+
+DLCPack.cpp:
+- A mash-up pack's game rules header (its world template) is skipped.
+  DLCGameRulesHeader is a JustGrSource, from the LevelGenerationOptions
+  header iOS stands in for, so it can't be built.
+
+Idempotent.
+"""
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+DLC = REPO / "upstream" / "Minecraft.Client" / "Common" / "DLC"
+
+
+def patch(path, marker, edits):
+    if not path.exists():
+        sys.exit(f"missing: {path}")
+    src = path.read_text(encoding="utf-8", errors="replace")
+    if marker in src:
+        print(f"already patched: {path}")
+        return
+    nl = "\r\n" if "\r\n" in src else "\n"
+    for old, new in edits:
+        old = old.replace("\n", nl)
+        if src.count(old) != 1:
+            sys.exit(f"anchor not found once in {path}: {old.strip()}")
+        src = src.replace(old, nl.join(new))
+    path.write_text(src, encoding="utf-8", newline="")
+    print(f"patched: {path}")
+
+
+patch(DLC / "DLCManager.cpp", "mcle_dlc_widen_pck", [
+    ('#include "Common/UI/UI.h"', [
+        "#ifdef __APPLE_IOS__",
+        '#include "iOS_DLC.h"',
+        "#else",
+        '#include "Common/UI/UI.h"',
+        "#endif",
+    ]),
+    ("\treturn processDLCDataFile(dwFilesProcessed, pbData, bytesRead, pack);", [
+        "#ifdef __APPLE_IOS__",
+        "\tpbData = mcle_dlc_widen_pck(pbData, bytesRead);",
+        "#endif",
+        "\treturn processDLCDataFile(dwFilesProcessed, pbData, bytesRead, pack);",
+    ]),
+    ("\t\t\t\t\tMinecraft::GetInstance()->skins->addTexturePackFromDLC(dlcTexturePack, dlcTexturePack->GetPackId() );", [
+        "#ifndef __APPLE_IOS__",
+        "\t\t\t\t\tMinecraft::GetInstance()->skins->addTexturePackFromDLC(dlcTexturePack, dlcTexturePack->GetPackId() );",
+        "#endif",
+    ]),
+])
+
+patch(DLC / "DLCPack.cpp", "__APPLE_IOS__", [
+    ('#include "DLCGameRulesHeader.h"', [
+        "#ifndef __APPLE_IOS__",
+        '#include "DLCGameRulesHeader.h"',
+        "#endif",
+    ]),
+    ("\tcase DLCManager::e_DLCType_GameRulesHeader:\n\t\tnewFile = new DLCGameRulesHeader(path);\n\t\tbreak;", [
+        "#ifndef __APPLE_IOS__",
+        "\tcase DLCManager::e_DLCType_GameRulesHeader:",
+        "\t\tnewFile = new DLCGameRulesHeader(path);",
+        "\t\tbreak;",
+        "#endif",
+    ]),
+])

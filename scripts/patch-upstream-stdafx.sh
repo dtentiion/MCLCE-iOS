@@ -1701,8 +1701,8 @@ if [ -f "$CREATIVE_PY" ]; then
     python3 "$CREATIVE_PY"
 fi
 
-# DLCManager builds and reads .pck files with iOS's 4 byte wchar_t
-DLCM_PY="$REPO_ROOT/scripts/patch-dlcmanager-ios.py"
+# DLCManager and DLCPack build and read .pck files with iOS's 4 byte wchar_t
+DLCM_PY="$REPO_ROOT/scripts/patch-dlc-ios.py"
 if [ -f "$DLCM_PY" ]; then
     python3 "$DLCM_PY"
 fi
