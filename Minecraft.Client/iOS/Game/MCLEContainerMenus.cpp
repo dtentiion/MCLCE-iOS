@@ -19,6 +19,7 @@
 #include <string>
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
+#include "../../../upstream/Minecraft.World/net.minecraft.world.item.h"
 #include "../../../upstream/Minecraft.World/FurnaceTileEntity.h"
 #include "../../../upstream/Minecraft.World/BrewingStandTileEntity.h"
 #include "../../../upstream/Minecraft.World/BeaconTileEntity.h"
