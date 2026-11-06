@@ -48,6 +48,13 @@ namespace {
 std::mutex g_mutex;
 int g_tooltips[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
+// The block asks the client's level, where these items' useOn returns true
+// before anything else. On the server level the spawn egg's test spawns the
+// mob, so they're answered the client's way.
+bool useOnIsTrueOnClient(const std::shared_ptr<ItemInstance> &item) {
+    return item->id == Item::spawnEgg_Id || item->id == Item::fireball_Id || item->id == Item::bed_Id;
+}
+
 // The TutorialMode as the block uses it: the tutorial it has, useItem, and
 // useItemOn with bTestUseOnly set, which only asks whether the use would do
 // anything
@@ -106,7 +113,9 @@ struct TooltipGameMode {
 
         if (item != nullptr) {
             if (!didSomething && player->isAllowedToUse(item)) {
-                if (creative) {
+                if (useOnIsTrueOnClient(item)) {
+                    didSomething = true;
+                } else if (creative) {
                     int aux = item->getAuxValue();
                     int count = item->count;
                     didSomething = item->useOn(player, level, x, y, z, face, clickX, clickY, clickZ, bTestUseOnly);
