@@ -651,6 +651,20 @@ bool Minecraft::renderDebug() {
     return (m_instance != nullptr && m_instance->options->renderDebug);
 }
 
+// Minecraft.cpp's, ConsoleSaveFileOriginal::Flush puts it in the save's metadata
+unsigned int Minecraft::getCurrentTexturePackId() {
+    return skins->getSelected()->getId();
+}
+
+// DLCPack.cpp's, ServerLevel::saveToDisc asks it of a texture pack. The
+// community build patches every DLC to purchased.
+#include "Common/DLC/DLCPack.h"
+bool DLCPack::hasPurchasedFile(DLCManager::EDLCType type, const wstring &path) {
+    (void)type;
+    (void)path;
+    return true;
+}
+
 // HUD-pulled symbols. Once Gui.cpp / GuiComponent.cpp / Lighting.cpp went
 // into the build their references became live; the owning .cpps for these
 // don't compile yet. Stubs return safe defaults / no-ops.
