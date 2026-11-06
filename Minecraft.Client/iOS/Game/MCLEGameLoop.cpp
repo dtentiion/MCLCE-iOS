@@ -1904,6 +1904,7 @@ void mcle_local_player_explosion(std::shared_ptr<ExplodePacket> packet) {
 
 // The chat handler's minecraft->gui calls
 void mcle_gui_add_message(const std::wstring &message, bool bIsDeathMessage) {
+    MCLE_LOG("chat: %s", narrow(message).c_str());
     std::lock_guard<std::mutex> lock(s_guiMutex);
     if (g_gui) g_gui->addMessage(message, 0, bIsDeathMessage);
 }
