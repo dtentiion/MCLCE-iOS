@@ -1180,6 +1180,14 @@ bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {
     return true;
 }
 
+// Minecraft::respawnPlayer makes a new LocalPlayer with a new Input, so the
+// player's sneak, sprint, flight taps, riding jump and hand sway start over
+void mcle_player_new_local_player() {
+    m = MoveState();
+    std::lock_guard<std::mutex> lock(g_bobMutex);
+    g_xBob = g_yBob = g_xBobO = g_yBobO = 0;
+}
+
 // Leaving the world: the next one starts with a new LocalPlayer and
 // MultiPlayerGameMode, so none of this carries over
 void mcle_player_input_reset() {
@@ -1189,6 +1197,7 @@ void mcle_player_input_reset() {
     }
     delete s.hitResult;
     s = ClientState();
+    mcle_player_new_local_player();
     P.reset();
     L = nullptr;
     g_thirdPersonView.store(0, std::memory_order_relaxed);

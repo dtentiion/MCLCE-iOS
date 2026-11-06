@@ -2524,6 +2524,7 @@ static void mcle_do_respawn() {
         g_player = fresh;
     }
     mc->gameRenderer->EnableUpdateThread();
+    mcle_player_new_local_player();
     mcle_sound_listen(fresh, nullptr);
     MCLE_LOG("respawned at %.1f %.1f %.1f", fresh->x, fresh->y, fresh->z);
 }
