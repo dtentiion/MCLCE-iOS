@@ -44,6 +44,7 @@
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BeaconMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_AnvilMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_HorseInventoryMenu.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_FireworksMenu.h"
 #include "../../../upstream/Minecraft.Client/EntityRenderDispatcher.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.World/InputOutputStream.h"
@@ -132,6 +133,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::REPAIR_TABLE:
     case ContainerOpenPacket::TRADER_NPC:
     case ContainerOpenPacket::HORSE:
+    case ContainerOpenPacket::FIREWORKS:
         return true;
     }
     return isChest(type);
@@ -1474,6 +1476,70 @@ protected:
     }
 };
 
+// UIScene_FireworksMenu, over the server's FireworksMenu
+class FireworksScene : public ServerContainerScene, public IUIScene_FireworksMenu {
+public:
+    explicit FireworksScene(AbstractContainerMenu *menu)
+        : m_slotListResult("MainPanel.Result"), m_slotList3x3("MainPanel.Fireworks3x3"),
+          m_slotList2x2("MainPanel.Fireworks2x2"), m_labelFireworks("MainPanel.FireworksLabel") {
+        mapSharedControls();
+        mapSlotList(m_slotListResult);
+        mapSlotList(m_slotList3x3);
+        mapSlotList(m_slotList2x2);
+
+        m_labelFireworks.init(app.GetString(IDS_HOW_TO_PLAY_MENU_FIREWORKS));
+
+        enterTutorialState(e_Tutorial_State_Fireworks_Menu);
+
+        Initialize(0, menu, false, FireworksMenu::INV_SLOT_START, eSectionFireworksUsing, eSectionFireworksMax);
+
+        m_slotListResult.addSlots(FireworksMenu::RESULT_SLOT, 1);
+        m_slotList3x3.addSlots(FireworksMenu::CRAFT_SLOT_START, 9);
+        ShowLargeCraftingGrid(true);
+    }
+
+protected:
+    MCLEUISlotList m_slotListResult, m_slotList3x3, m_slotList2x2;
+    MCLEUILabel m_labelFireworks;
+
+    int getSectionColumns(ESceneSection eSection) override {
+        int cols = 0;
+        switch (eSection) {
+        case eSectionFireworksIngredients: cols = 3; break;
+        case eSectionFireworksResult: cols = 1; break;
+        case eSectionFireworksInventory: cols = 9; break;
+        case eSectionFireworksUsing: cols = 9; break;
+        default: assert(false); break;
+        }
+        return cols;
+    }
+
+    int getSectionRows(ESceneSection eSection) override {
+        int rows = 0;
+        switch (eSection) {
+        case eSectionFireworksIngredients: rows = 3; break;
+        case eSectionFireworksResult: rows = 1; break;
+        case eSectionFireworksInventory: rows = 3; break;
+        case eSectionFireworksUsing: rows = 1; break;
+        default: assert(false); break;
+        }
+        return rows;
+    }
+
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionFireworksIngredients: return &m_slotList3x3;
+        case eSectionFireworksResult: return &m_slotListResult;
+        case eSectionFireworksInventory: return &m_slotListInventory;
+        case eSectionFireworksUsing: return &m_slotListHotbar;
+        default: assert(false); return nullptr;
+        }
+    }
+
+    // bShow == true removes the 2x2 crafting grid and bShow == false removes the 3x3 crafting grid
+    void ShowLargeCraftingGrid(bool bShow) { mcle_ui_call("", "ShowLargeCraftingGrid", {mcle_ui_bool(bShow)}); }
+};
+
 // UIScene_HorseInventoryMenu. m_horse is the client's copy of the horse and
 // m_container the AnimalChest it makes for the packet; here they're the
 // server's horse and the inventory the menu is over.
@@ -1741,6 +1807,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::REPAIR_TABLE: return "AnvilMenu1080.swf";
     case ContainerOpenPacket::TRADER_NPC: return "TradingMenu1080.swf";
     case ContainerOpenPacket::HORSE: return "HorseInventoryMenu1080.swf";
+    case ContainerOpenPacket::FIREWORKS: return "FireworksMenu1080.swf";
     }
     return "";
 }
@@ -1808,6 +1875,9 @@ bool mcle_container_open_server() {
                 scene = new HorseScene(menu, player->inventory, container, horse, horseName(g_packet, horse));
             }
         } break;
+        case ContainerOpenPacket::FIREWORKS:
+            if (dynamic_cast<FireworksMenu *>(menu)) scene = new FireworksScene(menu);
+            break;
         }
     }
     if (!scene) {

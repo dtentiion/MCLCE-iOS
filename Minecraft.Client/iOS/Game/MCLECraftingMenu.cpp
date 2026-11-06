@@ -48,10 +48,8 @@ void craftItem(const std::shared_ptr<ServerPlayer> &player, int iRecipe) {
             player->drop(pTempItemInst);
         }
     } else if (pTempItemInst->id == Item::fireworksCharge_Id || pTempItemInst->id == Item::fireworks_Id) {
-        // openFireworks swaps the crafting table for the fireworks menu,
-        // which isn't here yet, so nothing is made
-        app.DebugPrintf("fireworks need the fireworks menu\n");
-        return;
+        CraftingMenu *menu = static_cast<CraftingMenu *>(player->containerMenu);
+        player->openFireworks(menu->getX(), menu->getY(), menu->getZ());
     } else {
         Recipy::INGREDIENTS_REQUIRED &req = pRecipeIngredientsRequired[iRecipe];
         if (req.iType == RECIPE_TYPE_3x3 && dynamic_cast<CraftingMenu *>(player->containerMenu) == nullptr) {
