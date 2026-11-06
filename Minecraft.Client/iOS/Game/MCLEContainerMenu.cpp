@@ -19,7 +19,6 @@
 #include "../../../upstream/Minecraft.World/net.minecraft.world.item.crafting.h"
 #include "../../../upstream/Minecraft.World/FurnaceTileEntity.h"
 #include "../../../upstream/Minecraft.World/net.minecraft.world.effect.h"
-#include "../../../upstream/Minecraft.World/net.minecraft.stats.h"
 #include "../../../upstream/Minecraft.World/HtmlString.h"
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/SoundTypes.h"
@@ -129,6 +128,9 @@ static std::shared_ptr<Player> mcle_container_player() {
 // copy of the container and send the click to the server, where
 // PlayerConnection::handleContainerClick clicks it again. The two are the
 // same container here, so it's clicked once, the way the server does it.
+// The ContainerAckPacket it sends is left out, there's no connection, and
+// ignoreSlotUpdateHack keeps slotChanged and broadcastCarriedItem from
+// sending too.
 static void mcle_container_click(AbstractContainerMenu *menu, int slotId, int buttonNum, bool quickKey) {
     std::shared_ptr<ServerPlayer> player = mcle_local_player();
     if (!player || !menu || player->containerMenu != menu) return;
@@ -219,12 +221,14 @@ public:
     AbstractContainerMenu *menu() { return m_menu; }
 
     // UIScene_AbstractContainerMenu::handleDestroy. There's no tutorial
-    // state to put back.
+    // state to put back. The client's closeContainer() ends up in the
+    // server's handleContainerClose, which is just doCloseContainer().
+    // ServerPlayer's own closeContainer() would send a ContainerClosePacket.
     void destroy() {
         std::shared_ptr<ServerPlayer> player = mcle_local_player();
         if (player != nullptr && player->containerMenu != nullptr && m_menu != nullptr &&
             player->containerMenu->containerId == m_menu->containerId) {
-            player->closeContainer();
+            player->doCloseContainer();
         }
     }
 
@@ -353,7 +357,10 @@ public:
 
         InventoryMenu *menu = static_cast<InventoryMenu *>(player->inventoryMenu);
 
-        player->awardStat(GenericStats::openInventory(), GenericStats::param_openInventory());
+        // Upstream awards GenericStats::openInventory() here through
+        // LocalPlayer::awardStat. It's a locally awarded achievement, so the
+        // ServerPlayer would just drop it, and nothing gives achievements
+        // here yet, so it's left out.
 
         Initialize(0, menu, false, InventoryMenu::INV_SLOT_START, eSectionInventoryUsing, eSectionInventoryMax, false);
 
