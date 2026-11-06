@@ -112,7 +112,10 @@ int McleAppStub::DLCMountedCallback(LPVOID pParam, int iPad, DWORD dwErr, DWORD 
 
             app.HandleDLC(pack);
 
-            if (pack->getDLCItemsCount(DLCManager::e_DLCType_Texture) > 0) {
+            // HandleDLC deletes a pack none of whose files read, so it's only
+            // looked at again if the manager still has it
+            if (app.m_dlcManager.getPack(ContentData.szDisplayName) == pack &&
+                pack->getDLCItemsCount(DLCManager::e_DLCType_Texture) > 0) {
                 Minecraft::GetInstance()->skins->addTexturePackFromDLC(pack, pack->GetPackId());
             }
         } else {

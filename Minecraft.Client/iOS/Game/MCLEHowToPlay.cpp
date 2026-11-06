@@ -88,9 +88,8 @@ class MCLEAppText {
 public:
     int GetHTMLColour(eMinecraftColour colour) {
         Minecraft *pMinecraft = Minecraft::GetInstance();
-        if (pMinecraft && pMinecraft->skins) {
-            return pMinecraft->skins->getSelected()->getColourTable()->getColour(colour);
-        }
+        ColourTable *selected = (pMinecraft && pMinecraft->skins) ? pMinecraft->skins->getSelected()->getColourTable() : nullptr;
+        if (selected) return selected->getColour(colour);
         ColourTable *table = frontEndColours();
         return table ? table->getColour(colour) : 0xffffffff;
     }
