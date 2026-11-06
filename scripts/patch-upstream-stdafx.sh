@@ -1748,3 +1748,9 @@ TIOS_PY="$REPO_ROOT/scripts/patch-tutorial-ios.py"
 if [ -f "$TIOS_PY" ]; then
     python3 "$TIOS_PY"
 fi
+
+# LocalPlayer::aiStep's flying move runs after the server player's Player::aiStep
+PLA_PY="$REPO_ROOT/scripts/patch-player-local-aistep.py"
+if [ -f "$PLA_PY" ]; then
+    python3 "$PLA_PY"
+fi
