@@ -201,6 +201,19 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
+
+// ActionGameSettings(eGameSetting_RenderDistance): the chunk count picked in
+// the graphics menu becomes Options::viewDistance, 3 minus its level there
+// (UIScene_SettingsGraphicsMenu::DistanceToLevel)
+static int mcle_view_distance_setting() {
+    static const int kTable[6] = {2, 4, 8, 16, 32, 64};
+    const int dist = mcle_settings_get(2 /*RenderDistance*/);
+    int level = 3;
+    for (int i = 0; i < 6; ++i) {
+        if (kTable[i] == dist) level = i;
+    }
+    return 3 - level;
+}
 void mcle_creative_menu_static_ctor();                    // MCLECreativeMenu.cpp
 
 #include "4JLibs/inc/4J_Storage.h"
@@ -1438,9 +1451,6 @@ void initImpl() {
     // and don't deref this.
     if (!g_minecraftShim->options) try {
         g_minecraftShim->options = new Options();
-        // G5: viewDistance left at Options::init default (0). allChanged
-        // is now wired to fire properly via setLevel below.
-        g_minecraftShim->options->viewDistance = 0;
         // fancyGraphics=true gives leaves the cutout-transparency path
         // (LevelRenderer.cpp:427 Tile::leaves->setFancy). Clouds normally
         // branch to renderAdvancedClouds when this is true, but our
@@ -1464,6 +1474,10 @@ void initImpl() {
     } catch (...) {
         MCLE_LOG("mcle_game_init: Options ctor threw");
     }
+
+    // ApplyGameSettingsChanged at the start of the game: the render
+    // distance setting, before setLevel's allChanged sizes the area
+    if (g_minecraftShim->options) g_minecraftShim->options->viewDistance = mcle_view_distance_setting();
 
     static char s_gameRendererShimBuf[sizeof(GameRenderer)] = {0};
     g_minecraftShim->gameRenderer =
@@ -2730,6 +2744,20 @@ extern "C" void mcle_game_tick(void) {
     // level code (Level::getCubes) reaches into the renderer.
     if (!g_renderReady.load(std::memory_order_acquire)) return;
 
+    // UIScene_SettingsGraphicsMenu sets options->viewDistance when the render
+    // distance slider moves, and LevelRenderer::render's allChanged resizes
+    // the area with the chunk update thread stopped. Here the chunk updates
+    // run in this tick, so it's done between them, with the frame held.
+    {
+        Minecraft *mc = Minecraft::GetInstance();
+        const int vd = mcle_view_distance_setting();
+        if (mc && mc->options && g_levelRenderer && mc->options->viewDistance != vd) {
+            std::lock_guard<std::mutex> frameLock(g_frameMutex);
+            mc->options->viewDistance = vd;
+            try { g_levelRenderer->allChanged(); } catch (...) { MCLE_LOG("allChanged threw"); }
+        }
+    }
+
     // Throttle simulation to 20Hz (50ms per tick) to match upstream parity.
     // CADisplayLink calls us at 60Hz; without this, aiStep + tickEntities run
     // 3x too fast and walking / gravity / friction all feel sped up.
@@ -3216,8 +3244,11 @@ static float g_fr = 0.0f, g_fg = 0.0f, g_fb = 0.0f;
 static std::atomic<bool> g_haveClearColor{false};
 // GameRenderer::isInClouds, set by moveCameraToPlayer
 static bool g_isInClouds = false;
-// GameRenderer::renderDistance, 256 >> viewDistance
-static const float kRenderDistance = 256.0f;
+// GameRenderer::setupCamera's renderDistance from Options::viewDistance
+static float mcle_render_distance() {
+    const int vd = Minecraft::GetInstance()->options->viewDistance;
+    return vd >= 0 ? static_cast<float>(16 * 16 >> vd) : static_cast<float>((16 * 16) << (-vd));
+}
 
 // GameRenderer::getNightVisionScale
 static float mcle_night_vision_scale(float a) {
@@ -3376,7 +3407,7 @@ static void mcle_setup_fog(int i, float alpha) {
         float distance = 5.0f;
         int duration = player->getEffect(MobEffect::blindness)->getDuration();
         if (duration < 20) {
-            distance = 5.0f + (kRenderDistance - 5.0f) * (1.0f - static_cast<float>(duration) / 20.0f);
+            distance = 5.0f + (mcle_render_distance() - 5.0f) * (1.0f - static_cast<float>(duration) / 20.0f);
         }
 
         mcle_glbridge_set_fog_mode(0);
@@ -3401,7 +3432,7 @@ static void mcle_setup_fog(int i, float alpha) {
         mcle_glbridge_set_fog_mode(1);
         mcle_glbridge_set_fog_density(2.0f);
     } else {
-        float distance = kRenderDistance;
+        float distance = mcle_render_distance();
         if (!level->dimension->hasCeiling) {
             // 4J - test for doing bedrockfog brought forward from 1.2.3
             if (level->dimension->hasBedrockFog() && !creative) {
@@ -3692,7 +3723,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         // GameRenderer::setupCamera, first person
         mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
         mcle_glbridge_load_identity();
-        mcle_glbridge_metal_perspective(fov, aspect, 0.05f, 1024.0f);
+        mcle_glbridge_metal_perspective(fov, aspect, 0.05f, mcle_render_distance() * 2);
 
         mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
         mcle_glbridge_load_identity();
@@ -4102,7 +4133,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
             mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
             mcle_glbridge_load_identity();
-            mcle_glbridge_metal_perspective(handFov, aspect, 0.05f, 1024.0f);
+            mcle_glbridge_metal_perspective(handFov, aspect, 0.05f, mcle_render_distance() * 2);
             mcle_glbridge_matrix_mode(0x1700 /* GL_MODELVIEW */);
             mcle_glbridge_load_identity();
 
