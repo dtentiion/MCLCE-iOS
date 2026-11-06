@@ -319,6 +319,21 @@ typedef struct {
 int           ruffle_ios_custom_draw_regions(PlayerHandle* h,
                                              RuffleIosCustomDrawRegion* out, size_t max);
 
+// The same three for the movie at a stage depth: the root clip for 0,
+// otherwise the sibling SWF added there. A component movie like
+// TutorialPopup1080.swf is driven through these like its own Iggy movie.
+int           ruffle_ios_sibling_custom_draw_regions(PlayerHandle* h, int depth,
+                                                     RuffleIosCustomDrawRegion* out, size_t max);
+int           ruffle_ios_call_sibling_path(PlayerHandle* h, int depth,
+                                           const uint8_t* path, size_t path_len,
+                                           const uint8_t* method, size_t method_len,
+                                           const int* kinds, const double* nums,
+                                           const uint8_t* const* strs, const size_t* str_lens,
+                                           size_t argc);
+int           ruffle_ios_set_sibling_path_visible(PlayerHandle* h, int depth,
+                                                  const uint8_t* path, size_t path_len,
+                                                  int visible);
+
 // Clear AS3 stage focus. Call on scene exit so the focus highlight
 // from the previous scene doesn't bleed into the next.
 void          ruffle_ios_clear_focus(PlayerHandle* h);
