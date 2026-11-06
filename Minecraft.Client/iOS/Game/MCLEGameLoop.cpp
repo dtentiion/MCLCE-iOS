@@ -168,6 +168,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/ResourceLocation.h"
 #include "../../../upstream/Minecraft.Client/Lighting.h"
 #include "../../../upstream/Minecraft.Client/FrustumCuller.h"
+#include "../../../upstream/Minecraft.Client/Frustum.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/UIFontData.h"
 #include "../../../upstream/Minecraft.Client/Common/Colours/ColourTable.h"
 #include "../../../upstream/Minecraft.Client/BossMobGuiInfo.h"
@@ -3175,274 +3176,201 @@ extern "C" void mcle_world_drive_renderer(void) {
             }
         }
 
-        // Bind the terrain atlas before chunks render. Upstream's
-        // GameRenderer::renderLevel does this; we don't run GameRenderer
-        // so we call it directly here. Routes to our patched
-        // Textures::bindTexture which loads terrain.png and binds the GL id.
-        {
-            Minecraft *mc = Minecraft::GetInstance();
-            static int s_bindCount = 0;
-            if (s_bindCount < 3) {
-                MCLE_LOG("BIND_CKPT pre-render bindTexture(LOCATION_BLOCKS): mc=%p textures=%p",
-                         (void*)mc, mc ? (void*)mc->textures : nullptr);
-            }
-            if (mc && mc->textures) {
-                try {
-                    mc->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);
-                } catch (...) {}
-            }
-            if (s_bindCount < 3) {
-                MCLE_LOG("BIND_CKPT post-bind bound_tex_id=%u",
-                         mcle_glbridge_get_bound_texture());
-                s_bindCount++;
-            }
-        }
+        // GameRenderer::renderLevel from setupCamera on. The chunk lists go
+        // out through LevelRenderer::render (CBuffCall), opaque layer first,
+        // the water layer after the entities and particles.
+        Minecraft *mc = Minecraft::GetInstance();
+        std::shared_ptr<LivingEntity> cameraEntity = g_player;
+        const double xOff = cameraEntity->xOld + (cameraEntity->x - cameraEntity->xOld) * a;
+        const double yOff = cameraEntity->yOld + (cameraEntity->y - cameraEntity->yOld) * a;
+        const double zOff = cameraEntity->zOld + (cameraEntity->z - cameraEntity->zOld) * a;
+        const bool underWater = g_player->isUnderLiquid(Material::water);
+        int hx = 0, hy = 0, hz = 0, hf = 0;
+        const bool haveHit = mcle_player_hit_tile(&hx, &hy, &hz, &hf) != 0;
 
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+
+        Frustum::getFrustum();
+        if (mc->options->viewDistance < 2) {
+            try { mcle_setup_fog(-1, a); } catch (...) {}
+            try { g_levelRenderer->renderSky(a); } catch (...) {}
+        }
+        glEnable(GL_FOG);
+        try { mcle_setup_fog(1, a); } catch (...) {}
+
+        FrustumCuller frustObj;
+        Culler *frustum = &frustObj;
+        frustum->prepare(xOff, yOff, zOff);
+        try { g_levelRenderer->cull(frustum, a); } catch (...) {}
+
+        // prepareAndRenderClouds, below the clouds' height
+        auto renderClouds = [&]() {
+            if (!mc->options->isCloudsOn()) return;
+            glPushMatrix();
+            try { mcle_setup_fog(0, a); } catch (...) {}
+            glEnable(GL_FOG);
+            try { g_levelRenderer->renderClouds(a); } catch (...) {}
+            glDisable(GL_FOG);
+            try { mcle_setup_fog(1, a); } catch (...) {}
+            glPopMatrix();
+        };
+        if (cameraEntity->y < Level::genDepth) renderClouds();
+        Frustum::getFrustum();
+
+        try { mcle_setup_fog(0, a); } catch (...) {}
+        glEnable(GL_FOG);
+        if (mc->textures) {
+            try { mc->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS); } catch (...) {}
+        }
+        Lighting::turnOff();
         {
-            static int s_renderCalls = 0;
-            if (s_renderCalls < 3) MCLE_LOG("WD_CKPT before render call=%d", s_renderCalls);
             using hrclock2 = std::chrono::steady_clock;
             const auto renderStart = hrclock2::now();
-            // Pass partial tick so renderChunks interpolates the camera
-            // translate(-player) between xOld and x. Smooths motion when
-            // input ticks at 20Hz but rendering is at 60Hz.
-            g_levelRenderer->render(g_player, /*layer*/0,
-                                    /*alpha*/(double)frame_partial_tick,
-                                    /*updateChunks*/false);
+            try {
+                g_levelRenderer->render(cameraEntity, 0, (double)a, /*updateChunks*/false);
+            } catch (...) {}
             const auto renderMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                       hrclock2::now() - renderStart).count();
             if (renderMs > 100) {
                 MCLE_LOG("SLOW_RENDER LevelRenderer::render took=%lldms", (long long)renderMs);
             }
-            if (s_renderCalls < 3) MCLE_LOG("WD_CKPT after render call=%d", s_renderCalls);
-            s_renderCalls++;
         }
 
-        // GameRenderer::renderLevel: entities and tile entities go right
-        // after the opaque chunk pass, culled against the camera frustum.
+        // Entities don't use the "a" factor for culling, their AABBs are
+        // already at the new position
         if (EntityRenderDispatcher::instance && TileEntityRenderDispatcher::instance) {
             static Vec3 *s_cameraPos = Vec3::newPermanent(0, 0, 0);
             try {
                 Lighting::turnOn();
-                FrustumCuller frustObj;
-                Culler *frustum = &frustObj;
-                frustum->prepare(g_player->x, g_player->y, g_player->z);
-                Vec3 *cameraPosTemp = g_player->getPos(frame_partial_tick);
+                frustum->prepare(cameraEntity->x, cameraEntity->y, cameraEntity->z);
+                Vec3 *cameraPosTemp = cameraEntity->getPos(a);
                 s_cameraPos->x = cameraPosTemp->x;
                 s_cameraPos->y = cameraPosTemp->y;
                 s_cameraPos->z = cameraPosTemp->z;
-                g_levelRenderer->renderEntities(s_cameraPos, frustum, frame_partial_tick);
-                Lighting::turnOff();
+                g_levelRenderer->renderEntities(s_cameraPos, frustum, a);
             } catch (...) {
                 static int s_entErr = 0;
                 if (s_entErr++ < 3) MCLE_LOG("renderEntities threw");
             }
         }
 
-        // renderLevel: the selection box round the targeted block, picked
-        // on the sim thread this tick
-        {
-            int hx, hy, hz, hf;
-            if (mcle_player_hit_tile(&hx, &hy, &hz, &hf) && !g_player->isUnderLiquid(Material::water)) {
-                try {
-                    HitResult hit(hx, hy, hz, hf, Vec3::newTemp(hx, hy, hz));
-                    glDisable(GL_ALPHA_TEST);
-                    g_levelRenderer->renderHitOutline(g_player, &hit, 0, frame_partial_tick);
-                    glEnable(GL_ALPHA_TEST);
-                } catch (...) {
-                    static int s_hitErr = 0;
-                    if (s_hitErr++ < 3) MCLE_LOG("renderHitOutline threw");
-                }
-            }
-        }
-
-        // G3e-step5: re-enable renderSky/renderClouds with line-by-line
-        // checkpoints inside Level::getSkyColor (LR_GSC tags). Last LR_GSC
-        // line printed before crash pins the offending deref.
-
-        // Diagnostic: dump modelview matrix + sun angle right before
-        // renderSky. This is the matrix all sky/sun/moon/cloud passes
-        // operate on. Expected ~ R_pitch * R_yaw * T(0,heightOff-1.62,0).
-        {
-            static int s_skyDiag = 0;
-            if ((s_skyDiag++ % 60) == 0) {
-                float mv[16] = {0};
-                extern void mcle_glbridge_get_modelview(float *out16);
-                mcle_glbridge_get_modelview(mv);
-                MCLE_LOG("MV_CKPT log=%d row0=[%.3f %.3f %.3f %.3f] row3=[%.3f %.3f %.3f %.3f]",
-                         s_skyDiag,
-                         mv[0],  mv[1],  mv[2],  mv[3],
-                         mv[12], mv[13], mv[14], mv[15]);
-                if (g_levels[0]) {
-                    try {
-                        float td  = g_levels[0]->getTimeOfDay(frame_partial_tick);
-                        float san = g_levels[0]->getSunAngle(frame_partial_tick);
-                        // Compute the sun's centre eye-space position after
-                        // the renderSky local rotations (R_-90Y * R_td*360X
-                        // applied to (0, 100, 0)) plus the current camera
-                        // modelview. This tells us exactly where the sun
-                        // ends up on screen.
-                        const float kPi = 3.14159265358979323846f;
-                        float ang = td * 2.0f * kPi;
-                        // After R_X(td*360) on (0,100,0): (0, 100*cos, 100*sin)
-                        float sx = 0.0f;
-                        float sy = 100.0f * std::cos(ang);
-                        float sz = 100.0f * std::sin(ang);
-                        // After R_Y(-90): (a,b,c)->(-c, b, a)
-                        float wx = -sz, wy = sy, wz = sx;
-                        // Apply camera modelview (column-major mv).
-                        float ex = mv[0]*wx + mv[4]*wy + mv[8] *wz + mv[12];
-                        float ey = mv[1]*wx + mv[5]*wy + mv[9] *wz + mv[13];
-                        float ez = mv[2]*wx + mv[6]*wy + mv[10]*wz + mv[14];
-                        // Crude NDC (no projection matrix applied; just check sign of z).
-                        const char *zside = (ez < 0) ? "front" : "behind";
-                        MCLE_LOG("SUN_ANGLE log=%d xRot=%.1f yRot=%.1f td=%.4f sunAngle=%.4f world=(%.1f,%.1f,%.1f) eye=(%.1f,%.1f,%.1f) zside=%s",
-                                 s_skyDiag,
-                                 g_player ? g_player->xRot : 0.0f,
-                                 g_player ? g_player->yRot : 0.0f,
-                                 td, san,
-                                 wx, wy, wz,
-                                 ex, ey, ez,
-                                 zside);
-                    } catch (...) {}
-                }
-            }
-        }
-
-        // Diagnostic for star rendering. getStarBrightness should be >0
-        // at night so glCallList(starList) actually fires inside renderSky
-        // (upstream LevelRenderer.cpp:1138-1142). If brightness is 0 at
-        // what looks like night, the time-of-day or dimension check is
-        // wrong. If brightness is >0 but no stars appear, the starList
-        // capture didn't happen at LevelRenderer ctor time.
-        {
-            static int s_starDiag = 0;
-            if ((s_starDiag++ % 60) == 0 && g_levels[0]) {
-                try {
-                    float sb = g_levels[0]->getStarBrightness(frame_partial_tick);
-                    MCLE_LOG("STAR_CKPT log=%d starBrightness=%.4f",
-                             s_starDiag, sb);
-                } catch (...) {}
-            }
-        }
-        // renderLevel: setupFog(-1, a) for the sky, then back to the terrain's
-        try { mcle_setup_fog(-1, frame_partial_tick); } catch (...) {}
-        try { g_levelRenderer->renderSky(frame_partial_tick);    } catch (...) {}
-        try { mcle_setup_fog(0, frame_partial_tick); } catch (...) {}
-        // Modelview at this point should match what entered renderSky.
-        // Upstream renderClouds expects: rotations + eye-height translate,
-        // no XZ player translate. Log every 60 frames so we can confirm
-        // matrix state hasn't been corrupted by renderChunks/renderSky's
-        // push/pops.
-        {
-            static int s_mvCloud = 0;
-            if ((s_mvCloud++ % 60) == 0) {
-                float mv[16] = {0};
-                extern void mcle_glbridge_get_modelview(float *out16);
-                mcle_glbridge_get_modelview(mv);
-                MCLE_LOG("MV_CLOUD log=%d row0=[%.3f %.3f %.3f %.3f] row1=[%.3f %.3f %.3f %.3f] row2=[%.3f %.3f %.3f %.3f] row3=[%.3f %.3f %.3f %.3f]",
-                         s_mvCloud,
-                         mv[0],  mv[1],  mv[2],  mv[3],
-                         mv[4],  mv[5],  mv[6],  mv[7],
-                         mv[8],  mv[9],  mv[10], mv[11],
-                         mv[12], mv[13], mv[14], mv[15]);
-                if (g_player) {
-                    MCLE_LOG("MV_CLOUD log=%d player_x=%.2f y=%.2f z=%.2f xRot=%.1f yRot=%.1f",
-                             s_mvCloud,
-                             (float)g_player->x, (float)g_player->y, (float)g_player->z,
-                             g_player->xRot, g_player->yRot);
-                }
-            }
-        }
-        try { g_levelRenderer->renderClouds(frame_partial_tick); } catch (...) {}
-
-        // HUD: parity with upstream GameRenderer::render which calls
-        // Gui::render after the world. Hotbar, health/hunger/xp bars,
-        // crosshair all happen inside this call. Push screen size into
-        // the shim so ScreenSizeCalculator gets the right pixels.
-        // g_minecraftShim is function-local in initImpl; reach the same
-        // pointer via Minecraft::GetInstance() (set in initImpl).
-        Minecraft *mcShim = Minecraft::GetInstance();
-        // HUD rendering disabled: Gui::render's pre-RENDER_HUD overlays
-        // (renderPumpkin / renderTp / renderVignette) kept firing on our
-        // partially-initialised player state, painting full-screen blue/
-        // pumpkin overlays. Real HUD lands via the Ruffle/SWF path - phases
-        // 2-4 of project_hud_swf_plan.md - which renders HUD1080.swf on
-        // top of the world. Until then, skip gui->render entirely.
-        constexpr bool kEnableNativeGuiRender = false;
-        if (kEnableNativeGuiRender && g_gui && mcShim) {
-            int sw = 0, sh = 0;
-            mcle_metal_current_size(&sw, &sh);
-            mcShim->width       = sw;
-            mcShim->height      = sh;
-            // width_phys / height_phys are the physical-pixel dims (vs the
-            // potentially-scaled width/height). GuiComponent::blit divides
-            // by width_phys; without this it's 0 -> NaN vertex coords ->
-            // HUD invisible. iOS retina has the framebuffer already at
-            // physical size so width == width_phys.
-            mcShim->width_phys  = sw;
-            mcShim->height_phys = sh;
-            try {
-                g_gui->render(frame_partial_tick, /*mouseFree*/false,
-                              /*xMouse*/0, /*yMouse*/0);
-            } catch (const std::exception &e) {
-                static int s_huderr = 0;
-                if (s_huderr < 3) {
-                    MCLE_LOG("Gui::render threw: %{public}s", e.what());
-                    s_huderr++;
-                }
-            } catch (...) {
-                static int s_huderr2 = 0;
-                if (s_huderr2 < 3) {
-                    MCLE_LOG("Gui::render threw unknown");
-                    s_huderr2++;
-                }
-            }
-        }
-
-        mcle_glbridge_replay_all_lists();
-
-        // renderLevel: the opaque particles, then the translucent ones that
-        // upstream draws after the water. The chunks are only drawn by the
-        // replay above, so these come after it.
-        if (ParticleEngine *particles = Minecraft::GetInstance()->particleEngine) {
+        ParticleEngine *particleEngine = mc->particleEngine;
+        if (particleEngine) {
             try {
                 std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
-                Camera::prepare(g_player, false);
-                Lighting::turnOn();
-                particles->renderLit(g_player, frame_partial_tick, ParticleEngine::OPAQUE_LIST);
+                Camera::prepare(g_player, mcle_third_person_view() == 2);
+                particleEngine->renderLit(cameraEntity, a, ParticleEngine::OPAQUE_LIST);
                 Lighting::turnOff();
-                particles->render(g_player, frame_partial_tick, ParticleEngine::OPAQUE_LIST);
-                Lighting::turnOn();
-                particles->renderLit(g_player, frame_partial_tick, ParticleEngine::TRANSLUCENT_LIST);
-                Lighting::turnOff();
-                particles->render(g_player, frame_partial_tick, ParticleEngine::TRANSLUCENT_LIST);
+                try { mcle_setup_fog(0, a); } catch (...) {}
+                particleEngine->render(cameraEntity, a, ParticleEngine::OPAQUE_LIST);
             } catch (...) {
                 static int s_particleErr = 0;
                 if (s_particleErr++ < 3) MCLE_LOG("particle render threw");
             }
         }
+        Lighting::turnOff();
 
-        // renderLevel: the cracks on blocks being broken
+        if (haveHit && underWater) {
+            try {
+                HitResult hit(hx, hy, hz, hf, Vec3::newTemp(hx, hy, hz));
+                glDisable(GL_ALPHA_TEST);
+                g_levelRenderer->renderHit(g_player, &hit, 0, g_player->inventory->getSelected(), a);
+                glEnable(GL_ALPHA_TEST);
+            } catch (...) {}
+        }
+
+        glDisable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(true);
+        try { mcle_setup_fog(0, a); } catch (...) {}
+        glEnable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+        if (mc->textures) {
+            try { mc->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS); } catch (...) {}
+        }
+        // The water: depth only first, then drawn over it, so only the
+        // nearest water surface shows
+        try {
+            glBlendFunc(GL_ZERO, GL_ONE);
+            int visibleWaterChunks = g_levelRenderer->render(cameraEntity, 1, (double)a, /*updateChunks*/false);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            if (visibleWaterChunks > 0) {
+                g_levelRenderer->render(cameraEntity, 1, (double)a, /*updateChunks*/false);
+            }
+        } catch (...) {
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+
+        // Translucent particles go after the water
+        if (particleEngine) {
+            try {
+                std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+                Lighting::turnOn();
+                particleEngine->renderLit(cameraEntity, a, ParticleEngine::TRANSLUCENT_LIST);
+                Lighting::turnOff();
+                try { mcle_setup_fog(0, a); } catch (...) {}
+                particleEngine->render(cameraEntity, a, ParticleEngine::TRANSLUCENT_LIST);
+            } catch (...) {
+                static int s_particleErr2 = 0;
+                if (s_particleErr2++ < 3) MCLE_LOG("translucent particle render threw");
+            }
+        }
+        Lighting::turnOff();
+
+        glDepthMask(true);
+        glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+
+        // The selection box round the targeted block, picked on the sim
+        // thread this tick
+        if (haveHit && !underWater) {
+            try {
+                HitResult hit(hx, hy, hz, hf, Vec3::newTemp(hx, hy, hz));
+                glDisable(GL_ALPHA_TEST);
+                g_levelRenderer->renderHitOutline(g_player, &hit, 0, a);
+                glEnable(GL_ALPHA_TEST);
+            } catch (...) {
+                static int s_hitErr = 0;
+                if (s_hitErr++ < 3) MCLE_LOG("renderHitOutline threw");
+            }
+        }
+
+        // The cracks on blocks being broken
         try {
             std::lock_guard<std::mutex> lock(g_destroyingBlocksMutex);
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-            g_levelRenderer->renderDestroyAnimation(Tesselator::getInstance(), g_player, frame_partial_tick);
+            g_levelRenderer->renderDestroyAnimation(Tesselator::getInstance(), g_player, a);
             glDisable(GL_BLEND);
         } catch (...) {
+            glDisable(GL_BLEND);
             static int s_crackErr = 0;
             if (s_crackErr++ < 3) MCLE_LOG("renderDestroyAnimation threw");
         }
 
-        // renderLevel: rain and snow after the clouds, with the fog on
+        if (cameraEntity->y >= Level::genDepth) renderClouds();
+
+        // Rain and snow after the clouds so they blend onto them
         try {
+            mcle_setup_fog(0, a);
             glEnable(GL_FOG);
-            mcle_weather_render(g_player, g_player->level, frame_partial_tick);
+            mcle_weather_render(g_player, g_player->level, a);
             glDisable(GL_FOG);
         } catch (...) {
+            glDisable(GL_FOG);
             static int s_rainErr = 0;
             if (s_rainErr++ < 3) MCLE_LOG("renderSnowAndRain threw");
+        }
+
+        // Player position for the logs
+        {
+            static int s_posLog = 0;
+            if ((s_posLog++ % 60) == 0) {
+                MCLE_LOG("MV_CLOUD log=%d player_x=%.2f y=%.2f z=%.2f xRot=%.1f yRot=%.1f", s_posLog,
+                         (float)g_player->x, (float)g_player->y, (float)g_player->z, g_player->xRot, g_player->yRot);
+            }
         }
 
         // renderLevel ends with glClear(GL_DEPTH_BUFFER_BIT) and

@@ -174,6 +174,8 @@ MTLWinding  g_lastWinding  = (MTLWinding)-1;
 // glEnable/glDisable(GL_DEPTH_TEST) writes here. Default: enabled (matches
 // upstream initial GL state). Reset to true at frame begin.
 bool        g_depth_test_enabled = true;
+// GL_CULL_FACE, only honoured for the chunk format (the rest never culled)
+bool        g_cull_face_enabled = true;
 // glDepthMask writes here. Default: enabled (matches upstream initial GL
 // state). renderSky calls glDepthMask(false) before drawing the sky dome
 // so the dome doesn't write depth - sun/moon then pass the depth test
@@ -229,6 +231,10 @@ id<MTLRenderPipelineState> g_lastWorldPso = nil;
 
 extern "C" void mcle_glbridge_set_depth_test(int enabled) {
     g_depth_test_enabled = (enabled != 0);
+}
+
+extern "C" void mcle_glbridge_set_cull_face(int enabled) {
+    g_cull_face_enabled = (enabled != 0);
 }
 
 extern "C" void mcle_glbridge_set_texture_2d(int enabled) {
@@ -1428,9 +1434,10 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             [g.enc setFrontFacingWinding:MTLWindingCounterClockwise];
             g_lastWinding = MTLWindingCounterClockwise;
         }
-        if (g_lastCullMode != MTLCullModeBack) {
-            [g.enc setCullMode:MTLCullModeBack];
-            g_lastCullMode = MTLCullModeBack;
+        const MTLCullMode cull = g_cull_face_enabled ? MTLCullModeBack : MTLCullModeNone;
+        if (g_lastCullMode != cull) {
+            [g.enc setCullMode:cull];
+            g_lastCullMode = cull;
         }
     } else {
         if (g_lastCullMode != MTLCullModeNone) {
@@ -1853,6 +1860,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     // glEnable(GL_BLEND), glEnable(GL_FOG), glDepthMask,
     // glDisable(GL_ALPHA_TEST) etc. flip these via the bridge.
     g_depth_test_enabled  = true;
+    g_cull_face_enabled   = true;
     g_depth_write_enabled = true;
     g_alpha_test_enabled  = true;
     g_blend_enabled       = false;
@@ -2031,6 +2039,7 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g_lastDepthBias  = 0.0f;
     g_lastDepthSlope = 0.0f;
     g_depth_test_enabled  = true;
+    g_cull_face_enabled   = true;
     g_depth_write_enabled = true;
     g_alpha_test_enabled  = true;
     g_blend_enabled       = false;
