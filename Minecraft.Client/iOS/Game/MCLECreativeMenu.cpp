@@ -344,6 +344,7 @@ void mcle_container_open_creative(const MCLECreativeLayout &layout) {
     if (!player) return;
     mcle_container_prepare();
     mcleContainerUI.PlayUISFX(eSFX_Press);
+    mcle_game_set_menu_displayed(true);
     mcle_container_begin(new CreativeScene(layout, player));
 }
 

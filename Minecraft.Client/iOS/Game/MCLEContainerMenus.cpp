@@ -1532,6 +1532,7 @@ bool mcle_container_open_server() {
     if (!container) return false;
 
     mcle_container_prepare();
+    mcle_game_set_menu_displayed(true);
     MCLEContainerScene *scene = nullptr;
     if (isChest(g_packet.type)) {
         if (dynamic_cast<ContainerMenu *>(menu)) scene = new ChestScene(menu, chestName(g_packet));
@@ -1571,7 +1572,10 @@ bool mcle_container_open_server() {
             break;
         }
     }
-    if (!scene) return false;
+    if (!scene) {
+        mcle_game_set_menu_displayed(false);
+        return false;
+    }
 
     // ServerPlayer's open adds itself as a listener so slotChanged can send
     // the client every slot that changes. The client is this player, like

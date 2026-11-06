@@ -64,6 +64,9 @@ inline MCLEContainerScene *mcle_container_scene(UIScene *scene) {
 // The scene that's up, null when none is
 MCLEContainerScene *mcle_container_current_scene();
 
+// UIController::SetMenuDisplayed. NavigateToScene sets it before making the
+// scene, which the scene's tutorial state goes by (MCLEGameLoop.cpp).
+void mcle_game_set_menu_displayed(bool displayed);
 // Clears what the last scene left, before a new one is made
 void mcle_container_prepare();
 // Hands a constructed scene to the frame loop
