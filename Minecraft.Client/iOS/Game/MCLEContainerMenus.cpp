@@ -14,12 +14,16 @@
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.World/FurnaceTileEntity.h"
+#include "../../../upstream/Minecraft.World/BrewingStandTileEntity.h"
+#include "../../../upstream/Minecraft.World/PotionBrewing.h"
+#include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.World/ContainerOpenPacket.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_ContainerMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_FurnaceMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_DispenserMenu.h"
 #include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_HopperMenu.h"
+#include "../../../upstream/Minecraft.Client/Common/UI/IUIScene_BrewingMenu.h"
 
 namespace {
 
@@ -58,6 +62,7 @@ bool hasScene(int type) {
     case ContainerOpenPacket::TRAP:
     case ContainerOpenPacket::DROPPER:
     case ContainerOpenPacket::HOPPER:
+    case ContainerOpenPacket::BREWING_STAND:
         return true;
     }
     return isChest(type);
@@ -364,6 +369,101 @@ protected:
     }
 };
 
+// UIScene_BrewingStandMenu, over the server's brewing stand like the
+// furnace
+class BrewingScene : public ServerContainerScene, public IUIScene_BrewingMenu {
+public:
+    BrewingScene(AbstractContainerMenu *menu, const std::shared_ptr<BrewingStandTileEntity> &brewingStand)
+        : m_brewingStand(brewingStand),
+          m_slotListBottles{MCLEUISlotList("MainPanel.Bottle1"), MCLEUISlotList("MainPanel.Bottle2"),
+                            MCLEUISlotList("MainPanel.Bottle3")},
+          m_slotListIngredient("MainPanel.Ingredient"), m_labelBrewingStand("MainPanel.BrewingStandText"),
+          m_progressBrewingArrow("MainPanel.BrewingArrow"), m_progressBrewingBubbles("MainPanel.BrewingBubbles") {
+        mapSharedControls();
+        for (MCLEUISlotList &list : m_slotListBottles) mapSlotList(list);
+        mapSlotList(m_slotListIngredient);
+
+        m_progressBrewingArrow.init(L"", 0, 0, PotionBrewing::BREWING_TIME_SECONDS * SharedConstants::TICKS_PER_SECOND,
+                                    0);
+        m_progressBrewingBubbles.init(L"", 0, 0, 30, 0);
+
+        m_labelBrewingStand.init(m_brewingStand->getName());
+
+        // The tutorial state is left out, localgameModes is never set here
+
+        Initialize(0, menu, false, BrewingStandMenu::INV_SLOT_START, eSectionBrewingUsing, eSectionBrewingMax);
+
+        m_slotListIngredient.addSlots(BrewingStandMenu::INGREDIENT_SLOT, 1);
+        for (unsigned int i = 0; i < 3; ++i) {
+            m_slotListBottles[i].addSlots(BrewingStandMenu::BOTTLE_SLOT_START + i, 1);
+        }
+    }
+
+    void tick(double now) override {
+        m_progressBrewingArrow.setProgress(m_brewingStand->getBrewTime());
+
+        int value = 0;
+        int bubbleStep = (m_brewingStand->getBrewTime() / 2) % 7;
+        switch (bubbleStep) {
+        case 0: value = 0; break;
+        case 6: value = 5; break;
+        case 5: value = 10; break;
+        case 4: value = 15; break;
+        case 3: value = 20; break;
+        case 2: value = 25; break;
+        case 1: value = 30; break;
+        }
+        m_progressBrewingBubbles.setProgress(value);
+        ServerContainerScene::tick(now);
+    }
+
+protected:
+    std::shared_ptr<BrewingStandTileEntity> m_brewingStand;
+    MCLEUISlotList m_slotListBottles[3], m_slotListIngredient;
+    MCLEUILabel m_labelBrewingStand;
+    MCLEUIProgress m_progressBrewingArrow, m_progressBrewingBubbles;
+
+    int getSectionColumns(ESceneSection eSection) override {
+        int cols = 0;
+        switch (eSection) {
+        case eSectionBrewingBottle1: cols = 1; break;
+        case eSectionBrewingBottle2: cols = 1; break;
+        case eSectionBrewingBottle3: cols = 1; break;
+        case eSectionBrewingIngredient: cols = 1; break;
+        case eSectionBrewingInventory: cols = 9; break;
+        case eSectionBrewingUsing: cols = 9; break;
+        default: assert(false); break;
+        }
+        return cols;
+    }
+
+    int getSectionRows(ESceneSection eSection) override {
+        int rows = 0;
+        switch (eSection) {
+        case eSectionBrewingBottle1: rows = 1; break;
+        case eSectionBrewingBottle2: rows = 1; break;
+        case eSectionBrewingBottle3: rows = 1; break;
+        case eSectionBrewingIngredient: rows = 1; break;
+        case eSectionBrewingInventory: rows = 3; break;
+        case eSectionBrewingUsing: rows = 1; break;
+        default: assert(false); break;
+        }
+        return rows;
+    }
+
+    MCLEUISlotList *getSection(ESceneSection eSection) override {
+        switch (eSection) {
+        case eSectionBrewingBottle1: return &m_slotListBottles[0];
+        case eSectionBrewingBottle2: return &m_slotListBottles[1];
+        case eSectionBrewingBottle3: return &m_slotListBottles[2];
+        case eSectionBrewingIngredient: return &m_slotListIngredient;
+        case eSectionBrewingInventory: return &m_slotListInventory;
+        case eSectionBrewingUsing: return &m_slotListHotbar;
+        default: assert(false); return nullptr;
+        }
+    }
+};
+
 // The client's SimpleContainer for the chest packet types, and its getName
 std::wstring chestName(const OpenPacket &packet) {
     int chestString;
@@ -409,6 +509,7 @@ const char *mcle_container_server_movie() {
     case ContainerOpenPacket::TRAP:
     case ContainerOpenPacket::DROPPER: return "DispenserMenu1080.swf";
     case ContainerOpenPacket::HOPPER: return "HopperMenu1080.swf";
+    case ContainerOpenPacket::BREWING_STAND: return "BrewingStandMenu1080.swf";
     }
     return "";
 }
@@ -442,6 +543,11 @@ bool mcle_container_open_server() {
         case ContainerOpenPacket::HOPPER:
             if (dynamic_cast<HopperMenu *>(menu)) scene = new HopperScene(menu, container);
             break;
+        case ContainerOpenPacket::BREWING_STAND: {
+            std::shared_ptr<BrewingStandTileEntity> brewingStand =
+                std::dynamic_pointer_cast<BrewingStandTileEntity>(container);
+            if (dynamic_cast<BrewingStandMenu *>(menu) && brewingStand) scene = new BrewingScene(menu, brewingStand);
+        } break;
         }
     }
     if (!scene) return false;
