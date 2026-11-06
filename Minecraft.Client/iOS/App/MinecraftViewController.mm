@@ -514,6 +514,18 @@ static void MCLECreditsInit(void) {
     }
 }
 
+// CreditBackground fills the 1920x1080 movie, all of TU19's 16:9 screen.
+// It's grown about the centre to fill a wider screen too, so nothing
+// shows around it.
+static void MCLECreditsCoverScreen(PlayerHandle* player, CGSize view) {
+    if (!player || view.width <= 0 || view.height <= 0) return;
+    const float movieAspect = 1920.0f / 1080.0f;
+    const float aspect = (float)(view.width / view.height);
+    const float s = std::max(aspect / movieAspect, movieAspect / aspect);
+    ruffle_ios_set_root_child_transform_at_depth(player, 1, s, s,
+        960.0f * (1.0f - s), 540.0f * (1.0f - s));
+}
+
 // UIScene_Credits::tick, the next line once the movie asks for it
 static void MCLECreditsTick(void) {
     if (!g_credits_add_next.exchange(false)) return;
@@ -4668,6 +4680,7 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
             MCLECreditsInit();
+            MCLECreditsCoverScreen(g_ruffle_player, self.view.bounds.size);
         } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
             [self attachMenuScenery];
             self.menuButtonConfig = nil;
