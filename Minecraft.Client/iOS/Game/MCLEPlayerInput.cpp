@@ -982,8 +982,10 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     checkInTile(P->x + P->bbWidth * 0.35, P->bb->y0 + 0.5, P->z - P->bbWidth * 0.35);
     checkInTile(P->x + P->bbWidth * 0.35, P->bb->y0 + 0.5, P->z + P->bbWidth * 0.35);
 
-    // PlayerCommandPacket START/STOP_SNEAKING
-    if (P->isSneaking() != m.sneaking) P->setSneaking(m.sneaking);
+    // PlayerCommandPacket START/STOP_SNEAKING, sent when LocalPlayer::isSneaking
+    // changes. A sleeping player isn't sneaking.
+    const bool sneaking = m.sneaking && !P->isSleeping();
+    if (P->isSneaking() != sneaking) P->setSneaking(sneaking);
 
     bool enoughFoodToSprint = P->getFoodData()->getFoodLevel() > FoodConstants::MAX_FOOD * FoodConstants::FOOD_SATURATION_LOW;
     // Flyers can sprint without food, for survival saves reloaded in creative
