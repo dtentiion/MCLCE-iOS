@@ -1361,7 +1361,7 @@ void initImpl() {
         int centreXC = static_cast<int>(Math::round(g_player->x / scale) * scale);
         int centreZC = static_cast<int>(Math::round(g_player->z / scale) * scale);
         // 4J Added - Give every player a map the first time they join a server
-        g_player->inventory->setItem(9, std::make_shared<ItemInstance>(Item::map_Id, 1,
+        g_player->inventory->setItem(9, std::make_shared<ItemInstance>(static_cast<int>(Item::map_Id), 1,
             g_levels[0]->getAuxValueForMap(g_player->getXuid(), 0, centreXC, centreZC, mapScale)));
         if (app.getGameRuleDefinitions() != nullptr) {
             app.getGameRuleDefinitions()->postProcessPlayer(g_player);
