@@ -137,6 +137,9 @@ static MCLEDialogRequest* g_pending_dialog = nil;
 //       visually overlap the dialog panel.
 static const int kLogoDepth        = 101;
 static const int kDimDepth         = 199;
+// The in-game menus' MenuBackground, under the scene like UILayer draws
+// its components before its scenes. 199 is the MessageBox's own one.
+static const int kMenuBackgroundDepth = -1;
 // UIScene::getSafeZoneHalfHeight / HalfWidth on a HiDef screen: 5% of the
 // 1920x1080 the movies are laid out for
 static const int kSafeZoneTop    = 1080 / 20;
@@ -1621,6 +1624,7 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
             // Panorama scale it only covered the centre band of
             // the screen. Same 1.5x and pre-shift Panorama uses so
             // it fills iPhone aspect ratios end-to-end.
+            @[@"MenuBackground1080.swf",@(kMenuBackgroundDepth),@(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
             @[@"MenuBackground1080.swf",@(kDimDepth),           @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
             @[@"ToolTips1080.swf",     @(kTooltipsDepth),       @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
         ];
@@ -1653,6 +1657,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
         // regular menu tree.
         ruffle_ios_set_xui_sibling_visible_at_depth(
             g_ruffle_player, kDimDepth, 0);
+        ruffle_ios_set_xui_sibling_visible_at_depth(
+            g_ruffle_player, kMenuBackgroundDepth, 0);
 
         // Tick the player a few frames so each sibling SWF's
         // ADDED_TO_STAGE event fires and its FJ_Document.init
@@ -2471,7 +2477,7 @@ static NSString* MCLETipHTML(void) {
     [self applyMenuButtonConfig:cfg];
     // updateComponents: no panorama, menu background and logo on
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
-    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kDimDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kLogoDepth, 1);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
@@ -2494,7 +2500,7 @@ static NSString* MCLETipHTML(void) {
     [self applyMenuButtonConfig:cfg];
     MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_YOU_DIED)]);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
-    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kDimDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
@@ -2512,7 +2518,7 @@ static NSString* MCLETipHTML(void) {
     [self transitionToMenuNamed:@"HUD1080.swf"];
     MCLEHudReset();
     MCLEGameTooltipsReset();
-    const int depths[] = { -2, kLogoDepth, kDimDepth, kTooltipsDepth };
+    const int depths[] = { -2, kMenuBackgroundDepth, kLogoDepth, kDimDepth, kTooltipsDepth };
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
     if (self.splashLabel) self.splashLabel.hidden = YES;
     // In game the upstream SoundEngine plays the music
