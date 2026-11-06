@@ -4759,6 +4759,26 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     }
 
 
+    // GameRenderer::CachePlayerGammas / ComputeGammaFromSlider. Windows64's
+    // PostProcesser puts it on the whole frame after ui.render, so the menus
+    // and HUD get it too, and outside a world it comes from the slider alone.
+    {
+        float slider = (float)mcle_settings_get(MCLE_SETTING_Gamma);
+        slider = std::max(slider, 0.0f);
+        slider = std::min(slider, 100.0f);
+        float gamma = slider > 50.0f ? 1.0f + (slider - 50.0f) / 50.0f * 1.2f
+                                     : 1.0f - (50.0f - slider) / 50.0f * 0.4f;
+        mcle_metal_set_gamma(gamma);
+        extern PlayerHandle* g_ruffle_player;
+        static PlayerHandle* s_gammaPlayer = NULL;
+        static float s_ruffleGamma = 1.0f;
+        if (g_ruffle_player && (g_ruffle_player != s_gammaPlayer || gamma != s_ruffleGamma)) {
+            ruffle_ios_player_set_gamma(g_ruffle_player, gamma);
+            s_gammaPlayer = g_ruffle_player;
+            s_ruffleGamma = gamma;
+        }
+    }
+
     // Phase G phase 1A: once the world simulation is ticking, take over
     // the screen with the legacy Metal path (sky-color clear via
     // mcle_render_frame). Bypasses Ruffle entirely so the SWF menu
@@ -4784,15 +4804,6 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                 MCLECaptureThumbnailThen(^{ mcle_save_now(); });
                 MCLESetAutosaveTimerTime();
             }
-        }
-        // GameRenderer::CachePlayerGammas / ComputeGammaFromSlider
-        {
-            float slider = (float)mcle_settings_get(MCLE_SETTING_Gamma);
-            slider = std::max(slider, 0.0f);
-            slider = std::min(slider, 100.0f);
-            float gamma = slider > 50.0f ? 1.0f + (slider - 50.0f) / 50.0f * 1.2f
-                                         : 1.0f - (50.0f - slider) / 50.0f * 0.4f;
-            mcle_metal_set_gamma(gamma);
         }
         // Minecraft::tick shows the death menu once the player has died, and
         // goes back to the game when the respawned player is alive

@@ -43,7 +43,8 @@ struct Ctx {
     id<MTLDepthStencilState>   depthStateNoWrite = nil;  // less + no write (sky dome)
 
     // Gamma: when it isn't 1 the frame is drawn here and copied to the
-    // drawable through the gamma pass, like Windows64's PostProcesser
+    // drawable through the gamma pass, like Windows64's PostProcesser. The
+    // world and the UI layer's frames both use it, one after the other.
     id<MTLTexture>              sceneTex = nil;
     int                         sceneTexW = 0;
     int                         sceneTexH = 0;
@@ -1983,7 +1984,9 @@ extern "C" void mcle_metal_attach_layer(void* ca_metal_layer, int width, int hei
     }
 }
 
-// PostProcesser's gamma shader: a fullscreen triangle, pow(rgb, 1/gamma)
+// PostProcesser's gamma shader: a fullscreen triangle, pow(rgb, 1/gamma).
+// params.x is the gamma, params.y is set for the UI layer, which is
+// premultiplied so the curve goes on the colour under its alpha.
 NSString* const kGammaShaderSrc = @R"(
     #include <metal_stdlib>
     using namespace metal;
@@ -1999,11 +2002,16 @@ NSString* const kGammaShaderSrc = @R"(
     }
     fragment float4 gamma_frag(G_out i [[stage_in]],
                                texture2d<float> sceneTex [[texture(0)]],
-                               constant float &gamma [[buffer(0)]]) {
+                               constant float2 &params [[buffer(0)]]) {
         constexpr sampler s(filter::nearest);
         float4 color = sceneTex.sample(s, i.uv);
+        if (params.y > 0.5) {
+            if (color.a <= 0.0) return color;
+            color.rgb = pow(saturate(color.rgb / color.a), float3(1.0 / params.x)) * color.a;
+            return color;
+        }
         color.rgb = max(color.rgb, 0.0);
-        color.rgb = pow(color.rgb, 1.0 / gamma);
+        color.rgb = pow(color.rgb, float3(1.0 / params.x));
         return color;
     }
 )";
@@ -2037,6 +2045,42 @@ static bool ensure_gamma_pipeline() {
     }
     s_failed = false;
     return true;
+}
+
+// Whether this frame goes through the gamma pass, with the texture it's
+// drawn into made for the drawable's size
+static bool gamma_frame_begin(id<MTLTexture> drawableTex) {
+    // PostProcesser skips the pass when gamma is 1
+    if (!(g_gamma < 0.99f || g_gamma > 1.01f) || !ensure_gamma_pipeline()) return false;
+    if (!g.sceneTex || g.sceneTexW != (int)drawableTex.width ||
+        g.sceneTexH != (int)drawableTex.height) {
+        MTLTextureDescriptor* td = [MTLTextureDescriptor
+            texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                          width:drawableTex.width
+                                         height:drawableTex.height
+                                      mipmapped:NO];
+        td.storageMode = MTLStorageModePrivate;
+        td.usage       = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+        g.sceneTex     = [g.device newTextureWithDescriptor:td];
+        g.sceneTexW    = (int)drawableTex.width;
+        g.sceneTexH    = (int)drawableTex.height;
+    }
+    return g.sceneTex != nil;
+}
+
+// The gamma pass from the scene texture to the drawable
+static void gamma_frame_end(bool premultiplied) {
+    MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+    rpd.colorAttachments[0].texture     = g.drawable.texture;
+    rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
+    rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+    id<MTLRenderCommandEncoder> pe = [g.cmd renderCommandEncoderWithDescriptor:rpd];
+    [pe setRenderPipelineState:g.gammaPso];
+    [pe setFragmentTexture:g.sceneTex atIndex:0];
+    const float params[2] = { g_gamma, premultiplied ? 1.0f : 0.0f };
+    [pe setFragmentBytes:params length:sizeof(params) atIndex:0];
+    [pe drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [pe endEncoding];
 }
 
 // What RenderManager.StartFrame resets that every frame here starts with
@@ -2263,22 +2307,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
         g.depthStateNoWrite = [g.device newDepthStencilStateWithDescriptor:dsd];
     }
 
-    // PostProcesser skips the pass when gamma is 1
-    g.gammaThisFrame = (g_gamma < 0.99f || g_gamma > 1.01f) && ensure_gamma_pipeline();
-    if (g.gammaThisFrame &&
-        (!g.sceneTex || g.sceneTexW != (int)g.drawable.texture.width ||
-         g.sceneTexH != (int)g.drawable.texture.height)) {
-        MTLTextureDescriptor* td = [MTLTextureDescriptor
-            texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                          width:g.drawable.texture.width
-                                         height:g.drawable.texture.height
-                                      mipmapped:NO];
-        td.storageMode = MTLStorageModePrivate;
-        td.usage       = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-        g.sceneTex     = [g.device newTextureWithDescriptor:td];
-        g.sceneTexW    = (int)g.drawable.texture.width;
-        g.sceneTexH    = (int)g.drawable.texture.height;
-    }
+    g.gammaThisFrame = gamma_frame_begin(g.drawable.texture);
 
     MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
     rpd.colorAttachments[0].texture     = g.gammaThisFrame ? g.sceneTex : g.drawable.texture;
@@ -2389,19 +2418,7 @@ extern "C" void mcle_metal_current_size(int* out_width, int* out_height) {
 extern "C" void mcle_metal_frame_end(void) {
     if (!g.inFrame) return;
     [g.enc endEncoding];
-    if (g.gammaThisFrame) {
-        MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-        rpd.colorAttachments[0].texture     = g.drawable.texture;
-        rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
-        rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-        id<MTLRenderCommandEncoder> pe = [g.cmd renderCommandEncoderWithDescriptor:rpd];
-        [pe setRenderPipelineState:g.gammaPso];
-        [pe setFragmentTexture:g.sceneTex atIndex:0];
-        float gamma = g_gamma;
-        [pe setFragmentBytes:&gamma length:sizeof(gamma) atIndex:0];
-        [pe drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-        [pe endEncoding];
-    }
+    if (g.gammaThisFrame) gamma_frame_end(false);
     thumb_encode();
     [g.cmd presentDrawable:g.drawable];
     [g.cmd commit];
@@ -2475,8 +2492,11 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
         g_uiDepthW     = g_uiW;
         g_uiDepthH     = g_uiH;
     }
+    // Gamma goes on the slot items too, PostProcesser runs over the whole
+    // frame after ui.render
+    g.gammaThisFrame = gamma_frame_begin(g.drawable.texture);
     MTLRenderPassDescriptor* rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-    rpd.colorAttachments[0].texture     = g.drawable.texture;
+    rpd.colorAttachments[0].texture     = g.gammaThisFrame ? g.sceneTex : g.drawable.texture;
     rpd.colorAttachments[0].loadAction  = MTLLoadActionClear;
     rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
     rpd.colorAttachments[0].clearColor  = MTLClearColorMake(0, 0, 0, 0);
@@ -2487,7 +2507,6 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g.cmd = [g.queue commandBuffer];
     g.enc = [g.cmd renderCommandEncoderWithDescriptor:rpd];
     g.inFrame = true;
-    g.gammaThisFrame = false;
     g_uiFrameDepthTex = g_uiDepthTex;
     g_lastCullMode   = MTLCullModeNone;
     g_lastWinding    = MTLWindingClockwise;
@@ -2512,6 +2531,8 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
 extern "C" void mcle_metal_ui_frame_end(void) {
     if (!g.inFrame) return;
     [g.enc endEncoding];
+    if (g.gammaThisFrame) gamma_frame_end(true);
+    g.gammaThisFrame = false;
     [g.cmd presentDrawable:g.drawable];
     [g.cmd commit];
     g.enc = nil;
