@@ -528,7 +528,7 @@ double g_repeatTimer[kActionCount];
 
 // What the world asked to open, see mcle_container_take_request
 std::mutex g_requestMutex;
-bool g_craftingRequested = false;
+int g_request = MCLE_CONTAINER_NONE;
 bool g_openPacket = false;
 int g_openPacketType = 0;
 int g_openPacketContainerId = 0;
@@ -561,9 +561,9 @@ void mcle_container_open_inventory(const MCLEInventoryLayout &layout, double now
     mcle_container_begin(new InventoryScene(layout, player, now));
 }
 
-void mcle_container_request_crafting() {
+void mcle_container_request(int request) {
     std::lock_guard<std::mutex> lock(g_requestMutex);
-    g_craftingRequested = true;
+    g_request = request;
 }
 
 void mcle_container_open_packet(int type, int containerId) {
@@ -580,17 +580,17 @@ int mcle_container_open_id() {
 // ClientConnection::handleContainerOpen runs when the packet arrives, by
 // which time the server has the new container on the player. Only the
 // crafting table is here; the rest fail like a menu that couldn't open.
-// A crafting press that came in while a menu was going up is dropped.
+// A press that came in while a menu was going up is dropped.
 int mcle_container_take_request() {
-    bool crafting, packet;
-    int type, containerId;
+    bool packet;
+    int request, type, containerId;
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
-        crafting = g_craftingRequested;
+        request = g_request;
         packet = g_openPacket;
         type = g_openPacketType;
         containerId = g_openPacketContainerId;
-        g_craftingRequested = false;
+        g_request = MCLE_CONTAINER_NONE;
         g_openPacket = false;
     }
     if (packet) {
@@ -599,7 +599,7 @@ int mcle_container_take_request() {
         mcle_container_open_failed();
         return MCLE_CONTAINER_NONE;
     }
-    return (crafting && !g_scene) ? MCLE_CONTAINER_CRAFTING_2X2 : MCLE_CONTAINER_NONE;
+    return g_scene ? MCLE_CONTAINER_NONE : request;
 }
 
 // handleContainerOpen's failed case sends a ContainerClosePacket, and the
