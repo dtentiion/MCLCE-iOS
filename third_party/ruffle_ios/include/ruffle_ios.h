@@ -411,13 +411,13 @@ int           ruffle_ios_call_root_method_numbers(PlayerHandle* h,
 // 0 if none, -1 on lock fail.
 int           ruffle_ios_remove_sibling_at_depth(PlayerHandle* h, int depth);
 
-// Wipe every AVM2 event listener attached to the Stage object.
-// Pair with ruffle_ios_redispatch_added_to_stage to swap which
-// FJ_Document owns input. The dialog overlay path uses both to
-// transfer stage-level KEY_DOWN ownership between the underlying
-// scene's FJ_Document and the dialog's FJ_Document without removing
-// the underlying scene root. Returns 1 if a dispatch list existed,
-// 0 otherwise, -1 on lock fail.
+// Drop the AVM2 event listeners the root movie attached to the Stage,
+// the sibling movies keep theirs. Pair with
+// ruffle_ios_redispatch_added_to_stage to swap which FJ_Document owns
+// input. The dialog overlay path uses both to transfer stage-level
+// KEY_DOWN ownership between the underlying scene's FJ_Document and
+// the dialog's FJ_Document without removing the underlying scene root.
+// Returns 1, -1 on lock fail.
 int           ruffle_ios_clear_stage_dispatch_list(PlayerHandle* h);
 
 // Re-fire the AVM2 `addedToStage` event on a target so its
@@ -426,6 +426,16 @@ int           ruffle_ios_clear_stage_dispatch_list(PlayerHandle* h);
 // depth to target a sibling. Returns 1 ok, 0 if target not found,
 // -1 on lock fail.
 int           ruffle_ios_redispatch_added_to_stage(PlayerHandle* h, int target_depth);
+
+// UILayer's components can't take input: with takes_input 0 the sibling
+// at `depth` only hears what ruffle_ios_sibling_key sends it. Returns 1
+// ok, 0 if there's no sibling there, -1 on lock fail.
+int           ruffle_ios_set_sibling_takes_input(PlayerHandle* h, int depth, int takes_input);
+
+// UIScene::sendInputToMovie on a component: a key down (down != 0) or up
+// by its Flash key code, into the sibling at `depth` alone. Returns 1 ok,
+// 0 if there's no sibling there, -1 on lock fail.
+int           ruffle_ios_sibling_key(PlayerHandle* h, int depth, int code, int down);
 
 // Call an AS3 method on the document class of the sibling SWF
 // at the given depth, with zero or more number args.

@@ -841,10 +841,10 @@ pub unsafe extern "C" fn ruffle_ios_remove_sibling_at_depth(
     if found { 1 } else { 0 }
 }
 
-/// Wipe every AVM2 event listener attached to the Stage object.
-/// Pair with ruffle_ios_redispatch_added_to_stage to swap which
-/// FJ_Document owns input. Returns 1 if the stage had a dispatch
-/// list to clear, 0 otherwise, -1 on lock fail.
+/// Drop the AVM2 event listeners the root movie attached to the Stage,
+/// the sibling movies keep theirs. Pair with
+/// ruffle_ios_redispatch_added_to_stage to swap which FJ_Document owns
+/// input. Returns 1, -1 on lock fail.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_clear_stage_dispatch_list(
     raw: *mut PlayerHandle,
@@ -881,6 +881,39 @@ pub unsafe extern "C" fn ruffle_ios_redispatch_added_to_stage(
         target_depth, dispatched
     ));
     if dispatched { 1 } else { 0 }
+}
+
+/// UILayer's components can't take input: with `takes_input` 0 the
+/// sibling at `depth` only hears what ruffle_ios_sibling_key sends it.
+/// Returns 1 ok, 0 if there's no sibling there, -1 on lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_sibling_takes_input(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    takes_input: c_int,
+) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    if p.set_sibling_takes_input(depth, takes_input != 0) { 1 } else { 0 }
+}
+
+/// UIScene::sendInputToMovie on a component: a key down or up by its
+/// Flash key code, into the sibling at `depth` alone. Returns 1 ok, 0 if
+/// there's no sibling there, -1 on lock fail.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_sibling_key(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    code: c_int,
+    down: c_int,
+) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let sent = {
+        let Ok(mut p) = handle.player.lock() else { return -1; };
+        p.send_key_to_sibling(depth, code.max(0) as u32, down != 0)
+    };
+    handle.executor.borrow_mut().run();
+    if sent { 1 } else { 0 }
 }
 
 /// Call ToolTips1080's SetToolTip(int, String, Boolean) on the
