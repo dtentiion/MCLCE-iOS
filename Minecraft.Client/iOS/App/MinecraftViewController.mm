@@ -3692,7 +3692,8 @@ static void MCLEMoreOptionsChangeTab(void) {
 }
 
 // UIScene_LaunchMoreOptionsMenu constructor, on the params of the
-// CreateWorldMenu or LoadMenu that opened it
+// CreateWorldMenu or LoadMenu that opened it. Coming back from the keyboard
+// it's reloadMovie, on the same params.
 - (void)initMoreOptionsMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -3770,6 +3771,10 @@ static void MCLEMoreOptionsChangeTab(void) {
     // set the default text
     MCLEMoreOptionsSetDescription(p.bGenerateOptions ? IDS_GAMEOPTION_SEED : IDS_GAMEOPTION_ONLINE);
 
+    // UIScene::reloadMovie coming back from the keyboard puts the focus back
+    // on the seed it was for
+    if (g_menu_reloading) ruffle_ios_call_root_set_focus(g_ruffle_player, kMoreOptionsEditSeed);
+
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 }
@@ -3837,20 +3842,31 @@ static void MCLEMoreOptionsChangeTab(void) {
     }
 }
 
+// UIScene_LaunchMoreOptionsMenu::KeyboardCompleteSeedCallback. The menu's
+// movie reloads once the keyboard has gone, and the seed's label comes from
+// m_params->seed there.
+static int MCLEMoreOptionsKeyboardComplete(void* lpParam, const bool bRes) {
+    g_more_options_ignore_input = false;
+    if (bRes) {
+        // Win64_GetKeyboardText
+        g_start_options.seed = MCLEWideUTF16(MCLEStringFromWide(mcle_keyboard_text()));
+    }
+    return 0;
+}
+
 // UIScene_LaunchMoreOptionsMenu::handlePress, the seed's keyboard
 - (void)moreOptionsPress:(int)controlId {
     if (g_more_options_ignore_input || controlId != kMoreOptionsEditSeed) return;
+    // Windows64 without the keyboard and mouse: UIScene_Keyboard
     g_more_options_ignore_input = true;
-    [self requestKeyboardWithTitle:MCLEStr(IDS_CREATE_NEW_WORLD_SEED)
-                              text:MCLEStringFromUTF16(g_start_options.seed)
-                          maxChars:60
-                              done:^(NSString* text) {
-        // KeyboardCompleteSeedCallback
-        g_more_options_ignore_input = false;
-        if (!text) return;
-        MCLECallPath(@"WorldOptions.EditSeed", @"SetLabel", @[text]);
-        g_start_options.seed = MCLEWideUTF16(text);
-    }];
+    MCLEKeyboardInitData kbData;
+    kbData.title = MCLEWideString(MCLEStr(IDS_CREATE_NEW_WORLD_SEED));
+    if (!MCLELabelAt("WorldOptions.EditSeed", &kbData.defaultText)) {
+        kbData.defaultText = MCLEWideString(MCLEStringFromUTF16(g_start_options.seed));
+    }
+    kbData.maxChars = 60;
+    kbData.callback = &MCLEMoreOptionsKeyboardComplete;
+    [self navigateToKeyboard:kbData];
 }
 
 static int g_progress_stage = -2;
