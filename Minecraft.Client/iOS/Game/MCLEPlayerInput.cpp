@@ -77,7 +77,6 @@ const double kEyeHeight = 1.62;
 
 struct ClientState {
     int ticks = 0;
-    unsigned int prevButtons = 0;
 
     // LocalPlayer
     int missTime = 0;
@@ -677,14 +676,11 @@ bool creativeModeHandleMouseClick(int button, bool buttonPressed) {
 } // namespace
 
 void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerLevel *level,
-                            unsigned int buttons) {
+                            unsigned int buttons, unsigned int pressed) {
     if (!player || !level || !player->gameMode) return;
     P = player;
     L = level;
     s.ticks++;
-
-    const unsigned int pressed = buttons & ~s.prevButtons;
-    s.prevButtons = buttons;
 
     // Minecraft::tick
     pick(1);
@@ -802,7 +798,6 @@ struct MoveState {
     float xa = 0, ya = 0;
     bool jumping = false;
     bool sneaking = false;
-    unsigned int prevButtons = 0;
     int sprintTime = 0;
     int sprintTriggerTime = 0;
     bool sprintTriggerRegisteredReturn = false;
@@ -910,12 +905,10 @@ void sendRidingJump() {
 } // namespace
 
 void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float stickX, float stickY,
-                           float lookX, float lookY, unsigned int buttons, float sensitivity, bool invertLook) {
+                           float lookX, float lookY, unsigned int buttons, unsigned int pressed, float sensitivity,
+                           bool invertLook) {
     if (!player) return;
     P = player;
-
-    const unsigned int pressed = buttons & ~m.prevButtons;
-    m.prevButtons = buttons;
 
     if (m.sprintTime > 0) {
         m.sprintTime--;

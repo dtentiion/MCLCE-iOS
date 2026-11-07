@@ -2012,18 +2012,40 @@ std::shared_ptr<ServerPlayer> mcle_local_player() {
     return g_player;
 }
 
-// While a menu is up the pad drives the menu, not the player
+// UIController::m_bMenuDisplayed, and InputManager's menu displayed flag
+// that's set and cleared with it. While it's set the pad drives the menu:
+// C_4JInput::ButtonPressed, ButtonDown and GetValue give the game none of
+// its actions and the sticks read 0.
 static std::atomic<bool> g_menuDisplayed{false};
-// The pad's buttons as the game sees them this tick
+// m_bMenuToBeClosed and m_iCountDown
+static std::atomic<bool> g_menuToBeClosed{false};
+static std::atomic<int> g_menuCountDown{0};
+// The pad's buttons as the game sees them this tick, held and pressed
 static unsigned int g_gameButtons = 0;
-// Buttons held down from a menu, which the game doesn't take until let go
-static std::atomic<unsigned int> g_heldFromMenu{0};
+static unsigned int g_gamePressed = 0;
 
+// UIController::SetMenuDisplayed. A menu going away leaves the flag set
+// for another 10 frames, so the press that shut it isn't one in the game.
 void mcle_game_set_menu_displayed(bool displayed) {
-    // The menu shuts on the press, often between two ticks, so the button
-    // that shut it is marked held here rather than on the next tick
-    if (!displayed) g_heldFromMenu.fetch_or((unsigned int)mcle_ios_input_poll_buttons(0));
-    g_menuDisplayed.store(displayed);
+    if (displayed) {
+        g_menuDisplayed.store(true);
+        // A menu up again stops the countdown the last one started
+        g_menuToBeClosed = false;
+    } else {
+        g_menuCountDown = 10;
+        g_menuToBeClosed = true;
+    }
+}
+
+// UIController::CheckMenuDisplayed, once a frame after the present
+extern "C" void mcle_game_check_menu_displayed(void) {
+    if (!g_menuToBeClosed) return;
+    if (g_menuCountDown != 0) {
+        g_menuCountDown--;
+    } else {
+        g_menuToBeClosed = false;
+        g_menuDisplayed.store(false);
+    }
 }
 
 // UIController::GetMenuDisplayed and IsPauseMenuDisplayed for the tutorial
@@ -3182,6 +3204,20 @@ extern "C" void mcle_game_tick(void) {
         g_nextSimTickNs.store(s_nextTickNs, std::memory_order_relaxed);
     }
 
+    // InputManager::Tick, paused or not: a press is a button that's gone
+    // down since the last look, and with a menu displayed the game gets
+    // none of the pad's buttons. A button pressed for the menu is still
+    // down when the game gets them again, so it's no press there.
+    {
+        static unsigned int s_lastRaw = 0;
+        const unsigned int raw = (unsigned int)mcle_ios_input_poll_buttons(0);
+        const unsigned int pressed = raw & ~s_lastRaw;
+        s_lastRaw = raw;
+        const bool menu = g_menuDisplayed.load();
+        g_gameButtons = menu ? 0 : raw;
+        g_gamePressed = menu ? 0 : pressed;
+    }
+
     if (g_gamePaused.load(std::memory_order_relaxed)) return;
 
     if (g_respawnRequested.exchange(false)) mcle_do_respawn();
@@ -3239,20 +3275,6 @@ extern "C" void mcle_game_tick(void) {
     CompressedTileStorage::tick();
     SparseDataStorage::tick();
 
-    // While a menu is up the game gets no buttons, and a button pressed then
-    // only counts once it's been let go, so the press that shut the menu
-    // isn't a press in the game as well
-    {
-        const unsigned int raw = (unsigned int)mcle_ios_input_poll_buttons(0);
-        if (g_menuDisplayed.load()) {
-            g_heldFromMenu.fetch_or(raw);
-            g_gameButtons = 0;
-        } else {
-            const unsigned int held = g_heldFromMenu.fetch_and(raw) & raw;
-            g_gameButtons = raw & ~held;
-        }
-    }
-
     // Minecraft::tick's player input: mining, placing, attacking, hotbar.
     // Before the levels tick, like the client's packets being handled at
     // the start of the server tick.
@@ -3264,7 +3286,7 @@ extern "C" void mcle_game_tick(void) {
             MCLE_LOG("mcle_game_tick: tutorial threw");
         }
         try {
-            mcle_player_input_tick(g_player, g_player->getLevel(), g_gameButtons);
+            mcle_player_input_tick(g_player, g_player->getLevel(), g_gameButtons, g_gamePressed);
         } catch (...) {
             MCLE_LOG("mcle_game_tick: player input threw");
         }
@@ -3384,7 +3406,7 @@ extern "C" void mcle_game_tick(void) {
                                       menu ? 0.0f : mcle_ios_input_poll_ly(0) / 1000.0f,
                                       menu ? 0.0f : mcle_ios_input_poll_rx(0) / 1000.0f,
                                       menu ? 0.0f : mcle_ios_input_poll_ry(0) / 1000.0f,
-                                      g_gameButtons,
+                                      g_gameButtons, g_gamePressed,
                                       mcle_settings_get(6 /*SensitivityInGame*/) / 100.0f,
                                       mcle_settings_get(10 /*ControlInvertLook*/) != 0);
                 const double xBefore = g_player->x, yBefore = g_player->y, zBefore = g_player->z;
@@ -5046,6 +5068,7 @@ static void mcle_exit_world(bool save) {
     g_respawnRequested.store(false, std::memory_order_relaxed);
     // Leaving from the death menu leaves no menu up for the next world
     g_menuDisplayed.store(false);
+    g_menuToBeClosed = false;
     g_pendingLevelId.clear();
     g_newWorld = NewWorldParams();
     g_loadIsNew = false;

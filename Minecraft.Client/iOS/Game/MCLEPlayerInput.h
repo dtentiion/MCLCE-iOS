@@ -7,16 +7,17 @@ class ServerLevel;
 
 // Breaking, placing, attacking, using items and hotbar scrolling for the
 // local player. Call once per 20Hz game tick with the pad's
-// _360_JOY_BUTTON_* bits.
+// _360_JOY_BUTTON_* bits held down and pressed since the last tick, as
+// InputManager's ButtonDown and ButtonPressed give them.
 void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerLevel *level,
-                            unsigned int buttons);
+                            unsigned int buttons, unsigned int pressed);
 
 // Input::tick plus the start of LocalPlayer::aiStep: walking and looking,
 // sneak toggle, sprint and creative flying. Stick values are -1..1, x right
 // and y forward / up. Call once per game tick before the player's doTick.
 void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float stickX, float stickY,
-                           float lookX, float lookY, unsigned int buttons, float sensitivity,
-                           bool invertLook);
+                           float lookX, float lookY, unsigned int buttons, unsigned int pressed,
+                           float sensitivity, bool invertLook);
 
 // The end of LocalPlayer::aiStep, after Player::aiStep: the flying move.
 // Player::aiStep calls it for every player, it only acts on the local one.

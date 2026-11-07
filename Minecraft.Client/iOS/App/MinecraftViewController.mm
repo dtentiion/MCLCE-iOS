@@ -275,6 +275,8 @@ static bool g_intro_ignore_navigate = false;
 static int MCLECallPath(NSString* path, NSString* method, NSArray* args);
 static void MCLETutorialPopupApplyOps(void);
 void mcle_game_set_menu_displayed(bool displayed); // Game/MCLEGameLoop.cpp
+bool mcle_game_menu_displayed();                   // Game/MCLEGameLoop.cpp
+extern "C" void mcle_game_check_menu_displayed(void); // Game/MCLEGameLoop.cpp
 
 // What each UIScene_Settings*Menu labels a slider with, both in init and
 // in handleSliderMove. value is the slider's own value.
@@ -3930,6 +3932,8 @@ static void MCLELoadingHoldPause(bool paused) {
     if (!g_ruffle_player) return;
     g_world_paused = true;
     mcle_game_set_paused(1);
+    // NavigateToScene's SetMenuDisplayed, the pad drives the menu now
+    mcle_game_set_menu_displayed(true);
     // UIScene_PauseMenu: the tutorial popup stays hidden while it's up
     mcle_tutorial_show_popup(false);
     self.menuStack = nil;
@@ -4494,7 +4498,10 @@ static void MCLEConnectingHoldStart(void) {
 - (void)enterWorldUI {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
-    // The menus are gone once the game starts, UIScene_HUD takes over
+    // The menus are gone once the game starts, UIScene_HUD takes over.
+    // CloseUIScenes' SetMenuDisplayed, the game gets the pad back once
+    // CheckMenuDisplayed has counted the frames down.
+    mcle_game_set_menu_displayed(false);
     self.menuStack = nil;
     [self transitionToMenuNamed:@"HUD1080.swf"];
     MCLEHudReset();
@@ -5346,6 +5353,9 @@ static void MCLEConnectingHoldStart(void) {
 
     mcle_game_tick();
 
+    // UIController::CheckMenuDisplayed, once a frame
+    mcle_game_check_menu_displayed();
+
     // The thumbnail came back from the world frame drawn last tick (or no
     // world frame came), so what was waiting on it goes
     if (g_after_thumbnail &&
@@ -5461,10 +5471,13 @@ static void MCLEConnectingHoldStart(void) {
         if (!g_world_paused && !g_world_dead && !g_world_container && !sceneUp) {
             mcle_ios_pad_state pad;
             if (mcle_ios_input_poll(0, &pad)) {
-                bool startNow = (pad.buttons & 0x00000010u) != 0;
+                // InputManager.ButtonPressed gives no game actions while a
+                // menu is still displayed
+                const uint32_t game = mcle_game_menu_displayed() ? 0 : pad.buttons;
+                bool startNow = (game & 0x00000010u) != 0;
                 bool startBefore = (self.lastPadButtons & 0x00000010u) != 0;
-                bool inventoryPressed = (pad.buttons & ~self.lastPadButtons & mcle_container_inventory_buttons()) != 0;
-                bool gameInfoPressed = (pad.buttons & ~self.lastPadButtons & mcle_ingame_info_buttons()) != 0;
+                bool inventoryPressed = (game & ~self.lastPadButtons & mcle_container_inventory_buttons()) != 0;
+                bool gameInfoPressed = (game & ~self.lastPadButtons & mcle_ingame_info_buttons()) != 0;
                 self.lastPadButtons = pad.buttons;
                 if (gameInfoPressed && mcle_ingame_info_input_allowed()) [self openInGameInfoMenu];
                 else if (startNow && !startBefore) [self openPauseMenu];
