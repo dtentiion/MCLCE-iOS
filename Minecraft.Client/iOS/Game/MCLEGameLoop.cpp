@@ -3088,6 +3088,19 @@ static void mcle_tracker_item_frame_maps(int dimension) {
     }
 }
 
+// The end of TrackedEntity::tick for each entity the tracker has: once the
+// knockback has gone out hurtMarked is cleared, which TradeWithPlayerGoal
+// waits on before a villager that was hit will trade
+static void mcle_tracker_hurt_marked(int dimension) {
+    ServerLevel *level = g_levels[dimension];
+    EntityTracker *tracker = level->getTracker();
+    EnterCriticalSection(&level->m_entitiesCS);
+    for (const std::shared_ptr<Entity> &e : level->entities) {
+        if (e->hurtMarked && tracker->getTracker(e) != nullptr) e->hurtMarked = false;
+    }
+    LeaveCriticalSection(&level->m_entitiesCS);
+}
+
 extern "C" void mcle_game_tick(void) {
     // Install per-thread sigaltstack on whichever thread first calls
     // this. Idempotent. Covers main (UIKit) and sim threads; workers
@@ -3338,7 +3351,9 @@ extern "C" void mcle_game_tick(void) {
                 if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
                 g_levels[i]->tickEntities();
             }
+            // level->getTracker()->tick()
             mcle_tracker_item_frame_maps(i);
+            mcle_tracker_hurt_marked(i);
             const auto lvlMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                    hrclock::now() - lvlStart).count();
             if (lvlMs > 50) {
