@@ -206,6 +206,7 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/EntityEventPacket.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EntityIO.cpp
   ${UPSTREAM_DIR}/Minecraft.World/EntityPos.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/EntitySelector.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ExperienceItem.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ExperienceOrb.cpp
   ${UPSTREAM_DIR}/Minecraft.World/ExplodePacket.cpp

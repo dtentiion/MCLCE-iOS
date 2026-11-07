@@ -525,7 +525,7 @@ PY
 fi
 
 # EntitySelector.cpp dereferences shared_ptr<Entity> but only includes the
-# forward-decl chain. Add Entity.h directly.
+# forward-decl chain. Add Entity.h and Mob.h directly.
 ESCPP="$REPO_ROOT/upstream/Minecraft.World/EntitySelector.cpp"
 if grep -q '#include "Entity.h"' "$ESCPP"; then
     echo "patch-upstream-stdafx: EntitySelector.cpp already patched, skipping"
@@ -538,7 +538,8 @@ with open(path, 'r', encoding='utf-8', errors='replace') as f:
 needle = '#include "EntitySelector.h"'
 if needle not in src:
     sys.exit("patch-upstream-stdafx: EntitySelector anchor not found")
-patched = src.replace(needle, needle + '\n#include "Entity.h"  // shared_ptr<Entity> deref', 1)
+patched = src.replace(needle, needle + '\n#include "Entity.h"  // shared_ptr<Entity> deref'
+                      '\n#include "Mob.h"  // LivingEntity and Mob for MobCanWearArmourEntitySelector', 1)
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(patched)
 print(f"patch-upstream-stdafx: added Entity.h include to {path}")

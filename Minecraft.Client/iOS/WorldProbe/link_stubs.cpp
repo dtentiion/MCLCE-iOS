@@ -57,7 +57,6 @@
 #include "C4JThread.h"
 #include "../Minecraft.Client/PS3/PS3Extras/ShutdownManager.h"
 #include "../Minecraft.Client/StatsCounter.h"
-#include "EntitySelector.h"
 #include "QuartzBlockTile.h"
 #include "Sapling.h"
 #include "SkullTileEntity.h"
@@ -168,18 +167,6 @@ const int TileEntityDataPacket::TYPE_MOB_SPAWNER;
 const int TileEntityDataPacket::TYPE_ADV_COMMAND;
 const int TileEntityDataPacket::TYPE_BEACON;
 const int TileEntityDataPacket::TYPE_SKULL;
-
-// EntitySelector pointer-to-singleton statics. Real upstream constructs
-// these in a registration block we don't pull in; nullptr keeps the
-// container/hopper code paths inert (returns "no eligible entity").
-const EntitySelector *EntitySelector::ENTITY_STILL_ALIVE = nullptr;
-const EntitySelector *EntitySelector::CONTAINER_ENTITY_SELECTOR = nullptr;
-
-// MobCanWearArmourEntitySelector: real bodies live in
-// EntitySelector.cpp which doesn't compile yet. Dispenser-armor path
-// short-circuits to "no match" until that source is in.
-MobCanWearArmourEntitySelector::MobCanWearArmourEntitySelector(std::shared_ptr<ItemInstance> i) : item(i) {}
-bool MobCanWearArmourEntitySelector::matches(std::shared_ptr<Entity>) const { return false; }
 
 // StatsCounter::setupStatBoards: real body lives in StatsCounter.cpp;
 // noop is fine because no boards means leaderboard panels render empty.
