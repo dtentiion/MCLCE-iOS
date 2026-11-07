@@ -4,8 +4,8 @@
 // Player without having to speak Rust. Every function is `extern "C"` with
 // `#[no_mangle]` so the linker finds it by the exact C name.
 //
-// The rendering path is still the NullRenderer provided by Ruffle; our
-// Metal backend goes in next. All other backends (audio, navigator, etc.)
+// Rendering goes through Ruffle's wgpu backend on a CAMetalLayer.
+// All other backends (audio, navigator, etc.)
 // stay at their safe Null defaults for now.
 
 #![allow(clippy::missing_safety_doc)]
@@ -26,9 +26,9 @@ use ruffle_core::{Player, PlayerBuilder};
 // --- Captured ExternalInterface log -----------------------------------------
 //
 // LCE's menu calls ExternalInterface.call(name, args) repeatedly during
-// init. Stubbing each call by name is how we eventually get the menu to
-// render its visible content. To find out what names it calls we log every
-// invocation into this global ring buffer and expose it to the iOS app.
+// init. Stubbing each call by name is how the menu eventually gets to
+// render its visible content. To find out what names it calls, every
+// invocation is logged into this global ring buffer and exposed to the iOS app.
 
 static EXTINT_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -46,8 +46,8 @@ struct StagedFont {
 }
 static STAGED_FONTS: std::sync::Mutex<Vec<StagedFont>> = std::sync::Mutex::new(Vec::new());
 
-// Stage counters for tick diagnostics. If `ticks` climbs but `cur_frame`
-// stays at 0, comparing these tells us which stage of the tick path is
+// Stage counters for the tick path. If `ticks` climbs but `cur_frame`
+// stays at 0, comparing these shows which stage of the tick path is
 // dropping out silently.
 static TICK_LOCK_OK:       std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static TICK_AFTER_TICK:    std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -57,7 +57,7 @@ static TICK_AFTER_RENDER:  std::sync::atomic::AtomicU64 = std::sync::atomic::Ato
 static IS_PLAYING_SAMPLE:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 // Frame samples taken around the tick/run_frame pair. `cf_pre` is the
-// current frame just after we grab the player lock; `cf_mid` is after
+// current frame just after the player lock is taken; `cf_mid` is after
 // `Player::tick`; `cf_post` is after `Player::run_frame`. If `run_frame`
 // actually advances the root clip, cf_post > cf_pre for at least some
 // ticks and FRAME_ADVANCES climbs.
@@ -66,10 +66,10 @@ static LATEST_CF_MID:  std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI
 static LATEST_CF_POST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
 static FRAME_ADVANCES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-// Burn-frames diagnostic: at player create time we hammer run_frame()
-// BURN_N times back to back and record cur_frame after each call. If the
+// Burn-frames check: at player create time run_frame() is called
+// BURN_N times back to back, recording cur_frame after each call. If the
 // root clip never advances under a tight back-to-back loop, run_frame is
-// either a real no-op for this movie or it's gated on something we haven't
+// either a real no-op for this movie or it's gated on something not yet
 // wired. Independent of tick-time accumulation and of tracing delivery.
 const BURN_N: usize = 100;
 static BURN_FIRST_CF: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-99);
@@ -82,7 +82,7 @@ pub struct LoggingExternalInterface;
 
 // Host-registered callback fired when LCE AS3 reports a setting
 // change via ExternalInterface. handleCheckboxToggled(id, checked)
-// and handleSliderMove(id, current) are the two we care about for
+// and handleSliderMove(id, current) are the two that matter for
 // now; console UIScene.cpp:1251/1271 dispatches them as virtual
 // method overrides per scene. On iOS the host maps (current scene,
 // id) to an mcle_setting index and writes through the store.
@@ -102,7 +102,7 @@ pub unsafe extern "C" fn ruffle_ios_set_settings_event_callback(cb: SettingsEven
 }
 
 fn dispatch_settings_event(name: &str, args: &[ExtValue]) {
-    // Routed event shapes. Matches console's ExternalInterface.call
+    // Routed event shapes: console's ExternalInterface.call
     // names from FJ_Document.as (handlePress line 170-191,
     // handleFocusChange / handleInitFocus line 270-298) plus the
     // per-scene setting events (handleCheckboxToggled /
@@ -180,21 +180,21 @@ impl ExternalInterfaceProvider for LoggingExternalInterface {
         }
         // Mirror to AVM_LOG so the line lands in crash_log.txt too. The
         // overlay has its own ExtInt panel, but crash_log.txt only sees
-        // what goes through avm_log_push, and we need those calls in the
+        // what goes through avm_log_push, and those calls belong in the
         // persisted log when diagnosing why text fields never populate.
         avm_log_push(format!("[extint] call {line}"));
         // LCE setting events route to the iOS settings store if a
         // callback was registered.
         dispatch_settings_event(name, args);
         // For now, every call returns Null. Specific menus may need better
-        // responses; we wire those once we know what the names are.
+        // responses; those get wired once the names are known.
         ExtValue::Null
     }
 
     fn on_callback_available(&self, name: &str) {
-        // SWF registered an AS3 callback the host can invoke. For LCE we
-        // almost certainly never invoke these, but seeing their names is
-        // how we learn what host-side methods the menu expects to exist.
+        // SWF registered an AS3 callback the host can invoke. For LCE the host
+        // almost certainly never invokes these, but their names show
+        // what host-side methods the menu expects to exist.
         let line = format!("addCallback({name})");
         if let Ok(mut log) = EXTINT_LOG.lock() {
             if log.len() >= 256 { log.remove(0); }
@@ -221,7 +221,7 @@ impl FsCommandProvider for LoggingFsCommands {
 }
 
 // AS3 trace() and AVM warnings go through a LogBackend. Capture them into
-// a separate ring buffer so we can see what Ruffle is complaining about
+// a separate ring buffer to show what Ruffle is complaining about
 // while the menu SWF runs.
 static AVM_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
@@ -289,13 +289,13 @@ fn init_tracing_subscriber_once() {
     }
     ONCE.get_or_init(|| {
         use tracing_subscriber::EnvFilter;
-        // Default: ruffle modules at debug, everything else at warn so we
-        // don't drown in tracing from wgpu/naga.
+        // Default: ruffle modules at debug, everything else at warn so
+        // wgpu/naga tracing doesn't drown the log.
         // Keep ruffle_core at info (not trace): trace floods the ring
         // buffer with every DefineShape/DefineSprite/tag parse during
-        // preload and pushes the try_settle_imports/drain diagnostics
+        // preload and pushes the try_settle_imports/drain logs
         // out of the head slice. info still captures the load cascade
-        // and resolver outcomes we actually need on-device.
+        // and resolver outcomes that matter on-device.
         let filter = EnvFilter::try_new(
             "warn,ruffle_core=info,ruffle_render=debug,ruffle_render_wgpu=debug,ruffle_common=debug"
         ).unwrap_or_else(|_| EnvFilter::new("info"));
@@ -358,7 +358,7 @@ pub unsafe extern "C" fn ruffle_ios_avm_counts(
 /// the root clip's direct children as `instance_name\tclass_name\n` lines.
 /// Intended as a discovery pass for the LCE host bootstrap: the menu SWFs
 /// expect the host to invoke `Init(label, id)` on each button by instance
-/// name, and we don't know those names until we see them.
+/// name, and those names aren't known until they show up here.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
     raw: *mut PlayerHandle,
@@ -377,7 +377,7 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
         .map(|(n, c)| format!("{}\t{}", if n.is_empty() { "<unnamed>" } else { &n }, c))
         .collect::<Vec<_>>()
         .join("\n");
-    // Also drop it into the persistent log so we can grep later.
+    // Also drop it into the persistent log for grepping later.
     avm_log_push(format!(
         "[ruffle_ios] root children ({} total):\n{}",
         rendered.lines().count(),
@@ -392,7 +392,7 @@ pub unsafe extern "C" fn ruffle_ios_enumerate_root_children(
 
 /// Toggle the `visible` flag on a named direct child of the root clip.
 /// Used to hide 4J's `iggy_Splash` loading placeholder, which the
-/// console engine hides the moment a scene is ready but our port
+/// console engine hides the moment a scene is ready but this port
 /// leaves in the display list as a permanent gray strip.
 /// Returns 1 if the child was found and updated, 0 on bad args or
 /// not found, -1 on player lock failure.
@@ -674,11 +674,11 @@ pub unsafe extern "C" fn ruffle_ios_cache_import(
 
 /// One level deeper than `ruffle_ios_enumerate_root_children`: list the
 /// direct children of a named root child, e.g. what `Button1` actually
-/// contains. Hypothesis we're chasing: PlaceObject places Button1 by class
+/// contains. The suspicion: PlaceObject places Button1 by class
 /// name only (no char id), Ruffle builds the AS3 object but doesn't clone
 /// the bound sprite's timeline, so `FJ_TextContainer` (needed by
 /// `FJ_Base.GetTextField`) never exists. This dumps Button1's children so
-/// we can confirm in the log.
+/// the log can confirm it.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_enumerate_named_child_children(
     raw: *mut PlayerHandle,
@@ -814,7 +814,7 @@ pub unsafe extern "C" fn ruffle_ios_call_init_on_named_child(
 /// Set AS3 stage focus to a named root child. Needed on scenes
 /// like SettingsOptionsMenu where the SWF expects keyboard input
 /// routing, but no control is auto-focused on scene enter. Without
-/// it, arrow-key events (which our gamepad mapping translates from
+/// it, arrow-key events (which the gamepad mapping translates from
 /// DPad) go to no DisplayObject and sliders/checkboxes look
 /// frozen. Mirrors UIScene::sendInputToMovie's null-focus recovery
 /// block on console (Common/UI/UIScene.cpp:1066-1081).
@@ -1694,8 +1694,8 @@ pub unsafe extern "C" fn ruffle_ios_avm_log(out: *mut u8, cap: usize) -> usize {
     n
 }
 
-/// Diagnostic: returns the current frame number the player is on, or -1
-/// if no player / no root movie. Tells us if the movie is advancing at all.
+/// Returns the current frame number the player is on, or -1
+/// if no player / no root movie. Shows whether the movie is advancing at all.
 /// Pixel width of the currently-loaded root movie, or -1 on error.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_movie_width(raw: *mut PlayerHandle) -> c_int {
@@ -1733,7 +1733,7 @@ pub unsafe extern "C" fn ruffle_ios_player_current_frame(raw: *mut PlayerHandle)
 pub struct PlayerHandle {
     player: Arc<Mutex<Player>>,
     // NullExecutor wraps a futures::executor::LocalPool, which is !Send.
-    // iOS only ticks us from the main thread, so we hand out Send+Sync
+    // iOS only ticks this from the main thread, so Send+Sync is handed out
     // via unsafe impls below. RefCell gives interior mutability without
     // needing a lock.
     executor: std::cell::RefCell<NullExecutor>,
@@ -1958,11 +1958,11 @@ pub unsafe extern "C" fn ruffle_ios_surface_probe(layer_ptr: *mut std::ffi::c_vo
 
 /// Probe: create a wgpu Instance with the Metal backend, request an adapter,
 /// then a device. Returns:
-///   1  = all three succeeded (Metal GPU is reachable from our Rust side)
+///   1  = all three succeeded (Metal GPU is reachable from the Rust side)
 ///   -1 = no adapter
 ///   -2 = no device
 /// This does NOT create a Surface (no CAMetalLayer yet) and does NOT draw
-/// anything; it just proves we can talk to the GPU from Rust on iOS.
+/// anything; it just proves Rust on iOS can talk to the GPU.
 #[no_mangle]
 pub extern "C" fn ruffle_ios_wgpu_probe() -> c_int {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -2025,7 +2025,7 @@ pub extern "C" fn ruffle_ios_player_create(vp_w: c_int, vp_h: c_int) -> *mut Pla
 
 /// Create a Player with the given SWF bytes pre-loaded. Preferred path:
 /// PlayerBuilder::with_movie takes care of wiring the movie into the player
-/// during construction, so we don't need a separate load step.
+/// during construction, so no separate load step is needed.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_create_with_swf(
     vp_w: c_int,
@@ -2133,9 +2133,9 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     };
 
     // NullNavigatorBackend's default constructor creates its own internal
-    // LocalPool executor we can never drive, so any future Ruffle spawns
+    // LocalPool executor that can never be driven, so any future Ruffle spawns
     // during preload / AS3 setup never gets polled. Use `with_base_path`
-    // instead, which lets us share an executor we can run each tick.
+    // instead, which shares an executor that runs each tick.
     //
     // `base_path_c` is where the SWF's relative fetches resolve (Loader
     // for sister assets, etc.). iOS passes the Documents directory so
@@ -2171,7 +2171,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     // mapping Ruffle's InputManager silently drops GamepadButtonDown /
     // GamepadButtonUp events; AS3 menus listen on KeyboardEvent, not
     // gamepad events, so the menu would look dead to controller input
-    // even with our FFI plumbing working.
+    // even with the FFI plumbing working.
     let mut gamepad_map: std::collections::HashMap<GamepadButton, KeyCode> =
         std::collections::HashMap::new();
     // Same keys as UIScene::convertGameActionToIggyKeycode. Start and Back
@@ -2214,8 +2214,8 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
     // stalls and run_frame becomes a no-op.
     //
     // CRITICAL: the futures Ruffle spawns call `player.lock().unwrap()` on
-    // their own, so we MUST release our player lock before `executor.run()`
-    // or we deadlock against ourselves.
+    // their own, so the player lock MUST be released before `executor.run()`
+    // or it deadlocks against itself.
     let mut executor = executor;
     {
         // Apply any fonts staged by the iOS shell BEFORE preload. Registering
@@ -2280,7 +2280,7 @@ pub unsafe extern "C" fn ruffle_ios_player_create_wgpu(
         // Burn-frames probe: call run_frame() BURN_N times and record what
         // the root clip's frame number looks like after each call, with the
         // executor drained between each attempt. With the navigator wired
-        // we expect this to actually advance for AS3 movies now.
+        // this should actually advance for AS3 movies now.
         use std::sync::atomic::Ordering::Relaxed;
         let first = {
             let p = player.lock().expect("player lock");
@@ -2398,13 +2398,13 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
     TICK_COUNT.fetch_add(1, Relaxed);
 
     // Step 1: drain async futures (Loader completions etc.) WITHOUT holding
-    // the player lock. The futures lock the player themselves; holding our
-    // own lock here would deadlock.
+    // the player lock. The futures lock the player themselves; holding the
+    // lock here as well would deadlock.
     handle.executor.borrow_mut().run();
     let nth_executor = handle.executor_runs.fetch_add(1, Relaxed) + 1;
 
     // Every 60 ticks drop a heartbeat marker into AVM_LOG so the overlay
-    // proves our avm_log_push path still delivers even when Ruffle itself
+    // proves the avm_log_push path still delivers even when Ruffle itself
     // emits no further tracing events.
     if nth_executor % 60 == 0 {
         avm_log_push(format!(
@@ -2437,7 +2437,7 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
 
     // Step 3: publish samples and run the executor one more time so any
     // futures tick queued start resolving before the next tick. cf_mid is
-    // now the same as cf_post (we no longer call run_frame separately);
+    // now the same as cf_post (run_frame is no longer called separately);
     // kept as a field in the diag for overlay compatibility.
     LATEST_CF_PRE.store(cf_pre, Relaxed);
     LATEST_CF_MID.store(cf_post, Relaxed);
@@ -2529,8 +2529,8 @@ pub unsafe extern "C" fn ruffle_ios_player_set_xui_siblings_playing(
     p.set_xui_siblings_playing(playing != 0);
 }
 
-/// Burn-frames diag: stats from the back-to-back run_frame loop we
-/// performed at player create time. Answers whether the root clip can
+/// Burn-frames stats from the back-to-back run_frame loop
+/// run at player create time. Answers whether the root clip can
 /// advance at all under a tight loop, independent of per-tick dt timing.
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_burn_diag(
@@ -2595,8 +2595,8 @@ pub extern "C" fn ruffle_ios_tick_count() -> u64 {
     TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Diagnostic: return the player's current SWF frame rate (times 1000 so we
-/// can fit it in an int without losing precision on typical values).
+/// Return the player's current SWF frame rate (times 1000 so it
+/// fits in an int without losing precision on typical values).
 #[no_mangle]
 pub unsafe extern "C" fn ruffle_ios_player_framerate_mHz(raw: *mut PlayerHandle) -> c_int {
     let Some(handle) = borrow_handle(raw) else { return -1; };
