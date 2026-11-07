@@ -188,8 +188,8 @@ static void MCLECaptureThumbnailThen(void (^then)(void)) {
     mcle_capture_save_thumbnail();
 }
 
-// Name of the currently loaded menu SWF, set whenever we enter a
-// new scene. The settings-event bridge reads this to decide which
+// Name of the currently loaded menu SWF, set each time a
+// new scene loads. The settings-event bridge reads this to decide which
 // scene's control-id -> MCLE_SETTING_* mapping to use, without
 // holding a reference to the view controller itself.
 static NSString* g_current_scene_name = @"";
@@ -236,7 +236,7 @@ static MCLEDialogRequest* g_pending_dialog = nil;
 //  101  Logo (ComponentLogo1080.swf)
 //  199  MenuBackground (the dim overlay, hidden by default,
 //       shown while a dialog is up). Sits ABOVE the logo so
-//       the dim covers it, matching console where MessageBox's
+//       the dim covers it, as MessageBox's
 //       addComponent(eUIComponent_MenuBackground) darkens
 //       everything underneath including the logo.
 //  200  MessageBox dialog (sibling, only when dialog up)
@@ -363,8 +363,8 @@ static int mcle_map_slider(int sliderId, double rawValue, unsigned char* outValu
         if (sliderId == 7) return MCLE_SETTING_Difficulty;
     } else if ([g_current_scene_name isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
         // RenderDistance slider value is a level 0..5; store the
-        // block count the level maps to (matches console's
-        // eGameSetting_RenderDistance which holds the count).
+        // block count the level maps to (console's
+        // eGameSetting_RenderDistance holds the count).
         if (sliderId == 3) {
             static const int kDistance[6] = {2, 4, 8, 16, 32, 64};
             int lvl = v; if (lvl < 0) lvl = 0; if (lvl > 5) lvl = 5;
@@ -909,8 +909,8 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // and childId is the item index. For simple FJ_Button
         // screens the MainMenu path fires controlId=buttonId,
         // childId=0 - but the host's DPad handler already
-        // routes simple-button scenes natively, so we only need
-        // the list-widget path here.
+        // routes simple-button scenes natively, so this only
+        // needs the list-widget path.
         int listId = (int)id;
         int itemId = (int)value;
         if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && !g_pending_dialog) {
@@ -949,7 +949,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 }
             } else if (listId == 1) {
                 // JoinList. iOS has no netcode yet, so this list
-                // stays empty - log in case we get here anyway
+                // stays empty - log in case a press arrives anyway
                 // so the event path is visible.
                 NSLog(@"[loadorjoin] join list press idx=%d (no networking yet)",
                       itemId);
@@ -970,7 +970,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         } else if ([g_current_scene_name isEqualToString:@"LeaderboardMenu1080.swf"]) {
             // FJ_LeaderboardList is native-driven on console
             // (UIControl_LeaderboardList customDraw + per-row
-            // selection). We don't populate the list yet so a
+            // selection). The list isn't populated yet so a
             // press here shouldn't fire, but log it anyway.
             NSLog(@"[leaderboard] entry press idx=%d (online service is a follow-up)",
                   itemId);
@@ -1002,7 +1002,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             // populateMessageBoxSibling sets to the sequence
             // counter (0 for the first visible button, etc.).
             // With the sibling-overlay model g_current_scene_name
-            // is still the underlying scene so we key off
+            // is still the underlying scene, so this keys off
             // g_pending_dialog instead.
             MCLEDialogResult r = MCLEDialogResultCancelled;
             switch (listId) {
@@ -1952,7 +1952,7 @@ static void MCLEReloadSkinLibraries(bool platformChanged = false) {
         }
     }
 
-    // Fallback to the bundled test movie so we always render something.
+    // Fallback to the bundled test movie so something always renders.
     return [[NSBundle mainBundle] pathForResource:@"test_rect" ofType:@"swf"];
 }
 
@@ -1961,7 +1961,7 @@ static void MCLEReloadSkinLibraries(bool platformChanged = false) {
 // (skinHDWin.swf) is loaded under the alias platformskinHD.swf so
 // scene SWFs that reference platformskinHD.swf find the actual
 // file. Per-platform variants exist (skinHDDurango on XB1,
-// skinHDOrbis on PS4, skinHDWin on Windows64). For iOS we fall
+// skinHDOrbis on PS4, skinHDWin on Windows64). iOS falls
 // back to the Windows64 variant since that is what the
 // MediaWindows64.arc dump in INSTALL.md walks the user through
 // extracting.
@@ -2195,7 +2195,7 @@ static int MCLEPadIsPlayStation(void) {
     [self pickSplash];
 
     // Register the Mojangles TTF with CoreText so UIFont can find it
-    // by name. We already load it for Ruffle via ruffle_ios_stage_
+    // by name. Ruffle already loads it via ruffle_ios_stage_
     // device_font; UIKit has its own font registry that needs the
     // file separately. Font file is Mojang Font_7.ttf in Documents.
     NSString* fontPath = [docsDir stringByAppendingPathComponent:@"Mojang Font_7.ttf"];
@@ -2209,7 +2209,7 @@ static int MCLEPadIsPlayStation(void) {
 
     // Splash label: yellow, rotated -17 degrees, positioned next to
     // the title logo. Authored XUI position is (612, 126) on the
-    // 1920x1080 stage; we convert to view points in the tick method
+    // 1920x1080 stage; the tick method converts it to view points
     // using self.view.bounds so the stage fit math stays dynamic.
     self.splashLabel = [[UILabel alloc] init];
     self.splashLabel.text = self.splashText;
@@ -2290,8 +2290,8 @@ static int MCLEPadIsPlayStation(void) {
     self.customDrawView.layer.contentsScale = scale;
 
     // Try to stand up a Ruffle wgpu player that owns this CAMetalLayer.
-    // If it succeeds, every frame is driven by Ruffle. If it fails, we
-    // fall back to our legacy Metal triangle path for diagnostics.
+    // If it succeeds, every frame is driven by Ruffle. If it fails, it
+    // falls back to the old Metal triangle path.
     extern PlayerHandle* g_ruffle_player;
     extern int g_ruffle_surface_probe;
 
@@ -2382,7 +2382,7 @@ static int MCLEPadIsPlayStation(void) {
                       (unsigned long)(font11Data.length / 1024), rc);
             } else {
                 // List what's actually in Documents so the user can see
-                // whether the file even landed where we expect.
+                // whether the file landed where it should.
                 NSError* err = nil;
                 NSArray<NSString*>* entries =
                     [fm contentsOfDirectoryAtPath:docsPath error:&err];
@@ -2415,9 +2415,9 @@ static int MCLEPadIsPlayStation(void) {
 
             // One-shot discovery dump. LCE SWFs are driven by the host calling
             // AS3 methods on named button instances (IggyPlayerCallMethodRS
-            // on console). We don't know the instance names ahead of time, so
+            // on console). The instance names aren't known ahead of time, so
             // enumerate the root's direct children and write them into the
-            // persistent log where we can read them off-device.
+            // persistent log, where they can be read off-device.
             if (g_ruffle_player) {
                 static uint8_t childBuf[8192];
                 size_t n = ruffle_ios_enumerate_root_children(
@@ -2565,8 +2565,8 @@ static int MCLEPadIsPlayStation(void) {
     self.menuFocusIndex = 0;
 
     // Hide 4J's loading placeholder on every scene. Iggy on console
-    // hides it automatically when the scene finishes streaming; our
-    // port has no scene-ready hook wired up, so we hide it explicitly
+    // hides it automatically when the scene finishes streaming; this
+    // port has no scene-ready hook wired up, so it's hidden here
     // once buttons are wired.
     const char* splashName = "iggy_Splash";
     ruffle_ios_set_root_child_visible(
@@ -2582,10 +2582,10 @@ static int MCLEPadIsPlayStation(void) {
     // outlives scene transitions, so the panorama timeline keeps
     // playing smoothly as menus swap.
     //
-    // Our Ruffle side now attaches these to the Stage at non-zero
+    // The Ruffle side attaches these to the Stage at non-zero
     // depths (Stage.replace_root_movie only touches depth 0, so
     // Stage-level children at other depths survive scene swaps).
-    // That means we should attach ONCE at startup, NOT on every
+    // So they're attached ONCE at startup, NOT on every
     // scene init - otherwise each transition would create duplicate
     // siblings and reset the panorama's playhead to frame 1.
     extern PlayerHandle* g_ruffle_player;
@@ -2644,20 +2644,19 @@ static int MCLEPadIsPlayStation(void) {
         // Each sibling's (depth, scaleX, scaleY). Console renders
         // each Iggy movie at screen resolution via
         // IggyPlayerSetDisplaySize so the authored 1920x1080
-        // content fills the screen. Our shared stage means siblings
+        // content fills the screen. With one shared stage, siblings
         // render at their authored proportions within the 1920x1080
         // stage, so content authored at less than the stage size
         // (panorama's 720-tall bitmap, logo's 571x138 PNG) looks
         // small on iPhone. Apply per-sibling scale to fill out the
-        // visible area, since iPhone-friendly presentation is Path B
-        // of the port direction (faithful to source for architecture,
-        // adapted for device for visuals).
+        // visible area: the layout follows the source, but the
+        // presentation is sized for a phone.
         //
         // Logo: 1.5x uniform so the 571x138 MenuTitle PNG is more
         // visible on a phone screen.
         //
-        // Tooltips: keep 1.0x until we fix the individual button
-        // panel rendering (FJ_Tooltips undefined-class issue).
+        // Tooltips: keep 1.0x until the individual button
+        // panel rendering (FJ_Tooltips undefined-class issue) is fixed.
         // Logo: 1.0x with the 1080.png MenuTitle (857x207) dropped into
         // Documents. The SWF is authored to center that asset on the
         // 1920x1080 stage, so no scale and no translate is needed.
@@ -2951,8 +2950,8 @@ static int MCLEPadIsPlayStation(void) {
     [self applyMenuButtonConfig:cfg];
     // Hide the two unused slots (Button6=Reinstall Content,
     // Button7=Debug Settings). Console removeControl()s them in
-    // UIScene_HelpAndOptionsMenu's ctor; we call FJ_Button::HideUntilInit
-    // which sets .visible=false and marks them non-initialised, same
+    // UIScene_HelpAndOptionsMenu's ctor; here FJ_Button::HideUntilInit
+    // sets .visible=false and marks them non-initialised, same
     // practical effect of keeping them off the display.
     extern PlayerHandle* g_ruffle_player;
     for (NSString* hiddenName in @[@"Button6", @"Button7"]) {
@@ -2970,7 +2969,7 @@ static int MCLEPadIsPlayStation(void) {
 // current menu, everything else UNSELECTED. Used after
 // navigateBack so the focused button is the one the user left on,
 // not always Button1. State codes 1=SELECTED, 2=UNSELECTED match
-// the console FJ_Button states we drive from the input handler.
+// the console FJ_Button states the input handler drives.
 - (void)refreshFocusState {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player || !self.menuButtonConfig.count) return;
@@ -2994,12 +2993,12 @@ static int MCLEPadIsPlayStation(void) {
 // Autosave, Difficulty, DifficultyText, Languages).
 //
 // This round only drives SetLabel + Init so the scene shows readable
-// text instead of FJ_Label placeholders. The full parity port needs
-// two more pieces we don't have yet:
+// text instead of FJ_Label placeholders. The full port needs
+// two more pieces that don't exist yet:
 //   - iOS-side game settings storage so checkbox/slider initial
 //     values and write-through can actually land somewhere.
 //   - Event flow from Ruffle back up when a checkbox toggles or a
-//     slider moves, so we can update the backing value.
+//     slider moves, so the backing value can be updated.
 // Both are follow-ups; this at least makes the scene readable and
 // navigable with B back to Settings.
 - (void)initSettingsOptionsMenu {
@@ -3085,7 +3084,7 @@ static int MCLEPadIsPlayStation(void) {
 
 // Ports UIScene_SettingsAudioMenu (Common/UI/UIScene_SettingsAudioMenu.cpp).
 // Two FJ_Slider controls, ranges 0..100, labels formatted "X: N%".
-// Defaults match console's Options profile: music 100, sound 100.
+// Defaults are console's Options profile: music 100, sound 100.
 // Real values need the iOS game-settings store (follow-up round).
 - (void)initSettingsAudioMenu {
     extern PlayerHandle* g_ruffle_player;
@@ -3173,7 +3172,7 @@ static int MCLEPadIsPlayStation(void) {
 // 16, 32, 64}. FOV slider is 0..100 mapping to 70..110 degrees via
 // FOV_MIN + sliderVal*(FOV_MAX-FOV_MIN)/100. Defaults here are
 // console's "medium" profile until the iOS game-settings store
-// exists and we can read real values.
+// exists and real values can be read.
 - (void)initSettingsGraphicsMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -3243,7 +3242,7 @@ static int MCLEPadIsPlayStation(void) {
 // Six FJ_CheckBoxes + two FJ_Sliders. UISize sliders have a
 // non-standard range (1..3) because console uses them as direct
 // labels rather than an index. Splitscreen-related controls stay
-// visible for parity, but splitscreen toggling does nothing on
+// visible as on console, but splitscreen toggling does nothing on
 // iOS since there's no second-controller path.
 - (void)initSettingsUIMenu {
     extern PlayerHandle* g_ruffle_player;
@@ -3423,10 +3422,10 @@ static int MCLEPadIsPlayStation(void) {
 
     // Console starts NoGames hidden (UIScene_LoadOrJoinMenu.cpp:230
     // setVisible(false)) and only shows it when the join list
-    // actually ends up empty. We don't have the networking layer
-    // that populates the join list yet, so for now we flip it on
+    // actually ends up empty. The networking layer that fills the
+    // join list doesn't exist yet, so for now it's turned on
     // to communicate "no sessions" to the user instead of leaving
-    // blank space. Revisit when we have real session discovery.
+    // blank space. Revisit once real session discovery exists.
     const char* noGames = "NoGames";
     ruffle_ios_set_root_child_visible(
         g_ruffle_player,
@@ -5396,7 +5395,7 @@ static void MCLEConnectingHoldStart(void) {
     mcle_skin_select_custom_draw(reinterpret_cast<const MCLECustomDrawRegion*>(regions), n);
 }
 
-// Present a MessageBox-style dialog overlay. Matches console's
+// Present a MessageBox-style dialog overlay, as in console's
 // UIController::RequestMessageBox flow (UIController.cpp:2951):
 // stash the callback / titles / buttons, navigate to the
 // MessageBox SWF scene, which reads back the stash in its init
@@ -5405,7 +5404,7 @@ static void MCLEConnectingHoldStart(void) {
 //
 // buttonLabels is filled END-FIRST so a 2-button dialog is
 // typically ["OK", "Cancel"] (OK = Button2, Cancel = Button3 on
-// the authored SWF). Matches console's UIScene_MessageBox.cpp:26
+// the authored SWF), as in UIScene_MessageBox.cpp:26
 // where Button0 is filled last.
 - (void)presentDialogWithTitle:(NSString*)title
                        content:(NSString*)content
@@ -5437,7 +5436,7 @@ static void MCLEConnectingHoldStart(void) {
     // addComponent(eUIComponent_MenuBackground) at UIScene_
     // MessageBox.cpp:49. Dim sits ABOVE the logo (kDimDepth >
     // kLogoDepth) so logo + scene are darkened underneath it,
-    // matching console where the dialog overlay covers everything
+    // as on console, where the dialog overlay covers everything
     // except the tooltips strip.
     ruffle_ios_set_xui_sibling_visible_at_depth(
         g_ruffle_player, kDimDepth, 1);
@@ -5478,8 +5477,8 @@ static void MCLEConnectingHoldStart(void) {
     NSLog(@"[dialog] add_sibling MessageBox @%d -> %d", kMessageBoxDepth, rc);
 
     // 30-tick headless burst so the sibling's preload + ABC class
-    // construct + first-frame placement finish before we drive its
-    // AS3. Don't freeze siblings here: set_xui_siblings_playing(0)
+    // construct + first-frame placement finish before its
+    // AS3 is driven. Don't freeze siblings here: set_xui_siblings_playing(0)
     // would also freeze the just-attached MessageBox, and it needs
     // those exact frames to advance from preloaded to constructed.
     // matricesRestore at the bottom of this method wipes any drift
@@ -5674,7 +5673,7 @@ static void MCLEConnectingHoldStart(void) {
     // doesn't paint on top of the new scene. Settings scenes call
     // SWF SetFocus(-1) via ruffle_ios_call_root_set_focus inside
     // their init methods to re-establish a scene-local focus,
-    // matching console's UIScene::gainFocus path.
+    // like UIScene::gainFocus.
     ruffle_ios_clear_focus(g_ruffle_player);
 
     // Snapshot panorama/logo/tooltips matrices before the whole
@@ -5705,11 +5704,11 @@ static void MCLEConnectingHoldStart(void) {
         }
         // Advance the scene HEADLESS (no render) so its async imports
         // finish and Button1..ButtonN get placed, but the surface still
-        // shows the previous frame. This matches console's scene-swap
-        // semantics: initialiseMovie + control init happen before the
+        // shows the previous frame. On console's scene swap,
+        // initialiseMovie + control init also happen before the
         // scene becomes visible. Without this, the new menu renders
         // with Flash authoring-time placeholder text ("FJ_Label") for
-        // the ~500ms it takes our Init calls to land.
+        // the ~500ms it takes the Init calls to land.
         // Freeze every non-root stage child's Timeline (panorama,
         // logo, tooltips) across the burst so their scroll animations
         // don't drift while the new scene constructs. Root scene
@@ -5832,9 +5831,9 @@ static void MCLEConnectingHoldStart(void) {
         // seedTooltipsForScene picks the right (A, B) pair per
         // scene to match each console UIScene::updateTooltips
         // override. MessageBox stays visible with Select / Cancel
-        // instead of being hidden, matching console.
+        // instead of being hidden, as on console.
         [self seedTooltipsForScene:swfName hidden:NO];
-        // Dump the new menu's root children so we know what buttons/
+        // Dump the new menu's root children to show which buttons/
         // named instances to drive next. Labels aren't Init'd yet for
         // non-MainMenu scenes; that's a per-scene string table follow-up.
         static uint8_t childBuf[4096];
@@ -5846,7 +5845,7 @@ static void MCLEConnectingHoldStart(void) {
             : @"<empty>";
         NSLog(@"[MinecraftVC] %@ root children:\n%@", swfName, childList);
     }
-    // Restore the panorama/logo/tooltips matrices we stashed at the
+    // Restore the panorama/logo/tooltips matrices stashed at the
     // start of this method. Anything that advanced the XUI bitmap
     // tx during the transition gets wiped; normal scroll resumes
     // from where it was visible before the A-press.
@@ -5893,7 +5892,7 @@ static void MCLEConnectingHoldStart(void) {
         }
     }
 
-    // Phase G phase 1A: once the world simulation is ticking, take over
+    // Once the world simulation is ticking, take over
     // the screen with the legacy Metal path (sky-color clear via
     // mcle_render_frame). Bypasses Ruffle entirely so the SWF menu
     // doesn't keep drawing on top of the world output.
@@ -6070,7 +6069,7 @@ static void MCLEConnectingHoldStart(void) {
     // OnRender (Common/XUI/XUI_Ctrl_SplashPulser.cpp): pulses with
     // sin(currentTimeMillis), rotated -17 degrees, centered at the
     // authored (612, 126) position on the 1920x1080 stage. Only
-    // visible on MainMenu; hidden on sub-scenes to match console.
+    // visible on MainMenu; hidden on sub-scenes, as on console.
     if (self.splashLabel) {
         BOOL onMainMenu = [self.currentMenuSwf isEqualToString:@"MainMenu1080.swf"];
         self.splashLabel.hidden = !onMainMenu;
@@ -6099,7 +6098,7 @@ static void MCLEConnectingHoldStart(void) {
             CGFloat authoredScale = stageH / 1080.0;
             // Authored XUI position is (612, 126) top-left with size
             // (500, 50) on a 1280x720 stage. MainMenu1080.swf is the
-            // 1.5x-scaled version generated for 1920x1080, so on our
+            // 1.5x-scaled version generated for 1920x1080, so on this
             // stage the center lands at
             //   (612*1.5 + 250*1.5, 126*1.5 + 25*1.5)
             // = (918 + 375, 189 + 37.5) = (1293, 226.5).
@@ -6141,7 +6140,7 @@ static void MCLEConnectingHoldStart(void) {
 
     // Edge-detect controller buttons and forward press/release events to
     // Ruffle so the menu's AS3 input handlers fire. Bit layout matches
-    // 4J_Input.h; the int code we pass matches ruffle_ios.h's mapping.
+    // 4J_Input.h; the int code passed matches ruffle_ios.h's mapping.
     if (g_ruffle_player) {
         mcle_ios_pad_state pad;
         if (mcle_ios_input_poll(0, &pad)) {
@@ -6188,8 +6187,8 @@ static void MCLEConnectingHoldStart(void) {
             // Menu focus state machine, driven from the per-scene
             // menuButtonConfig. Each entry has a "name"/"label"/"id".
             // FJ_Button.ChangeState codes: 1=SELECTED, 2=UNSELECTED,
-            // 3=PRESSED. We edge-detect DPadUp/Down to walk the list and
-            // A to fire the press animation + any scene action.
+            // 3=PRESSED. DPadUp/Down are edge-detected to walk the list, and
+            // A fires the press animation + any scene action.
             // When a dialog overlay is up, this whole block is
             // skipped: the underlying scene is silent (stage
             // KEY_DOWN was redispatched onto the MessageBox
@@ -6239,8 +6238,8 @@ static void MCLEConnectingHoldStart(void) {
                         // Mirrors UIScene_MainMenu::handlePress
                         // (Common/UI/UIScene_MainMenu.cpp:301).
                         // PlayGame opens a sign-in flow then
-                        // CreateLoad/LoadOrJoin; we skip sign-in and
-                        // go straight to the load/join picker.
+                        // CreateLoad/LoadOrJoin; this skips sign-in and
+                        // goes straight to the load/join picker.
                         // Achievements on console opens the Xbox
                         // Live platform overlay, not a game SWF, so
                         // there's nothing to transition to on iOS.
@@ -6348,8 +6347,8 @@ static void MCLEConnectingHoldStart(void) {
                         // (Consoles_App.cpp:857+ sets MusicVolume=100,
                         // SoundFXVolume=100, RenderDistance=16, Gamma=
                         // 50, Difficulty=1, Autosave=2, Clouds=1, ...
-                        // across ~30 settings). We skip the confirm
-                        // dialog for now and run the reset immediately.
+                        // across ~30 settings). The confirm
+                        // dialog is skipped for now and the reset runs immediately.
                         NSString* target = nil;
                         switch (id) {
                             case 0: target = @"SettingsOptionsMenu1080.swf"; break;
@@ -6360,9 +6359,9 @@ static void MCLEConnectingHoldStart(void) {
                             case 6:
                                 // Console opens a confirm dialog
                                 // ("Reset to default settings?") before
-                                // applying. We drive that same path
+                                // applying. The same path runs
                                 // through presentDialogWithTitle:...:
-                                // and only run the reset on Accept.
+                                // and the reset only runs on Accept.
                                 // Title IDS_DEFAULTS_TITLE / body
                                 // IDS_DEFAULTS_TEXT per
                                 // strings_Misc.txt line 492-496.
@@ -6399,7 +6398,7 @@ static void MCLEConnectingHoldStart(void) {
             }
             // B button (code=1, mask 0x00000002). Priority order:
             //   1. Dialog up -> Cancelled (regardless of which
-            //      underlying scene is showing). Matches console
+            //      underlying scene is showing), as in
             //      UIScene_MessageBox::handleInput line 99-105.
             //   2. Otherwise on a non-MainMenu scene -> back.
             //   3. MainMenu B is a no-op (no scene to pop to).
@@ -6515,7 +6514,7 @@ static void MCLEConnectingHoldStart(void) {
     }
 
     // Ruffle's AVM trace/warning output. Rust returns the tail of the
-    // ring buffer; we then keep only the last 10 lines so the label's
+    // ring buffer; only the last 10 lines are kept so the label's
     // fixed frame on iPhone doesn't clip the newest events off the
     // bottom of the screen.
     static uint8_t avmBuf[16384];
@@ -6550,7 +6549,7 @@ static void MCLEConnectingHoldStart(void) {
         NSArray<NSString*>* allLines = [full componentsSeparatedByString:@"\n"];
         // Filter out the Mojangles7 font noise. It's a known
         // outstanding issue and spams the ring, hiding the
-        // preload/drain cascade diagnostics we actually need.
+        // preload/drain cascade logs that matter.
         NSMutableArray<NSString*>* filtered = [NSMutableArray new];
         NSUInteger droppedFallback = 0;
         for (NSString* line in allLines) {
@@ -6629,7 +6628,7 @@ static void MCLEConnectingHoldStart(void) {
         }),
         extintLog,
         avmLog];
-    // Drop-on-floor for readouts we pulled but no longer surface on screen.
+    // Discards readouts that are pulled but no longer shown on screen.
     (void)rustMagic; (void)renderProbe;
     (void)burnDone; (void)burnUnique;
     (void)g_ruffle_player_ok; (void)g_ruffle_framerate_mHz;
