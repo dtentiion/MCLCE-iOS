@@ -2392,28 +2392,11 @@ static double mcle_ticks_to_ms(uint64_t ticks) {
     return (double)(ticks * tb.numer / tb.denom) / 1.0e6;
 }
 
-extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
-    g_frame_start_ticks = mach_absolute_time();
-    if (!g.device || !g.layer) return 1;
-    if (g.inFrame) return 0;
-
-    g.drawable = [g.layer nextDrawable];
-    g_phase_ms[0] += mcle_ticks_to_ms(mach_absolute_time() - g_frame_start_ticks);
-    if (!g.drawable) return 2;
-
-    // G3d-step2: ensure a depth texture sized to the current drawable.
-    if (!g.depthTex || g.depthTexW != g.width || g.depthTexH != g.height) {
-        MTLTextureDescriptor* dd = [MTLTextureDescriptor
-            texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
-                                          width:(NSUInteger)g.width
-                                         height:(NSUInteger)g.height
-                                      mipmapped:NO];
-        dd.storageMode = MTLStorageModePrivate;
-        dd.usage       = MTLTextureUsageRenderTarget;
-        g.depthTex     = [g.device newTextureWithDescriptor:dd];
-        g.depthTexW    = g.width;
-        g.depthTexH    = g.height;
-    }
+// The depth states every pass draws with. RenderManager makes its own when
+// it's initialised, so a custom draw before any world frame (Change Skin's
+// characters at the main menu) has them too.
+static void ensure_depth_states() {
+    if (!g.device) return;
     if (!g.depthState) {
         // LessEqual (not strict Less) for parity with upstream
         // Minecraft.cpp:394 glDepthFunc(GL_LEQUAL). Lets the grass-side
@@ -2437,6 +2420,31 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
         dsd.depthWriteEnabled    = NO;
         g.depthStateNoWrite = [g.device newDepthStencilStateWithDescriptor:dsd];
     }
+}
+
+extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
+    g_frame_start_ticks = mach_absolute_time();
+    if (!g.device || !g.layer) return 1;
+    if (g.inFrame) return 0;
+
+    g.drawable = [g.layer nextDrawable];
+    g_phase_ms[0] += mcle_ticks_to_ms(mach_absolute_time() - g_frame_start_ticks);
+    if (!g.drawable) return 2;
+
+    // G3d-step2: ensure a depth texture sized to the current drawable.
+    if (!g.depthTex || g.depthTexW != g.width || g.depthTexH != g.height) {
+        MTLTextureDescriptor* dd = [MTLTextureDescriptor
+            texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
+                                          width:(NSUInteger)g.width
+                                         height:(NSUInteger)g.height
+                                      mipmapped:NO];
+        dd.storageMode = MTLStorageModePrivate;
+        dd.usage       = MTLTextureUsageRenderTarget;
+        g.depthTex     = [g.device newTextureWithDescriptor:dd];
+        g.depthTexW    = g.width;
+        g.depthTexH    = g.height;
+    }
+    ensure_depth_states();
 
     g.gammaThisFrame = gamma_frame_begin(g.drawable.texture);
 
@@ -2610,7 +2618,7 @@ extern "C" void mcle_metal_ui_size(int* out_width, int* out_height) {
 // 0 when the UI layer is ready to draw into
 extern "C" int mcle_metal_ui_frame_begin(void) {
     if (!g.device || !g_uiLayer || g.inFrame || g_uiW <= 0 || g_uiH <= 0) return 1;
-    // The depth states come from the first world frame
+    ensure_depth_states();
     if (!g.depthState || !g.depthStateNoTest || !g.depthStateNoWrite) return 3;
     g.drawable = [g_uiLayer nextDrawable];
     if (!g.drawable) return 2;
