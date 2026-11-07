@@ -3302,6 +3302,23 @@ static void MCLELoadOrJoinRefocusSave(void) {
     MCLECallPath(@"SavesList", @"HighlightItem", @[@(g_load_save_list_index)]);
 }
 
+// UIScene_LoadOrJoinMenu::KeyboardCompleteWorldNameCallback. The keyboard
+// has gone back, and the list's movie reloads after it, which is the
+// e_SavesRepopulate RenameSaveDataReturned asks for.
+static int MCLELoadOrJoinKeyboardComplete(void* lpParam, const bool bRes) {
+    g_load_or_join_ignore_input = false;
+    if (bRes) {
+        // Win64_GetKeyboardText
+        const std::wstring& text = mcle_keyboard_text();
+        // check the name is valid
+        if (!text.empty()) {
+            int listPos = g_load_save_list_index - g_load_default_buttons;
+            mcle_saves_rename(listPos, MCLEStringFromWide(text).UTF8String);
+        }
+    }
+    return 0;
+}
+
 // UIScene_LoadOrJoinMenu::handleInput's ACTION_MENU_RIGHT_SCROLL, and the
 // ACTION_MENU_X Windows64 adds for it. Saving is never disabled and there's
 // always space for a save, so it's Save Options rather than Delete Save.
@@ -3327,7 +3344,18 @@ static void MCLELoadOrJoinRefocusSave(void) {
 // this dialog: the first button (Cancel) is Accept
 - (void)loadOrJoinSaveOptionsReturned:(MCLEDialogResult)result {
     MCLELoadOrJoinRefocusSave();
-    if (result == MCLEDialogResultThird) {
+    if (result == MCLEDialogResultDecline) {
+        // rename: Windows64 without the keyboard and mouse brings up
+        // UIScene_Keyboard on the save's name
+        g_load_or_join_ignore_input = true;
+        MCLEKeyboardInitData kbData;
+        kbData.title = MCLEWideString(MCLEStr(IDS_RENAME_WORLD_TITLE));
+        const char* saveName = mcle_saves_name(g_load_save_list_index - g_load_default_buttons);
+        kbData.defaultText = MCLEWideString([NSString stringWithUTF8String:saveName] ?: @"");
+        kbData.maxChars = 25;
+        kbData.callback = &MCLELoadOrJoinKeyboardComplete;
+        [self navigateToKeyboard:kbData];
+    } else if (result == MCLEDialogResultThird) {
         // delete the save game
         // Have to ask the player if they are sure they want to delete this game
         __weak MinecraftViewController* weakSelf = self;

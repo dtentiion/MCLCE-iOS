@@ -19,6 +19,10 @@ long long   mcle_saves_size(int i);       // .ms size in bytes
 // didn't all go.
 int         mcle_saves_delete(int i);
 
+// The Windows64 rename: save i's worldname.txt says `name` (UTF-8), which
+// the list shows from then on. 0 if it couldn't be written.
+int         mcle_saves_rename(int i, const char *name);
+
 #ifdef __cplusplus
 }
 #endif

@@ -520,14 +520,36 @@ static bool delete_save_directory(const std::string &path) {
     return rmdir(path.c_str()) == 0;
 }
 
+// A save's own folder under saves/, never saves/ itself or anything outside it
+static bool is_save_folder(const std::string &folder) {
+    return !folder.empty() && folder != "." && folder != ".." && folder.find('/') == std::string::npos;
+}
+
 // DeleteSaveDialogReturned on Windows64 deletes GameHDD\<save filename>, here
-// saves/<folder>. Never saves/ itself or anything outside it.
+// saves/<folder>
 extern "C" int mcle_saves_delete(int i) {
     std::lock_guard<std::mutex> lock(g_storageMutex);
     auto e = entry(i);
     const char *root = ios_documents_dir();
-    if (!e || !root || !*root) return 0;
-    const std::string &folder = e->folder;
-    if (folder.empty() || folder == "." || folder == ".." || folder.find('/') != std::string::npos) return 0;
-    return delete_save_directory(std::string(root) + "/saves/" + folder) ? 1 : 0;
+    if (!e || !root || !*root || !is_save_folder(e->folder)) return 0;
+    return delete_save_directory(std::string(root) + "/saves/" + e->folder) ? 1 : 0;
+}
+
+// KeyboardCompleteWorldNameCallback on Windows64 writes the new name to
+// GameHDD\<save filename>\worldname.txt, which read_level_name takes over the
+// level's own name. It's UTF-8 here, the way that reads it back.
+extern "C" int mcle_saves_rename(int i, const char *name) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    const char *root = ios_documents_dir();
+    if (i < 0 || i >= (int)g_saves.size() || !name || !root || !*root) return 0;
+    SaveEntry &e = g_saves[(size_t)i];
+    if (!is_save_folder(e.folder)) return 0;
+    bool written = false;
+    if (FILE *fw = fopen((std::string(root) + "/saves/" + e.folder + "/worldname.txt").c_str(), "w")) {
+        written = fputs(name, fw) >= 0;
+        written = (fclose(fw) == 0) && written;
+    }
+    // Update the in-memory display name so the list reflects it immediately
+    e.name = std::string(name).substr(0, 127);
+    return written ? 1 : 0;
 }
