@@ -35,6 +35,7 @@
 #include "Biome.h"
 #include "GameEventPacket.h"
 #include "PlayerInfoPacket.h"
+#include "ServerSettingsChangedPacket.h"
 #include "PotionBrewing.h"
 #include "WeighedTreasure.h"
 #include "ChunkPos.h"
@@ -386,6 +387,7 @@ void mcle_local_player_respawn_packet(int dimension);   // Game/MCLEGameLoop.cpp
 void mcle_local_player_win_game();   // Game/MCLEGameLoop.cpp
 void mcle_sign_entry_tile_editor_open(int editorType, int x, int y, int z);   // Game/MCLESignEntryMenu.cpp
 void mcle_client_player_info(std::shared_ptr<PlayerInfoPacket> packet);   // Game/MCLEPlayerInfo.cpp
+void mcle_client_server_settings_changed(std::shared_ptr<ServerSettingsChangedPacket> packet);   // Game/MCLEPlayerInfo.cpp
 void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     // what ClientConnection's handlers pass on to the tutorial
     mcle_tutorial_local_player_packet(packet);
@@ -412,6 +414,9 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
         mcle_sign_entry_tile_editor_open(editor->editorType, editor->x, editor->y, editor->z);
     } else if (std::shared_ptr<PlayerInfoPacket> info = std::dynamic_pointer_cast<PlayerInfoPacket>(packet)) {
         mcle_client_player_info(info);
+    } else if (std::shared_ptr<ServerSettingsChangedPacket> settings =
+                   std::dynamic_pointer_cast<ServerSettingsChangedPacket>(packet)) {
+        mcle_client_server_settings_changed(settings);
     }
 }
 void PlayerConnection::send(std::shared_ptr<Packet> packet) {

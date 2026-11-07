@@ -1,7 +1,8 @@
-// The players' privileges. What the client's ClientConnection does with the
-// PlayerInfoPacket and the LoginPacket's privileges, for the one player here:
-// the host, network small id 0, whose client player is the server's own
-// ServerPlayer.
+// The players' privileges and the host's in game options. What the server's
+// PlayerConnection and the client's ClientConnection do with the
+// PlayerInfoPacket, the LoginPacket's privileges and the
+// ServerSettingsChangedPacket, for the one player here: the host, network
+// small id 0, whose client player is the server's own ServerPlayer.
 // displayPrivilegeChanges is upstream's own, copied out by
 // scripts/gen-privilege-changes.py.
 
@@ -12,6 +13,9 @@
 
 #include "../../../upstream/Minecraft.World/net.minecraft.world.entity.player.h"
 #include "../../../upstream/Minecraft.World/PlayerInfoPacket.h"
+#include "../../../upstream/Minecraft.World/ServerSettingsChangedPacket.h"
+#include "../../../upstream/Minecraft.Client/MinecraftServer.h"
+#include "../../../upstream/Minecraft.Client/PlayerList.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 
 std::shared_ptr<ServerPlayer> mcle_local_player(); // MCLEGameLoop.cpp
@@ -89,5 +93,36 @@ void mcle_client_player_info(std::shared_ptr<PlayerInfoPacket> packet) {
     if (networkPlayer && player != nullptr) {
         player->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_All, packet->m_playerPrivileges);
         g_connection.displayPrivilegeChanges(player, startingPrivileges);
+    }
+}
+
+void mcle_client_server_settings_changed(std::shared_ptr<ServerSettingsChangedPacket> packet) {
+    // The in game settings are the only ones sent here, the difficulty and
+    // gamertags ones come from MinecraftServer's xui actions
+    if (packet->action == ServerSettingsChangedPacket::HOST_IN_GAME_SETTINGS) {
+        app.SetGameHostOption(eGameHostOption_All, packet->data);
+    }
+}
+
+void mcle_server_settings_changed(std::shared_ptr<ServerSettingsChangedPacket> packet) {
+    if (packet->action == ServerSettingsChangedPacket::HOST_IN_GAME_SETTINGS) {
+        // Need to check that this player has permission to change each individual setting?
+        // It's the host's packet, the only player here
+        app.SetGameHostOption(eGameHostOption_FireSpreads, app.GetGameHostOption(packet->data, eGameHostOption_FireSpreads));
+        app.SetGameHostOption(eGameHostOption_TNT, app.GetGameHostOption(packet->data, eGameHostOption_TNT));
+        app.SetGameHostOption(eGameHostOption_MobGriefing, app.GetGameHostOption(packet->data, eGameHostOption_MobGriefing));
+        app.SetGameHostOption(eGameHostOption_KeepInventory, app.GetGameHostOption(packet->data, eGameHostOption_KeepInventory));
+        app.SetGameHostOption(eGameHostOption_DoMobSpawning, app.GetGameHostOption(packet->data, eGameHostOption_DoMobSpawning));
+        app.SetGameHostOption(eGameHostOption_DoMobLoot, app.GetGameHostOption(packet->data, eGameHostOption_DoMobLoot));
+        app.SetGameHostOption(eGameHostOption_DoTileDrops, app.GetGameHostOption(packet->data, eGameHostOption_DoTileDrops));
+        app.SetGameHostOption(eGameHostOption_DoDaylightCycle, app.GetGameHostOption(packet->data, eGameHostOption_DoDaylightCycle));
+        app.SetGameHostOption(eGameHostOption_NaturalRegeneration, app.GetGameHostOption(packet->data, eGameHostOption_NaturalRegeneration));
+
+        if (PlayerList *players = MinecraftServer::getPlayerList()) {
+            players->broadcastAll(std::make_shared<ServerSettingsChangedPacket>(
+                ServerSettingsChangedPacket::HOST_IN_GAME_SETTINGS, app.GetGameHostOption(eGameHostOption_All)));
+        }
+
+        // g_NetworkManager.UpdateAndSetGameSessionData: there's no session
     }
 }
