@@ -101,6 +101,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Facing.h"
 #include "../../../upstream/Minecraft.World/Icon.h"
 #include "../../../upstream/Minecraft.World/Item.h"
+#include "../../../upstream/Minecraft.World/ItemFrame.h"
+#include "../../../upstream/Minecraft.World/MapItem.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
 #include "../../../upstream/Minecraft.World/Entity.h"
 #include "../../../upstream/Minecraft.World/Biome.h"
@@ -3029,6 +3031,31 @@ static void mcle_local_chunk_sending_tick(const std::shared_ptr<ServerPlayer> &p
                          nearest.z * 16 + 14);
 }
 
+// The item frame part of EntityTracker::tick's TrackedEntity::tick, as the
+// port runs no tracker: every 10 ticks a map in a frame is carried by each
+// player in the frame's level, which puts the frame's marker on the map
+static void mcle_tracker_item_frame_maps(int dimension) {
+    static int s_tickCount[3] = {0, 0, 0};
+    ServerLevel *level = g_levels[dimension];
+    if (s_tickCount[dimension]++ % 10 != 0 || level->players.empty()) return;
+    std::vector<std::shared_ptr<Entity>> frames;
+    EnterCriticalSection(&level->m_entitiesCS);
+    for (const std::shared_ptr<Entity> &e : level->entities) {
+        if (e->GetType() == eTYPE_ITEM_FRAME) frames.push_back(e);
+    }
+    LeaveCriticalSection(&level->m_entitiesCS);
+    for (const std::shared_ptr<Entity> &e : frames) {
+        std::shared_ptr<ItemFrame> frame = std::dynamic_pointer_cast<ItemFrame>(e);
+        std::shared_ptr<ItemInstance> item = frame->getItem();
+        if (item != nullptr && item->getItem()->id == Item::map_Id && !e->removed) {
+            std::shared_ptr<MapItemSavedData> data = Item::map->getSavedData(item, e->level);
+            for (const std::shared_ptr<Player> &player : level->players) {
+                data->tickCarriedBy(std::dynamic_pointer_cast<ServerPlayer>(player), item);
+            }
+        }
+    }
+}
+
 extern "C" void mcle_game_tick(void) {
     // Install per-thread sigaltstack on whichever thread first calls
     // this. Idempotent. Covers main (UIKit) and sim threads; workers
@@ -3272,6 +3299,7 @@ extern "C" void mcle_game_tick(void) {
             g_levels[i]->tick();
             if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
             g_levels[i]->tickEntities();
+            mcle_tracker_item_frame_maps(i);
             const auto lvlMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                    hrclock::now() - lvlStart).count();
             if (lvlMs > 50) {

@@ -1775,6 +1775,12 @@ if [ -f "$MLP_PY" ]; then
     python3 "$MLP_PY"
 fi
 
+# Map icons include the item frame and End portal ones the client would get
+MMD_PY="$REPO_ROOT/scripts/patch-minimap-ios-decorations.py"
+if [ -f "$MMD_PY" ]; then
+    python3 "$MMD_PY"
+fi
+
 # Nothing bumping into the local player pushes it, the server's pushes on its own player never reach the client
 LPP_PY="$REPO_ROOT/scripts/patch-local-player-not-pushed.py"
 if [ -f "$LPP_PY" ]; then
