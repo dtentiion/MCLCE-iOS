@@ -165,6 +165,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/LevelRenderer.h"
 #include "../../../upstream/Minecraft.Client/Tesselator.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
+#include "../../../upstream/Minecraft.Client/ProgressRenderer.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/ScreenSizeCalculator.h"
 #include "../../../upstream/Minecraft.Client/Gui.h"
@@ -557,15 +558,19 @@ static void mcle_world_thread_end() {
 // world: PlayerList::saveAll, the levels in reverse so the nether's level
 // data doesn't overwrite the overworld's, the game rules, then the save
 // file goes to disc. Leaving also closes the level storage after the last
-// level (saveAllChunks) and unloads the rules before the flush.
+// level (saveAllChunks) and unloads the rules before the flush. Each step
+// goes on Minecraft's progress renderer, which FullscreenProgress shows.
 static void mcle_save_world(bool exiting, bool autosave) {
     const auto start = std::chrono::steady_clock::now();
+    ProgressRenderer *progress = Minecraft::GetInstance() ? Minecraft::GetInstance()->progressRenderer : nullptr;
     // PlayerList::saveAll for the one player
+    if (progress) progress->progressStart(IDS_PROGRESS_SAVING_PLAYERS);
     if (g_levelStorage) {
         PlayerIO *playerIo = g_levelStorage->getPlayerIO();
         try {
             playerIo->saveAllCachedData();
             if (g_player) playerIo->save(g_player);
+            if (progress) progress->progressStagePercentage(0);
             playerIo->clearOldPlayerFiles();
             playerIo->saveMapIdLookup();
         } catch (...) {
@@ -576,7 +581,7 @@ static void mcle_save_world(bool exiting, bool autosave) {
         if (!g_levels[i]) continue;
         const auto t0 = std::chrono::steady_clock::now();
         try {
-            g_levels[i]->save(true, nullptr, autosave);
+            g_levels[i]->save(true, progress, autosave);
             if (exiting && i == 0) g_levels[i]->closeLevelStorage();
         } catch (...) {
             MCLE_LOG("BG_SAVE: level[%d] threw", i);
@@ -600,7 +605,7 @@ static void mcle_save_world(bool exiting, bool autosave) {
             csf->closeHandle(fe);
         }
         if (exiting) app.m_gameRules.unloadCurrentGameRules();
-        try { g_levels[0]->saveToDisc(nullptr, autosave); }
+        try { g_levels[0]->saveToDisc(progress, autosave); }
         catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
     }
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2826,13 +2831,38 @@ extern "C" void mcle_minecraft_main(void) {
     app.loadDefaultGameRules();
     MCLE_LOG("minecraft main: %d level generators", (int)app.getLevelGenerators()->size());
 
-    // Minecraft::start makes the Minecraft: its constructor the sound engine
-    // and the instance, init the texture packs. The DLC mount from the menus
+    // Minecraft::start makes the Minecraft: its constructor the sound engine,
+    // running and the progress renderer's lock, and the instance, init the
+    // texture packs and the progress renderer. The DLC mount from the menus
     // adds the DLC ones to it.
     Minecraft *minecraft = mcle_minecraft_shim();
+    minecraft->running = true;
+    InitializeCriticalSection(&ProgressRenderer::s_progress);
     minecraft->soundEngine = new SoundEngine();
     Minecraft::m_instance = minecraft;
     mcle_texture_packs_init(minecraft);
+    minecraft->progressRenderer = new ProgressRenderer(minecraft);
+}
+
+// What the server's saving has put on Minecraft's progress renderer, for
+// UIScene_FullscreenProgress::tick: the title and status string ids (-1 for
+// none) and the percent. progressStart(-1) and progressStage(-1) first, like
+// its constructor, when reset is set.
+extern "C" void mcle_game_progress(int reset, int *title, int *status, int *percent) {
+    ProgressRenderer *progress = Minecraft::GetInstance() ? Minecraft::GetInstance()->progressRenderer : nullptr;
+    if (!progress) {
+        if (title) *title = -1;
+        if (status) *status = -1;
+        if (percent) *percent = 0;
+        return;
+    }
+    if (reset) {
+        progress->progressStart(-1);
+        progress->progressStage(-1);
+    }
+    if (title) *title = progress->getCurrentTitle();
+    if (status) *status = progress->getType() == ProgressRenderer::eProgressStringType_ID ? progress->getCurrentStatus() : -1;
+    if (percent) *percent = progress->getCurrentPercent();
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after
