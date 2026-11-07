@@ -109,6 +109,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.World/Stats.h"
 #include "../../../upstream/Minecraft.World/Packet.h"
 #include "../../../upstream/Minecraft.World/ExplodePacket.h"
+#include "../../../upstream/Minecraft.World/PlayerInfoPacket.h"
 #include "../../../upstream/Minecraft.World/Explosion.h"
 #include "../../../upstream/Minecraft.World/HatchetItem.h"
 #include "../../../upstream/Minecraft.World/PickaxeItem.h"
@@ -208,11 +209,13 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "MCLETexturePacks.h"
 #include "MCLETutorial.h"
 #include "MCLEPortal.h"
+#include "MCLEPlayerInfo.h"
 #include "../../../upstream/Minecraft.World/PlayerIO.h"
 #include "../../../upstream/Minecraft.Client/PlayerConnection.h"
 #include "../../../upstream/Minecraft.Client/HumanoidModel.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
+void mcle_local_player_packet(std::shared_ptr<Packet> packet); // WorldProbe/link_stubs.cpp
 
 // ActionGameSettings(eGameSetting_RenderDistance): the chunk count picked in
 // the graphics menu becomes Options::viewDistance, 3 minus its level there
@@ -1404,6 +1407,13 @@ void initImpl() {
         }
     }
 
+    // placeNewPlayer: the host always has these privileges, whatever its
+    // saved data says
+    if (g_player) {
+        g_player->enableAllPlayerPrivileges(true);
+        g_player->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_HOST, 1);
+    }
+
     // placeNewPlayer: the player goes in the level of the dimension it was
     // saved in. Only the overworld's spawn area is loaded above, so the
     // chunks round a player in another dimension are loaded the same way.
@@ -1484,6 +1494,16 @@ void initImpl() {
             g_player->gameMode->updateGameMode(g_levels[0]->getLevelData()->getGameType());
         } catch (...) {
             MCLE_LOG("mcle_game_init: updateGameMode threw");
+        }
+        // placeNewPlayer: update the privileges with the correct game mode
+        GameType *gameType = Player::getPlayerGamePrivilege(g_player->getAllPlayerGamePrivileges(),
+                                                            Player::ePlayerGamePrivilege_CreativeMode)
+                                 ? GameType::CREATIVE
+                                 : GameType::SURVIVAL;
+        gameType = LevelSettings::validateGameType(gameType->getId());
+        if (g_player->gameMode->getGameModeForPlayer() != gameType) {
+            g_player->setPlayerGamePrivilege(Player::ePlayerGamePrivilege_CreativeMode,
+                                             g_player->gameMode->getGameModeForPlayer()->getId());
         }
     }
 
@@ -1811,6 +1831,17 @@ void initImpl() {
             MCLE_LOG("mcle_game_init: Gui ctor threw: %{public}s", e.what());
         } catch (...) {
             MCLE_LOG("mcle_game_init: Gui ctor threw unknown");
+        }
+    }
+
+    // ClientConnection::handleLogin takes the player's privileges from the
+    // LoginPacket, then PlayerList::add sends it its own PlayerInfoPacket
+    if (g_player) {
+        try {
+            mcle_client_login_privileges(g_player);
+            mcle_local_player_packet(std::make_shared<PlayerInfoPacket>(g_player));
+        } catch (...) {
+            MCLE_LOG("mcle_game_init: player info threw");
         }
     }
 

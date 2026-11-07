@@ -1632,6 +1632,11 @@ CHAT_PY="$REPO_ROOT/scripts/gen-chat-handler.py"
 if [ -f "$CHAT_PY" ]; then
     python3 "$CHAT_PY"
 fi
+# ClientConnection::displayPrivilegeChanges, for Game/MCLEPlayerInfo.cpp
+PRIV_PY="$REPO_ROOT/scripts/gen-privilege-changes.py"
+if [ -f "$PRIV_PY" ]; then
+    python3 "$PRIV_PY"
+fi
 # PlayerList broadcasts reach the local player too
 PLB_PY="$REPO_ROOT/scripts/patch-playerlist-broadcast-local.py"
 if [ -f "$PLB_PY" ]; then
