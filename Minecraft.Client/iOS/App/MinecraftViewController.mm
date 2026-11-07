@@ -134,6 +134,12 @@ static int g_respawns_seen = 0;
 // UIScene_EndPoem is up after the End's exit portal
 static bool g_world_won = false;
 static int g_wins_seen = 0;
+// UIScene_FullscreenProgress is up while the server saves, for the pause
+// menu's Save or an autosave, over the game (0), the pause menu (1) or the
+// in game info menu (2)
+static bool g_world_saving = false;
+static bool g_saving_autosave = false;
+static int g_saving_over = 0;
 // UIScene_EndPoem's m_requestedLabel and m_bIgnoreInput
 static std::atomic<int> g_endpoem_requested{-1};
 static bool g_endpoem_ignore_input = false;
@@ -159,6 +165,8 @@ extern "C" int  mcle_player_is_dead(void);           // MCLEGameLoop.cpp
 extern "C" void mcle_game_respawn(void);             // MCLEGameLoop.cpp
 extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MCLEGameLoop.cpp
 extern "C" int  mcle_game_save(int autosave);        // MCLEGameLoop.cpp
+extern "C" int  mcle_game_save_done(void);           // MCLEGameLoop.cpp
+extern "C" void mcle_game_progress(int reset, int *title, int *status, int *percent); // MCLEGameLoop.cpp
 extern "C" void mcle_storage_set_save_folder(const char *folder); // MCLESaveList.cpp
 extern "C" void mcle_capture_save_thumbnail(void);   // MCLESaveList.cpp
 extern "C" void mcle_game_host_settings_changed(void); // MCLEGameLoop.cpp
@@ -4149,6 +4157,9 @@ static int MCLEMoreOptionsKeyboardComplete(void* lpParam, const bool bRes) {
 
 static int g_progress_stage = -2;
 static int g_progress_pct = -1;
+// UIScene_FullscreenProgress's m_lastTitle and m_lastStatus
+static int g_progress_title = -1;
+static int g_progress_status = -1;
 static CFTimeInterval g_progress_tip_time = 0;
 
 static NSString* MCLETipHTML(void) {
@@ -4741,6 +4752,93 @@ static void MCLEConnectingHoldStart(void) {
     // UIGroup::closeAllScenes lets the tutorial popup show again
     mcle_tutorial_show_popup(true);
     [self enterWorldUI];
+}
+
+// eAppAction_SaveGameCapturedThumbnail and AutosaveSaveGameCapturedThumbnail:
+// FullscreenProgress with the tips, panorama and logo while
+// SaveWorldThreadProc has the server save, the pad the scene's until then
+- (void)openSaveProgress:(BOOL)autosave {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player || g_world_saving || g_exiting_world) return;
+    const bool overPause = g_world_paused && [self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"];
+    const bool overInfo = g_world_container && g_world_info &&
+                          [self.currentMenuSwf isEqualToString:@"InGameInfoMenu1080.swf"];
+    const bool overGame = !g_world_paused && !g_world_dead && !g_world_container && !g_world_connecting &&
+                          !g_world_won;
+    if (!overPause && !overInfo && !overGame) return;
+    // Both reset the autosave timer
+    MCLESetAutosaveTimerTime();
+    // The autosave hides the tutorial popup until it's done. Before the save
+    // starts, as it waits on the tick lock the save holds.
+    if (autosave) mcle_tutorial_show_popup(false);
+    // The scene's constructor clears the progress before its thread starts
+    mcle_game_progress(1, NULL, NULL, NULL);
+    if (!mcle_game_save(autosave ? 1 : 0)) {
+        if (autosave) mcle_tutorial_show_popup(true);
+        return;
+    }
+    g_world_saving = true;
+    g_saving_autosave = autosave;
+    g_saving_over = overPause ? 1 : (overInfo ? 2 : 0);
+    // NavigateToScene's SetMenuDisplayed
+    mcle_game_set_menu_displayed(true);
+    if (overPause) {
+        // NavigateBackToScene comes back to the pause menu
+        [self navigateForwardTo:@"FullscreenProgress1080.swf"];
+    } else {
+        self.menuStack = nil;
+        [self transitionToMenuNamed:@"FullscreenProgress1080.swf"];
+    }
+    g_progress_pct = 0;
+    g_progress_title = -1;
+    g_progress_status = -1;
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kLogoDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
+    // updateTooltips: no select until done and no cancel
+    const int none[11] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    MCLESetTooltips(none);
+}
+
+// UIScene_FullscreenProgress::tick over the save: the progress renderer's
+// percent, title and status, the next tip, and once the server's save is
+// done the completion, back to the pause menu (NavigateBackToScene) or to
+// what the autosave went over (AutosaveNavigateBack)
+- (void)saveProgressTick {
+    int title = -1, status = -1, pct = 0;
+    mcle_game_progress(0, &title, &status, &pct);
+    if (pct < 0) pct = 0;
+    if (pct != g_progress_pct) {
+        g_progress_pct = pct;
+        MCLECallPath(@"ProgressBar", @"setProgress", @[@(pct)]);
+    }
+    if (title >= 0 && title != g_progress_title) {
+        g_progress_title = title;
+        MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(title)]);
+    }
+    if (status >= 0 && status != g_progress_status) {
+        g_progress_status = status;
+        MCLECallPath(@"ProgressBar", @"SetLabel", @[MCLEStr(status)]);
+    }
+    MCLEProgressTipTick();
+    if (!mcle_game_save_done()) return;
+    g_world_saving = false;
+    if (g_saving_over == 1) {
+        [self navigateBack];
+        return;
+    }
+    // This just allows it to be shown
+    if (g_saving_autosave) mcle_tutorial_show_popup(true);
+    if (g_saving_over == 2) {
+        // The info menu's movie back up for its reloadMovie
+        g_container_reloading = true;
+        [self transitionToMenuNamed:@"InGameInfoMenu1080.swf"];
+        g_container_reloading = false;
+        [self showContainerOverWorld];
+    } else {
+        [self enterWorldUI];
+    }
 }
 
 // ClientConnection::handleGameEvent WIN_GAME: UIScene_EndPoem, fullscreen
@@ -5641,16 +5739,17 @@ static void MCLEConnectingHoldStart(void) {
             g_level_changes_seen = mcle_game_level_changes(NULL, NULL);
             g_wins_seen = mcle_game_wins();
         }
+        if (g_world_saving) [self saveProgressTick];
         // ClientConnection::handleRespawn and handleGameEvent's WIN_GAME
         {
             int finished = 0, titleId = -1;
             const int started = mcle_game_level_changes(&finished, &titleId);
-            if (started != g_level_changes_seen) {
+            if (started != g_level_changes_seen && !g_world_saving) {
                 g_level_changes_seen = started;
                 [self openConnectingProgress:titleId respawn:NO];
             }
             const int wins = mcle_game_wins();
-            if (wins != g_wins_seen) {
+            if (wins != g_wins_seen && !g_world_saving) {
                 g_wins_seen = wins;
                 [self openEndPoem];
             }
@@ -5669,20 +5768,22 @@ static void MCLEConnectingHoldStart(void) {
         }
         // Minecraft::run's autosave: not with the pause menu or a scene
         // that ignores autosaves up (death, containers, a level change,
-        // the End poem), and the timer starts again once the save has gone
+        // the End poem, FullscreenProgress), and the timer starts again once
+        // the save has gone
         if (!g_world_paused && !g_world_dead && (!g_world_container || g_world_info) && !g_world_connecting &&
-            !g_world_won) {
+            !g_world_won && !g_world_saving) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
-                MCLECaptureThumbnailThen(^{ mcle_game_save(1); });
+                __weak MinecraftViewController* weakSelf = self;
+                MCLECaptureThumbnailThen(^{ [weakSelf openSaveProgress:YES]; });
                 MCLESetAutosaveTimerTime();
             }
         }
         // Minecraft::tick shows the death menu once the player has died with
         // no menu up (the in game info menu holds it off), and goes back to
         // the game when the respawned player is alive
-        if (!g_world_dead && !g_world_paused && !g_world_connecting && !g_world_won &&
+        if (!g_world_dead && !g_world_paused && !g_world_connecting && !g_world_won && !g_world_saving &&
             !(g_world_container && g_world_info) && mcle_player_is_dead()) {
             [self openDeathMenu];
         } else if (g_world_dead && !mcle_player_is_dead()) {
@@ -5696,7 +5797,7 @@ static void MCLEConnectingHoldStart(void) {
         }
         // Minecraft::tick: the game info action opens the in game info menu,
         // Start the pause menu, the inventory action the inventory
-        const bool sceneUp = g_world_connecting || g_world_won;
+        const bool sceneUp = g_world_connecting || g_world_won || g_world_saving;
         if (!g_world_paused && !g_world_dead && !g_world_container && !sceneUp) {
             mcle_ios_pad_state pad;
             if (mcle_ios_input_poll(0, &pad)) {
@@ -5723,8 +5824,9 @@ static void MCLEConnectingHoldStart(void) {
             // ClientConnection::handleTileEditorOpen
             if (mcle_sign_entry_take_request()) [self openSignEntryMenu];
         }
-        mcle_render_frame();
-        if (g_world_container) {
+        // Saving, the game isn't started and the world isn't drawn
+        if (!g_world_saving) mcle_render_frame();
+        if (g_world_container && !g_world_saving) {
             [self containerMenuFrame];
             return;
         }
@@ -5993,18 +6095,22 @@ static void MCLEConnectingHoldStart(void) {
                             case 0: [self resumeFromPause]; break;
                             case 1: [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"]; break;
                             case 2: [self navigateForwardTo:@"LeaderboardMenu1080.swf"]; break;
-                            case 4:
+                            case 4: {
                                 // PerformActionSaveGame: the save is there, so
                                 // ask before overwriting it. SaveGameDialogReturned
                                 // saves on the second button.
+                                __weak MinecraftViewController* weakSelf = self;
                                 [self presentDialogWithTitle:MCLEStr(IDS_TITLE_SAVE_GAME)
                                                      content:MCLEStr(IDS_CONFIRM_SAVE_GAME)
                                                      buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
                                                   focusIndex:0
                                                     callback:^(MCLEDialogResult r) {
-                                    if (r == MCLEDialogResultDecline) MCLECaptureThumbnailThen(^{ mcle_game_save(0); });
+                                    if (r == MCLEDialogResultDecline) {
+                                        MCLECaptureThumbnailThen(^{ [weakSelf openSaveProgress:NO]; });
+                                    }
                                 }];
                                 break;
+                            }
                             case 5: [self requestExitGame]; break;
                             // Achievements is the platform overlay
                             default:
