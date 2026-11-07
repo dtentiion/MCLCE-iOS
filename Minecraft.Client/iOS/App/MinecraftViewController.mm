@@ -5769,8 +5769,11 @@ static void MCLEConnectingHoldStart(void) {
         // Minecraft::run's autosave: not with the pause menu or a scene
         // that ignores autosaves up (death, containers, a level change,
         // the End poem, FullscreenProgress), and the timer starts again once
-        // the save has gone
-        if (!g_world_paused && !g_world_dead && (!g_world_container || g_world_info) && !g_world_connecting &&
+        // the save has gone. The host and player options over the info menu
+        // have no reloadMovie to come back with, so it waits for them to go.
+        const bool infoUp = g_world_container && g_world_info &&
+                            [self.currentMenuSwf isEqualToString:@"InGameInfoMenu1080.swf"];
+        if (!g_world_paused && !g_world_dead && (!g_world_container || infoUp) && !g_world_connecting &&
             !g_world_won && !g_world_saving) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
