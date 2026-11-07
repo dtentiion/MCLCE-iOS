@@ -881,13 +881,19 @@ void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double
     if (!g_closeRequested) {
         g_scene->tick(now);
         // UILayer::tick goes down the stack. The movies of the scenes under
-        // the top one aren't up, what they'd make on them is dropped and
-        // their reloadMovie puts it back.
+        // the top one aren't up, what they'd make on them is dropped, so are
+        // the tooltips they'd set, and their reloadMovie puts it back.
+        int tooltipText[eToolTipNumButtons];
+        bool tooltipShown[eToolTipNumButtons];
+        memcpy(tooltipText, g_tooltipText, sizeof(tooltipText));
+        memcpy(tooltipShown, g_tooltipShown, sizeof(tooltipShown));
         for (auto it = g_backScenes.rbegin(); it != g_backScenes.rend() && !g_closeRequested; ++it) {
             size_t queued = g_ops.size();
             (*it)->tick(now);
             dropMovieOps(queued);
         }
+        memcpy(g_tooltipText, tooltipText, sizeof(tooltipText));
+        memcpy(g_tooltipShown, tooltipShown, sizeof(tooltipShown));
     }
     g_scene->snapshot();
 }
