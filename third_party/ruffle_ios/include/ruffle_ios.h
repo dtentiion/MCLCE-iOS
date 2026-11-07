@@ -195,6 +195,17 @@ int           ruffle_ios_set_root_child_transform_at_depth(PlayerHandle* h, int 
                                                            float scale_x, float scale_y,
                                                            float tx, float ty);
 
+// Scale and move the scene's root clip itself, in stage pixels.
+// Returns 1 if there was one, 0 if not, -1 on player lock failure.
+int           ruffle_ios_set_root_transform(PlayerHandle* h, float scale_x, float scale_y,
+                                            float tx, float ty);
+
+// Draw the root clip's child at a depth on past its left and right edges,
+// in stage pixels, its edge columns drawn out over the extra width.
+// Returns 1 if a child was there, 0 if not, -1 on player lock failure.
+int           ruffle_ios_set_root_child_edge_extend_at_depth(PlayerHandle* h, int depth,
+                                                             float left, float right);
+
 // Instantiate an AS3 class by name and attach its DisplayObject as a
 // direct child of the root clip at the given depth. Used for things
 // like dropping the menu Panorama under the main menu buttons without

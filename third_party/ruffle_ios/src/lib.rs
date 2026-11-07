@@ -438,6 +438,38 @@ pub unsafe extern "C" fn ruffle_ios_set_root_child_transform_at_depth(
     if found { 1 } else { 0 }
 }
 
+/// Scale and move the scene's root clip itself, in stage pixels.
+/// Returns 1 if there was one, 0 if not, -1 on player lock failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_root_transform(
+    raw: *mut PlayerHandle,
+    scale_x: f32,
+    scale_y: f32,
+    tx: f32,
+    ty: f32,
+) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let found = p.set_root_transform(scale_x, scale_y, tx as f64, ty as f64);
+    if found { 1 } else { 0 }
+}
+
+/// Draw the root clip's child at a depth on past its left and right edges
+/// by the given stage pixels. Returns 1 if a child was there, 0 if not,
+/// -1 on player lock failure.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_root_child_edge_extend_at_depth(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+    left: f32,
+    right: f32,
+) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return 0; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let found = p.set_root_child_edge_extend_at_depth(depth, left as f64, right as f64);
+    if found { 1 } else { 0 }
+}
+
 /// Instantiate an AS3 class by name (looked up in the root movie's
 /// domain) and attach its resulting DisplayObject to the root clip at
 /// the specified depth. Used by the iOS host to add the menu panorama
