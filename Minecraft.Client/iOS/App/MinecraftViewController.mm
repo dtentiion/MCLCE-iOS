@@ -4027,6 +4027,14 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     MCLEGameTooltipsReset();
 }
 
+// UIScene_Keyboard's constructor, over the scene that navigated to it
+- (void)initKeyboardMenu {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    mcle_container_open_navigated();
+    MCLEContainerApplyOps();
+}
+
 // UIController::NavigateToScene from the scene that's up: the new scene's
 // movie takes the place of that one's
 - (void)containerNavigateTo:(NSString*)movie {
@@ -5068,6 +5076,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
             [self initCreativeMenu];
         } else if ([swfName isEqualToString:[NSString stringWithUTF8String:mcle_container_server_movie()]]) {
             [self initServerContainer];
+        } else if ([swfName isEqualToString:@"Keyboard1080.swf"]) {
+            [self initKeyboardMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
