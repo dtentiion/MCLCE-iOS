@@ -2,7 +2,7 @@
 # Patch upstream Minecraft.World source files to add iOS branches to
 # their platform-conditional chains. Without these, the chains fall
 # through to the Orbis (PS4) catch-all and pull in Sony NP / FIOS2
-# headers we do not have on iOS, plus leave platform enum values
+# headers iOS doesn't have, plus leave platform enum values
 # undefined.
 #
 # Files touched (per-file blocks below, all idempotent):
@@ -64,13 +64,13 @@ fi
 # full app build and pulls in ~30 Minecraft.Client/Common/*.h headers
 # (Consoles_App, GameNetworkManager, UIStructs, App_structs, ...) plus
 # their dependencies, each of which assumes a full Win32 / SCE / 4J
-# environment we are not trying to provide right now.
+# environment this port doesn't try to provide.
 #
-# Our force-included iOS_stdafx.h already provides the std headers and
+# The force-included iOS_stdafx.h already provides the std headers and
 # Win32 type aliases AABB.cpp / Vec3.cpp / similar low-level translation
 # units actually need. As the probe set grows and a file genuinely
-# needs something stdafx.h would have pulled in, we add it directly to
-# iOS_stdafx.h or include it from the file's own header.
+# needs something stdafx.h would have pulled in, it goes directly into
+# iOS_stdafx.h or is included from the file's own header.
 patch_stdafx_no_op() {
     local path="$1"
     local label="$2"
@@ -141,8 +141,8 @@ PY
 fi
 
 # Same treatment for Minecraft.Client/stdafx.h. It pulls Win32 / Xbox /
-# Sony platform headers per #ifdef chain; iOS has no branch so we skip
-# the whole body and rely on iOS_stdafx.h to provide what we need.
+# Sony platform headers per #ifdef chain; iOS has no branch, so the
+# whole body is skipped and iOS_stdafx.h provides what's needed.
 patch_stdafx_no_op "$CLIENT_STDAFX" "Minecraft.Client/stdafx.h"
 
 # FileHeader.h: enum ESavePlatform has a #if/#elif chain that picks one
@@ -152,17 +152,17 @@ patch_stdafx_no_op "$CLIENT_STDAFX" "Minecraft.Client/stdafx.h"
 # right before the closing `#endif` that maps it to PS4 (the Orbis
 # value). The save-file format is the same across console; the only
 # place the value matters is when reading saves that originated on
-# this device, and we are unlikely to ever ship a "save from iOS"
+# this device, and there's unlikely to ever be a "save from iOS"
 # format distinct from PS4 since LCE's save layer is platform-tagged
 # but format-shared.
 # ArrayWithLength.h has a `#include "ItemInstance.h"` near the bottom that
 # only exists to define ItemInstanceArray. ItemInstance.h transitively
 # pulls in com.mojang.nbt -> NbtIo -> CompoundTag -> ByteArrayTag -> Tag
 # -> InputOutputStream -> DataInput, which references PlayerUID and
-# System (the latter creating a circular include loop because we are
-# already in System.h's chain when we reach ByteArrayTag's inline body).
+# System (the latter creating a circular include loop because it's
+# already in System.h's chain when it reaches ByteArrayTag's inline body).
 # Skip the ItemInstance include on iOS - the probe set does not exercise
-# ItemInstance and we will land it as a separate piece later. Wrap with
+# ItemInstance, which can land as a separate piece later. Wrap with
 # a marker comment so grep can detect idempotency.
 if grep -q '__APPLE_IOS__' "$ARRWITHLEN"; then
     echo "patch-upstream-stdafx: ArrayWithLength.h already patched, skipping"
@@ -179,7 +179,7 @@ if needle not in src:
 
 # Wrap the ItemInstance include + its dependent typedef. The line right
 # after the include is `typedef arrayWithLength<shared_ptr<ItemInstance> > ItemInstanceArray;`
-# so we wrap both lines.
+# so both lines are wrapped.
 old = needle + '\ntypedef arrayWithLength<shared_ptr<ItemInstance> > ItemInstanceArray;'
 new = (
     '#ifndef __APPLE_IOS__  // probe skips ItemInstance to avoid NBT cascade\n'
@@ -225,7 +225,7 @@ if not m:
     sys.exit(f"patch-upstream-stdafx: Sony branch anchor not found in {path}")
 
 # Re-emit with iOS appended, preserving whatever whitespace style the
-# original had (we just append `|| defined(__APPLE_IOS__)`).
+# original had (it just appends `|| defined(__APPLE_IOS__)`).
 new_text = m.group(0) + ' || defined(__APPLE_IOS__)'
 patched = src[:m.start()] + new_text + src[m.end():]
 with open(path, 'w', encoding='utf-8', newline='\n') as f:
@@ -253,7 +253,7 @@ if needle in patched and (needle + ' || defined __APPLE_IOS__') not in patched:
     patched = patched.replace(needle, needle + ' || defined __APPLE_IOS__', 1)
 # Compress/Decompress chains pick zlib for the Win64/Orbis/Vita/Durango set
 # and fall through to XMemCompress/XMemDecompress in the #else. Route iOS
-# into the zlib arms so we don't need Microsoft's XMem* APIs.
+# into the zlib arms so Microsoft's XMem* APIs aren't needed.
 patterns = [
     # Compress/Decompress chains - bodies use zlib ::compress/::uncompress.
     '#if defined __ORBIS__ || defined _DURANGO || defined _WIN64 || defined __PSVITA__',
@@ -290,7 +290,7 @@ PY
 # CHUNK_SIZE = CHUNK_WIDTH * CHUNK_WIDTH * Level::DEPTH. Upstream's
 # Level.h has maxBuildHeight = 256 which is the world's vertical
 # resolution; alias DEPTH to that value so ZonedChunkStorage compiles
-# under parity (rather than us shimming Level::DEPTH out of band).
+# with upstream's own value (rather than shimming Level::DEPTH out of band).
 if grep -q '__APPLE_IOS__' "$LEVELH"; then
     echo "patch-upstream-stdafx: Level.h already patched, skipping"
 else
@@ -343,9 +343,9 @@ fi
 # RAD Miles `mss.h` for audio. iOS isn't covered, so it falls through to
 # the `#else // PS4` branch and pulls Orbis/Miles/include/mss.h, which
 # requires RAD platform macros (RADDEFSTART/RADDEFEND) that conflict
-# with our Iggy stub's RADLINK / RADEXPLINK guard logic. iOS uses
-# miniaudio (Common/Audio/SoundEngine.cpp) instead, so we want the
-# RAD Miles include to be skipped entirely on iOS. Insert an iOS branch
+# with the Iggy stub's RADLINK / RADEXPLINK guard logic. iOS uses
+# miniaudio (Common/Audio/SoundEngine.cpp) instead, so the
+# RAD Miles include is skipped entirely on iOS. Insert an iOS branch
 # before the `#else // PS4` arm that does nothing.
 if grep -q '__APPLE_IOS__' "$SNDENG"; then
     echo "patch-upstream-stdafx: Consoles_SoundEngine.h already patched, skipping"
@@ -456,7 +456,7 @@ fi
 
 # DirectoryLevelStorage.cpp uses std::to_wstring(PlayerUID) in two places
 # (lines 401, 450), which Sony/Xbox supplies but iOS doesn't. The Durango
-# (_DURANGO) branch right above uses xuid.toString() which is what we want.
+# (_DURANGO) branch right above uses xuid.toString(), which is what iOS needs.
 # Add __APPLE_IOS__ to those _DURANGO arms.
 DLSCPP="$REPO_ROOT/upstream/Minecraft.World/DirectoryLevelStorage.cpp"
 if grep -q '__APPLE_IOS__' "$DLSCPP"; then
@@ -760,8 +760,8 @@ PY
 fi
 
 # SpringTile.cpp uses Level::setTile which was renamed to setTileAndData
-# (extra args data + updateFlags). Pass (data=0, flags=3) for tile-update
-# parity with Level::setTile()'s historical default.
+# (extra args data + updateFlags). Pass (data=0, flags=3) so tile updates
+# match Level::setTile()'s historical default.
 SPT="$REPO_ROOT/upstream/Minecraft.World/SpringTile.cpp"
 if grep -q 'setTileAndData(' "$SPT"; then
     echo "patch-upstream-stdafx: SpringTile.cpp already patched, skipping"
@@ -824,7 +824,7 @@ fi
 
 # UIStructs.h's typedef _UIVec2D conflicts with the iOS_stdafx.h stub
 # (both define `typedef struct _UIVec2D { ... } UIVec2D;`). Gate the
-# upstream definition on the macro we set in iOS_stdafx.h.
+# upstream definition on the macro iOS_stdafx.h sets.
 UISC="$REPO_ROOT/upstream/Minecraft.Client/Common/UI/UIStructs.h"
 if grep -q '_UIVEC2D_DEFINED' "$UISC"; then
     echo "patch-upstream-stdafx: UIStructs.h already patched, skipping"
@@ -898,7 +898,7 @@ PY
 fi
 
 # GameMode.cpp uses level->setTile which became setTileAndData. Pass
-# (data=0, flags=3) for parity with the historical setTile() default.
+# (data=0, flags=3), the historical setTile() default.
 GMC="$REPO_ROOT/upstream/Minecraft.Client/GameMode.cpp"
 if [ -f "$GMC" ] && grep -q 'level->setTile(' "$GMC" && ! grep -q 'level->setTileAndData(' "$GMC"; then
 python3 - "$GMC" <<'PY'
@@ -964,7 +964,7 @@ fi
 # SoundEngine.h declares `class SoundEngine : public ConsoleSoundEngine`.
 # iOS_stdafx provides a stub `class SoundEngine` (no inheritance). Gate
 # the upstream header on _SOUNDENGINE_H_DEFINED so it skips its body if
-# our stub is in scope first.
+# the stub is in scope first.
 SEH="$REPO_ROOT/upstream/Minecraft.Client/Common/Audio/SoundEngine.h"
 if grep -q '_SOUNDENGINE_H_DEFINED' "$SEH"; then
     echo "patch-upstream-stdafx: SoundEngine.h already patched, skipping"
@@ -1243,20 +1243,20 @@ if needle in src:
 PY
 fi
 
-# F2/F3 diagnostic checkpoint patches retired now that the simulation
-# half (Phase F3) is landed and ticks run cleanly. The scripts still
+# The simulation checkpoint patches are retired now that the simulation
+# half is in and ticks run cleanly. The scripts still
 # live in scripts/ for archive reference but no longer mutate upstream.
 
-# G2c: bracket LevelRenderer::render path so each sideload pins the
+# Bracket the LevelRenderer::render path so each sideload pins the
 # upstream-renderer null deref. Includes an early `if (!mc) return 0;`
-# guard so the most common crash path (mc=nullptr we passed to ctor)
-# is sidestepped while we work on a real Minecraft instance.
+# guard so the most common crash path (mc=nullptr passed to the ctor)
+# is sidestepped until there's a real Minecraft instance.
 LRCK_PY="$REPO_ROOT/scripts/patch-levelrenderer-checkpoints.py"
 if [ -f "$LRCK_PY" ]; then
     python3 "$LRCK_PY"
 fi
 
-# G2d: expose Minecraft::m_instance so the MCLEGameLoop shim can set it
+# Expose Minecraft::m_instance so the MCLEGameLoop shim can set it
 # directly. Without the singleton wired, allChanged() returns through
 # Minecraft::GetInstance()->gameRenderer->DisableUpdateThread().
 MCI_PY="$REPO_ROOT/scripts/patch-minecraft-instance-public.py"
@@ -1264,7 +1264,7 @@ if [ -f "$MCI_PY" ]; then
     python3 "$MCI_PY"
 fi
 
-# G3e: expose LevelRenderer::level[4] + textures so we can attach
+# Expose LevelRenderer::level[4] + textures so the shim can attach
 # real Level + Textures shim to the renderer without setLevel's heavy
 # allChanged path.
 LRL_PY="$REPO_ROOT/scripts/patch-levelrenderer-level-public.py"
@@ -1272,40 +1272,40 @@ if [ -f "$LRL_PY" ]; then
     python3 "$LRL_PY"
 fi
 
-# G5-step16: expose resortChunks so we can re-center the render grid
+# Expose resortChunks so the shim can re-center the render grid
 # around the player after setLevel.
 LRR_PY="$REPO_ROOT/scripts/patch-levelrenderer-resortchunks-public.py"
 if [ -f "$LRR_PY" ]; then
     python3 "$LRR_PY"
 fi
 
-# G3e-step2: bracket renderSky / renderClouds / renderAdvancedClouds
+# Bracket renderSky / renderClouds / renderAdvancedClouds
 # with checkpoints so the next sideload pins which deref crashes.
 LRSKY_PY="$REPO_ROOT/scripts/patch-rendersky-checkpoints.py"
 if [ -f "$LRSKY_PY" ]; then
     python3 "$LRSKY_PY"
 fi
 
-# G3e-step5: line-by-line checkpoints inside Level::getSkyColor body so
-# we can pin which deref crashes when called from renderSky context.
+# Line-by-line checkpoints inside Level::getSkyColor body to
+# pin which deref crashes when called from renderSky context.
 GSC_PY="$REPO_ROOT/scripts/patch-getskycolor-checkpoints.py"
 if [ -f "$GSC_PY" ]; then
     python3 "$GSC_PY"
 fi
 
-# G5-step5: older UDC2_CKPT patch superseded by patch-updatedirty-ckpts.py
+# The older UDC2_CKPT patch is superseded by patch-updatedirty-ckpts.py
 # below. Disabled to avoid double-patching the same anchors.
 
-# G5-step14/15 CKPTs done - they pinned the 0x128 crash to
+# Earlier CKPTs are done - they pinned the 0x128 crash to
 # MinecraftServer::addPostProcessRequest's uninit critical section.
 # Fix landed via asyncPostProcess=false in MCLEGameLoop.cpp.
 
-# G5: chunk-rebuild / TileRenderer / LevelChunk-getBlockData /
+# The chunk-rebuild / TileRenderer / LevelChunk-getBlockData /
 # CompressedTileStorage CKPTs all served their purpose narrowing the
 # crash to the tesselate path; removed to free up os_log buffer so
 # any new crash signal isn't dropped by spam.
 
-# G5-step29: redirect Textures::bindTexture to the iOS CGImageSource
+# Redirect Textures::bindTexture to the iOS CGImageSource
 # PNG path. Upstream's body uses loadTexture which needs the real
 # texture pack pipeline not fully wired yet.
 TBT_PY="$REPO_ROOT/scripts/patch-textures-bindtexture-ios.py"
@@ -1412,8 +1412,8 @@ fi
 # state stubbed to no-ops). Letting upstream's own fancyGraphics branch
 # decide; with fancyGraphics=true that gives proper 3D cube clouds
 # tiling around the player instead of the simple flat sheet.
-# patch-renderclouds-force-simple.py kept on disk in case we need to
-# fall back, but no longer applied by default.
+# patch-renderclouds-force-simple.py kept on disk in case a
+# fallback is needed, but no longer applied by default.
 
 # LevelRenderer.h: expose starList/skyList/darkList/haloRingList/
 # cloudList as public. MCLEGameLoop reads them post-ctor to register
@@ -1425,22 +1425,22 @@ if [ -f "$LPL_PY" ]; then
 fi
 
 # LevelRenderer.cpp: skip the always-on darkList draw at the bottom
-# of renderSky. Chunks render after renderSky in our build so chunk
+# of renderSky. Chunks render after renderSky in this build so chunk
 # gaps showed the dome through them as blue jittery patches.
 RSD_PY="$REPO_ROOT/scripts/patch-rendersky-no-darklist-overworld.py"
 if [ -f "$RSD_PY" ]; then
     python3 "$RSD_PY"
 fi
 
-# ColourTable.h: expose the static name table publicly so our iOS shim
+# ColourTable.h: expose the static name table publicly so the iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
 if [ -f "$CTP_PY" ]; then
     python3 "$CTP_PY"
 fi
 
-# TileRenderer.cpp: one-shot diagnostic inside the grass-side overlay
-# second pass so we can see pBase / vertex color values when it fires.
+# TileRenderer.cpp: one-shot log inside the grass-side overlay
+# second pass showing pBase / vertex color values when it fires.
 GOL_PY="$REPO_ROOT/scripts/patch-grasside-overlay-log.py"
 if [ -f "$GOL_PY" ]; then
     python3 "$GOL_PY"
@@ -1462,14 +1462,14 @@ if [ -f "$TRN_PY" ]; then
 fi
 
 # LevelRenderer.cpp: clamp playerIndex to [0,3] after GetXboxPad.
-# Our ServerPlayer aliased into mc->player slot can return garbage
+# The ServerPlayer aliased into the mc->player slot can return garbage
 # from this call due to layout mismatch, causing intermittent OOB.
 LCP_PY="$REPO_ROOT/scripts/patch-levelrenderer-clamp-playerindex.py"
 if [ -f "$LCP_PY" ]; then
     python3 "$LCP_PY"
 fi
 
-# ServerChunkCache.cpp: one-shot SCC_CREATE log so we can see if the
+# ServerChunkCache.cpp: one-shot SCC_CREATE log to show whether the
 # on-demand chunk streaming path reaches cache->create.
 SCC_PY="$REPO_ROOT/scripts/patch-scc-create-checkpoint.py"
 if [ -f "$SCC_PY" ]; then
@@ -1478,13 +1478,13 @@ fi
 
 # PlayerChunkMap.cpp: force add() to queue all chunks (no synchronous
 # 14-ring load) so the initial player-registration doesn't blow up
-# on chunks the synchronous path can't handle in our build.
+# on chunks the synchronous path can't handle in this build.
 PCMA_PY="$REPO_ROOT/scripts/patch-playerchunkmap-add-async.py"
 if [ -f "$PCMA_PY" ]; then
     python3 "$PCMA_PY"
 fi
 
-# PlayerChunkMap.cpp: null-guard connection->send sites. Our local
+# PlayerChunkMap.cpp: null-guard connection->send sites. The local
 # player has no network connection, so the chunk-visibility packet
 # broadcasts in add/tick null-deref without this.
 PCMNC_PY="$REPO_ROOT/scripts/patch-playerchunkmap-null-connection.py"
@@ -1492,7 +1492,7 @@ if [ -f "$PCMNC_PY" ]; then
     python3 "$PCMNC_PY"
 fi
 
-# ServerChunkCache.cpp: per-phase log inside create() so we can see
+# ServerChunkCache.cpp: per-phase log inside create() to show
 # exactly which step crashes for the procgen crashes at coords
 # beyond r=3.
 SCCP_PY="$REPO_ROOT/scripts/patch-scc-create-phases.py"
@@ -1516,7 +1516,7 @@ if [ -f "$CTRD_PY" ]; then
 fi
 
 # ServerChunkCache.cpp: cap m_unloadedCache + LRU evict on iOS so
-# jetsam stops killing us after a few hundred streamed chunks. The
+# jetsam stops killing the app after a few hundred streamed chunks. The
 # Win64 path keeps every unloaded chunk pinned in memory which is
 # a perf win there and a memory leak here.
 SCEU_PY="$REPO_ROOT/scripts/patch-serverchunkcache-evict-unloaded.py"
