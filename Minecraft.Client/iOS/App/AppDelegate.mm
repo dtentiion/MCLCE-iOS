@@ -138,9 +138,8 @@ PlayerHandle* g_ruffle_player = NULL;
     return YES;
 }
 
-// Persist chunk data on iOS lifecycle events. Both are defined in
-// Game/MCLEGameLoop.cpp.
-extern "C" void mcle_save_now(void);
+// Persist chunk data on iOS lifecycle events, defined in
+// Game/MCLEGameLoop.cpp
 extern "C" void mcle_save_now_sync(void);
 
 - (void)applicationDidEnterBackground:(UIApplication*)application {

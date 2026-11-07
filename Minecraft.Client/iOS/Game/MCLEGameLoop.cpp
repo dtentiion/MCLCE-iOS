@@ -526,8 +526,9 @@ std::atomic<int>              g_loadStage{ 0 };
 std::atomic<int>              g_loadPercent{ 0 };
 std::atomic<bool>             g_renderReady{ false };
 pthread_t                     g_simThread{};
-// Auto-save flag - file-scope so the detached save thread can clear it.
-std::atomic<bool>             g_autoSaveInFlight{ false };
+// MinecraftServer::run's eXuiServerAction_SaveGame and AutoSaveGame for the
+// sim thread, which is the server's: 0 idle, 1 save, 2 autosave
+std::atomic<int>              g_serverSaveAction{ 0 };
 
 // The thread storage ServerThreadProc makes for the server thread, for a
 // thread here that saves or leaves the world, and what it lets go of when
@@ -557,7 +558,7 @@ static void mcle_world_thread_end() {
 // data doesn't overwrite the overworld's, the game rules, then the save
 // file goes to disc. Leaving also closes the level storage after the last
 // level (saveAllChunks) and unloads the rules before the flush.
-static void mcle_save_world(bool exiting) {
+static void mcle_save_world(bool exiting, bool autosave) {
     const auto start = std::chrono::steady_clock::now();
     // PlayerList::saveAll for the one player
     if (g_levelStorage) {
@@ -575,7 +576,7 @@ static void mcle_save_world(bool exiting) {
         if (!g_levels[i]) continue;
         const auto t0 = std::chrono::steady_clock::now();
         try {
-            g_levels[i]->save(true, nullptr);
+            g_levels[i]->save(true, nullptr, autosave);
             if (exiting && i == 0) g_levels[i]->closeLevelStorage();
         } catch (...) {
             MCLE_LOG("BG_SAVE: level[%d] threw", i);
@@ -599,7 +600,7 @@ static void mcle_save_world(bool exiting) {
             csf->closeHandle(fe);
         }
         if (exiting) app.m_gameRules.unloadCurrentGameRules();
-        try { g_levels[0]->saveToDisc(nullptr, false); }
+        try { g_levels[0]->saveToDisc(nullptr, autosave); }
         catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
     }
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -607,63 +608,44 @@ static void mcle_save_world(bool exiting) {
     MCLE_LOG("BG_SAVE: done took=%lldms", (long long)ms);
 }
 
-static void *mcle_save_now_thread(void *) {
-    mcle_world_thread_begin();
+// The sim thread's part of MinecraftServer::run: once a tick is done, paused
+// or not, a save that's been asked for is made before the next one, so
+// nothing changes while the world is written. Then the action is idle again.
+static void mcle_server_save_action() {
+    const int action = g_serverSaveAction.load(std::memory_order_acquire);
+    if (action == 0) return;
     {
         // Not while the world is being torn down
         std::lock_guard<std::mutex> life(g_worldLifeMutex);
-        if (g_initState == kStateTicking) {
-            MCLE_LOG("BG_SAVE: starting");
-            mcle_save_world(false);
-        } else {
-            MCLE_LOG("BG_SAVE: no world to save");
-        }
+        MCLE_LOG("BG_SAVE: starting autosave=%d", action == 2 ? 1 : 0);
+        try { mcle_save_world(false, action == 2); } catch (...) { MCLE_LOG("BG_SAVE: save threw"); }
     }
-    mcle_world_thread_end();
-    g_autoSaveInFlight.store(false, std::memory_order_release);
-    return nullptr;
+    g_serverSaveAction.store(0, std::memory_order_release);
 }
 
-// Detached variant - fire-and-forget, used by paths that cannot block
-// (eg the periodic auto-save in the sim loop, which historically
-// deadlocked when run inline).
-extern "C" void mcle_save_now(void) {
-    if (g_autoSaveInFlight.load(std::memory_order_acquire)) return;
-    bool expected = false;
-    if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) return;
-
-    pthread_t saveThread;
-    int rc = pthread_create(&saveThread, nullptr, &mcle_save_now_thread, nullptr);
-    if (rc == 0) {
-        pthread_detach(saveThread);
-    } else {
-        g_autoSaveInFlight.store(false, std::memory_order_release);
-        MCLE_LOG("BG_SAVE: pthread_create failed rc=%d", rc);
-    }
+// IUIScene_PauseMenu::SaveWorldThreadProc: SetXuiServerAction with
+// AutoSaveGame or SaveGame, for the server to save between its ticks. 0 if
+// there's no world or a save is already waiting.
+extern "C" int mcle_game_save(int autosave) {
+    if (g_initState != kStateTicking) return 0;
+    int expected = 0;
+    return g_serverSaveAction.compare_exchange_strong(expected, autosave ? 2 : 1) ? 1 : 0;
 }
 
-// Blocking variant - applicationDidEnterBackground calls this so it
-// can hold the iOS background task open until the save actually
-// finishes. Without this, the detached pthread above raced against
-// iOS suspension and never logged a "done" line.
+// SaveWorldThreadProc's wait: the server action is idle again, or the
+// server has stopped
+extern "C" int mcle_game_save_done(void) {
+    return (g_serverSaveAction.load(std::memory_order_acquire) == 0 || g_initState != kStateTicking) ? 1 : 0;
+}
+
+// applicationDidEnterBackground and applicationWillTerminate: the same save,
+// waited for so iOS doesn't suspend the app halfway through it. A save
+// already waiting or going is the one waited for.
 extern "C" void mcle_save_now_sync(void) {
-    // A save already going is the one this waits for, so the app isn't
-    // suspended halfway through it
-    bool expected = false;
-    if (!g_autoSaveInFlight.compare_exchange_strong(expected, true)) {
+    if (!mcle_game_save(0) && !mcle_game_save_done()) {
         MCLE_LOG("BG_SAVE: sync requested, waiting for the save in flight");
-        while (g_autoSaveInFlight.load(std::memory_order_acquire)) usleep(10 * 1000);
-        return;
     }
-
-    pthread_t saveThread;
-    int rc = pthread_create(&saveThread, nullptr, &mcle_save_now_thread, nullptr);
-    if (rc != 0) {
-        g_autoSaveInFlight.store(false, std::memory_order_release);
-        MCLE_LOG("BG_SAVE: sync pthread_create failed rc=%d", rc);
-        return;
-    }
-    pthread_join(saveThread, nullptr);
+    while (!mcle_game_save_done()) usleep(10 * 1000);
 }
 
 // Leak hunt: atomic counters bracketed around ctor/dtor of suspect
@@ -1870,13 +1852,15 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: tutorial threw");
     }
 
+    // MinecraftServer::loadLevel saves a newly created level straight away,
+    // before the server's first tick. saveToDisc looks at Minecraft's
+    // texture packs, which only exist from here.
+    if (g_loadIsNew) {
+        try { mcle_save_world(false, false); } catch (...) { MCLE_LOG("mcle_game_init: first save threw"); }
+    }
+
     g_loadPercent = 100;
     g_renderReady = true;
-
-    // MinecraftServer::loadLevel saves a newly created level straight away.
-    // saveToDisc looks at Minecraft's texture packs, which only exist from
-    // here, so the save goes now, the way an autosave does.
-    if (g_loadIsNew) mcle_save_now();
     MCLE_LOG("mcle_game_init: initImpl returning");
 }
 
@@ -3206,6 +3190,10 @@ extern "C" void mcle_game_tick(void) {
     // level code (Level::getCubes) reaches into the renderer.
     if (!g_renderReady.load(std::memory_order_acquire)) return;
 
+    // MinecraftServer::run's delayed actions, after the last tick and while
+    // paused too
+    mcle_server_save_action();
+
     // UIScene_SettingsGraphicsMenu sets options->viewDistance when the render
     // distance slider moves, and LevelRenderer::render's allChanged resizes
     // the area with the chunk update thread stopped. Here it's done with the
@@ -3646,7 +3634,7 @@ extern "C" void mcle_game_tick(void) {
                                  listBytes / (1024.0 * 1024.0),
                                  (unsigned long long)drawCount,
                                  loadedChunks, entityCount,
-                                 (int)g_autoSaveInFlight.load(std::memory_order_acquire),
+                                 (int)(g_serverSaveAction.load(std::memory_order_acquire) != 0),
                                  regionLive, regionTotal,
                                  trLive, trTotal,
                                  lcLive, lcTotal);
@@ -5003,7 +4991,7 @@ static void mcle_exit_world(bool save) {
     // stopServer: saveAll, saveAllChunks, the game rules and saveToDisc
     // when saving on exit
     if (save) {
-        try { mcle_save_world(true); } catch (...) { MCLE_LOG("EXIT_WORLD: save threw"); }
+        try { mcle_save_world(true, false); } catch (...) { MCLE_LOG("EXIT_WORLD: save threw"); }
     }
     // _ExitWorld unloads the game rules once the server has stopped
     app.m_gameRules.unloadCurrentGameRules();
@@ -5120,6 +5108,7 @@ static void mcle_exit_world(bool save) {
     g_gamePaused.store(false, std::memory_order_relaxed);
     g_playerDead.store(false, std::memory_order_relaxed);
     g_respawnRequested.store(false, std::memory_order_relaxed);
+    g_serverSaveAction.store(0);
     // Leaving from the death menu leaves no menu up for the next world
     g_menuDisplayed.store(false);
     g_menuToBeClosed = false;

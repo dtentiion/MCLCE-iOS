@@ -158,7 +158,7 @@ extern "C" void mcle_game_set_paused(int paused);   // MCLEGameLoop.cpp
 extern "C" int  mcle_player_is_dead(void);           // MCLEGameLoop.cpp
 extern "C" void mcle_game_respawn(void);             // MCLEGameLoop.cpp
 extern "C" int  mcle_world_game_time(long long *gameTime, int *dimension); // MCLEGameLoop.cpp
-extern "C" void mcle_save_now(void);                 // MCLEGameLoop.cpp
+extern "C" int  mcle_game_save(int autosave);        // MCLEGameLoop.cpp
 extern "C" void mcle_storage_set_save_folder(const char *folder); // MCLESaveList.cpp
 extern "C" void mcle_capture_save_thumbnail(void);   // MCLESaveList.cpp
 extern "C" void mcle_game_host_settings_changed(void); // MCLEGameLoop.cpp
@@ -5675,7 +5675,7 @@ static void MCLEConnectingHoldStart(void) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
-                MCLECaptureThumbnailThen(^{ mcle_save_now(); });
+                MCLECaptureThumbnailThen(^{ mcle_game_save(1); });
                 MCLESetAutosaveTimerTime();
             }
         }
@@ -6002,7 +6002,7 @@ static void MCLEConnectingHoldStart(void) {
                                                      buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
                                                   focusIndex:0
                                                     callback:^(MCLEDialogResult r) {
-                                    if (r == MCLEDialogResultDecline) MCLECaptureThumbnailThen(^{ mcle_save_now(); });
+                                    if (r == MCLEDialogResultDecline) MCLECaptureThumbnailThen(^{ mcle_game_save(0); });
                                 }];
                                 break;
                             case 5: [self requestExitGame]; break;
