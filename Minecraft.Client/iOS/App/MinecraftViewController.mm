@@ -257,6 +257,9 @@ static const int kTooltipsDepth    = 201;
 // UIComponent_TutorialPopup, on the popup layer over the scenes (the HUD
 // and the container menus)
 static const int kTutorialPopupDepth = 150;
+// UIComponent_PressStartToPlay, on the fullscreen group's tooltips layer
+// over everything else
+static const int kPressStartToPlayDepth = 202;
 
 // Weak-ish ref to the live VC so C-style ExternalInterface bridge
 // callbacks can reach instance methods (navigateBack,
@@ -1142,6 +1145,72 @@ static void MCLESetPathVisible(NSString* path, BOOL visible) {
     if (!g_ruffle_player) return;
     const char* pth = path.UTF8String;
     ruffle_ios_set_child_path_visible(g_ruffle_player, (const uint8_t*)pth, strlen(pth), visible ? 1 : 0);
+}
+
+// UIComponent_PressStartToPlay's controls: a call or setVisible on its movie
+static void MCLEPressStartCall(NSString* path, NSString* method, NSArray* args) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    size_t n = args.count;
+    std::vector<int> kinds(n);
+    std::vector<double> nums(n);
+    std::vector<const uint8_t*> strs(n);
+    std::vector<size_t> lens(n);
+    NSMutableArray* keep = [NSMutableArray array];
+    for (size_t i = 0; i < n; ++i) {
+        if ([args[i] isKindOfClass:[NSString class]]) {
+            NSData* d = [(NSString*)args[i] dataUsingEncoding:NSUTF8StringEncoding];
+            [keep addObject:d];
+            kinds[i] = 2;
+            strs[i] = (const uint8_t*)d.bytes;
+            lens[i] = d.length;
+        } else {
+            kinds[i] = 0;
+            nums[i] = [(NSNumber*)args[i] doubleValue];
+        }
+    }
+    const char* pth = path.UTF8String;
+    const char* m = method.UTF8String;
+    ruffle_ios_call_sibling_path(g_ruffle_player, kPressStartToPlayDepth, (const uint8_t*)pth, strlen(pth),
+                                 (const uint8_t*)m, strlen(m), kinds.data(), nums.data(), strs.data(), lens.data(), n);
+}
+
+static void MCLEPressStartVisible(NSString* path, BOOL visible) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    const char* pth = path.UTF8String;
+    ruffle_ios_set_sibling_path_visible(g_ruffle_player, kPressStartToPlayDepth, (const uint8_t*)pth, strlen(pth),
+                                        visible ? 1 : 0);
+}
+
+// UIComponent_PressStartToPlay constructor, once its movie is up
+static void MCLEPressStartToPlayInit(void) {
+    MCLEPressStartCall(@"", @"SetSafeZone", @[@(kSafeZoneTop), @(kSafeZoneBottom), @(kSafeZoneLeft), @(kSafeZoneRight)]);
+    MCLEPressStartCall(@"TrialTimer", @"Init", @[@""]);
+    MCLEPressStartVisible(@"TrialTimer", NO);
+    MCLEPressStartCall(@"MainPanel.PressStartLabel", @"Init", @[MCLEStr(IDS_PRESS_START_TO_JOIN)]);
+    MCLEPressStartVisible(@"SaveIcon", NO);
+    MCLEPressStartVisible(@"MainPanel", NO);
+    MCLEPressStartVisible(@"PlayerName", NO);
+}
+
+// UIController::ShowAutosaveCountdownTimer, the component's showTrialTimer
+static bool g_autosave_countdown_shown = false;
+static void MCLEShowAutosaveCountdownTimer(bool show) {
+    if (show == g_autosave_countdown_shown) return;
+    g_autosave_countdown_shown = show;
+    MCLEPressStartVisible(@"TrialTimer", show);
+}
+
+// UIController::UpdateAutosaveCountdownTimer: IDS_AUTOSAVE_COUNTDOWN with
+// the seconds, the component's setTrialTimer
+static void MCLEUpdateAutosaveCountdownTimer(unsigned int seconds) {
+    static int s_shown = -1;
+    if ((int)seconds == s_shown) return;
+    s_shown = (int)seconds;
+    NSString* text = [MCLEStr(IDS_AUTOSAVE_COUNTDOWN) stringByReplacingOccurrencesOfString:@"%d"
+                                                                               withString:@(seconds).stringValue];
+    MCLEPressStartCall(@"TrialTimer", @"SetLabel", @[text]);
 }
 
 // UIComponent_Panorama::tick: night once the loaded overworld is past 14000
@@ -2531,6 +2600,8 @@ static int MCLEPadIsPlayStation(void) {
             @[@"ToolTips1080.swf",     @(kTooltipsDepth),       @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
             // UIGroup's tutorial popup, hidden until the tutorial shows it
             @[@"TutorialPopup1080.swf", @(kTutorialPopupDepth), @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
+            // The fullscreen group's PressStartToPlay, with the autosave countdown
+            @[@"PressStartToPlay1080.swf", @(kPressStartToPlayDepth), @(1.0f), @(1.0f), @(0.0f), @(0.0f)],
         ];
         for (NSArray* entry in siblings) {
             NSString* swfName = entry[0];
@@ -2569,7 +2640,7 @@ static int MCLEPadIsPlayStation(void) {
         // UILayer::handleInput: components can't take input or focus.
         // The tooltips only get the presses AnimateKeyPress sends them.
         const int components[] = { -2, kLogoDepth, kMenuBackgroundDepth, kDimDepth,
-                                   kTooltipsDepth, kTutorialPopupDepth };
+                                   kTooltipsDepth, kTutorialPopupDepth, kPressStartToPlayDepth };
         for (int depth : components) ruffle_ios_set_sibling_takes_input(g_ruffle_player, depth, 0);
 
         // Tick the player a few frames so each sibling SWF's
@@ -2589,6 +2660,7 @@ static int MCLEPadIsPlayStation(void) {
         // UIComponent_TutorialPopup's constructor, now its movie is up
         mcle_tutorial_popup_movie_ready();
         MCLETutorialPopupApplyOps();
+        MCLEPressStartToPlayInit();
     }
 }
 
@@ -4999,6 +5071,8 @@ static void MCLEConnectingHoldStart(void) {
     if (!g_ruffle_player || g_exiting_world) return;
     if (!mcle_game_exit_world(save ? 1 : 0)) return;
     g_exiting_world = true;
+    // clear the autosave timer that might be on screen
+    MCLEShowAutosaveCountdownTimer(false);
     self.menuStack = nil;
     [self transitionToMenuNamed:@"FullscreenProgress1080.swf"];
     MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_EXITING_GAME)]);
@@ -5766,21 +5840,37 @@ static void MCLEConnectingHoldStart(void) {
                 MCLEProgressTipTick();
             }
         }
-        // Minecraft::run's autosave: not with the pause menu or a scene
-        // that ignores autosaves up (death, containers, a level change,
-        // the End poem, FullscreenProgress), and the timer starts again once
-        // the save has gone. The host and player options over the info menu
-        // have no reloadMovie to come back with, so it waits for them to go.
-        const bool infoUp = g_world_container && g_world_info &&
-                            [self.currentMenuSwf isEqualToString:@"InGameInfoMenu1080.swf"];
-        if (!g_world_paused && !g_world_dead && (!g_world_container || infoUp) && !g_world_connecting &&
-            !g_world_won && !g_world_saving) {
-            unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
-            if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
-                NSLog(@"[MinecraftVC] autosave");
-                __weak MinecraftViewController* weakSelf = self;
-                MCLECaptureThumbnailThen(^{ [weakSelf openSaveProgress:YES]; });
-                MCLESetAutosaveTimerTime();
+        // Minecraft::run's autosave, with no app action going (a level change,
+        // a thumbnail being taken): not with the pause menu or a scene that
+        // ignores autosaves up (death, containers, the End poem,
+        // FullscreenProgress), and the timer starts again once the save has
+        // gone. The last 5 seconds count down. The host and player options
+        // over the info menu have no reloadMovie to come back with, so it
+        // waits for them to go.
+        if (!g_world_connecting && !g_after_thumbnail) {
+            const bool infoUp = g_world_container && g_world_info &&
+                                [self.currentMenuSwf isEqualToString:@"InGameInfoMenu1080.swf"];
+            if (!g_world_paused && !g_world_dead && (!g_world_container || infoUp) && !g_world_won &&
+                !g_world_saving) {
+                unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
+                const CFTimeInterval now = CACurrentMediaTime();
+                if (autosave != 0 && now > g_autosave_due) {
+                    // disable the autosave countdown
+                    MCLEShowAutosaveCountdownTimer(false);
+                    NSLog(@"[MinecraftVC] autosave");
+                    __weak MinecraftViewController* weakSelf = self;
+                    MCLECaptureThumbnailThen(^{ [weakSelf openSaveProgress:YES]; });
+                    MCLESetAutosaveTimerTime();
+                } else if (autosave != 0) {
+                    const unsigned int secs = (unsigned int)(g_autosave_due - now);
+                    if (secs < 6) {
+                        MCLEShowAutosaveCountdownTimer(true);
+                        MCLEUpdateAutosaveCountdownTimer(secs);
+                    }
+                }
+            } else {
+                // disable the autosave countdown
+                MCLEShowAutosaveCountdownTimer(false);
             }
         }
         // Minecraft::tick shows the death menu once the player has died with
