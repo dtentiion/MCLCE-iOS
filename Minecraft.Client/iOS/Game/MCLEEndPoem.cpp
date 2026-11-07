@@ -115,8 +115,9 @@ extern "C" void mcle_end_poem_init(void) {
     noNoiseString = mcle_format_html_string(0, noNoiseString, 0xff000000);
 
     // The client player's display name is the profile's
+    // (Minecraft::setLevel and respawnPlayer set m_displayName from it)
     wstring playerName = L"";
-    playerName = escapeXML(ProfileManager.GetDisplayName(0));
+    playerName = escapeXML(ProfileManager.GetDisplayName(ProfileManager.GetPrimaryPad()));
     noNoiseString = replaceAll(noNoiseString, L"{*PLAYER*}", playerName);
 
     Random random(8124371);
