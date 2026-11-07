@@ -44,6 +44,8 @@ std::vector<std::string> g_tracks;
 std::vector<bool> g_heard;
 std::mutex g_mu;
 std::atomic<bool> g_shuffle_stop{false};
+// Bumped on stop so a wait for the next track from before is dropped
+std::atomic<unsigned> g_music_gen{0};
 
 // Live audio volumes sourced from MCLE_SETTING_MusicVolume /
 // _SoundFXVolume. 0..1 floats applied to ma_sound instances.
@@ -95,13 +97,20 @@ std::vector<std::string> findAllMenuTracks() {
 // Forward decl.
 void startRandomTrack();
 
-// miniaudio end-of-sound callback. Fires on the audio thread; we
-// defer the actual next-track selection to the main thread so we
-// don't do file I/O inside the callback.
+// miniaudio end-of-sound callback. Fires on the audio thread; the
+// next-track selection is deferred to the main thread so there's no
+// file I/O inside the callback.
+// SoundEngine::playMusicUpdate's eMusicStreamState_Completed: a random
+// delay of up to 3 minutes, nextInt(20 * 60 * 3) music ticks, before the
+// next track. The in-game engine counts them on the 20Hz game tick.
 void onSoundEnd(void* pUserData, ma_sound* pSound) {
     (void)pUserData; (void)pSound;
     if (g_shuffle_stop.load()) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
+    const unsigned gen = g_music_gen.load();
+    const int64_t delayTicks = arc4random_uniform(20 * 60 * 3);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayTicks * 50 * (int64_t)NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        if (g_music_gen.load() != gen) return;
         startRandomTrack();
     });
 }
@@ -318,6 +327,7 @@ extern "C" void mcle_audio_play_ui_sfx(const char* name, float volume, float pit
 
 extern "C" void mcle_audio_stop_menu_music(void) {
     g_shuffle_stop.store(true);
+    g_music_gen.fetch_add(1);
     {
         std::lock_guard<std::mutex> lk(g_mu);
         if (g_sound_loaded) {
