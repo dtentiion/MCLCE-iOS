@@ -102,8 +102,6 @@ static bool g_texture_pack_waiting_for_dlc = false;
 // UIScene_LaunchMoreOptionsMenu: m_tabIndex, 0 world options, 1 game options
 static int  g_more_options_tab = 0;
 static bool g_more_options_ignore_input = false;
-// InputManager.RequestKeyboard is up, the pad doesn't reach the menus
-static bool g_text_input_open = false;
 static void MCLEMoreOptionsTooltips(void);
 // UIScene_PauseMenu is up and the single player game is paused under it
 static bool g_world_paused = false;
@@ -3393,46 +3391,6 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
     }
 }
 
-// InputManager.RequestKeyboard: the system keyboard in an alert, cut to the
-// keyboard's character limit. done gets the text, or nil when cancelled.
-- (void)requestKeyboardWithTitle:(NSString*)title
-                            text:(NSString*)text
-                        maxChars:(int)maxChars
-                            done:(void (^)(NSString* text))done {
-    if (!self.view.window) {
-        done(nil);
-        return;
-    }
-    g_text_input_open = true;
-    UIAlertController* alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField* field) {
-        field.text = text;
-        field.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-    __weak UIAlertController* weakAlert = alert;
-    [alert addAction:[UIAlertAction actionWithTitle:MCLEStr(IDS_CONFIRM_CANCEL)
-                                              style:UIAlertActionStyleCancel
-                                            handler:^(UIAlertAction* action) {
-        g_text_input_open = false;
-        done(nil);
-    }]];
-    UIAlertAction* ok = [UIAlertAction actionWithTitle:MCLEStr(IDS_CONFIRM_OK)
-                                                 style:UIAlertActionStyleDefault
-                                               handler:^(UIAlertAction* action) {
-        g_text_input_open = false;
-        NSString* s = weakAlert.textFields.firstObject.text ?: @"";
-        if ((int)s.length > maxChars) {
-            s = [s substringToIndex:[s rangeOfComposedCharacterSequenceAtIndex:maxChars].location];
-        }
-        done(s);
-    }];
-    [alert addAction:ok];
-    alert.preferredAction = ok;
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
 // UIScene_CreateWorldMenu::KeyboardCompleteWorldNameCallback. The keyboard
 // has gone back but the menu's movie only reloads after, where the name's
 // label and the Create button come from m_worldName.
@@ -4309,11 +4267,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     extern PlayerHandle* g_ruffle_player;
     mcle_ios_pad_state pad = {};
     mcle_ios_input_poll(0, &pad);
-    // The system keyboard has the pad while it's up
-    if (!g_text_input_open) {
-        mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
-        self.lastPadButtons = pad.buttons;
-    }
+    mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+    self.lastPadButtons = pad.buttons;
     MCLEContainerApplyOps();
     if (mcle_container_close_requested()) {
         if (mcle_container_back_movie()) [self containerNavigateBack];
@@ -4323,16 +4278,6 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     if (const char* movie = mcle_container_take_navigate()) {
         [self containerNavigateTo:[NSString stringWithUTF8String:movie]];
         return;
-    }
-    std::wstring kbTitle, kbText;
-    int kbMaxChars = 0;
-    if (mcle_container_take_keyboard(&kbTitle, &kbText, &kbMaxChars)) {
-        [self requestKeyboardWithTitle:MCLEStringFromWide(kbTitle)
-                                  text:MCLEStringFromWide(kbText)
-                              maxChars:kbMaxChars
-                                  done:^(NSString* text) {
-            mcle_container_keyboard_done(text != nil, text ? MCLEWideString(text) : std::wstring());
-        }];
     }
     int tips[11];
     mcle_container_tooltips(tips);
@@ -5568,8 +5513,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
                 { 0x00800000u, 12 },  // LT    -> LeftTrigger2
                 { 0x00400000u, 13 },  // RT    -> RightTrigger2
             };
-            // The scene's m_bIgnoreInput while the keyboard is up: nothing changes
-            uint32_t now = g_text_input_open ? self.lastPadButtons : pad.buttons;
+            uint32_t now = pad.buttons;
             uint32_t prev = self.lastPadButtons;
             uint32_t changed = now ^ prev;
             for (size_t i = 0; i < sizeof(btnMap)/sizeof(btnMap[0]); ++i) {

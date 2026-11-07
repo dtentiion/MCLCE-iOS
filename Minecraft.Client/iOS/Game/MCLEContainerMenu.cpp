@@ -55,11 +55,6 @@ bool g_tooltipShown[eToolTipNumButtons];
 
 bool g_closeRequested = false;
 
-// A keyboard the scene asked for and the view controller hasn't put up
-bool g_keyboardRequested = false;
-std::wstring g_keyboardTitle, g_keyboardText;
-int g_keyboardMaxChars = 0;
-
 MCLEContainerScene *g_scene = nullptr;
 
 // UILayer's scene stack under the scene that's up, what a navigateBack
@@ -221,13 +216,6 @@ void mcle_ui_send_input(int key, bool pressed) {
 
 void mcle_ui_set_visible(const std::string &path, bool visible) {
     g_ops.push_back(MCLEUIOp{MCLEUIOp::Visible, path, std::string(), {mcle_ui_bool(visible)}});
-}
-
-void mcle_ui_request_keyboard(const std::wstring &title, const std::wstring &text, int maxChars) {
-    g_keyboardRequested = true;
-    g_keyboardTitle = title;
-    g_keyboardText = text;
-    g_keyboardMaxChars = maxChars;
 }
 
 MCLEContainerUI mcleContainerUI;
@@ -398,7 +386,6 @@ void mcle_container_prepare() {
     resetTooltips();
     g_closeRequested = false;
     g_closeAll = false;
-    g_keyboardRequested = false;
 }
 
 void mcle_container_begin(MCLEContainerScene *scene) {
@@ -729,7 +716,6 @@ void destroyScene(MCLEContainerScene *scene) {
 
 // Nothing the last scene had going carries over to the next
 void resetSceneState() {
-    g_keyboardRequested = false;
     resetTooltips();
     for (double &t : g_repeatTimer) t = 0;
 }
@@ -918,21 +904,6 @@ bool mcle_container_pointer(float *x, float *y) {
 
 bool mcle_container_close_requested() {
     return g_scene != nullptr && g_closeRequested;
-}
-
-bool mcle_container_take_keyboard(std::wstring *title, std::wstring *text, int *maxChars) {
-    if (!g_scene || !g_keyboardRequested) return false;
-    g_keyboardRequested = false;
-    *title = g_keyboardTitle;
-    *text = g_keyboardText;
-    *maxChars = g_keyboardMaxChars;
-    return true;
-}
-
-void mcle_container_keyboard_done(bool ok, const std::wstring &text) {
-    if (!g_scene) return;
-    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
-    g_scene->keyboardComplete(ok, text);
 }
 
 void mcle_container_close() {

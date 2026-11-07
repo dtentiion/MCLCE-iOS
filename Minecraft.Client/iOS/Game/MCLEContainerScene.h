@@ -43,9 +43,6 @@ public:
     virtual void snapshot() {}
     virtual void customDraw(const MCLECustomDrawRegion &region) = 0;
 
-    // The callback a scene gave InputManager.RequestKeyboard
-    virtual void keyboardComplete(bool ok, const std::wstring &text) {}
-
     // UIScene::slideLeft / slideRight, the tutorial popup moving the menu
     // out of its way
     virtual void slideLeft();
@@ -115,9 +112,6 @@ void mcle_ui_key(int iggyKeyCode, bool down);
 void mcle_ui_send_input(int key, bool pressed);
 // UIControl::setVisible on a value path
 void mcle_ui_set_visible(const std::string &path, bool visible);
-// InputManager.RequestKeyboard: the system keyboard, answered through the
-// scene's keyboardComplete
-void mcle_ui_request_keyboard(const std::wstring &title, const std::wstring &text, int maxChars);
 
 // The UIController calls the scene logic makes
 struct MCLEContainerUI {

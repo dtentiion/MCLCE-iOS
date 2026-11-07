@@ -147,11 +147,6 @@ const char *mcle_container_back_movie();
 void mcle_container_navigate_back();
 void mcle_container_reload();
 
-// The keyboard a scene asked for, taken once; then its answer, ok false
-// when it was cancelled
-bool mcle_container_take_keyboard(std::wstring *title, std::wstring *text, int *maxChars);
-void mcle_container_keyboard_done(bool ok, const std::wstring &text);
-
 // The scenes' handleDestroy, the one that's up and any under it
 void mcle_container_close();
 
