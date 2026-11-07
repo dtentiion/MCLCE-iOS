@@ -371,7 +371,7 @@ void mcle_tutorial_local_player_packet(std::shared_ptr<Packet> packet);   // Gam
 void mcle_player_entity_link(int type, int sourceId, int destId);   // Game/MCLEPlayerInput.cpp
 void mcle_container_custom_payload(const std::wstring &identifier, byteArray data);   // Game/MCLETradingMenu.cpp
 void mcle_local_player_respawn_packet(int dimension);   // Game/MCLEGameLoop.cpp
-void mcle_local_player_win_game();   // Game/MCLEGameLoop.cpp
+void mcle_client_game_event(std::shared_ptr<GameEventPacket> packet);   // Game/MCLEClientEffects.cpp
 void mcle_sign_entry_tile_editor_open(int editorType, int x, int y, int z);   // Game/MCLESignEntryMenu.cpp
 void mcle_client_player_info(std::shared_ptr<PlayerInfoPacket> packet);   // Game/MCLEPlayerInfo.cpp
 void mcle_client_server_settings_changed(std::shared_ptr<ServerSettingsChangedPacket> packet);   // Game/MCLEPlayerInfo.cpp
@@ -393,7 +393,7 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
     } else if (std::shared_ptr<RespawnPacket> respawn = std::dynamic_pointer_cast<RespawnPacket>(packet)) {
         mcle_local_player_respawn_packet(respawn->dimension);
     } else if (std::shared_ptr<GameEventPacket> event = std::dynamic_pointer_cast<GameEventPacket>(packet)) {
-        if (event->_event == GameEventPacket::WIN_GAME) mcle_local_player_win_game();
+        mcle_client_game_event(event);
     } else if (std::shared_ptr<CustomPayloadPacket> payload = std::dynamic_pointer_cast<CustomPayloadPacket>(packet)) {
         mcle_container_custom_payload(payload->identifier, payload->data);
     } else if (std::shared_ptr<TileEditorOpenPacket> editor = std::dynamic_pointer_cast<TileEditorOpenPacket>(packet)) {

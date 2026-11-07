@@ -21,6 +21,7 @@ set(MCLE_GAME_SOURCES
   MCLECredits.cpp
   MCLEEndPoem.cpp
   MCLEPortal.cpp
+  MCLEClientEffects.cpp
   MCLEJoypadMaps.cpp
   MCLEControls.cpp
   MCLEHowToPlay.cpp
