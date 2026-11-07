@@ -581,14 +581,39 @@ static void MCLECreditsInit(void) {
     }
 }
 
+// How much a 1920x1080 movie, all of TU19's 16:9 screen, grows about the
+// centre to cover a screen of another shape
+static float MCLEMovieCoverScale(CGSize view) {
+    if (view.width <= 0 || view.height <= 0) return 1.0f;
+    const float movieAspect = 1920.0f / 1080.0f;
+    const float aspect = (float)(view.width / view.height);
+    return std::max(aspect / movieAspect, movieAspect / aspect);
+}
+
+// How far a wider screen goes past each side of the 16:9 stage, in stage
+// pixels
+static float MCLEStageSideOverhang(CGSize view) {
+    if (view.width <= 0 || view.height <= 0) return 0.0f;
+    const float stageWidth = 1080.0f * (float)(view.width / view.height);
+    return std::max(0.0f, (stageWidth - 1920.0f) * 0.5f);
+}
+
+// Strips the movie runs from one side of its stage to the other go on to
+// the sides of a wider screen
+static void MCLEExtendStripsToScreen(PlayerHandle* player, CGSize view, const int* depths, int count) {
+    const float side = MCLEStageSideOverhang(view);
+    if (!player || side <= 0.0f) return;
+    for (int i = 0; i < count; ++i) {
+        ruffle_ios_set_root_child_edge_extend_at_depth(player, depths[i], side + 1.0f, side + 1.0f);
+    }
+}
+
 // CreditBackground fills the 1920x1080 movie, all of TU19's 16:9 screen.
 // It's grown about the centre to fill a wider screen too, so nothing
 // shows around it.
 static void MCLECreditsCoverScreen(PlayerHandle* player, CGSize view) {
     if (!player || view.width <= 0 || view.height <= 0) return;
-    const float movieAspect = 1920.0f / 1080.0f;
-    const float aspect = (float)(view.width / view.height);
-    const float s = std::max(aspect / movieAspect, movieAspect / aspect);
+    const float s = MCLEMovieCoverScale(view);
     ruffle_ios_set_root_child_transform_at_depth(player, 1, s, s,
         960.0f * (1.0f - s), 540.0f * (1.0f - s));
 }
@@ -4957,6 +4982,12 @@ static void MCLEConnectingHoldStart(void) {
     g_endpoem_ignore_input = false;
     mcle_end_poem_init();
     g_endpoem_requested = 0;
+    // The poem's dirt and shadow fill the whole 1920x1080 movie, all of
+    // TU19's 16:9 screen, and the text scrolls up its middle. Like the
+    // credits background it's grown about the centre to fill a wider
+    // screen, so the game doesn't show at the sides.
+    const float s = MCLEMovieCoverScale(self.view.bounds.size);
+    ruffle_ios_set_root_transform(g_ruffle_player, s, s, 960.0f * (1.0f - s), 540.0f * (1.0f - s));
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
