@@ -234,6 +234,47 @@ struct McleAppStub {
         default: break;
         }
     }
+    // CMinecraftApp::UpdatePlayerInfo, GetPlayerColour and GetPlayerPrivileges:
+    // what the client's PlayerInfoPackets said about each player, by colour
+    // index (the QNet small id there and its privileges)
+    BYTE m_playerColours[MINECRAFT_NET_MAX_PLAYERS] = {};
+    unsigned int m_playerGamePrivileges[MINECRAFT_NET_MAX_PLAYERS] = {};
+
+    void UpdatePlayerInfo(BYTE networkSmallId, SHORT playerColourIndex, unsigned int playerGamePrivileges) {
+        for (unsigned int i = 0; i < MINECRAFT_NET_MAX_PLAYERS; ++i) {
+            if (m_playerColours[i] == networkSmallId) {
+                m_playerColours[i] = 0;
+                m_playerGamePrivileges[i] = 0;
+            }
+        }
+        if (playerColourIndex >= 0 && playerColourIndex < MINECRAFT_NET_MAX_PLAYERS) {
+            m_playerColours[playerColourIndex] = networkSmallId;
+            m_playerGamePrivileges[playerColourIndex] = playerGamePrivileges;
+        }
+    }
+
+    short GetPlayerColour(BYTE networkSmallId) {
+        short index = -1;
+        for (unsigned int i = 0; i < MINECRAFT_NET_MAX_PLAYERS; ++i) {
+            if (m_playerColours[i] == networkSmallId) {
+                index = i;
+                break;
+            }
+        }
+        return index;
+    }
+
+    unsigned int GetPlayerPrivileges(BYTE networkSmallId) {
+        unsigned int privileges = 0;
+        for (unsigned int i = 0; i < MINECRAFT_NET_MAX_PLAYERS; ++i) {
+            if (m_playerColours[i] == networkSmallId) {
+                privileges = m_playerGamePrivileges[i];
+                break;
+            }
+        }
+        return privileges;
+    }
+
     template<class... A> int            GetGameNewHellScale(A...) { return 1; }
     template<class... A> int            GetGameNewWorldSize(A...) { return 0; }
     template<class... A> bool           GetGameNewWorldSizeUseMoat(A...) { return false; }
