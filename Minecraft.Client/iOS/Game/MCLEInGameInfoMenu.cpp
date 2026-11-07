@@ -306,11 +306,238 @@ private:
     MCLEUIControl m_buttonTeleportToPlayer, m_buttonTeleportToMe;
 };
 
+// PlayerConnection::handlePlayerInfo for the host's own PlayerInfoPacket,
+// with a connection standing in for the game mode packet it can send
+void sendHostPlayerInfo(unsigned int playerPrivileges) {
+    std::shared_ptr<ServerPlayer> player = mcle_local_player();
+    mcle_run_with_stand_in_connection(player, [](void *privileges) {
+        mcle_tutorial_player_info(*static_cast<unsigned int *>(privileges));
+    }, &playerPrivileges);
+}
+
+// UIScene_InGamePlayerOptionsMenu
+class PlayerOptionsScene : public InGameMenuScene {
+    enum EControls {
+        // Checkboxes
+        eControl_BuildAndMine,
+        eControl_UseDoorsAndSwitches,
+        eControl_UseContainers,
+        eControl_AttackPlayers,
+        eControl_AttackAnimals,
+        eControl_Op,
+        eControl_CheatTeleport,
+        eControl_HostFly,
+        eControl_HostHunger,
+        eControl_HostInvisible,
+
+        eControl_CHECKBOXES_COUNT,
+
+        // Others
+        eControl_Kick = eControl_CHECKBOXES_COUNT,
+    };
+
+public:
+    explicit PlayerOptionsScene(const PlayerOptionsInitData &initData)
+        : m_labelGamertag("Gamertag"),
+          m_checkboxes{MCLEUICheckBox("CheckboxBuildAndMine"), MCLEUICheckBox("CheckboxUseDoorsAndSwitches"),
+                       MCLEUICheckBox("CheckboxUseContainers"), MCLEUICheckBox("CheckboxAttackPlayers"),
+                       MCLEUICheckBox("CheckboxAttackAnimals"), MCLEUICheckBox("CheckboxOp"),
+                       MCLEUICheckBox("CheckboxTeleport"), MCLEUICheckBox("CheckboxHostFly"),
+                       MCLEUICheckBox("CheckboxHostHunger"), MCLEUICheckBox("CheckboxHostInvisible")},
+          m_buttonKick("ButtonKick") {
+        m_iPad = initData.iPad;
+
+        m_bShouldNavBack = false;
+
+        m_networkSmallId = initData.networkSmallId;
+        m_playerPrivileges = initData.playerPrivileges;
+
+        HostNetworkPlayer *localPlayer = g_network.GetLocalPlayerByUserIndex(m_iPad);
+        HostNetworkPlayer *editingPlayer = g_network.GetPlayerBySmallId(m_networkSmallId);
+
+        if (editingPlayer != nullptr) {
+            m_labelGamertag.init(editingPlayer->GetDisplayName());
+        }
+
+        bool trustPlayers = app.GetGameHostOption(eGameHostOption_TrustPlayers) != 0;
+        bool cheats = app.GetGameHostOption(eGameHostOption_CheatsEnabled) != 0;
+        m_editingSelf = (localPlayer != nullptr && localPlayer == editingPlayer);
+
+        if (m_editingSelf || trustPlayers || (editingPlayer != nullptr && editingPlayer->IsHost())) {
+            removeControl(&m_checkboxes[eControl_BuildAndMine], true);
+            removeControl(&m_checkboxes[eControl_UseDoorsAndSwitches], true);
+            removeControl(&m_checkboxes[eControl_UseContainers], true);
+            removeControl(&m_checkboxes[eControl_AttackPlayers], true);
+            removeControl(&m_checkboxes[eControl_AttackAnimals], true);
+        }
+        // else the trust checkboxes for another player; only the host is here
+
+        if (m_editingSelf) {
+            // Not a _DEBUG build, so no creative mode box in Op's place
+            removeControl(&m_checkboxes[eControl_Op], true);
+
+            removeControl(m_buttonKick.path, true);
+            removeControl(&m_checkboxes[eControl_CheatTeleport], true);
+
+            if (cheats) {
+                bool canBeInvisible =
+                    Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CanToggleInvisible) != 0;
+                m_checkboxes[eControl_HostInvisible].SetEnable(canBeInvisible);
+                bool checked = canBeInvisible &&
+                               (Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_Invisible) != 0 &&
+                                Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_Invulnerable) != 0);
+                m_checkboxes[eControl_HostInvisible].init(app.GetString(IDS_INVISIBLE), eControl_HostInvisible, checked);
+
+                bool inCreativeMode =
+                    Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CreativeMode) != 0;
+                if (inCreativeMode) {
+                    removeControl(&m_checkboxes[eControl_HostFly], true);
+                    removeControl(&m_checkboxes[eControl_HostHunger], true);
+                } else {
+                    bool canFly = Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CanToggleFly);
+                    bool canChangeHunger =
+                        Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CanToggleClassicHunger);
+
+                    m_checkboxes[eControl_HostFly].SetEnable(canFly);
+                    checked = canFly && Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CanFly) != 0;
+                    m_checkboxes[eControl_HostFly].init(app.GetString(IDS_CAN_FLY), eControl_HostFly, checked);
+
+                    m_checkboxes[eControl_HostHunger].SetEnable(canChangeHunger);
+                    checked = canChangeHunger &&
+                              Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_ClassicHunger) != 0;
+                    m_checkboxes[eControl_HostHunger].init(app.GetString(IDS_DISABLE_EXHAUSTION), eControl_HostHunger,
+                                                           checked);
+                }
+            } else {
+                removeControl(&m_checkboxes[eControl_HostInvisible], true);
+                removeControl(&m_checkboxes[eControl_HostFly], true);
+                removeControl(&m_checkboxes[eControl_HostHunger], true);
+            }
+        }
+        // else the moderator, cheat and kick options the host has for another
+        // player
+
+        short colourIndex = app.GetPlayerColour(m_networkSmallId);
+        mcle_ui_call("", "SetPlayerIcon", {mcle_ui_num(colourIndex)});
+
+        m_bModeratorState = m_checkboxes[eControl_Op].IsChecked();
+
+        resetCheatCheckboxes();
+
+        // addTimer(CHECKBOXES_TIMER_ID) only follows the moderator box, and
+        // RegisterPlayerChangedCallback the player leaving; editing yourself
+        // in an offline game neither happens
+
+        gainFocus();
+    }
+
+    const char *movieName() override { return "InGamePlayerOptions1080.swf"; }
+
+    void handleInput(int key, bool repeat, bool pressed, bool released) override {
+        mcleContainerUI.AnimateKeyPress(m_iPad, key, repeat, pressed, released);
+        switch (key) {
+        case ACTION_MENU_CANCEL:
+            if (pressed) {
+                bool cheats = app.GetGameHostOption(eGameHostOption_CheatsEnabled) != 0;
+                if (m_editingSelf) {
+                    // Not a _DEBUG build, so the creative mode privilege stays
+                    if (cheats) {
+                        bool canBeInvisible = Player::getPlayerGamePrivilege(
+                                                  m_playerPrivileges, Player::ePlayerGamePrivilege_CanToggleInvisible) != 0;
+                        if (canBeInvisible)
+                            Player::setPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_Invisible,
+                                                           m_checkboxes[eControl_HostInvisible].IsChecked());
+                        if (canBeInvisible)
+                            Player::setPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_Invulnerable,
+                                                           m_checkboxes[eControl_HostInvisible].IsChecked());
+
+                        bool inCreativeMode = Player::getPlayerGamePrivilege(
+                                                  m_playerPrivileges, Player::ePlayerGamePrivilege_CreativeMode) != 0;
+                        if (!inCreativeMode) {
+                            bool canFly =
+                                Player::getPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CanToggleFly);
+                            bool canChangeHunger = Player::getPlayerGamePrivilege(
+                                m_playerPrivileges, Player::ePlayerGamePrivilege_CanToggleClassicHunger);
+
+                            if (canFly)
+                                Player::setPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_CanFly,
+                                                               m_checkboxes[eControl_HostFly].IsChecked());
+                            if (canChangeHunger)
+                                Player::setPlayerGamePrivilege(m_playerPrivileges, Player::ePlayerGamePrivilege_ClassicHunger,
+                                                               m_checkboxes[eControl_HostHunger].IsChecked());
+                        }
+                    }
+                }
+                // else what the host set for another player
+
+                unsigned int originalPrivileges = app.GetPlayerPrivileges(m_networkSmallId);
+                if (originalPrivileges != m_playerPrivileges) {
+                    // Send update settings packet to server, this same game
+                    sendHostPlayerInfo(m_playerPrivileges);
+                }
+                navigateBack();
+            }
+            break;
+        case ACTION_MENU_OK:
+        case ACTION_MENU_UP:
+        case ACTION_MENU_DOWN:
+            sendInputToMovie(key, repeat, pressed, released);
+            break;
+        }
+    }
+
+    // InGamePlayerOptions1080 calls handleCheckboxToggled with what the
+    // box is now, which IsChecked reads back. Only the moderator box does
+    // more, through the timer.
+    void handleCheckboxToggled(int controlId, bool selected) override {
+        // A box the movie hasn't had Init for yet has no id
+        if (controlId < 0 || controlId >= eControl_CHECKBOXES_COUNT) return;
+        MCLEUICheckBox &box = m_checkboxes[controlId];
+        if (!box.removed && box.id == controlId) box.movieToggled(selected);
+    }
+
+    // handlePress is the kick button's, which isn't there editing yourself
+
+protected:
+    void updateTooltips() override { mcleContainerUI.SetTooltips(m_iPad, IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK); }
+
+private:
+    // 4J-JEV: For enabling/disabling 'Can Fly', 'Can Teleport', 'Can Disable Hunger' etc
+    // used after changing the moderator checkbox.
+    void resetCheatCheckboxes() {
+        bool isModerator = m_checkboxes[eControl_Op].IsChecked();
+
+        if (!m_editingSelf) {
+            m_checkboxes[eControl_HostInvisible].SetEnable(isModerator);
+            m_checkboxes[eControl_HostFly].SetEnable(isModerator);
+            m_checkboxes[eControl_HostHunger].SetEnable(isModerator);
+            m_checkboxes[eControl_CheatTeleport].SetEnable(isModerator);
+        }
+    }
+
+    bool m_bShouldNavBack = false;
+    bool m_editingSelf = false;
+    BYTE m_networkSmallId = 0;
+    unsigned int m_playerPrivileges = 0;
+    bool m_bModeratorState = false;
+
+    MCLEUILabel m_labelGamertag;
+    MCLEUICheckBox m_checkboxes[eControl_CHECKBOXES_COUNT];
+    MCLEUIControl m_buttonKick;
+};
+
 // ui.NavigateToScene(m_iPad, eUIScene_InGameHostOptionsMenu)
 void navigateToHostOptions(int iPad) {
     mcle_container_navigate_to(
         "InGameHostOptions1080.swf", [iPad]() -> MCLEContainerScene * { return new HostOptionsScene(iPad); },
         nullptr);
+}
+
+// ui.NavigateToScene(m_iPad, eUIScene_InGamePlayerOptionsMenu, pInitData)
+void navigateToPlayerOptions(const PlayerOptionsInitData &initData) {
+    mcle_container_navigate_to(
+        "InGamePlayerOptions1080.swf",
+        [initData]() -> MCLEContainerScene * { return new PlayerOptionsScene(initData); }, nullptr);
 }
 
 } // namespace
