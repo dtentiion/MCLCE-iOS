@@ -1,7 +1,7 @@
 // Compile-only stub for the upstream global `CMinecraftApp app`.
 // Real CMinecraftApp lives in Minecraft.Client/Common/Consoles_App.h
 // and brings in ~half the Minecraft.Client tree. For the world-probe
-// we only need every `app.X(...)` call site to typecheck. Method
+// every `app.X(...)` call site only needs to typecheck. Method
 // bodies are no-ops returning sensible defaults.
 //
 // As probe coverage expands, add methods here in alphabetical order
@@ -66,7 +66,7 @@ struct McleAppStub {
 
     // Direct fields upstream uses without parens.
     // Real Consoles_App.h:79 has `DLCManager m_dlcManager;` (by value).
-    // Player.cpp does `app.m_dlcManager.getSkinFile(...)` so we need the
+    // Player.cpp does `app.m_dlcManager.getSkinFile(...)` so it needs the
     // real DLCManager type, complete. iOS_stdafx.h pre-includes
     // DLCFile.h -> DLCManager.h before this header so the type is
     // visible.
@@ -152,7 +152,7 @@ struct McleAppStub {
     // Real upstream has two overloads:
     //   GAME_SETTINGS* GetGameSettings(int pad)
     //   int            GetGameSettings(int pad, int settingId)   <-- Input.cpp uses this
-    // Our stub now provides both so static_cast<float>(GetGameSettings(p,s))
+    // The stub provides both so static_cast<float>(GetGameSettings(p,s))
     // resolves to int->float instead of pointer->float.
     GAME_SETTINGS *GetGameSettings(int /*pad*/)               { return nullptr; }
     // The iOS settings store (MCLE_iOS_Settings.mm) keeps the eGameSetting
@@ -697,7 +697,7 @@ struct McleAppStub {
 };
 
 // Real upstream defines `CMinecraftApp app;` as a global instance of
-// CMinecraftApp. We provide a global stub instance that all upstream
+// CMinecraftApp. This is a global stub instance that all upstream
 // `app.X(...)` calls bind to. Inline so each TU gets its own; static
 // link is not needed since the world-probe is a syntax-only build.
 inline McleAppStub app;

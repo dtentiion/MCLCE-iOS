@@ -8,7 +8,7 @@
 #include "iOS_WinCompat.h"
 
 #ifdef __cplusplus
-// F3-real-input bridge into the iOS GameController.framework reader.
+// Bridge into the iOS GameController.framework reader.
 // Defined in Input/INP_iOS_Bridge.cpp.
 extern "C" int  mcle_ios_input_poll_lx(int pad);
 extern "C" int  mcle_ios_input_poll_ly(int pad);
@@ -83,7 +83,7 @@ public:
         return (buttons & GetGameJoypadMaps(GetJoypadMapVal(0), action)) != 0 ? 1 : 0;
     }
 
-    // F3-real-input: sticks. Return values are 0..1000 in upstream's
+    // Sticks. Return values are 0..1000 in upstream's
     // 4J convention (signed for sticks, unsigned for triggers). The
     // INP_iOS_Bridge converts -1..1 floats into this range.
     inline float GetJoypadStick_LX(int pad)             { return mcle_ios_input_poll_lx(pad) / 1000.0f; }

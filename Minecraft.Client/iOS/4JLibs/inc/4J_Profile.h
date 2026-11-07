@@ -15,7 +15,7 @@
 #include <cwchar>
 
 // Opaque player identity stub. Other platforms back this with platform-
-// specific identity (Sony NP, Xbox Live, etc). For iOS we have no online
+// specific identity (Sony NP, Xbox Live, etc). iOS has no online
 // identity yet, so PlayerUID is a fixed-size byte buffer that satisfies
 // the type usage in DataInput / DataOutput / Connection / save formats.
 // Layout chosen to be wide enough to hold any platform's identity at
@@ -90,7 +90,7 @@ namespace std {
 
 // 4J profile / pad-routing manager. Other platforms expose a real
 // C_4JProfile that owns per-pad user identity (Xbox Live signin, NP
-// authoritative user, etc). On iOS we have one local user; the stub
+// authoritative user, etc). On iOS there's one local user; the stub
 // provides whatever upstream calls touch via variadic methods.
 class C_4JProfile {
 public:

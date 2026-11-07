@@ -185,7 +185,7 @@ typedef int32_t HRESULT;
 #endif
 
 // MSVC debug-break intrinsic. Upstream uses __debugbreak() to assert
-// invariants in debug builds (CompoundTag.h:39 etc). On clang we map
+// invariants in debug builds (CompoundTag.h:39 etc). On clang it maps
 // to __builtin_trap() so a hit still aborts the process under a
 // debugger.
 #ifndef __debugbreak
@@ -284,7 +284,7 @@ typedef union _ULARGE_INTEGER {
 
 // Thread Local Storage Win32 API. Upstream code (Vec3.cpp, AABB.cpp,
 // pool allocators) uses TlsAlloc / TlsGetValue / TlsSetValue / TlsFree
-// to keep per-thread allocation arenas. On POSIX we back these with
+// to keep per-thread allocation arenas. On POSIX these are backed by
 // pthread keys so the upstream code compiles unchanged. The pthread
 // key fits in a DWORD on iOS / macOS (unsigned long under the hood,
 // truncated for the Win32 API surface). TLS_OUT_OF_INDEXES is the
@@ -315,8 +315,8 @@ static inline BOOL TlsSetValue(DWORD index, LPVOID value) {
 }
 
 // C4JThread.cpp records the current thread id + handle on entry. The Win32
-// values are opaque thread tokens; mach lets us hand back the pthread_self
-// pointer truncated to DWORD as a stand-in. Two different pthreads will
+// values are opaque thread tokens; here the pthread_self
+// pointer truncated to DWORD is the stand-in. Two different pthreads will
 // always produce different IDs, which is the only invariant upstream code
 // depends on.
 static inline DWORD GetCurrentThreadId(void) {
@@ -380,7 +380,7 @@ static inline DWORD ResumeThread(HANDLE h) {
 
 // Critical sections backed by pthread mutexes. Upstream uses these
 // for the global-lock pattern around C4JThread, command dispatch,
-// etc. Compile-only support: we only need calls to typecheck. The
+// etc. Compile-only support: calls only need to typecheck. The
 // CRITICAL_SECTION type is already declared in this header above.
 static inline void InitializeCriticalSection(LPCRITICAL_SECTION cs) {
     if (!cs) return;
@@ -460,7 +460,7 @@ enum {
     XC_LANGUAGE_POLISH     = 11,
     XC_LANGUAGE_RUSSIAN    = 12,
     // Extra languages referenced by UIScene_LanguageSelector.h. Values are
-    // arbitrary - we never actually do language switching on iOS, but the
+    // arbitrary - iOS never actually switches language, but the
     // enum needs all the names declared so that header parses.
     XC_LANGUAGE_DANISH     = 13,
     XC_LANGUAGE_FINISH     = 14,
@@ -503,7 +503,7 @@ static inline int XGetLocale(void)   { return XC_LANGUAGE_ENGLISH; }
 #endif
 
 // SessionID type from upstream's Sony SQRNetworkManager. iOS doesn't
-// ship PSN, so we provide an opaque 16-byte buffer matching the Sony
+// ship PSN, so this is an opaque 16-byte buffer matching the Sony
 // layout. SessionInfo.h declares fields of this type.
 #ifdef __cplusplus
 struct SessionID {
@@ -527,7 +527,7 @@ typedef uint32_t XCONTENTDEVICEID;
 
 // Direct3D 11 viewport descriptor. GameRenderer.h declares
 // `ComputeViewportForPlayer(int, D3D11_VIEWPORT&)`. iOS uses its own
-// renderer (Phase D); for compile we just need a same-shape struct.
+// renderer; compiling just needs a same-shape struct.
 typedef struct D3D11_VIEWPORT {
     float TopLeftX;
     float TopLeftY;
@@ -545,7 +545,7 @@ typedef struct D3D11_VIEWPORT {
 #endif
 
 // 4J game-rules save filename. Defined in upstream
-// Common/GameRules/GameRuleManager.h:18 - we mirror the string so
+// Common/GameRules/GameRuleManager.h:18 - the string is copied here so
 // callers that use the constant directly without pulling that header
 // (MinecraftServer.cpp does) compile cleanly.
 #ifndef GAME_RULE_SAVENAME
@@ -554,11 +554,11 @@ typedef struct D3D11_VIEWPORT {
 
 // Legacy OpenGL constants. Upstream Minecraft.cpp / LevelRenderer.cpp
 // use these against the OpenGL 1.x display-list / immediate-mode API.
-// iOS doesn't ship legacy GL; the calls eventually route through our
-// Metal-backed C4JRender_iOS in Phase D2. For compile we just need
+// iOS doesn't ship legacy GL; the calls route through the
+// Metal-backed mcle_glbridge_* layer. Compiling just needs
 // the integer constants to exist and the gl* prototypes to declare.
 // stubs.h has its own copies plus a `class Color` that conflicts with
-// Minecraft.World/Color.h, so we ship the GL-only subset here.
+// Minecraft.World/Color.h, so only the GL-only subset is here.
 #ifndef GL_CONSTANTS_DEFINED
 #define GL_CONSTANTS_DEFINED
 #  define GL_BYTE                    0x1400
@@ -716,8 +716,8 @@ typedef struct D3D11_VIEWPORT {
 #  define GL_TEXTURE2                0x84C2
 #  define GL_TEXTURE3                0x84C3
 // Legacy GL function prototypes. Bodies live in
-// WorldProbe/probe_stub.cpp as no-ops; real Metal backend lands in
-// Phase D2 and replaces these via the C4JRender_iOS adapter layer.
+// WorldProbe/probe_stub.cpp; many forward to the Metal-backed
+// mcle_glbridge_* calls in Render/MetalContext.mm.
 //
 // Declared with C++ linkage (NOT extern "C") so upstream-wrapper
 // overloads like glGenTextures() / glLight(...,FloatBuffer*) /
@@ -812,8 +812,7 @@ void glMultiTexCoord2fv(unsigned int, const float*);
 void glActiveTexture(unsigned int);
 void glClientActiveTexture(unsigned int);
 // Old fixed-function texture-coord generation. Real impl lives on
-// desktop GL; on iOS Metal these become no-ops at the leaf calls
-// (Phase G will swap the gl* layer for real Metal anyway).
+// desktop GL; on iOS Metal these become no-ops at the leaf calls.
 void glTexGeni(unsigned int, unsigned int, int);
 void glTexGenf(unsigned int, unsigned int, float);
 void glTexGenfv(unsigned int, unsigned int, const float*);
@@ -823,7 +822,7 @@ void glLightf(unsigned int, unsigned int, float);
 // Display lists - upstream uses these for batched draw command capture.
 void glCallLists(int, unsigned int, const void*);
 
-// G2b: C++ overloads of GL wrappers upstream renderer code calls. Now
+// C++ overloads of GL wrappers upstream renderer code calls. Now
 // that the gl* prototypes above are declared with C++ linkage, plain
 // overloads work. Definitions live in WorldProbe/probe_stub.cpp.
 #ifdef __cplusplus
@@ -997,8 +996,8 @@ void         glCallLists(IntBuffer *);                                   // Offs
 #endif
 
 // Xbox Live presence-context constants. Real values are in xbox-secrets;
-// our shim just needs each name to resolve so switch/case statements
-// parse. We never report presence on iOS.
+// the shim just needs each name to resolve so switch/case statements
+// parse. iOS never reports presence.
 #ifndef CONTEXT_PRESENCE_MULTIPLAYEROFFLINE
 #  define CONTEXT_PRESENCE_MULTIPLAYEROFFLINE 0
 #endif
@@ -1245,7 +1244,7 @@ public:
 };
 
 // Xbox memcompression contexts. Used by compression.cpp's PE-only
-// branch which we do not enter on iOS, but the type still needs
+// branch, which iOS never enters, but the type still needs
 // to exist for header parses. Opaque struct fits.
 typedef struct _XMEMCOMPRESSION_CONTEXT { int dummy; } XMEMCOMPRESSION_CONTEXT;
 typedef struct _XMEMDECOMPRESSION_CONTEXT { int dummy; } XMEMDECOMPRESSION_CONTEXT;
@@ -1524,7 +1523,7 @@ static inline BOOL VirtualFree(void *addr, size_t /*size*/, DWORD type) {
 }
 
 // Xbox-style physical-memory allocator. Real one returns aligned
-// pages; on iOS we fall back to malloc since the upstream code
+// pages; on iOS it falls back to malloc since the upstream code
 // already accepts that fallback (PS3 / Vita branches do the same).
 static inline void* XPhysicalAlloc(size_t size, unsigned long long, unsigned long, unsigned long) {
     return malloc(size);
@@ -1544,12 +1543,12 @@ static inline void XMemDestroyDecompressionContext(void*) {}
 // `wstringtofilename` and `escapeXML` are declared in upstream's
 // StringHelpers.h and defined in StringHelpers.cpp. Pre-include of
 // StringHelpers.h in iOS_stdafx.h brings the declarations into scope
-// for the files that need them; we no longer ship inline stubs here
+// for the files that need them; inline stubs no longer live here
 // because those collided with the real definitions when the probe
 // library was actually linked.
 
 // SystemTimeToFileTime: Win32 conversion helper. Probe stubs to a
-// no-op zero fill; we never read FILETIME on iOS.
+// no-op zero fill; nothing reads FILETIME on iOS.
 static inline BOOL SystemTimeToFileTime(const SYSTEMTIME*, FILETIME* ft) {
     if (ft) { ft->dwLowDateTime = 0; ft->dwHighDateTime = 0; }
     return TRUE;
@@ -1562,7 +1561,7 @@ static inline BOOL FileTimeToSystemTime(const FILETIME*, SYSTEMTIME* st) {
 }
 
 // GetSystemTime for upstream system.cpp. Fills SYSTEMTIME from
-// localtime. Compile-only correctness; we never call this.
+// localtime. Compile-only correctness; nothing calls this.
 static inline void GetSystemTime(LPSYSTEMTIME st) {
     if (!st) return;
     st->wYear = 2026; st->wMonth = 1; st->wDayOfWeek = 0; st->wDay = 1;
@@ -1580,9 +1579,9 @@ static inline DWORD GetTickCount(void) {
 
 // Win32 high-resolution timer API. Random.cpp seeds the RNG with
 // QueryPerformanceCounter; PerformanceTimer.cpp uses both. On Apple
-// platforms mach_absolute_time gives us a high-res monotonic counter
+// platforms mach_absolute_time gives a high-res monotonic counter
 // in mach-time units, convertible to nanoseconds via mach_timebase_info.
-// We expose these as nanosecond counts (frequency = 1e9) so QuadPart
+// These are exposed as nanosecond counts (frequency = 1e9) so QuadPart
 // values across calls yield meaningful ns deltas without callers caring
 // about the unit. (mach/mach_time.h included at top of this header.)
 

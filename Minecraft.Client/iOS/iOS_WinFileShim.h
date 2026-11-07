@@ -38,7 +38,7 @@ static inline std::string ios_wcs_to_utf8(const wchar_t *p) {
 }
 #endif
 
-// Non-UNICODE shape: upstream File.cpp's #else branch is what we hit on iOS,
+// Non-UNICODE shape: upstream File.cpp's #else branch is what iOS compiles,
 // and its filenametowstring helper takes `const char *`. So cFileName is char.
 typedef struct _WIN32_FIND_DATA {
     DWORD   dwFileAttributes;

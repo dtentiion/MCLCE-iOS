@@ -1,7 +1,7 @@
 // Shim for Microsoft's sal.h (Source Annotation Language).
 //
 // Upstream code uses these annotations decoratively; none of them have any
-// semantic effect outside of the MSVC static analyzer. We expand them all to
+// semantic effect outside of the MSVC static analyzer. They all expand to
 // nothing so the code compiles under clang on iOS.
 
 #pragma once

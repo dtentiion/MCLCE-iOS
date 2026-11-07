@@ -3,8 +3,8 @@
 // Upstream (LevelRenderer, ServerChunkCache, GameNetworkManager, etc.)
 // uses Win32 CreateThread / CreateEventA / SetEvent / ResetEvent /
 // WaitForSingleObject / ResumeThread / TerminateThread to drive worker
-// threads. The HANDLE type is opaque (void*), so we back each handle
-// with our own heap struct guarded by a magic tag so WaitForSingleObject
+// threads. The HANDLE type is opaque (void*), so each handle is backed
+// by a heap struct guarded by a magic tag so WaitForSingleObject
 // can disambiguate event waits from thread joins.
 //
 // CREATE_SUSPENDED is honored by deferring pthread_create until

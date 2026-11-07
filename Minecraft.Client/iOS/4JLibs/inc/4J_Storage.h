@@ -49,7 +49,7 @@ extern "C" void mcle_storage_set_save_images(const unsigned char *thumb, unsigne
                                              const unsigned char *text, unsigned int textBytes);
 
 // Real SAVE_DETAILS lives in the platform 4J_Storage lib (Xbox/Sony). On
-// iOS we only need a forward decl so upstream UI headers that store
+// iOS a forward decl is enough so upstream UI headers that store
 // `SAVE_DETAILS *m_pSaveDetails` parse.
 struct SAVE_DETAILS;
 
