@@ -3391,6 +3391,9 @@ extern "C" void mcle_game_tick(void) {
                                        (g_player && g_player->level == g_levels[i]);
             if (playerInLevel || g_levels[i]->hasEntitiesToRemove()) {
                 if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
+                // Minecraft::tick counts the client level's sky flash down
+                // before its entities tick
+                if (g_levels[i]->skyFlashTime > 0) g_levels[i]->skyFlashTime--;
                 g_levels[i]->tickEntities();
             }
             // level->getTracker()->tick()

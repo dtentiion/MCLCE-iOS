@@ -15,6 +15,14 @@ client:
   cure sound and the fireworks explosion.
 
 Game/MCLEGameLoop.cpp does those right where the packets are sent.
+
+The server's own entities are the client's too, so in the local player's
+level (mcle_client_level, Game/MCLEClientEffects.cpp) a few also do what
+only their client copies do:
+
+- LightningBolt::tick flashes the sky. The game loop counts skyFlashTime
+  down like Minecraft::tick.
+
 Idempotent.
 """
 import sys
@@ -88,3 +96,17 @@ patch(UP / "Minecraft.Client" / "ServerLevel.cpp", [
      "}\n"),
 ])
 
+CLIENT_LEVEL = ("#ifdef __APPLE_IOS__\n"
+                "bool mcle_client_level(Level *level);\n"
+                "#endif\n\n")
+
+patch(UP / "Minecraft.World" / "LightningBolt.cpp", [
+    ("void LightningBolt::tick()\n", CLIENT_LEVEL + "void LightningBolt::tick()\n"),
+    ("\t\telse\n\t\t{\n\t\t\tdouble r = 3;\n",
+     "\t\telse\n\t\t{\n"
+     "#ifdef __APPLE_IOS__\n"
+     "\t\t\t// the client's bolt, which here is the server's\n"
+     "\t\t\tif (mcle_client_level(level)) level->skyFlashTime = 2;\n"
+     "#endif\n"
+     "\t\t\tdouble r = 3;\n"),
+])
