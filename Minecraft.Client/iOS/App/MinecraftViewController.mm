@@ -3433,6 +3433,20 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+// UIScene_CreateWorldMenu::KeyboardCompleteWorldNameCallback. The keyboard
+// has gone back but the menu's movie only reloads after, where the name's
+// label and the Create button come from m_worldName.
+static int MCLECreateWorldKeyboardComplete(void* lpParam, const bool bRes) {
+    g_create_ignore_input = false;
+    // 4J HEG - No reason to set value if keyboard was cancelled
+    if (bRes) {
+        // Win64_GetKeyboardText
+        const std::wstring& text = mcle_keyboard_text();
+        if (!text.empty()) g_create_world_name = MCLEStringFromWide(text);
+    }
+    return 0;
+}
+
 static NSString* MCLECreateWorldGameModeLabel(void) {
     switch (g_create_game_mode_id) {
         case 1:  return MCLEStr(IDS_GAMEMODE_CREATIVE);
@@ -3441,10 +3455,11 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
     }
 }
 
-// UIScene_CreateWorldMenu constructor. Coming back from More Options this is
-// handleGainFocus, the scene's state is still in the statics. Control ids
-// follow its EControls: EditWorldName 0, TexturePackList 1, GameModeToggle 2,
-// Difficulty 3, MoreOptions 4, NewWorld 5, OnlineGame 6.
+// UIScene_CreateWorldMenu constructor. Coming back from More Options or the
+// keyboard this is handleGainFocus, the scene's state is still in the
+// statics. Control ids follow its EControls: EditWorldName 0,
+// TexturePackList 1, GameModeToggle 2, Difficulty 3, MoreOptions 4,
+// NewWorld 5, OnlineGame 6.
 - (void)initCreateWorldMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
@@ -3472,7 +3487,9 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
 
     if (!g_texture_pack_waiting_for_dlc) MCLEFillTexturePackList();
 
-    ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
+    // UIScene::reloadMovie coming back from the keyboard puts the focus back
+    // on eControl_EditWorldName, the name it was for
+    ruffle_ios_call_root_set_focus(g_ruffle_player, g_menu_reloading ? 0.0 : -1.0);
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 }
@@ -3491,19 +3508,15 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
     switch (controlId) {
         case 0: {   // eControl_EditWorldName
             g_create_ignore_input = true;
-            [self requestKeyboardWithTitle:MCLEStr(IDS_CREATE_NEW_WORLD)
-                                      text:g_create_world_name
-                                  maxChars:25
-                                      done:^(NSString* text) {
-                // KeyboardCompleteWorldNameCallback
-                g_create_ignore_input = false;
-                if (!text) return;
-                if (text.length) {
-                    MCLECallPath(@"MainPanel.EditWorldName", @"SetLabel", @[text]);
-                    g_create_world_name = text;
-                }
-                MCLECallPath(@"MainPanel.NewWorld", @"EnableButton", @[g_create_world_name.length ? @YES : @NO]);
-            }];
+            // Windows64 without the keyboard and mouse: UIScene_Keyboard
+            MCLEKeyboardInitData kbData;
+            kbData.title = MCLEWideString(MCLEStr(IDS_CREATE_NEW_WORLD));
+            if (!MCLELabelAt("MainPanel.EditWorldName", &kbData.defaultText)) {
+                kbData.defaultText = MCLEWideString(g_create_world_name);
+            }
+            kbData.maxChars = 25;
+            kbData.callback = &MCLECreateWorldKeyboardComplete;
+            [self navigateToKeyboard:kbData];
             break;
         }
         case 2:     // eControl_GameModeToggle
