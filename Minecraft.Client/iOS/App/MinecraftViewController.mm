@@ -2616,7 +2616,6 @@ static int MCLEPadIsPlayStation(void) {
         @"SkinSelectMenu1080.swf",
         @"LeaderboardMenu1080.swf",
         @"LeaderboardsMenu1080.swf",
-        @"DLCMainMenu1080.swf",
         @"CreateWorldMenu1080.swf",
         @"LaunchMoreOptionsMenu1080.swf",
     ]];
@@ -5077,44 +5076,20 @@ static void MCLEConnectingHoldStart(void) {
     self.menuFocusIndex = 0;
 }
 
-// Ports UIScene_DLCMainMenu constructor
-// (Common/UI/UIScene_DLCMainMenu.cpp:25-70). One FJ_ButtonList_List
-// named "OffersList" (eControl_OffersList = 0) plus OffersList_Title
-// label. Console populates the list from a DLC offer query against
-// the platform store (Xbox Live, PSN, etc.). Without a store
-// backend we leave the list empty and seed the title + a "store
-// not available" hint through the title label.
+// UIScene_DLCMainMenu constructor. The offer categories are only added on
+// Durango (and from the PS store in tick), so on Windows64 the list stays
+// empty under its title.
 - (void)initDLCMainMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
     [self attachMenuScenery];
 
+    MCLECallPath(@"OffersList_Title", @"Init", @[MCLEStr(IDS_DOWNLOADABLE_CONTENT_OFFERS)]);
+    // eControl_OffersList
     const char* list = "OffersList";
     ruffle_ios_call_list_init(g_ruffle_player,
         (const uint8_t*)list, strlen(list), 0.0);
-    ruffle_ios_call_list_remove_all(g_ruffle_player,
-        (const uint8_t*)list, strlen(list));
-
-    // FJ_ButtonList_List takes the 2-arg addNewItem shape (same as
-    // FJ_ButtonList_Menu, see FJ_ButtonList_List.as:18). Seed a
-    // single placeholder so the list widget has at least one
-    // focusable row; pressing it just logs for now.
-    const char* placeholder = "Store not available yet";
-    ruffle_ios_call_list_add_menu_item(
-        g_ruffle_player,
-        (const uint8_t*)list, strlen(list),
-        (const uint8_t*)placeholder, strlen(placeholder),
-        0.0);
-
-    const char* titleName = "OffersList_Title";
-    const char* titleText = "Minecraft Store";
-    ruffle_ios_call_init_on_named_child(
-        g_ruffle_player,
-        (const uint8_t*)titleName, strlen(titleName),
-        (const uint8_t*)"SetLabel", 8,
-        (const uint8_t*)titleText, strlen(titleText),
-        0.0);
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
@@ -5590,8 +5565,8 @@ static void MCLEConnectingHoldStart(void) {
         //   LeaderboardsMenu.cpp:150
         //   CreateWorldMenu.cpp:263
         //   LaunchMoreOptionsMenu.cpp:201
-        // DLCMainMenu also wants logo off once wired (its panel
-        // covers the full upper half of the screen).
+        // UIScene_DLCMainMenu has none, the logo stays as the main
+        // menu showed it.
         [self applyLogoVisibilityForScene:swfName];
 
         // Seed the Tooltips bottom-strip on every scene transition.
