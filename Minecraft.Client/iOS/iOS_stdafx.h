@@ -4,8 +4,8 @@
 // Upstream code starts every .cpp with `#include "stdafx.h"` and assumes it
 // has dragged in the C++ standard library, the Win32 type aliases, and a
 // handful of platform helpers. The Windows build provides that via per-
-// project precompiled headers; we do not have those on iOS so we force-
-// include this file at the top of every TU instead (see CMake target_compile_
+// project precompiled headers; iOS has none, so this file is force-
+// included at the top of every TU instead (see CMake target_compile_
 // options -include flags).
 //
 // Keep this minimal. Anything added here is paid for by every TU that gets
@@ -34,7 +34,7 @@
 // Note: 4J_Render.h is included AFTER iOS_stdafx.h's `typedef
 // C4JRenderStub C4JRender;` (which lives further down in this file)
 // so the typedef is in scope by the time 4J_Render.h declares the
-// global. We pull it in here near the top via a forward-declared
+// global. It's pulled in here near the top via a forward-declared
 // pointer wrapper, with the actual definition in WorldProbe/probe_stub.cpp.
 // See the include further down for the typedef of C4JRender.
 // Sentient telemetry enum tags (mirrored from upstream's Orbis/PS3/
@@ -86,7 +86,7 @@
 // translation unit starts (e.g. StringHelpers.cpp at file scope: `wstring
 // toLower(const wstring& a)`). On other platforms upstream's stdafx.h chain
 // includes a header that brings std into scope before these .cpps parse.
-// Our stdafx.h is a no-op on iOS, so we make the same `using` happen here.
+// The patched stdafx.h is a no-op on iOS, so the same `using` happens here.
 // Scoped to translation units that get this header force-included, which is
 // only the world-probe target (not the App or Ruffle code paths).
 #ifdef __cplusplus
@@ -95,12 +95,12 @@ using namespace std;
 
 // Upstream files write `using namespace std;` at file scope and then refer to
 // names like `vector` / `shared_ptr` / `string` without the std:: prefix. The
-// `using` above brings them into scope; we still need the headers themselves
+// `using` above brings them into scope; the headers themselves still need to be
 // included so the symbols actually exist.
 
 // Forward declarations for upstream gameplay types referenced through pointers
 // or shared_ptr by headers in the probe set. On other platforms these declar-
-// ations come transitively through stdafx.h's chain of includes, which we
+// ations come transitively through stdafx.h's chain of includes, which is
 // shut off on iOS to avoid the avalanche of unrelated dependencies. Add to
 // this list as the probe set grows and surfaces a new forward-declared name.
 #ifdef __cplusplus
@@ -134,8 +134,8 @@ class ConsoleSaveFile;
 
 // Telemetry enum stub. Real enum lives in platform-specific
 // Sentient/TelemetryEnum.h. The leak's ServerPlayer.cpp assigns the
-// player-death-source values directly to a field of this type, so we
-// fold both sets of identifiers into the same enum.
+// player-death-source values directly to a field of this type, so
+// both sets of identifiers fold into the same enum.
 enum ETelemetryChallenges {
     eTelemetryChallenges_None = 0,
     eTelemetryChallenges_Unknown,
@@ -225,15 +225,15 @@ struct MOJANG_DATA {
 };
 #endif
 
-// Stubs for upstream classes we cannot easily include without
+// Stubs for upstream classes that can't easily be included without
 // pulling huge subtrees. Each is defined as an empty struct so
 // any pointer / pointer-to-incomplete reference compiles, and
 // member-access calls fall through templated catch-alls (none
 // of these methods are ever called by the probe).
 // ConsoleGameRules: real upstream class. Lightweight Constants header
-// gives us the class shell + EGameRuleType / EGameRuleAttr enums with
+// gives the class shell + EGameRuleType / EGameRuleAttr enums with
 // zero heavy includes. The full ConsoleGameRules.h pulls 24 GameRules/*
-// headers which we do not want force-included; files that need full
+// headers that shouldn't be force-included; files that need full
 // behavior include ConsoleGameRules.h directly.
 // Stub for upstream's heavyweight C4JRender. Textures.h asks for the
 // nested texture-format enum value to declare a static field and
@@ -322,9 +322,9 @@ struct C4JRenderStub {
     template<class... A> void   MatrixPush(A...)     {}
     template<class... A> void   MatrixPop(A...)      {}
     template<class... A> void   MatrixMult(A...)     {}
-    // G2a: Tesselator -> Metal hook. Upstream Tesselator::end() passes
+    // Tesselator -> Metal hook. Upstream Tesselator::end() passes
     // (C4JRender::ePrimitiveType, int, int*, C4JRender::eVertexType,
-    //  C4JRender::ePixelShaderType). We match the exact types so that
+    //  C4JRender::ePixelShaderType). The exact types match so that
     // the non-template overload outranks the variadic catch-all. With
     // any conversion needed (eg int* -> const void*), the variadic
     // template wins as an "exact" match and silently no-ops.
@@ -341,13 +341,13 @@ struct C4JRenderStub {
     // Command buffer interface upstream LevelRenderer.cpp uses to
     // record draws into a reusable buffer. On real consoles each call
     // queues a glCallList-equivalent against the platform's command
-    // buffer; on iOS we just forward to the display-list bridge so the
+    // buffer; on iOS it just forwards to the display-list bridge so the
     // recorded chunk geometry replays through Tesselator -> Metal.
     inline bool CBuffCall(int list, bool /*first*/);
     inline bool CBuffCallCutOut(int list, bool /*first*/);
     // Variadic CBuffCall/CBuffCallCutOut catch-alls were shadowing the
     // non-template overloads above (same C++ overload-resolution issue
-    // we hit for LoadTextureData). Dropped so chunk display lists actually
+    // as LoadTextureData had). Dropped so chunk display lists actually
     // route through mcle_glbridge_call_list.
     template<class... A> bool   CBuffCallMultiple(A...)       { return false; }
     template<class... A> void   CBuffDeferredModeStart(A...)  {}
@@ -376,8 +376,8 @@ struct C4JRenderStub {
     template<class... A> int    TextureGetTextureLevels(A...) { return 1; }
     // Upstream Texture::updateOnGPU uploads pixels via this call:
     //   RenderManager.TextureData(width, height, pixels, mipLevel, format)
-    // Route mip level 0 to our Metal upload path; other levels are no-op
-    // for now (we don't have mipmap support wired yet).
+    // Route mip level 0 to the Metal upload path; other levels are no-op
+    // for now (mipmap support isn't wired yet).
     void TextureData(int width, int height, void *pixels, int mipLevel, int /*format*/) {
         if (mipLevel != 0 || pixels == nullptr || width <= 0 || height <= 0) return;
         unsigned int id = mcle_glbridge_get_bound_texture();
@@ -457,10 +457,10 @@ inline long C4JRenderStub::LoadTextureData(unsigned char *pbData, unsigned long 
 // C4JRender is a heavyweight platform render class - the real one
 // lives in platform-specific 4JLibs/. Files like Textures.h
 // reference nested types via `C4JRender::Texture *` which need the
-// class declared. Map the name to our stub via typedef.
+// class declared. Map the name to the stub via typedef.
 typedef C4JRenderStub C4JRender;
 
-// G2a: Tesselator -> Metal hook. Real impl in Render lib's MetalContext.mm,
+// Tesselator -> Metal hook. Real impl in Render lib's MetalContext.mm,
 // stubbed in WorldProbe/probe_stub.cpp so the probe library still links.
 extern "C" void mcle_metal_draw_vertices(int prim, int count,
                                           const void* data,
@@ -474,9 +474,9 @@ inline void C4JRenderStub::DrawVertices(C4JRenderStub::ePrimitiveType prim,
                              (int)fmt, (int)shader);
 }
 
-// G5: chunk-list dispatch from LevelRenderer::renderChunks. On real
-// consoles this queues a draw against the command buffer; here we just
-// replay the recorded display list through the GL bridge.
+// Chunk-list dispatch from LevelRenderer::renderChunks. On real
+// consoles this queues a draw against the command buffer; here it just
+// replays the recorded display list through the GL bridge.
 extern "C" void mcle_glbridge_call_list(int id);
 inline bool C4JRenderStub::CBuffCall(int list, bool /*first*/) {
     mcle_glbridge_call_list(list);
@@ -509,7 +509,7 @@ class Connection;
 // (->soundEngine, ->skins, ...) compiles in callers.
 // DLCPack: real header pre-included further down.
 // FriendSessionInfo lives in Common/Network/SessionInfo.h which has a
-// platform-conditional chain we do not cover. UIStructs.h references
+// platform-conditional chain not covered here. UIStructs.h references
 // it as a pointer field; forward-decl is enough for parses.
 class FriendSessionInfo;
 // UIScene is the SWF-backed scene class; UIControl.h:47 references it
@@ -525,7 +525,7 @@ class UIControl_TextInput;
 class ItemRenderer;
 // CustomDrawData is defined in upstream UIStructs.h as a typedef'd
 // struct. Provide an empty stub gated on _CUSTOMDRAWDATA_DEFINED so
-// the real header can skip its body when our stub is in scope first.
+// the real header can skip its body when this stub is in scope first.
 #ifndef _CUSTOMDRAWDATA_DEFINED
 #define _CUSTOMDRAWDATA_DEFINED
 typedef struct _CustomDrawData {} CustomDrawData;
@@ -533,7 +533,7 @@ typedef struct _CustomDrawData {} CustomDrawData;
 // ConnectionProgressParams - Minecraft.cpp constructs one with `new`
 // in a network connection path. iOS_stdafx provides this stub for
 // files that don't pull upstream UIStructs.h. Guard so the real
-// header (UIStructs.h:205) skips its body when our stub is in scope.
+// header (UIStructs.h:205) skips its body when this stub is in scope.
 #ifndef _CONNECTIONPROGRESSPARAMS_DEFINED
 #define _CONNECTIONPROGRESSPARAMS_DEFINED
 typedef struct _ConnectionProgressParams {
@@ -606,7 +606,7 @@ typedef unsigned char byte;
 // Memory-section profiler hook declared in upstream stdafx.h:
 //     void MemSect(int sect);
 // Used by NbtIo.cpp etc to mark allocation regions for the platform's
-// memory tracker. We do not have a tracker on iOS, no-op it out.
+// memory tracker. iOS has no tracker, so it's a no-op.
 #ifdef __cplusplus
 inline void MemSect(int) {}
 #endif
@@ -626,7 +626,7 @@ inline void MemSect(int) {}
 #include "Definitions.h"
 #include "ArrayWithLength.h"
 // ItemInstanceArray typedef from upstream's ArrayWithLength.h
-// (the line we patch out for iOS to avoid the NBT cascade).
+// (the line patched out for iOS to avoid the NBT cascade).
 typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "System.h"
 #include "Mth.h"
@@ -667,8 +667,8 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "../Minecraft.Client/Common/App_enums.h"
 #include "../Minecraft.Client/Common/App_Defines.h"
 // App_structs.h has UI / C4JStorage / GAME_SETTINGS deps that conflict
-// with our shims. We forward-declare MOJANG_DATA in Consoles_App stub
-// and patch upstream call sites instead.
+// with the shims here. MOJANG_DATA is forward-declared in the Consoles_App stub
+// and upstream call sites are patched instead.
 #include "Class.h"
 #include "Attribute.h"
 #include "AttributeModifier.h"
@@ -714,14 +714,14 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 #include "../Minecraft.Client/Common/Telemetry/TelemetryManager.h"
 // Real Minecraft (the platform client app class). MultiPlayerLevel
 // reaches into Minecraft::soundEngine, ServerLevel reaches into
-// Minecraft::skins, etc. Forward-decl is not enough; we need the full
-// class.
+// Minecraft::skins, etc. Forward-decl is not enough; the full
+// class is needed.
 #include "../Minecraft.Client/Minecraft.h"
 
 // Upstream Minecraft.Client/stdafx.h is wrapped in #ifndef __APPLE_IOS__
 // (see scripts/patch-upstream-stdafx.sh patch_stdafx_no_op), so includes
 // like ClientConstants.h that upstream pulls into every Client TU don't
-// reach our build. Gui.cpp's debug overlay reads ClientConstants::VERSION_STRING
+// reach this build. Gui.cpp's debug overlay reads ClientConstants::VERSION_STRING
 // and BRANCH_STRING at lines 1070-1071 - pull the header in here so
 // those references resolve.
 #include "../Minecraft.Client/ClientConstants.h"
@@ -737,7 +737,7 @@ typedef arrayWithLength<std::shared_ptr<ItemInstance> > ItemInstanceArray;
 // that include real SoundEngine.h directly (only ServerPlayer.cpp at
 // the moment) don't get added to the probe lib for now. Guard so the
 // real upstream header (Common/Audio/SoundEngine.h:112) skips its body
-// when our stub is in scope first.
+// when this stub is in scope first.
 #ifndef _SOUNDENGINE_H_DEFINED
 #define _SOUNDENGINE_H_DEFINED
 // The real upstream SoundEngine lives in Game/MCLESound.cpp. These are
@@ -814,7 +814,7 @@ public:
 #include "../Minecraft.Client/Gui.h"
 // ScreenSizeCalculator - Minecraft.cpp constructs one on the stack.
 #include "../Minecraft.Client/ScreenSizeCalculator.h"
-// G2b: ARB VBO namespace stub. Tesselator's ctor references
+// ARB VBO namespace stub. Tesselator's ctor references
 // ARBVertexBufferObject::glGenBuffersARB only when USE_VBO is true,
 // which it isn't (defaulted false in Tesselator.cpp). Code is dead
 // at runtime but still needs to compile.
@@ -833,9 +833,9 @@ public:
 
 // Mouse class stub. Real upstream version lives in
 // Minecraft.Client/stubs.h alongside a `class Color` that conflicts
-// with `Minecraft.World/Color.h`. We can't pre-include stubs.h
-// without breaking Color, so we ship just the Mouse + Keyboard
-// shapes the gameplay-host classes need.
+// with `Minecraft.World/Color.h`. stubs.h can't be pre-included
+// without breaking Color, so only the Mouse + Keyboard
+// shapes the gameplay-host classes need are here.
 class Mouse {
 public:
     static void create() {}
