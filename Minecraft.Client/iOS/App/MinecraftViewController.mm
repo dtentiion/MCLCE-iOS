@@ -1518,6 +1518,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // UIScene_MainMenu::UIScene_MainMenu on console where the splash is
 // re-picked on every construction.
 @property (strong, nonatomic) NSArray<NSString*>* splashes;
+// Windows64 clears to white outside a game, which is what shows around
+// the intro's logos. Under the SWF layer while the intro is up.
+@property (strong, nonatomic) UIView* introBackdrop;
 // Ordered stack of scene entries the player navigated through,
 // oldest at index 0. Each entry is a dict with @"swf" (NSString)
 // and @"focus" (NSNumber int) so B-back restores both the scene
@@ -2459,6 +2462,14 @@ static BOOL MCLEPlayStationPadConnected(void) {
     g_intro_ignore_navigate = false;
     self.menuButtonConfig = nil;
     self.splashLabel.hidden = YES;
+    if (!self.introBackdrop) {
+        self.introBackdrop = [[UIView alloc] initWithFrame:self.view.bounds];
+        self.introBackdrop.autoresizingMask =
+            UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        self.introBackdrop.backgroundColor = UIColor.whiteColor;
+        self.introBackdrop.userInteractionEnabled = NO;
+        [self.view insertSubview:self.introBackdrop aboveSubview:self.metalView];
+    }
     // Windows64's platformIdx 0, no ESRB skip, not China
     MCLECallPath(@"", @"SetIntroPlatform", @[@0, @NO, @NO]);
 }
@@ -5583,6 +5594,11 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
 
         // Ruffle owns the frame: advance the player, wgpu draws + presents.
         ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+        // The scene after the intro has drawn, its white can go
+        if (self.introBackdrop && ![self.currentMenuSwf isEqualToString:@"Intro1080.swf"]) {
+            [self.introBackdrop removeFromSuperview];
+            self.introBackdrop = nil;
+        }
     } else {
         // Legacy Metal path (triangle + pink rect).
         mcle_render_frame();
