@@ -2687,15 +2687,14 @@ static int MCLEPadIsPlayStation(void) {
 
 - (void)initMainMenuButtons {
     NSArray<NSDictionary*>* cfg = @[
-        @{ @"name": @"Button1", @"label": @"Play Game",            @"id": @(0) },
-        @{ @"name": @"Button2", @"label": @"Leaderboards",         @"id": @(1) },
-        @{ @"name": @"Button3", @"label": @"Achievements",         @"id": @(2) },
-        @{ @"name": @"Button4", @"label": @"Help & Options",       @"id": @(3) },
-        // "Minecraft Store" is IDS_DOWNLOADABLECONTENT on console
-        // (strings_Misc.txt line 8-9). Stored under that name so
-        // the DLC scene opens with the right header.
-        @{ @"name": @"Button5", @"label": @"Minecraft Store",      @"id": @(4) },
-        @{ @"name": @"Button6", @"label": @"Exit Game",            @"id": @(5) },
+        // UIScene_MainMenu constructor, the full version's
+        // IDS_DOWNLOADABLECONTENT
+        @{ @"name": @"Button1", @"label": MCLEStr(IDS_PLAY_GAME),           @"id": @(0) },
+        @{ @"name": @"Button2", @"label": MCLEStr(IDS_LEADERBOARDS),        @"id": @(1) },
+        @{ @"name": @"Button3", @"label": MCLEStr(IDS_ACHIEVEMENTS),        @"id": @(2) },
+        @{ @"name": @"Button4", @"label": MCLEStr(IDS_HELP_AND_OPTIONS),    @"id": @(3) },
+        @{ @"name": @"Button5", @"label": MCLEStr(IDS_DOWNLOADABLECONTENT), @"id": @(4) },
+        @{ @"name": @"Button6", @"label": MCLEStr(IDS_EXIT_GAME),           @"id": @(5) },
     ];
     [self attachMenuScenery];
     [self applyMenuButtonConfig:cfg];
@@ -3231,9 +3230,9 @@ static int MCLEPadIsPlayStation(void) {
     // works and avoids a new label-specific FFI.
     struct LabelSeed { const char* name; const char* text; };
     LabelSeed labels[] = {
-        { "SavesListTitle", "Start Game" },
-        { "JoinListTitle",  "Join Game" },
-        { "NoGames",        "No Games Found" },
+        { "SavesListTitle", MCLEStr(IDS_START_GAME).UTF8String },
+        { "JoinListTitle",  MCLEStr(IDS_JOIN_GAME).UTF8String },
+        { "NoGames",        MCLEStr(IDS_NO_GAMES_FOUND).UTF8String },
     };
     for (auto& s : labels) {
         ruffle_ios_call_init_on_named_child(
@@ -5009,12 +5008,12 @@ static void MCLEConnectingHoldStart(void) {
     // sequence skips 3 - console leaves BUTTON_ALL index 3 reserved
     // and numbers Graphics=4, UI=5, ResetToDefaults=6.
     NSArray<NSDictionary*>* cfg = @[
-        @{ @"name": @"Button1", @"label": @"Options",            @"id": @(0) },
-        @{ @"name": @"Button2", @"label": @"Audio",              @"id": @(1) },
-        @{ @"name": @"Button3", @"label": @"Control",            @"id": @(2) },
-        @{ @"name": @"Button4", @"label": @"Graphics",           @"id": @(4) },
-        @{ @"name": @"Button5", @"label": @"User Interface",     @"id": @(5) },
-        @{ @"name": @"Button6", @"label": @"Reset to Defaults",  @"id": @(6) },
+        @{ @"name": @"Button1", @"label": MCLEStr(IDS_OPTIONS),           @"id": @(0) },
+        @{ @"name": @"Button2", @"label": MCLEStr(IDS_AUDIO),             @"id": @(1) },
+        @{ @"name": @"Button3", @"label": MCLEStr(IDS_CONTROL),           @"id": @(2) },
+        @{ @"name": @"Button4", @"label": MCLEStr(IDS_GRAPHICS),          @"id": @(4) },
+        @{ @"name": @"Button5", @"label": MCLEStr(IDS_USER_INTERFACE),    @"id": @(5) },
+        @{ @"name": @"Button6", @"label": MCLEStr(IDS_RESET_TO_DEFAULTS), @"id": @(6) },
     ];
     [self attachMenuScenery];
     [self applyMenuButtonConfig:cfg];
