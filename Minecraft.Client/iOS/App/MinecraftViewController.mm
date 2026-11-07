@@ -2662,6 +2662,10 @@ static int MCLEPadIsPlayStation(void) {
         // SetTooltips takes off again), sharing is never allowed on
         // Windows64
         ids[2] = IDS_TOOLTIPS_CHANGEDEVICE;
+    } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
+        // UIScene_LeaderboardsMenu::updateTooltips with no entries
+        ids[0] = -1;
+        ids[2] = IDS_TOOLTIPS_CHANGE_FILTER;
     } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
         // UIScene_Credits: Back only
         ids[0] = -1;
@@ -5019,55 +5023,27 @@ static void MCLEConnectingHoldStart(void) {
     [self applyMenuButtonConfig:cfg];
 }
 
-// Ports UIScene_LeaderboardsMenu constructor
-// (Common/UI/UIScene_LeaderboardsMenu.cpp:120-160). The scene has
-// one specialized FJ_LeaderboardList named "Gamers" plus four
-// labels (Filter, Leaderboard, Entries, Info). Console populates
-// the list via network reads against Xbox Live / PSN; we have no
-// online service wired yet, so the list stays empty and the Info
-// label carries the "offline" copy instead of an empty panel.
+// UIScene_LeaderboardsMenu constructor. Windows64's LeaderboardManager
+// never answers a read (WindowsLeaderboardManager.h), so OnStatsReadComplete
+// never comes and the scene stays on the loading message with m_bIgnoreInput
+// set.
 - (void)initLeaderboardMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
 
     [self attachMenuScenery];
 
-    // Header labels. Console fills these from IDS_FILTER / IDS_
-    // Labels from UIScene_LeaderboardsMenu.cpp:
-    //   IDS_LEADERBOARD_FILTER    "Filter: "  (subtype appended at
-    //                              runtime from the current filter
-    //                              selection)
-    //   IDS_LEADERBOARD_ENTRIES   "Entries: " (count appended at
-    //                              runtime)
-    //   Leaderboard title comes from LEADERBOARD_DESCRIPTORS per
-    //   (m_currentLeaderboard, m_currentDifficulty) -- we don't
-    //   have the descriptor table wired up yet so show a neutral
-    //   stand-in that keeps the label from rendering FJ_Label.
-    // The informational "not available yet" line has no LCE
-    // equivalent (online services aren't wired on iOS) so it
-    // stays as a port-only explanatory string.
-    struct LabelSeed { const char* name; const char* text; };
-    LabelSeed labels[] = {
-        { "Filter",      "Filter: " },
-        { "Leaderboard", "Leaderboards" },
-        { "Entries",     "Entries: " },
-        { "Info",        "Leaderboards are not available on this platform yet." },
-    };
-    for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); ++i) {
-        ruffle_ios_call_init_on_named_child(
-            g_ruffle_player,
-            (const uint8_t*)labels[i].name, strlen(labels[i].name),
-            (const uint8_t*)"SetLabel", 8,
-            (const uint8_t*)labels[i].text, strlen(labels[i].text),
-            0.0);
-    }
-
-    // FJ_LeaderboardList driven from native (UIControl_LeaderboardList
-    // on console uses customDraw and column feeds via handleSelection
-    // ChangedRS). Our FFI doesn't cover that pathway yet, so we skip
-    // initialising it. Effect: Gamers widget shows its authored
-    // empty state, which is the same thing console displays before
-    // the first network read completes.
+    // m_currentLeaderboard 0, m_currentDifficulty 2: SetLeaderboardHeader
+    MCLECallPath(@"Leaderboard", @"SetLabel", @[MCLEStr(IDS_LEADERBOARD_TRAVELLING_NORMAL)]);
+    // eFM_Friends
+    MCLECallPath(@"Filter", @"Init", @[[MCLEStr(IDS_LEADERBOARD_FILTER)
+                                          stringByAppendingString:MCLEStr(IDS_LEADERBOARD_FILTER_FRIENDS)]]);
+    MCLECallPath(@"Entries", @"Init", @[[NSString stringWithFormat:@"%@%i", MCLEStr(IDS_LEADERBOARD_ENTRIES), 0]]);
+    // ReadStats(-1): m_listEntries.clearList, then the loading message. The
+    // movie's constructor moved Info onto the stage, its property finds it.
+    MCLECallPath(@"Gamers", @"ResetLeaderboard", @[]);
+    MCLECallPath(@"Info", @"SetLabel", @[MCLEStr(IDS_LEADERBOARD_LOADING)]);
+    MCLESetPathVisible(@"Info", YES);
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
 
@@ -5886,9 +5862,15 @@ static void MCLEConnectingHoldStart(void) {
             uint32_t now = pad.buttons;
             uint32_t prev = self.lastPadButtons;
             uint32_t changed = now ^ prev;
+            // UIScene_LeaderboardsMenu::handleInput only takes
+            // ACTION_MENU_CANCEL while m_bIgnoreInput is set, which on
+            // Windows64 it always is
+            const bool cancelOnly = !g_pending_dialog &&
+                [self.currentMenuSwf isEqualToString:@"LeaderboardMenu1080.swf"];
             for (size_t i = 0; i < sizeof(btnMap)/sizeof(btnMap[0]); ++i) {
                 if (changed & btnMap[i].mask) {
                     if (now & btnMap[i].mask) {
+                        if (cancelOnly && btnMap[i].mask != 0x00000002u) continue;
                         // The scene's handleInput animates the press first
                         MCLEAnimateKeyPress(btnMap[i].iggy);
                         ruffle_ios_player_gamepad_down(g_ruffle_player, btnMap[i].code);
