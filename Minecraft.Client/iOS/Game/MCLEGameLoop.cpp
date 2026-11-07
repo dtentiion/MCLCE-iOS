@@ -2679,6 +2679,13 @@ static void mcle_do_respawn() {
     standIn->setPlayer(nullptr);
     if (!fresh) return;
     fresh->connection = nullptr;
+    // respawn puts the new player in the PlayerList's players. Like the first
+    // one it stays out of them, the broadcasts already reach it, so in there
+    // it got every death message twice.
+    {
+        std::vector<std::shared_ptr<ServerPlayer>> &players = g_server->getPlayers()->players;
+        players.erase(std::remove(players.begin(), players.end(), fresh), players.end());
+    }
     // LocalPlayer's step, like the first player's
     fresh->footSize = 0.5f;
     Minecraft *mc = Minecraft::GetInstance();
