@@ -601,6 +601,30 @@ static float MCLEStageSideOverhang(CGSize view) {
     return std::max(0.0f, (stageWidth - 1920.0f) * 0.5f);
 }
 
+// The part of the stage a screen of another shape shows, in stage pixels:
+// the stage fits the screen and is centred on it
+static CGRect MCLEScreenInStage(CGSize view) {
+    if (view.width <= 0 || view.height <= 0) return CGRectMake(0, 0, 1920, 1080);
+    const CGFloat aspect = view.width / view.height;
+    const CGFloat w = std::max<CGFloat>(1920.0, 1080.0 * aspect);
+    const CGFloat h = std::max<CGFloat>(1080.0, 1920.0 / aspect);
+    return CGRectMake((1920.0 - w) * 0.5, (1080.0 - h) * 0.5, w, h);
+}
+
+// A PNG redrawn at another size
+static NSData* MCLEPngAtSize(NSData* png, CGSize size) {
+    UIImage* image = [UIImage imageWithData:png];
+    if (!image) return png;
+    UIGraphicsImageRendererFormat* format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = 1;
+    UIGraphicsImageRenderer* renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+    NSData* out = [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext* ctx) {
+        CGContextSetInterpolationQuality(ctx.CGContext, kCGInterpolationHigh);
+        [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    }];
+    return out.length ? out : png;
+}
+
 // Strips the movie runs from one side of its stage to the other go on to
 // the sides of a wider screen
 static void MCLEExtendStripsToScreen(PlayerHandle* player, CGSize view, const int* depths, int count) {
@@ -2578,20 +2602,22 @@ static int MCLEPadIsPlayStation(void) {
         // names (Panorama_Background_S etc.) to external PNG paths.
         NSString* docs = [NSSearchPathForDirectoriesInDomains(
             NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        // XUI import scale matches skin_Minecraft.xui <Scale> elements.
-        // Panorama_Background_S/N carry Scale=5.0 there so the 820x144
-        // tile renders as 4100x720; without that, two tiles side-by-side
-        // don't cover the stage and a large gap appears between end and
-        // start. MenuTitle has no XUI scale entry, it's drawn at native.
+        // The 1080 skin's own Panorama_Background_S/N (skinHDWin.swf) are
+        // 1230x216, the 820x144 art at the 1080 skin's 1.5x. The Panorama
+        // clip places two of them 6150 apart at 5x and scrolls one tile,
+        // 6150, per loop, so the PNG is drawn at that size: the tiles meet
+        // and the loop goes round without a jump. MenuTitle is drawn at
+        // native size (0x0 here).
+        const float sx = 1.0f;
+        const float sy = 1.0f;
         NSArray* xuiAssets = @[
-            @[@"Panorama_Background_S", @(5.0f), @(5.0f)],
-            @[@"Panorama_Background_N", @(5.0f), @(5.0f)],
-            @[@"MenuTitle",             @(1.0f), @(1.0f)],
+            @[@"Panorama_Background_S", @(1230), @(216)],
+            @[@"Panorama_Background_N", @(1230), @(216)],
+            @[@"MenuTitle",             @(0),    @(0)],
         ];
         for (NSArray* entry in xuiAssets) {
             NSString* className = entry[0];
-            float sx = [entry[1] floatValue];
-            float sy = [entry[2] floatValue];
+            const CGSize size = CGSizeMake([entry[1] floatValue], [entry[2] floatValue]);
             NSString* pngPath = [docs stringByAppendingPathComponent:
                                  [className stringByAppendingString:@".png"]];
             NSData* pngData = [NSData dataWithContentsOfFile:pngPath];
@@ -2599,6 +2625,7 @@ static int MCLEPadIsPlayStation(void) {
                 NSLog(@"[MinecraftVC] XUI %@ missing at %@", className, pngPath);
                 continue;
             }
+            if (size.width > 0) pngData = MCLEPngAtSize(pngData, size);
             int rc = ruffle_ios_register_xui_bitmap(
                 g_ruffle_player,
                 (const uint8_t*)className.UTF8String, strlen(className.UTF8String),
@@ -2613,10 +2640,7 @@ static int MCLEPadIsPlayStation(void) {
         // + eUIComponent_Logo; UIGroup.cpp:28 adds Tooltips via the
         // tooltips layer). Depths: panorama beneath everything (0),
         // logo and tooltips above MainMenu's button depths (3..9) so
-        // they overlay. Tooltips specifically covers the bottom area
-        // the panorama doesn't reach (panorama is authored at 5x
-        // scale => 720/1080 vertical coverage; the gap is the
-        // tooltips overlay slot on console).
+        // they overlay.
         // Each sibling's (depth, scaleX, scaleY). Console renders
         // each Iggy movie at screen resolution via
         // IggyPlayerSetDisplaySize so the authored 1920x1080
@@ -2629,21 +2653,11 @@ static int MCLEPadIsPlayStation(void) {
         // of the port direction (faithful to source for architecture,
         // adapted for device for visuals).
         //
-        // Panorama: sy=1.5 so the 720-tall strip scales to cover the
-        // full 1080 stage height. sx stays 1.0 so horizontal tile
-        // scrolling geometry keeps working.
-        //
         // Logo: 1.5x uniform so the 571x138 MenuTitle PNG is more
         // visible on a phone screen.
         //
         // Tooltips: keep 1.0x until we fix the individual button
         // panel rendering (FJ_Tooltips undefined-class issue).
-        // Panorama: uniform 1.5x (same sx/sy) so authored aspect is
-        // preserved. sx=1, sy=1.5 stretched mountains vertically and
-        // the scene looked squished horizontally; matching sx to sy
-        // fixes the aspect. ty stays 0 so the bottom still touches
-        // the stage floor the way it did at sx=1,sy=1.5.
-        //
         // Logo: 1.0x with the 1080.png MenuTitle (857x207) dropped into
         // Documents. The SWF is authored to center that asset on the
         // 1920x1080 stage, so no scale and no translate is needed.
@@ -2653,23 +2667,20 @@ static int MCLEPadIsPlayStation(void) {
         // size and let the SWF do its own layout.
         //
         // Tooltips: keep 1.0x until FJ_Tooltips is fleshed out.
-        // Panorama tx=-208.6: cancels the stage viewport's letterbox
-        // offset. The iPhone screen is wider than the 1920x1080 stage's
-        // 16:9 aspect, so Ruffle's stage->screen transform adds ~226
-        // screen px of left tx to fit-height-center. Metal doesn't
-        // clip to the stage rect, so pre-shifting the panorama sibling
-        // by (-226 / stage_scale) = -208.6 authored stage px lands
-        // tile1 exactly at screen x=0 on frame 0, removing the brief
-        // left-edge strip that showed for the first ~6 seconds while
-        // tile1 scrolled into the letterbox area.
         struct SiblingCfg { NSString* swf; int depth; float sx; float sy; float tx; float ty; };
+        const CGRect panoramaRect = MCLEScreenInStage(self.view.bounds.size);
         NSArray* siblings = @[
             // Depth stack documented next to the kFooDepth
             // constants near the top of this file. Order is
             // back-to-front: Panorama, scene root (added later by
             // replace_swf), Logo, dim, dialog (only when up),
             // Tooltips.
-            @[@"Panorama1080.swf",     @(-2),                   @(1.5f), @(1.5f), @(-208.6f), @(0.0f)],
+            // UIComponent_Panorama::render gives the movie the whole
+            // screen (IggyPlayerSetDisplaySize with the screen's size), so
+            // its stage is stretched over a screen of another shape
+            @[@"Panorama1080.swf",     @(-2),
+              @(panoramaRect.size.width / 1920.0), @(panoramaRect.size.height / 1080.0),
+              @(panoramaRect.origin.x), @(panoramaRect.origin.y)],
             @[@"ComponentLogo1080.swf",@(kLogoDepth),           @(1.0f), @(1.0f), @(0.0f),    @(0.0f)],
             // MenuBackground is the dim backdrop console adds via
             // UIComponent_MenuBackground while a MessageBox dialog
