@@ -7,6 +7,7 @@
 #include "MCLEContainerMenu.h"
 #include "MCLEContainerScene.h"
 #include "MCLEAbstractContainerScene.h"
+#include "MCLEKeyboard.h"
 
 #include <algorithm>
 #include <cassert>
@@ -1334,14 +1335,30 @@ public:
         handleTick();
     }
 
-    // KeyboardCompleteCallback
-    void keyboardComplete(bool ok, const std::wstring &text) override {
-        setIgnoreInput(false);
-        if (ok) {
-            setEditNameValue(text);
-            m_itemName = text;
-            updateItemName();
-        }
+    const char *movieName() override { return "AnvilMenu1080.swf"; }
+
+    // UIScene::reloadMovie once the keyboard over it has gone. Upstream's
+    // movie stays up under the keyboard, so it comes back as it was: the
+    // controls' ReInit and handleReload's slots, then the box or slot the
+    // pointer is on, its text, the cost, the cross and the tooltips. The
+    // pointer stays where it is rather than Initialize putting it back.
+    void reloadMovie() override {
+        m_labelInventory.init(m_labelInventory.label);
+        m_slotListInventory.addSlots(AnvilMenu::INV_SLOT_START, 27);
+        m_slotListHotbar.addSlots(AnvilMenu::INV_SLOT_START + 27, 9);
+        m_slotListItem1.addSlots(AnvilMenu::INPUT_SLOT, 1);
+        m_slotListItem2.addSlots(AnvilMenu::ADDITIONAL_SLOT, 1);
+        m_slotListResult.addSlots(AnvilMenu::RESULT_SLOT, 1);
+        m_labelAnvil.init(m_labelAnvil.label);
+        m_textInputAnvil.init(m_textInputAnvil.label, eControl_TextInput);
+
+        m_textInputAnvil.hasFocus = false;
+        if (m_focusSection != eSectionNone) setControlFocus(m_focusSection, true);
+        m_cursorPath.setLabel(m_cursorPath.label, true, true);
+        m_costSent = false;
+        setCostLabel(m_lastCostLabel, m_lastCanAfford);
+        mcle_ui_call("", "ShowRedCross", {mcle_ui_bool(m_showingCross)});
+        UpdateTooltips();
     }
 
     // The menu outlives the scene here, so the scene stops listening first
@@ -1450,9 +1467,29 @@ protected:
         m_focusSection = eSectionNone;
     }
 
+    // Windows64 without the keyboard and mouse: UIScene_Keyboard
     void handleEditNamePressed() override {
         setIgnoreInput(true);
-        mcle_ui_request_keyboard(app.GetString(IDS_TITLE_RENAME), m_textInputAnvil.label, 30);
+        MCLEKeyboardInitData kbData;
+        kbData.title = app.GetString(IDS_TITLE_RENAME);
+        kbData.defaultText = m_textInputAnvil.getLabel();
+        kbData.maxChars = 30;
+        kbData.callback = &AnvilScene::KeyboardCompleteCallback;
+        kbData.lpParam = this;
+        mcle_keyboard_navigate_to(getPad(), kbData);
+    }
+
+    static int KeyboardCompleteCallback(LPVOID lpParam, bool bRes) {
+        AnvilScene *pClass = static_cast<AnvilScene *>(lpParam);
+        pClass->setIgnoreInput(false);
+
+        if (bRes) {
+            // Win64_GetKeyboardText
+            pClass->setEditNameValue(mcle_keyboard_text());
+            pClass->m_itemName = mcle_keyboard_text();
+            pClass->updateItemName();
+        }
+        return 0;
     }
 
     void setEditNameValue(const wstring &name) override { m_textInputAnvil.setLabel(name); }

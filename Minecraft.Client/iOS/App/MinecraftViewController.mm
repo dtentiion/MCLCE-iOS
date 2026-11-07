@@ -4243,11 +4243,13 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     [self showContainerOverWorld];
 }
 
-// The server container's scene, once its movie is up
+// The server container's scene, once its movie is up, or its reloadMovie
+// coming back from the keyboard
 - (void)initServerContainer {
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
-    mcle_container_open_server();
+    if (g_container_reloading) mcle_container_reload();
+    else mcle_container_open_server();
     MCLEContainerApplyOps();
 }
 
