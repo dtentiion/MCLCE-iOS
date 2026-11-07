@@ -3399,6 +3399,8 @@ static int MCLELoadOrJoinKeyboardComplete(void* lpParam, const bool bRes) {
         const char* saves = "SavesList";
         ruffle_ios_call_list_remove_all(g_ruffle_player, (const uint8_t*)saves, strlen(saves));
         [self loadOrJoinAddSaves];
+        // clearList leaves the selection on the first button, Create New World
+        g_load_save_list_index = 0;
         // m_spaceIndicatorSaves.reset(), then addSave for each
         MCLESelectSaveSize(-1);
     } else {
