@@ -140,6 +140,7 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/TakeAnimationParticle.h"
 #include "../../../upstream/Minecraft.Client/FireworksParticles.h"
 #include "../../../upstream/Minecraft.World/FireworksItem.h"
+#include "../../../upstream/Minecraft.World/MinecartSpawner.h"
 #include "../../../upstream/Minecraft.World/EntityEvent.h"
 #include "../../../upstream/Minecraft.World/SynchedEntityData.h"
 #include "../../../upstream/Minecraft.World/ItemInstance.h"
@@ -2112,6 +2113,12 @@ void mcle_client_take(shared_ptr<Entity> item, shared_ptr<Entity> taker) {
 // server's own entity, so those aren't run again.
 void mcle_client_entity_event(shared_ptr<Entity> e, byte event) {
     if (!e || !g_player || e->level != g_player->level) return;
+    // MinecartSpawner::handleEntityEvent hands them all to its spawner, whose
+    // spawnDelay on the client is the one patch-client-effects.py adds
+    if (e->instanceof(eTYPE_MINECART_SPAWNER)) {
+        std::static_pointer_cast<MinecartSpawner>(e)->getSpawner()->clientEventTriggered(event);
+        return;
+    }
     switch (event) {
     case EntityEvent::ZOMBIE_CONVERTING:
         if (e->instanceof(eTYPE_ZOMBIE)) e->handleEntityEvent(event);

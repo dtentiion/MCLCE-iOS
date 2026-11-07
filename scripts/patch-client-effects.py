@@ -25,6 +25,10 @@ only their client copies do:
 - FireworksRocketEntity::tick leaves the rocket's trail of sparks.
 - EnderDragon::aiStep plays the wing flaps and growls, and breathes while
   landing and sitting.
+- BaseMobSpawner::tick makes the spawner's flames and smoke and spins the
+  mob in the cage, for tile spawners and spawner minecarts. The spin follows
+  the client's own spawnDelay, which only the minecart's entity event resets
+  (mcle_client_entity_event).
 
 Idempotent.
 """
@@ -36,9 +40,9 @@ UP = REPO / "upstream"
 MARKER = "mcle_client_"
 
 
-def patch(path, edits):
+def patch(path, edits, marker=MARKER):
     src = path.read_text(encoding="utf-8", errors="replace")
-    if MARKER in src:
+    if marker in src:
         print(f"already patched: {path}")
         return
     nl = "\r\n" if "\r\n" in src else "\n"
@@ -149,4 +153,64 @@ patch(UP / "Minecraft.World" / "EnderDragon.cpp", [
      "\telse\n"
      "#endif\n"
      "\t{\n\t\tdouble xdd = xTarget - x;\n"),
+])
+
+patch(UP / "Minecraft.World" / "BaseMobSpawner.h", [
+    ("public:\n\tBaseMobSpawner();\n",
+     "#ifdef __APPLE_IOS__\n"
+     "public:\n"
+     "\t// The client's own spawnDelay, for the client half of tick the\n"
+     "\t// server's spawner does here\n"
+     "\tint clientSpawnDelay = 0;\n"
+     "\tbool clientSpawnDelaySet = false;\n"
+     "\tvoid clientTick();\n"
+     "\tvoid clientEventTriggered(int id);\n"
+     "#endif\n\n"
+     "public:\n\tBaseMobSpawner();\n"),
+], marker="clientSpawnDelay")
+
+patch(UP / "Minecraft.World" / "BaseMobSpawner.cpp", [
+    ("void BaseMobSpawner::tick()\n", CLIENT_LEVEL + "void BaseMobSpawner::tick()\n"),
+    ("\t\treturn;\n\t}\n\n\tif (getLevel()->isClientSide)\n",
+     "\t\treturn;\n\t}\n\n"
+     "#ifdef __APPLE_IOS__\n"
+     "\t// the client's spawner, which here is the server's\n"
+     "\tif (!getLevel()->isClientSide && mcle_client_level(getLevel())) clientTick();\n"
+     "#endif\n\n"
+     "\tif (getLevel()->isClientSide)\n"),
+    ("BaseMobSpawner::SpawnData *BaseMobSpawner::getNextSpawnData()\n",
+     "#ifdef __APPLE_IOS__\n"
+     "// tick's client half. The client's spawnDelay starts as the Delay in the\n"
+     "// tile entity data it gets, the server's then.\n"
+     "void BaseMobSpawner::clientTick()\n"
+     "{\n"
+     "\tif (!clientSpawnDelaySet)\n"
+     "\t{\n"
+     "\t\tclientSpawnDelay = spawnDelay;\n"
+     "\t\tclientSpawnDelaySet = true;\n"
+     "\t}\n"
+     "\tdouble xP = getX() + getLevel()->random->nextFloat();\n"
+     "\tdouble yP = getY() + getLevel()->random->nextFloat();\n"
+     "\tdouble zP = getZ() + getLevel()->random->nextFloat();\n"
+     "\tgetLevel()->addParticle(eParticleType_smoke, xP, yP, zP, 0, 0, 0);\n"
+     "\tgetLevel()->addParticle(eParticleType_flame, xP, yP, zP, 0, 0, 0);\n"
+     "\n"
+     "\tif (clientSpawnDelay > 0) clientSpawnDelay--;\n"
+     "\toSpin = spin;\n"
+     "\tspin = static_cast<int>(spin + 1000 / (clientSpawnDelay + 200.0f)) % 360;\n"
+     "}\n"
+     "\n"
+     "// onEventTriggered on the client. Only the spawner minecart's entity event\n"
+     "// gets there, a tile spawner's tile event isn't sent (doTileEvent is false\n"
+     "// on the server).\n"
+     "void BaseMobSpawner::clientEventTriggered(int id)\n"
+     "{\n"
+     "\tif (id == EVENT_SPAWN)\n"
+     "\t{\n"
+     "\t\tclientSpawnDelay = minSpawnDelay;\n"
+     "\t\tclientSpawnDelaySet = true;\n"
+     "\t}\n"
+     "}\n"
+     "#endif\n\n"
+     "BaseMobSpawner::SpawnData *BaseMobSpawner::getNextSpawnData()\n"),
 ])
