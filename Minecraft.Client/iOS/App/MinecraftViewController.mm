@@ -394,6 +394,20 @@ static int mcle_map_checkbox(int boxId) {
     return -1;
 }
 
+// SettingsOptionsMenu's Languages button, which only the Xbox One build
+// shows, is the port's Longer Loading Screens option: the label has the
+// value and a press flips it
+static const int kOptionsLanguagesControl = 6;   // eControl_Languages
+static NSString* MCLELongerLoadingLabel(void) {
+    return [NSString stringWithFormat:@"Longer Loading Screens: %@",
+            MCLEStr(mcle_settings_get_longer_loading() ? IDS_ON : IDS_OFF)];
+}
+
+static void MCLEToggleLongerLoading(void) {
+    mcle_settings_set_longer_loading(!mcle_settings_get_longer_loading());
+    MCLECallPath(@"Languages", @"SetLabel", @[MCLELongerLoadingLabel()]);
+}
+
 // UIScene_ControlsMenu. The labels and lines in e_Pad order.
 extern "C" void mcle_controls_text(int layout, int creativeMode, int southPaw, int* out); // Game/MCLEControls.cpp
 static const char* const kControlsLabels[19] = {
@@ -802,6 +816,15 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             mcle_settings_set(MCLE_SETTING_ControlScheme, (unsigned char)control);
             dispatch_async(dispatch_get_main_queue(), ^{
                 MCLECallPath(@"CurrentLayout", @"SetLabel", @[MCLEControlsLayoutString(control)]);
+            });
+            return;
+        }
+        // UIScene_SettingsOptionsMenu::handlePress, its only button
+        if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"] && !g_pending_dialog) {
+            if ((int)id != kOptionsLanguagesControl) return;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+                MCLEToggleLongerLoading();
             });
             return;
         }
@@ -2696,14 +2719,15 @@ static BOOL MCLEPlayStationPadConnected(void) {
     MCLECallPath(@"DifficultyText", @"Init", @[MCLEDifficultyText(diffClamped)]);
 
     // UIScene::removeControl for what this build doesn't have: no mash-up
-    // packs to unhide, no language select (_ENABLE_LANGUAGE_SELECT isn't
-    // defined), and no difficulty change once in game
+    // packs to unhide, and no difficulty change once in game
     MCLECallPath(@"", @"RemoveObject", @[@"ShowMashUpWorlds", @YES]);
     if (mcle_world_is_ticking()) {
         MCLESetPathVisible(@"DifficultyText", false);
         MCLECallPath(@"", @"RemoveObject", @[@"Difficulty", @YES]);
     }
-    MCLECallPath(@"", @"RemoveObject", @[@"Languages", @NO]);
+    // No language select either (_ENABLE_LANGUAGE_SELECT isn't defined), so
+    // its button is Longer Loading Screens, in and out of game
+    MCLECallPath(@"Languages", @"Init", @[MCLELongerLoadingLabel(), @(kOptionsLanguagesControl)]);
 
     // Mirror console's UIScene::gainFocus first-focus path
     // (UIScene.cpp:1003-1012): call SWF SetFocus(-1) so
