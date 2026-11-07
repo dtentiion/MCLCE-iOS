@@ -427,7 +427,8 @@ static bool g_controls_creative = false; // m_bCreativeMode
 static std::atomic<bool> g_controls_layout_changed{false};
 
 static void MCLESetPathVisible(NSString* path, BOOL visible);
-static BOOL MCLEPlayStationPadConnected(void);
+// platformskinHD.swf holds the PS4 skin, skinHDOrbis.swf
+static BOOL g_platform_skin_orbis = NO;
 
 // PositionAllText
 static void MCLEControlsPositionAllText(void) {
@@ -450,7 +451,7 @@ static NSString* MCLEControlsLayoutString(int scheme) {
 // UIScene_ControlsMenu constructor
 static void MCLEControlsInit(void) {
     // SetPlatform: the Windows64 picture, or the PS4 one when the PS4 skin is in
-    MCLECallPath(@"", @"SetPlatform", @[@(MCLEPlayStationPadConnected() ? 3 : 0)]);
+    MCLECallPath(@"", @"SetPlatform", @[@(g_platform_skin_orbis ? 3 : 0)]);
 
     bool notInGame = !mcle_world_is_ticking();
     MCLECallPath(@"Version", @"Init", @[notInGame ? @(VER_PRODUCTVERSION_STR) : @" "]);
@@ -1539,6 +1540,32 @@ static void MCLETooltipsApplyOpacity(bool menuDisplayed, int opacityTimer, bool 
         (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1);
 }
 
+// The strip's movie went up again on a new skin, like UIComponent_Tooltips
+// in UIController::ReloadSkin's ReloadAll: it gets back the safe zone,
+// opacity and buttons it had
+static void MCLETooltipsMovieReloaded(void) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    const char* setSafe = "SetSafeZone";
+    double safe[4] = { kSafeZoneTop, kSafeZoneBottom, kSafeZoneLeft, kSafeZoneRight };
+    ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
+        (const uint8_t*)setSafe, strlen(setSafe), safe, 4);
+    if (g_tooltips_alpha >= 0.0f) {
+        const char* setAlpha = "SetAlpha";
+        double value = g_tooltips_alpha;
+        ruffle_ios_call_method_on_sibling_root(g_ruffle_player, kTooltipsDepth,
+            (const uint8_t*)setAlpha, strlen(setAlpha), &value, 1);
+    }
+    if (g_tooltips.known) {
+        int ids[11];
+        std::copy(g_tooltips.ids, g_tooltips.ids + 11, ids);
+        g_tooltips.known = false;
+        MCLESetTooltips(ids);
+    }
+    // In game the HUD pump shows it again per the setting
+    g_tooltips.enabled = -1;
+}
+
 // In game: Minecraft::tick's tooltips
 static void MCLEGameTooltipsPump(void) {
     extern PlayerHandle* g_ruffle_player;
@@ -1622,8 +1649,9 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 // UIController::loadSkins, Windows64's: each skin library from the selected
 // texture pack's media archive when it has one (CMinecraftApp::getArchiveFile),
 // else the game's own in Documents. The movies loaded from now on import
-// these. A library goes back to the file only after a pack replaced it.
-static void MCLEReloadSkinLibraries(void) {
+// these. A library goes back to the file only after a pack replaced it,
+// or for the platform skins when the pad gave them another skin.
+static void MCLEReloadSkinLibraries(bool platformChanged = false) {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
     NSString* docs = [NSSearchPathForDirectoriesInDomains(
@@ -1667,7 +1695,8 @@ static void MCLEReloadSkinLibraries(void) {
         const bool packSkin = mcle_texture_pack_archive_file(MCLEWideString(skinPath), bytes);
         NSString* file = [docs stringByAppendingPathComponent:skinName];
         if (!packSkin) {
-            if (![fromPack containsObject:skinName]) continue;
+            const bool platform = platformChanged && [skinName hasPrefix:@"platformskin"];
+            if (![fromPack containsObject:skinName] && !platform) continue;
             NSData* data = [NSData dataWithContentsOfFile:file];
             if (!data.length) continue;
             const unsigned char* p = static_cast<const unsigned char*>(data.bytes);
@@ -1734,22 +1763,34 @@ static void MCLEReloadSkinLibraries(void) {
 // the alias name already exists.
 // A PlayStation pad gets the PS4 skin (skinHDOrbis.swf / skinOrbis.swf,
 // what CopyPlatformSkin.bat puts in place on that platform) when it's
-// there, so the button glyphs match the pad. Decided once at launch like
-// a console build.
-static BOOL MCLEPlayStationPadConnected(void) {
-    for (GCController* c in GCController.controllers) {
-        NSString* category = c.productCategory ?: @"";
-        if ([category containsString:@"DualShock"] || [category containsString:@"DualSense"]) return YES;
+// there, so the button glyphs match the pad. It's the pad that drives the
+// game, pad 0. -1 while no pad is connected: GameController only reports
+// the paired pads a moment after launch.
+static int MCLEPadIsPlayStation(void) {
+    GCController* pad = GCController.controllers.firstObject;
+    if (!pad) return -1;
+    if ([pad.extendedGamepad isKindOfClass:GCDualShockGamepad.class]) return 1;
+    if (@available(iOS 14.5, *)) {
+        if ([pad.extendedGamepad isKindOfClass:GCDualSenseGamepad.class]) return 1;
     }
-    return NO;
+    NSString* category = pad.productCategory ?: @"";
+    return ([category containsString:@"DualShock"] || [category containsString:@"DualSense"]) ? 1 : 0;
 }
 
-+ (void)installPlatformSkinAliasIfNeeded {
+// YES when an alias now holds another skin
++ (BOOL)installPlatformSkinAliasIfNeeded {
     NSString* docs = [NSSearchPathForDirectoriesInDomains(
         NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    if (!docs) return;
+    if (!docs) return NO;
     NSFileManager* fm = NSFileManager.defaultManager;
-    const BOOL playStation = MCLEPlayStationPadConnected();
+    NSString* (^source)(NSString*) = ^NSString*(NSString* alias) {
+        NSString* marker = [[docs stringByAppendingPathComponent:alias] stringByAppendingString:@".source"];
+        return [NSString stringWithContentsOfFile:marker encoding:NSUTF8StringEncoding error:nil];
+    };
+    // With no pad yet the skins stay the ones the last pad had
+    const int pad = MCLEPadIsPlayStation();
+    const BOOL playStation = pad < 0 ? [source(@"platformskinHD.swf") isEqualToString:@"skinHDOrbis.swf"] : pad == 1;
+    BOOL changed = NO;
     struct AliasPair { NSString* alias; NSArray<NSString*>* sources; };
     AliasPair pairs[] = {
         { @"platformskinHD.swf", playStation
@@ -1779,12 +1820,57 @@ static BOOL MCLEPlayStationPadConnected(void) {
             if ([fm copyItemAtPath:srcPath toPath:aliasPath error:&err]) {
                 [candidate writeToFile:markerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 NSLog(@"[platformskin] aliased %@ -> %@", candidate, pairs[i].alias);
+                changed = YES;
             } else {
                 NSLog(@"[platformskin] copy %@ -> %@ failed: %@", candidate, pairs[i].alias, err);
             }
             break;
         }
     }
+    g_platform_skin_orbis = [source(@"platformskinHD.swf") isEqualToString:@"skinHDOrbis.swf"];
+    return changed;
+}
+
+// A pad connected or went. When the skins change with it, they load again
+// like UIController::ReloadSkin: the libraries, then the movies made with
+// the old ones that show the pad's buttons.
+- (void)platformPadChanged {
+    if (![MinecraftViewController installPlatformSkinAliasIfNeeded]) return;
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    MCLEReloadSkinLibraries(true);
+    if (self.scenerAttached) [self reloadTooltipsComponent];
+    // ReloadAll for the scenes that draw the pad
+    if (!g_pending_dialog && ([self.currentMenuSwf isEqualToString:@"Controls1080.swf"] ||
+                              [self.currentMenuSwf isEqualToString:@"HowToPlay1080.swf"])) {
+        [self transitionToMenuNamed:self.currentMenuSwf];
+    }
+}
+
+// The tooltips component's movie up again on the new platform skin, its
+// glyphs are the skin's
+- (void)reloadTooltipsComponent {
+    extern PlayerHandle* g_ruffle_player;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString* path = [docs stringByAppendingPathComponent:@"ToolTips1080.swf"];
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data.length) return;
+    NSString* url = [NSString stringWithFormat:@"file://%@",
+        [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+    ruffle_ios_remove_sibling_at_depth(g_ruffle_player, kTooltipsDepth);
+    int rc = ruffle_ios_add_sibling_swf_to_root(g_ruffle_player,
+        (const uint8_t*)data.bytes, data.length,
+        (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
+        kTooltipsDepth, 1.0f, 1.0f, 0.0f, 0.0f);
+    NSLog(@"[platformskin] tooltips movie reloaded -> %d", rc);
+    if (rc != 1) return;
+    // A few frames so its init builds the strip, as attachMenuScenery does
+    for (int i = 0; i < 10; ++i) {
+        ruffle_ios_player_tick_headless_preserve_xui(g_ruffle_player, 1.0f / 60.0f);
+    }
+    ruffle_ios_set_sibling_takes_input(g_ruffle_player, kTooltipsDepth, 0);
+    MCLETooltipsMovieReloaded();
 }
 
 - (void)viewDidLoad {
@@ -1823,6 +1909,15 @@ static BOOL MCLEPlayStationPadConnected(void) {
     // imports for controller-button glyphs and the icons stay
     // blank.
     [MinecraftViewController installPlatformSkinAliasIfNeeded];
+    // The pads GameController reports after launch, and any connected
+    // later, get their own skin too
+    __weak MinecraftViewController* weakSelf = self;
+    for (NSNotificationName name in @[ GCControllerDidConnectNotification, GCControllerDidDisconnectNotification ]) {
+        [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue
+                                                    usingBlock:^(NSNotification* _Nonnull) {
+            [weakSelf platformPadChanged];
+        }];
+    }
 
     CGRect frame = self.view.bounds;
 
