@@ -63,6 +63,8 @@ public:
     // the movie's ExternalInterface calls
     virtual void handlePress(int controlId, int childId) {}
     virtual void handleFocusChange(int controlId, int childId, bool init) {}
+    // UIScene::handleCheckboxToggled, for a movie that calls it
+    virtual void handleCheckboxToggled(int controlId, bool selected) {}
 
     // parentLayer->addComponent(eUIComponent_MenuBackground) in the
     // scene's constructor

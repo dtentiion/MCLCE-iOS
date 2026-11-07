@@ -985,6 +985,12 @@ void mcle_container_focus_change(int controlId, int childId, bool init) {
     g_scene->handleFocusChange(controlId, childId, init);
 }
 
+void mcle_container_checkbox_toggled(int controlId, bool selected) {
+    if (!g_scene || g_closeRequested) return;
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    g_scene->handleCheckboxToggled(controlId, selected);
+}
+
 bool mcle_container_menu_background() {
     return g_scene != nullptr && g_scene->hasMenuBackground();
 }

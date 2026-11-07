@@ -126,6 +126,8 @@ void mcle_container_set_label_reader(bool (*reader)(const char *path, std::wstri
 // scene that's up
 void mcle_container_press(int controlId, int childId);
 void mcle_container_focus_change(int controlId, int childId, bool init);
+// and its handleCheckboxToggled
+void mcle_container_checkbox_toggled(int controlId, bool selected);
 
 // Whether the scene that's up has the menu background under it
 bool mcle_container_menu_background();

@@ -649,6 +649,13 @@ static void MCLECreateWorldReset(void) {
 extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, double value) {
     if (!method) return;
     if (strcmp(method, "handleCheckboxToggled") == 0) {
+        // The scene over the game
+        if (mcle_container_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            bool checked = value != 0.0;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_checkbox_toggled(cid, checked); });
+            return;
+        }
         if ([g_current_scene_name isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
             int cid = (int)id;
             BOOL checked = value != 0.0;
