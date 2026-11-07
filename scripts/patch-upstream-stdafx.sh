@@ -1769,6 +1769,12 @@ if [ -f "$MMC_PY" ]; then
     python3 "$MMC_PY"
 fi
 
+# Maps mark the local player, who isn't in the PlayerList's players
+MLP_PY="$REPO_ROOT/scripts/patch-map-local-player.py"
+if [ -f "$MLP_PY" ]; then
+    python3 "$MLP_PY"
+fi
+
 # Nothing bumping into the local player pushes it, the server's pushes on its own player never reach the client
 LPP_PY="$REPO_ROOT/scripts/patch-local-player-not-pushed.py"
 if [ -f "$LPP_PY" ]; then
