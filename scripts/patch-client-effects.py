@@ -22,6 +22,7 @@ only their client copies do:
 
 - LightningBolt::tick flashes the sky. The game loop counts skyFlashTime
   down like Minecraft::tick.
+- FireworksRocketEntity::tick leaves the rocket's trail of sparks.
 
 Idempotent.
 """
@@ -109,4 +110,14 @@ patch(UP / "Minecraft.World" / "LightningBolt.cpp", [
      "\t\t\tif (mcle_client_level(level)) level->skyFlashTime = 2;\n"
      "#endif\n"
      "\t\t\tdouble r = 3;\n"),
+])
+
+SPARK = "\tif (level->isClientSide && (life % 2) < 2)\n"
+patch(UP / "Minecraft.World" / "FireworksRocketEntity.cpp", [
+    ("void FireworksRocketEntity::tick()\n", CLIENT_LEVEL + "void FireworksRocketEntity::tick()\n"),
+    (SPARK,
+     "#ifdef __APPLE_IOS__\n"
+     "\t// the client's rocket, which here is the server's\n"
+     "\tif ((level->isClientSide || mcle_client_level(level)) && (life % 2) < 2)\n"
+     "#else\n" + SPARK + "#endif\n"),
 ])
