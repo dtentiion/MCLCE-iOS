@@ -2384,6 +2384,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
     if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
         // UIScene_MainMenu: Select only, there's nothing to back out to
         ids[1] = -1;
+    } else if ([swfName isEqualToString:@"SaveMessage1080.swf"]) {
+        // UIScene_SaveMessage::updateTooltips: Select only
+        ids[1] = -1;
     } else if ([swfName isEqualToString:@"MessageBox1080.swf"]) {
         // UIScene_MessageBox: the dialog cancels
         ids[1] = IDS_TOOLTIPS_CANCEL;
@@ -2431,6 +2434,30 @@ static BOOL MCLEPlayStationPadConnected(void) {
     [self applyMenuButtonConfig:cfg];
     // UIScene_MainMenu::handleGainFocus
     MCLESetPathVisible(@"Timer", NO);
+}
+
+// UIScene_SaveMessage constructor
+- (void)initSaveMessage {
+    // addComponent eUIComponent_Panorama and eUIComponent_Logo
+    [self attachMenuScenery];
+    [self applyMenuButtonConfig:@[
+        @{ @"name": @"Confirm", @"label": MCLEStr(IDS_CONFIRM_OK), @"id": @(0) },
+    ]];
+    MCLECallPath(@"Description", @"Init", @[MCLEStr(IDS_SAVE_ICON_MESSAGE)]);
+    // Russian needs to resize the box
+    MCLECallPath(@"", @"AutoResize", @[]);
+    // If we have a signed in user connected, let's get the DLC now
+    mcle_dlc_install_if_needed(0);
+}
+
+// UIController::NavigateToHomeMenu: the menus go back on the default
+// texture pack, then the main menu with nothing to go back to
+- (void)navigateToHomeMenu {
+    self.menuStack = nil;
+    mcle_texture_packs_navigate_to_home_menu();
+    mcle_handle_xui_actions();
+    if (mcle_ui_take_skin_reload()) MCLEReloadSkinLibraries();
+    [self transitionToMenuNamed:@"MainMenu1080.swf"];
 }
 
 - (void)initHelpAndOptionsButtons {
@@ -4858,6 +4885,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
         MCLECallPath(@"", @"SetSafeZone", @[@(kSafeZoneTop), @(kSafeZoneBottom), @(kSafeZoneLeft), @(kSafeZoneRight)]);
         if ([swfName isEqualToString:@"MainMenu1080.swf"]) {
             [self initMainMenuButtons];
+        } else if ([swfName isEqualToString:@"SaveMessage1080.swf"]) {
+            [self initSaveMessage];
         } else if ([swfName isEqualToString:@"HelpAndOptionsMenu1080.swf"]) {
             [self initHelpAndOptionsButtons];
         } else if ([swfName isEqualToString:@"SettingsMenu1080.swf"]) {
@@ -5340,6 +5369,9 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                                     });
                             }];
                         }
+                    } else if ([self.currentMenuSwf isEqualToString:@"SaveMessage1080.swf"]) {
+                        // UIScene_SaveMessage::handlePress
+                        [self navigateToHomeMenu];
                     } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
                         // UIScene_DeathMenu::handlePress: eAppAction_Respawn,
                         // ConnectingProgress while the player respawns
@@ -5473,6 +5505,8 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
                 } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
                     // UIScene_DeathMenu::handleInput swallows B
+                } else if ([self.currentMenuSwf isEqualToString:@"SaveMessage1080.swf"]) {
+                    // UIScene_SaveMessage::handleInput only takes A
                 } else if ([self.currentMenuSwf isEqualToString:@"EndPoem1080.swf"]) {
                     // UIScene_EndPoem::handleInput: on to eAppAction_Respawn,
                     // ConnectingProgress while the player respawns
