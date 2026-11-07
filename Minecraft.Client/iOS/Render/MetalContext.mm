@@ -33,7 +33,7 @@ struct Ctx {
     id<CAMetalDrawable> drawable = nil;
     id<MTLCommandBuffer> cmd = nil;
     id<MTLRenderCommandEncoder> enc = nil;
-    // G3d-step2: depth attachment + depth-test pipeline state. Re-created
+    // Depth attachment + depth-test pipeline state. Re-created
     // when the layer resizes; reused across frames otherwise.
     id<MTLTexture>             depthTex = nil;
     int                        depthTexW = 0;
@@ -56,21 +56,21 @@ struct Ctx {
 
 Ctx g;
 
-// G3a: legacy GL display-list bridge. Upstream LevelRenderer::LevelRenderer
+// Legacy GL display-list bridge. Upstream LevelRenderer::LevelRenderer
 // builds geometry once via glNewList(id, GL_COMPILE) + Tesselator -> end()
 // recording, then per-frame replays it via glCallList(id). On real consoles
-// the GPU driver records & replays. On iOS we record DrawVertices payloads
-// in CPU memory and replay them through our Metal hook.
+// the GPU driver records & replays. On iOS the DrawVertices payloads are recorded
+// in CPU memory and replayed through the Metal hook.
 //
-// Until G3-step3 lands real Metal upload + draw, replay just bumps the
-// draw counter so we can verify per-frame dispatch in the tick log.
+// Replay draws each recorded batch through immediate_dispatch, which
+// also bumps the draw counter the tick log reads.
 struct DrawCmd {
     int                  prim;
     int                  count;
     int                  fmt;
     int                  shader;
     std::vector<uint8_t> data;
-    // G5: chunk's world translation (xRenderOffs/yRenderOffs/zRenderOffs)
+    // The chunk's world translation (xRenderOffs/yRenderOffs/zRenderOffs)
     // captured at record time. Applied as a translate on top of current
     // modelview at replay so geometry tracks the camera correctly.
     float                translate[3] = {0, 0, 0};
@@ -109,7 +109,7 @@ std::atomic<int>                      g_next_list_id{1};
 
 // Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
 // per vertex for the PF3_TF2_CB4_NB4_XW1 layout (see Tesselator::end's
-// pColData += 8 stride). Other formats are guesses until we exercise them.
+// pColData += 8 stride). Other formats are guesses until something uses them.
 inline int vertex_stride(int fmt) {
     switch (fmt) {
         case 1: /* VERTEX_TYPE_PF3_TF2_CB4_NB4_XW1        */ return 32;
@@ -120,13 +120,13 @@ inline int vertex_stride(int fmt) {
     }
 }
 
-// G3c: Metal pipeline state for the upstream PF3_TF2_CB4_NB4_XW1 vertex
+// Metal pipeline state for the upstream PF3_TF2_CB4_NB4_XW1 vertex
 // format (32 bytes/vertex: pos float3 @ 0, uv float2 @ 12, color uchar4
 // @ 20, normal uchar4 @ 24, extra word @ 28). Lazily built on first
 // replay so process startup doesn't pay shader compile cost.
 id<MTLRenderPipelineState> g_world_pso        = nil;
 
-// G5: pipeline state for VERTEX_TYPE_COMPRESSED (fmt=4, 16 bytes/vertex):
+// Pipeline state for VERTEX_TYPE_COMPRESSED (fmt=4, 16 bytes/vertex):
 // short3 pos*1024 @ 0, short packed_5_6_5_color @ 6, short2 uv*8192 @ 8,
 // short2 lightUV @ 12. This is what chunk rebuild emits when
 // useCompactVertices(true) is set in Tesselator.
@@ -141,8 +141,8 @@ id<MTLRenderPipelineState> g_world_pso_blend         = nil;
 id<MTLRenderPipelineState> g_world_pso_compact_blend = nil;
 // Additive blending variant (srcAlpha, ONE). Upstream uses this for the
 // sun and stars - black border pixels (rgb=0) contribute nothing to dst,
-// only the bright sun disc adds color. Without this we'd see the sun's
-// black border replacing the sky.
+// only the bright sun disc adds color. Without this the sun's
+// black border replaces the sky.
 id<MTLRenderPipelineState> g_world_pso_additive         = nil;
 id<MTLRenderPipelineState> g_world_pso_compact_additive = nil;
 
@@ -157,7 +157,7 @@ id<MTLRenderPipelineState> g_world_pso_additive_nocut = nil;
 // pass 0 calls glBlendFunc(GL_ZERO, GL_ONE) - source contributes nothing,
 // destination preserved - so color buffer is untouched while depth still
 // gets the cloud geometry. Without this variant the over-blend pipeline
-// runs for pass 0 too and we end up drawing clouds twice per frame, which
+// runs for pass 0 too and clouds are drawn twice per frame, which
 // is what produced the visible flat checkered cloud sheet on top of the
 // proper 3D cube layer.
 id<MTLRenderPipelineState> g_world_pso_depth_only         = nil;
@@ -211,7 +211,7 @@ thread_local float g_alpha_ref = 0.1f;
 // whichever texture is current - producing a chaotic textured slab
 // stuck around the player. When this flag is off, immediate_dispatch
 // binds the 1x1 white texture so sample * vertex_color collapses to
-// vertex_color (parity with fixed-function GL).
+// vertex_color (as fixed-function GL does).
 thread_local bool g_texture_2d_enabled = true;
 
 // Fog state. Mirrors upstream GameRenderer::setupFog which calls
@@ -342,7 +342,7 @@ extern "C" void mcle_lightmap_upload(void) {
 
 extern "C" void mcle_glbridge_set_alpha_test(int enabled) {
     g_alpha_test_enabled = (enabled != 0);
-    // Diagnostic: confirm upstream's glEnable/glDisable(GL_ALPHA_TEST)
+    // Confirm upstream's glEnable/glDisable(GL_ALPHA_TEST)
     // is actually reaching the shim. If renderSky's glDisable(...) call
     // never logs here, the shim isn't being wired up correctly.
     {
@@ -375,7 +375,7 @@ extern "C" void mcle_glbridge_set_polygon_offset(float factor, float units) {
     g_polygon_offset_units  = units;
 }
 
-// (Diagnostic getter mcle_glbridge_get_modelview lives below the
+// (The getter mcle_glbridge_get_modelview lives below the
 // anonymous-namespace block where g_modelview_stack is declared.)
 
 // glBlendFunc routing: pick additive (srcAlpha, ONE) vs over
@@ -404,14 +404,14 @@ extern "C" void mcle_glbridge_set_blend_func(int src, int dst) {
     }
 }
 
-// G4: 1x1 white default texture + linear sampler. Bound on every world
+// 1x1 white default texture + linear sampler. Bound on every world
 // draw so the fragment shader's texture sample stays well-defined even
 // for currently-untextured paths (sky / dark / star / sunset gradient).
-// Real textures from glBindTexture override this in G4-step2.
+// Real textures from glBindTexture override this.
 id<MTLTexture>      g_default_texture = nil;
 id<MTLSamplerState> g_default_sampler  = nil;
 // Lightmap is a 16x16 lookup table sampled per-fragment via the
-// interpolated tex2 UV. We want LINEAR filtering on this one (not
+// interpolated tex2 UV. It uses LINEAR filtering (not
 // nearest like the terrain atlas) so a fragment whose UV lands
 // between two cells gets a smooth mix, producing soft shadow
 // gradients across block faces instead of sharp per-cell edges.
@@ -434,11 +434,11 @@ static id<MTLSamplerState>    g_tex_samplers[16];
 id<MTLTexture> g_lightmap_texture       = nil;
 uint8_t        g_lightmap_pixels[16*16*4];
 // 1x1 white bound at fragment unit 1 for fmt=1 sky/sun/moon/cloud
-// dispatches. Their vertex tex2 is uninitialized so we hide the
-// lightmap entirely for those passes by sampling a constant 1.0.
+// dispatches. Their vertex tex2 is uninitialized, so the
+// lightmap is hidden for those passes by sampling a constant 1.0.
 id<MTLTexture> g_lightmap_white_texture = nil;
 
-// G4-step2: GL texture object registry. glGenTextures hands out IDs;
+// GL texture object registry. glGenTextures hands out IDs;
 // glBindTexture(target, id) sets the active texture; glTexImage2D
 // uploads data to the bound texture. IDs are dense small integers
 // matching legacy GL semantics.
@@ -472,7 +472,7 @@ NSString* const kWorldShaderSrc = @R"(
         // Texture matrix (active GL_TEXTURE stack top). Multiplied into
         // per-vertex UV so renderAdvancedClouds's per-cell UV-translate
         // (and any future water/lava animation) actually moves the
-        // sampled coords. Identity matrix = no-op = parity with shaders
+        // sampled coords. Identity matrix = no-op, same as shaders
         // that don't touch it.
         float4x4 texMatrix;
     };
@@ -480,7 +480,7 @@ NSString* const kWorldShaderSrc = @R"(
         float4 currentColor;
     };
     // FogParams.fogColor.w doubles as the fog-enabled flag (1.0 = on,
-    // 0.0 = off). Parity with upstream's GL_FOG state: when fogEnabled
+    // 0.0 = off), like upstream's GL_FOG state: when fogEnabled
     // is 0 the mix factor collapses to 0 and the fragment passes through
     // unchanged.
     struct FogParams {
@@ -629,7 +629,7 @@ NSString* const kWorldShaderSrc = @R"(
     }
 )";
 
-// G5: shader for fmt=4 compact vertex format. Position is int16x3 scaled
+// Shader for fmt=4 compact vertex format. Position is int16x3 scaled
 // by 1024, primary UV is int16x2 scaled by 8192. Packed color is signed
 // int16 with bits 15-11=A 10-5=R 4-0=G (per Tesselator.cpp:774). UVs go
 // through to fragment shader for atlas sampling.
@@ -980,7 +980,7 @@ bool ensure_world_pipeline() {
     // sets glBlendFunc(GL_ZERO, GL_ONE) - a depth pre-pass with zero color
     // contribution. Restore the fragment function to world_frag and the
     // writeMask back to All afterwards so the next pipeline build (none
-    // here for fmt=1, but parity for future variants) starts from a
+    // here for fmt=1, but kept for future variants) starts from a
     // known state.
     desc.fragmentFunction = [lib newFunctionWithName:@"world_frag"];
     desc.colorAttachments[0].writeMask = MTLColorWriteMaskNone;
@@ -1001,7 +1001,7 @@ bool ensure_world_pipeline() {
         return false;
     }
 
-    // G4: build the 1x1 white default texture + linear sampler.
+    // Build the 1x1 white default texture + linear sampler.
     if (!g_default_texture) {
         MTLTextureDescriptor* td =
             [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
@@ -1089,7 +1089,7 @@ bool ensure_world_pipeline() {
     return true;
 }
 
-// G3d-step3: legacy GL matrix stack. Two stacks (modelview + projection),
+// Legacy GL matrix stack. Two stacks (modelview + projection),
 // glMatrixMode picks active one. immediate_dispatch sends projection *
 // modelview as the MVP uniform.
 
@@ -1174,10 +1174,10 @@ thread_local float g_texgen_obj[16] = {};
 // Whether this encoder has the texgen cbuffer bound yet
 bool g_texgen_bound = false;
 
-// G3f: GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
+// GL_CURRENT_COLOR for fixed-function modulate. Vertex color is
 // multiplied with this in the world vertex shader so glColor3f /
-// glColor4f take effect across replayed display lists. Matches D3D9
-// fixed-function modulate semantics (Xbox 360 / PS3) for parity.
+// glColor4f take effect across replayed display lists, like D3D9
+// fixed-function modulate (Xbox 360 / PS3).
 thread_local float g_current_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 inline std::vector<Mat4>& current_stack() {
@@ -1191,7 +1191,7 @@ inline float* current_matrix_data() { return current_stack().back().m; }
 
 } // namespace
 
-// Diagnostic getter: copies the current modelview matrix into out16. Used
+// Copies the current modelview matrix into out16. Used
 // by MCLEGameLoop's MV_CKPT to confirm the matrix flow before renderSky.
 extern "C" void mcle_glbridge_get_modelview(float *out16) {
     if (!out16) return;
@@ -1218,7 +1218,7 @@ extern "C" void mcle_glbridge_matrix_mode(int mode) {
         case kGL_TEXTURE:    g_matrix_mode = kMatrixModeTexture;    break;
         default:             g_matrix_mode = kMatrixModeModelview;  break;
     }
-    // Diagnostic: log the first few GL_TEXTURE switches. If this doesn't
+    // Log the first few GL_TEXTURE switches. If this doesn't
     // fire even once during cloud render, renderAdvancedClouds is exiting
     // the per-cube loop before its glMatrixMode(GL_TEXTURE) call - usually
     // because Frustum::cubeInFrustum is rejecting everything.
@@ -1302,7 +1302,7 @@ extern "C" void mcle_glbridge_push_matrix(void) {
 extern "C" void mcle_glbridge_pop_matrix(void) {
     if (current_stack().size() > 1) current_stack().pop_back();
 }
-// G5: remember last translate applied while a list is being recorded, so
+// Remember the last translate applied while a list is being recorded, so
 // chunk display lists can carry their world position to replay. Per-
 // thread because each worker compiles into a different chunk and needs
 // its own remembered offset.
@@ -1338,9 +1338,9 @@ extern "C" void mcle_glbridge_set_light_direction(int light, float x, float y, f
     for (int i = 0; i < 3; i++) g_light_dir[light][i] = len > 0.0f ? d[i] / len : 0.0f;
 }
 
-// G4-step3: PNG decoder bridge (png_decode.mm) and texture-from-path
+// PNG decoder bridge (png_decode.mm) and texture-from-path
 // loader. Mirrors upstream's per-platform pattern - on Xbox/PS3 the
-// platform's render API decodes the PNG; here we plug in CGImageSource.
+// platform's render API decodes the PNG; here CGImageSource does.
 extern "C" int  mcle_png_decode_rgba8(const void* data, unsigned long length,
                                        unsigned char** out_rgba,
                                        int* out_w, int* out_h);
@@ -1364,7 +1364,7 @@ extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path) {
     FILE* f = fopen(path, "rb");
     if (!f) {
         NSLog(@"[mcle_glbridge G4] PNG missing: %s", path);
-        // Also log to crash_log.txt so we can diagnose load-order issues
+        // Also log to crash_log.txt so load-order issues show up
         // in shared logs. Otherwise these attempts only land in NSLog
         // (Apple system log) which the user can't easily capture.
         extern int mcle_log_msg(const char *);
@@ -1413,7 +1413,7 @@ extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path) {
     return id;
 }
 
-// G4-step2: GL texture object registry. All allocations / binds /
+// GL texture object registry. All allocations / binds /
 // uploads route through these so the fragment shader's bound texture
 // matches whatever upstream glBindTexture last set.
 extern "C" unsigned int mcle_glbridge_gen_texture(void) {
@@ -1446,7 +1446,7 @@ extern "C" void mcle_glbridge_bind_texture(unsigned int tex_id) {
         auto it = g_gl_textures.find(tex_id);
         g_current_texture = (it != g_gl_textures.end()) ? it->second : nil;
     }
-    // Diagnostic: log each bind so we can correlate sun/moon binds with
+    // Log each bind to correlate sun/moon binds with
     // their draw dispatches. Throttled to first 200 binds to avoid
     // flooding the log once steady-state is reached.
     {
@@ -1513,10 +1513,10 @@ extern "C" void mcle_glbridge_tex_image_2d_rgba(unsigned int tex_id, int width, 
     }
     g_gl_textures[tex_id] = tex;
     if (tex_id == g_bound_tex_id) g_current_texture = tex;
-    // Diagnostic: log each texture upload so we can match texture id
+    // Log each texture upload to match the texture id
     // back to the upload source (which BIL_CKPT path produced it).
     // For moon_phases.png (128x64), additionally dump the center pixels
-    // of the top-left cell so we can confirm channel order is correct -
+    // of the top-left cell to confirm the channel order is correct -
     // expected RGB ~ (175, 184, 204) blue-white, NOT (204, 184, 175).
     {
         static int s_count = 0;
@@ -1570,8 +1570,8 @@ extern "C" void mcle_glbridge_tex_sub_image_rgba(unsigned int tex_id, int x, int
             bytesPerRow:(NSUInteger)(width * 4)];
 }
 
-// G3f: GL_CURRENT_COLOR setters. Each draw reads the live values into a
-// vertex-shader uniform and modulates per-vertex color by it. Matches
+// GL_CURRENT_COLOR setters. Each draw reads the live values into a
+// vertex-shader uniform and modulates per-vertex color by it, like
 // fixed-function D3D9 modulate.
 extern "C" void mcle_glbridge_color4f(float r, float g, float b, float a) {
     g_current_color[0] = r;
@@ -1677,8 +1677,8 @@ void call_list_replay(const DisplayList& dl) {
     }
 }
 
-// Immediate dispatch path. G3c lands MTLBuffer upload + drawPrimitives.
-// G3d builds an MVP from the player's live position so we look out into
+// Immediate dispatch path: MTLBuffer upload + drawPrimitives, with an
+// MVP built from the player's live position so the view looks out into
 // the world from where the simulation thinks the player stands.
 // GL_QUADS as triangles (0,1,2 and 0,2,3 for each quad) from one shared
 // index buffer, grown when a draw has more quads than it covers
@@ -1734,7 +1734,7 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         if (!vbuf) return;
     }
 
-    // G3d: real perspective MVP centered on the live player position.
+    // Real perspective MVP centered on the live player position.
     float mvp[16];
     compute_mvp(mvp);
 
@@ -1782,8 +1782,8 @@ inline void immediate_dispatch(int prim, int count, const void* data,
             g_lastDepthSlope = slope;
         }
     }
-    // Parity with upstream chunks: glEnable(GL_CULL_FACE) with default
-    // GL CCW winding. Track last-applied state so we don't issue redundant
+    // Like upstream chunks: glEnable(GL_CULL_FACE) with default
+    // GL CCW winding. Track last-applied state to skip redundant
     // setCullMode / setFrontFacingWinding on every one of ~2300+ dispatches
     // per frame. g_lastCullMode / g_lastWinding reset at frame begin.
     if (isCompact) {
@@ -1813,12 +1813,12 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         const Mat4 &tm = g_texture_stack.back();
         for (int i = 0; i < 16; i++) uniforms[16+i] = tm.m[i];
         [g.enc setVertexBytes:uniforms length:sizeof(uniforms) atIndex:1];
-        // Diagnostic: log fmt=1 dispatches where the texture matrix is
+        // Log fmt=1 dispatches where the texture matrix is
         // NOT identity. renderAdvancedClouds is the only path that sets
         // GL_TEXTURE translates - sun/moon/sky dome leave it at identity.
         // Filtering to non-identity skips the noise from earlier sky
         // dispatches and pins whether renderAdvancedClouds actually
-        // routes per-cube UV offsets through our matrix stack.
+        // routes per-cube UV offsets through the matrix stack.
         if (!isCompact) {
             const float tx = tm.m[12];
             const float ty = tm.m[13];
@@ -1900,10 +1900,10 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         }
     }
 
-    // G4: bind whatever's current (defaults to 1x1 white) + sampler.
+    // Bind whatever's current (defaults to 1x1 white) + sampler.
     // When GL_TEXTURE_2D is disabled (skyList / starList / darkList /
     // sunrise gradient fan), force the 1x1 white texture so sample x
-    // vertex_color collapses to vertex_color - parity with fixed-function
+    // vertex_color collapses to vertex_color, as in fixed-function
     // GL where disabled texturing means the fragment is just the primary
     // color. Without this, those vertex-color-only draws sample whatever
     // atlas happens to be bound at uninitialized UVs and produce a
@@ -1926,10 +1926,10 @@ inline void immediate_dispatch(int prim, int count, const void* data,
     if (lm) [g.enc setFragmentTexture:lm atIndex:1];
     if (g_lightmap_sampler) [g.enc setFragmentSamplerState:g_lightmap_sampler atIndex:1];
 
-    // Diagnostic on the first compact dispatch: dump tex2 bytes from
+    // On the first compact dispatch, dump tex2 bytes from
     // the first 4 vertices (one quad). If 4 corners of one face show
     // DIFFERENT tex2 values, smooth lighting is firing in tessellation.
-    // If all 4 are identical, AO smoothing isn't reaching our buffer
+    // If all 4 are identical, AO smoothing isn't reaching the buffer
     // and shadows will look blocky regardless of sampler.
     if (isCompact) {
         static int s_cvDumped = 0;
@@ -2398,7 +2398,7 @@ static double mcle_ticks_to_ms(uint64_t ticks) {
 static void ensure_depth_states() {
     if (!g.device) return;
     if (!g.depthState) {
-        // LessEqual (not strict Less) for parity with upstream
+        // LessEqual (not strict Less), as in upstream
         // Minecraft.cpp:394 glDepthFunc(GL_LEQUAL). Lets the grass-side
         // overlay's second pass (TileRenderer.cpp:5599+) render at the
         // exact same Z as the first pass instead of being depth-discarded;
@@ -2686,11 +2686,11 @@ extern "C" void mcle_metal_ui_frame_end(void) {
     g_uiFrameDepthTex = nil;
 }
 
-// G2a: Tesselator -> Metal hook. G3a: routes into the display-list
+// Tesselator -> Metal hook. Routes into the display-list
 // recorder when glNewList is active; otherwise dispatches immediately.
 // Counter bumps only on the immediate path so per-frame tick logs reflect
 // actual draws, not the one-shot ctor recording.
-// Track fmt distribution so we can see what formats chunks actually emit.
+// Track fmt distribution to show what formats chunks actually emit.
 static unsigned long g_fmt_counts[16] = {0};
 
 extern "C" void mcle_metal_draw_vertices(int prim, int count,
@@ -2711,7 +2711,7 @@ extern "C" void mcle_metal_draw_vertices(int prim, int count,
                                             options:MTLResourceStorageModeShared];
         }
         if (!cmd.vbuf) cmd.data.assign(p, p + sz);
-        // G5: capture chunk world translation (set by translateToPos before
+        // Capture chunk world translation (set by translateToPos before
         // t->end()). Applied as translate on top of current modelview at
         // replay so geometry tracks the live camera.
         if (g_recording_has_translate) {
@@ -2738,7 +2738,7 @@ extern "C" unsigned long long mcle_metal_draw_count(void) {
     return g_draw_count.load(std::memory_order_relaxed);
 }
 
-// G3a: display-list bridge entry points called by probe_stub.cpp's
+// Display-list bridge entry points called by probe_stub.cpp's
 // glGenLists / glNewList / glEndList / glCallList / glDeleteLists.
 extern "C" int mcle_glbridge_gen_lists(int range) {
     return g_next_list_id.fetch_add(range, std::memory_order_relaxed);
@@ -2771,7 +2771,7 @@ extern "C" void mcle_glbridge_end_list(void) {
         g_lists[id] = std::move(g_recording_buffer);
     }
     g_recording_buffer.draws.clear();
-    // First 50 lists logged so we can confirm the starList capture
+    // First 50 lists logged to confirm the starList capture
     // inside LevelRenderer ctor (line 167-172 upstream) executes.
     {
         static int s_count = 0;
@@ -2786,7 +2786,7 @@ extern "C" void mcle_glbridge_end_list(void) {
     g_recording_list = 0;
 }
 
-// Stats we update without I/O in the hot path.
+// Stats updated without I/O in the hot path.
 static unsigned long g_call_list_hits = 0;
 static unsigned long g_call_list_misses = 0;
 static int g_call_list_first_miss_id = -1;
@@ -2799,7 +2799,7 @@ static unsigned long g_call_list_hits_high = 0;  // id >= 4000000
 
 extern "C" void mcle_glbridge_call_list(int id) {
     // Replay in-place under a shared lock. Writers (workers calling
-    // glNewList) wait briefly while we replay; readers (other render
+    // glNewList) wait briefly during the replay; readers (other render
     // call_list) run in parallel.
     std::shared_lock<std::shared_mutex> _lk(g_lists_mu);
     auto it = g_lists.find(id);
@@ -2838,8 +2838,8 @@ extern "C" void mcle_glbridge_release_lists(int id, int range) {
     for (int i = 0; i < range; i++) g_lists.erase(id + i);
 }
 
-// Diagnostics: number of recorded display lists (so we can correlate with
-// the 191 ctor draws we saw before recording was wired).
+// Number of recorded display lists (to correlate with
+// the 191 ctor draws logged before recording was wired).
 extern "C" unsigned long long mcle_glbridge_list_count(void) {
     return static_cast<unsigned long long>(g_lists.size());
 }
@@ -2881,8 +2881,8 @@ extern "C" unsigned long long mcle_glbridge_total_draws(void) {
 // renderAdvancedClouds via glCallList, so auto-replaying them again
 // draws a second copy stuck around the player - haloRingList in
 // particular is never called by upstream (the call site checks for a
-// specific player skin) so without skipping it we render a 100-radius
-// textured ring on every frame that becomes the "wedge" visible
+// specific player skin) so without skipping it a 100-radius
+// textured ring is drawn on every frame and becomes the "wedge" visible
 // across the upper sky.
 static std::unordered_set<int> g_skip_autoreplay_lists;
 
@@ -2890,9 +2890,9 @@ extern "C" void mcle_glbridge_skip_autoreplay(int id) {
     g_skip_autoreplay_lists.insert(id);
 }
 
-// G3b: chunks still rely on this auto-replay because our
+// Chunks still rely on this auto-replay because the
 // glCallLists(IntBuffer*) is a no-op stub, so OffsettedRenderList's
-// upstream render path doesn't actually call our display lists. World
+// upstream render path doesn't actually call these display lists. World
 // decoration lists registered via mcle_glbridge_skip_autoreplay get
 // filtered out so they're only drawn once - from upstream's explicit
 // glCallList sites.
