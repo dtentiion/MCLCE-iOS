@@ -2,8 +2,8 @@
 #include "STO_iOS_Paths.h"
 
 // Stub implementations of the save-game interface 4J_Storage exposes on the
-// upstream Windows64 build. Real wiring happens once we pull in the upstream
-// CConsoleSaveFile* classes. For now this file exists so the static library
+// upstream Windows64 build. Real wiring happens once the upstream
+// CConsoleSaveFile* classes are pulled in. For now this file exists so the static library
 // has content and the linker has symbols to resolve.
 
 extern "C" {

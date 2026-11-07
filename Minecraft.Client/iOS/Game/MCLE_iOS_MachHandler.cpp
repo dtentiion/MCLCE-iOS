@@ -10,23 +10,23 @@
 // the render thread) still worked but walking (on the sim thread)
 // died. exc_server is the only safe way to do this on iOS.
 //
-// We use the public <mach/exc.h> exc_server (32-bit codes) rather
+// This uses the public <mach/exc.h> exc_server (32-bit codes) rather
 // than the private mach_exc.h variant (64-bit codes) because the
 // iOS public SDK doesn't expose mach_exc.h. Trade-off: EXC_RESOURCE
 // and EXC_CRASH codes get 32-bit-truncated, but the exception TYPE
-// (which is what we mainly need to identify the kill reason) comes
+// (which is what mainly identifies the kill reason) comes
 // through cleanly.
 //
-// Forward-to-original semantics: we save the previously-installed
-// exception ports for our mask set, log the catch on our side, and
-// then forward the exception to whatever was registered before us by
+// Forward-to-original semantics: the previously-installed
+// exception ports for this mask set are saved, the catch is logged here, and
+// the exception is forwarded to whatever was registered before by
 // calling exception_raise on the saved port. The previous
 // handler then runs (in practice this is the kernel's default which
-// delivers a signal or SIGKILLs). If no previous handler exists, we
-// return KERN_FAILURE and the kernel falls back to signal dispatch.
+// delivers a signal or SIGKILLs). If no previous handler exists, it
+// returns KERN_FAILURE and the kernel falls back to signal dispatch.
 //
 // The catch_exception_raise_state* stubs return KERN_FAILURE
-// because we register with EXCEPTION_DEFAULT (no state included),
+// because the ports are registered with EXCEPTION_DEFAULT (no state included),
 // but exc_server requires all three symbols to link.
 
 #include <mach/mach.h>
@@ -42,7 +42,7 @@ extern "C" int g_crash_log_fd;
 
 namespace {
 
-// Saved exception ports from before we installed ours. catch_*_raise
+// Saved exception ports from before this handler was installed. catch_*_raise
 // forwards to these so the kernel's lifecycle handling still runs.
 exception_mask_t       g_old_masks[EXC_TYPES_COUNT];
 exception_handler_t    g_old_ports[EXC_TYPES_COUNT];
@@ -53,7 +53,7 @@ mach_msg_type_number_t g_old_count = 0;
 mach_port_t g_exc_port = MACH_PORT_NULL;
 
 // Pre-baked once at install. The Mach receive loop needs a buffer
-// large enough for the biggest exception message we expect. 4 KiB is
+// large enough for the biggest expected exception message. 4 KiB is
 // plenty for the MACH_EXCEPTION_CODES variant.
 constexpr size_t kMsgBufSize = 4096;
 
@@ -186,7 +186,7 @@ extern "C" kern_return_t catch_exception_raise_state(
     thread_state_t /*new_state*/,
     mach_msg_type_number_t * /*new_stateCnt*/)
 {
-    // We register with EXCEPTION_DEFAULT (no state). This shouldn't
+    // Registered with EXCEPTION_DEFAULT (no state). This shouldn't
     // get called, but the symbol must exist for exc_server to
     // link.
     return KERN_FAILURE;
@@ -210,7 +210,7 @@ extern "C" kern_return_t catch_exception_raise_state_identity(
 }
 
 // Forward decl. exc_server is implemented by libsystem_kernel; the
-// header is mach/exc.h which we've already included above.
+// header is mach/exc.h, already included above.
 extern "C" boolean_t exc_server(mach_msg_header_t *request,
                                        mach_msg_header_t *reply);
 
@@ -241,8 +241,8 @@ void* exception_thread_main(void* /*unused*/) {
             continue;
         }
 
-        // Let MIG decode the message and call into our catch_*_raise
-        // callback. It also formats the reply for us.
+        // Let MIG decode the message and call into the catch_*_raise
+        // callback. It also formats the reply.
         if (exc_server(req, rep)) {
             mach_msg(rep, MACH_SEND_MSG, rep->msgh_size, 0,
                      MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE,
@@ -306,7 +306,7 @@ extern "C" void mcle_install_mach_exception_handler(void) {
         THREAD_STATE_NONE);
     if (kr != KERN_SUCCESS) {
         // Some masks (EXC_MASK_CRASH especially) may require an
-        // entitlement we don't have. Retry with the safer subset.
+        // entitlement the app doesn't have. Retry with the safer subset.
         mach_msg_type_number_t safe_count = EXC_TYPES_COUNT;
         exception_mask_t safe_mask =
               EXC_MASK_BAD_ACCESS

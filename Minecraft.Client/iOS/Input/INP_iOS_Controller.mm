@@ -24,7 +24,7 @@ mcle_ios_pad_state g_state[kMaxPads] = {};
 id g_connectObserver = nil;
 id g_disconnectObserver = nil;
 
-// Convert a GCExtendedGamepad snapshot to our bitmask + axes.
+// Convert a GCExtendedGamepad snapshot to the pad bitmask + axes.
 // Safe to call on any thread; result is copied into g_state under lock.
 mcle_ios_pad_state snapshot(GCExtendedGamepad* p) {
     mcle_ios_pad_state s = {};

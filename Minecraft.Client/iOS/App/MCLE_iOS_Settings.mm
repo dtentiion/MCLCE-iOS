@@ -1,5 +1,5 @@
 // Flat settings store keyed by mcle_setting. Persists to
-// Documents/settings.dat on every set so we match console's
+// Documents/settings.dat on every set, like console's
 // Win64_SaveSettings write-on-change pattern
 // (Common/Consoles_App.cpp:792).
 
@@ -54,7 +54,7 @@ NSString* settings_path() {
 
 // Console defaults from CMinecraftApp::InitGameSettings
 // (Common/Consoles_App.cpp:820+). Any setting not explicitly
-// assigned stays at 0, matching console's memset-then-set pattern.
+// assigned stays at 0, as console's memset-then-set leaves it.
 void apply_defaults() {
     // Audio (DEFAULT_VOLUME_LEVEL is 100 on console).
     g_values[MCLE_SETTING_MusicVolume] = 100;
@@ -70,7 +70,7 @@ void apply_defaults() {
     g_values[MCLE_SETTING_InterfaceOpacity] = 80;
 
     // Options
-    g_values[MCLE_SETTING_Difficulty] = 1;              // easy (iOS matches console default)
+    g_values[MCLE_SETTING_Difficulty] = 1;              // easy (console's default)
     g_values[MCLE_SETTING_ViewBob] = 1;
     g_values[MCLE_SETTING_Hints] = 1;
     g_values[MCLE_SETTING_Tooltips] = 1;
@@ -141,7 +141,7 @@ extern "C" void mcle_settings_load(void) {
             std::fclose(f);
             // Tolerate shorter files: newer builds may have more
             // settings than an old settings.dat was written with.
-            // Copy what we got, leave defaults for the rest.
+            // Copy what was read, leave defaults for the rest.
             if (n > 0) {
                 const size_t skinEnd = MCLE_SETTING_MAX + sizeof(SkinSettings);
                 const size_t tutorialEnd = skinEnd + sizeof(TutorialSettings);

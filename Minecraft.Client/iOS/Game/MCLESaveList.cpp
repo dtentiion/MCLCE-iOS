@@ -1,6 +1,6 @@
 // Save list for LoadOrJoin and LoadMenu.
 //
-// Windows64 parity:
+// As on Windows64:
 //   - UIScene_LoadOrJoinMenu::tick sorts the GameHDD folders newest first
 //     (folder names are YYYYMMDDHHMMSS) and labels each one with
 //     ReadLevelNameFromSaveFile, falling back to the save title.

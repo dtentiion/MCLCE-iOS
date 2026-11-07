@@ -3,7 +3,7 @@
 // Win64_Save/LoadSettings pair at lines 784-817). Indices come from
 // Common/App_enums.h enum eGameSetting.
 //
-// On iOS we keep a flat unsigned-char table keyed by that enum,
+// On iOS it's a flat unsigned-char table keyed by that enum,
 // persisted to Documents/settings.dat. That's simpler than porting
 // the full bit-packed GAME_SETTINGS struct and equivalent in
 // practice - console's GAME_SETTINGS is bit-packed to fit 204 bytes
@@ -17,7 +17,7 @@ extern "C" {
 
 // Matches eGameSetting in Common/App_enums.h. Only the values used
 // by the five Settings scenes are enumerated; padding anything else
-// zero on load keeps us forward-compatible.
+// zero on load keeps it forward-compatible.
 enum mcle_setting {
     MCLE_SETTING_MusicVolume = 0,
     MCLE_SETTING_SoundFXVolume = 1,
@@ -60,7 +60,7 @@ enum mcle_setting {
 void mcle_settings_load(void);
 
 // Get / set individual values. set persists immediately to disk so
-// we don't lose state if the sideloaded build crashes mid-session.
+// no state is lost if the sideloaded build crashes mid-session.
 unsigned char mcle_settings_get(int setting);
 void          mcle_settings_set(int setting, unsigned char value);
 

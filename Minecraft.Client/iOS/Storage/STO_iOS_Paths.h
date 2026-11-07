@@ -17,7 +17,7 @@ const char* ios_documents_dir(void);
 const char* ios_app_support_dir(void);
 
 // Writable caches directory. May be purged by the OS under disk pressure.
-// Used for things we can regenerate (texture caches, etc).
+// Used for things that can be regenerated (texture caches, etc).
 const char* ios_caches_dir(void);
 
 // Read-only main bundle resources directory.

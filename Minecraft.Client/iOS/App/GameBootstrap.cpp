@@ -8,5 +8,5 @@
 //
 // This file is intentionally empty so the App target keeps building
 // (it expects GameBootstrap.cpp to exist by name). Once the bootstrap
-// API surface stabilises we can fold the App's bootstrap source list
-// directly into mcle_ios_game and remove this stub.
+// API surface stabilises, the App's bootstrap source list can fold
+// directly into mcle_ios_game and this stub can go.

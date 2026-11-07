@@ -11,7 +11,7 @@
 // Compile-time checks that the bridge header is valid C++.
 static_assert(sizeof(mcle_ios_pad_state) > 0, "mcle_ios_pad_state is empty");
 
-// F3-real-input shims into upstream C_4JInput. Each returns -1000..1000
+// Shims into upstream C_4JInput. Each returns -1000..1000
 // for stick axes and 0..1000 for triggers; 4J_Input.h scales by /1000
 // to recover the -1..1 / 0..1 range upstream gameplay code expects.
 // Stick Y is positive up, same as GameController.framework: Input.cpp

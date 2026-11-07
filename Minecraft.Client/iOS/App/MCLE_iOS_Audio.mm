@@ -1,6 +1,6 @@
 // iOS audio backend. Uses miniaudio (same library the console LCE
-// uses in SoundEngine.cpp) so we can play the stock .ogg tracks from
-// the console build directly without transcoding. Scans Documents for
+// uses in SoundEngine.cpp), so the stock .ogg tracks from
+// the console build play directly without transcoding. Scans Documents for
 // menu1.ogg..menu4.ogg (or anything else supported) and shuffles
 // across them on loop.
 //
@@ -247,7 +247,7 @@ extern "C" size_t mcle_audio_status(char* out, size_t cap) {
 // file lives at Documents/UI/<name>.ogg. The console SoundEngine also
 // rate-limits simultaneous UI SFX to one per 10 ms window
 // (Common/UI/UIController.cpp:2529) to stop checkbox cascades etc
-// from blasting audio; we mirror that.
+// from blasting audio; the same limit applies here.
 namespace {
 static const char* const g_ui_names[] = {
     "back", "craft", "craftfail", "focus", "press", "scroll",

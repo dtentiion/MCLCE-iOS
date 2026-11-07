@@ -21,7 +21,7 @@ void mcle_audio_stop_menu_music(void);
 size_t mcle_audio_status(char* out, size_t cap);
 
 // Preload the six UI SFX ogg files from Documents/UI/<name>.ogg.
-// Names match console: "back", "craft", "craftfail", "focus", "press",
+// The UI sound names: "back", "craft", "craftfail", "focus", "press",
 // "scroll" (see Common/Audio/SoundNames.cpp wchUISoundNames[]).
 // Missing files are silently skipped so the app still runs without
 // sound assets dropped in.
@@ -33,8 +33,8 @@ void   mcle_audio_load_ui_sfx(void);
 // pile of clicks.
 void   mcle_audio_play_ui_sfx(const char* name, float volume, float pitch);
 
-// Set music and UI-SFX volumes, each 0..100 matching console's
-// eGameSetting_MusicVolume / eGameSetting_SoundFXVolume scale. Any
+// Set music and UI-SFX volumes, each 0..100, the scale of
+// eGameSetting_MusicVolume / eGameSetting_SoundFXVolume. Any
 // currently playing track or future SFX picks up the new level on
 // the next frame.
 void   mcle_audio_set_music_volume(int volume_0_100);

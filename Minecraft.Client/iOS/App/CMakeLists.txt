@@ -49,7 +49,7 @@ target_link_libraries(Minecraft.LCE PRIVATE
   # Upstream gameplay simulation core. -force_load pulls every TU into
   # the binary; without it the linker would dead-strip ~95% of the
   # archive since the bootstrap hook only references one entry point.
-  # Re-add -dead_strip after Phase D2 once the actual call graph is
+  # Re-add -dead_strip once the actual call graph is
   # known.
   mcle_world_probe
   "-Wl,-force_load,$<TARGET_FILE:mcle_world_probe>"
@@ -78,7 +78,7 @@ set_target_properties(Minecraft.LCE PROPERTIES
   XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
   XCODE_ATTRIBUTE_ENABLE_BITCODE NO
   # Extended-memory entitlements. Sideloaders honor these even on unsigned
-  # builds - raises the iOS jetsam ceiling so we can hold more streamed chunks.
+  # builds - raises the iOS jetsam ceiling so more streamed chunks fit in memory.
   XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/Resources/Minecraft.LCE.entitlements
   # Unsigned build. Install via AltStore / Sideloadly / xtool.
   XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""

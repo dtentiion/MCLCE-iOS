@@ -58,7 +58,7 @@ PlayerHandle* g_ruffle_player = NULL;
     [self primeDocumentsFolder];
 
     // Start listening for controllers before the view controller comes up so
-    // we don't miss a connect notification from an already-paired pad.
+    // a connect notification from an already-paired pad isn't missed.
     mcle_ios_input_init();
 
     // Controller input doesn't reset the idle timer and there's no touch
@@ -107,12 +107,12 @@ PlayerHandle* g_ruffle_player = NULL;
 
     // Bring up the SWF runtime (render_handler + player). If this fails the
     // app still runs, just without future SWF-driven UI. The log line in
-    // mcle_swf_init tells us what happened.
+    // mcle_swf_init says what happened.
     if (mcle_swf_init() != 0) {
         NSLog(@"[AppDelegate] mcle_swf_init reported failure; continuing");
     } else {
         // Load the bundled test SWF so the render_handler path is driven
-        // by a real movie rather than our synthetic rect.
+        // by a real movie rather than the synthetic rect.
         NSString* swfPath = [[NSBundle mainBundle] pathForResource:@"test_rect"
                                                             ofType:@"swf"];
         if (swfPath.length) {
@@ -122,7 +122,7 @@ PlayerHandle* g_ruffle_player = NULL;
             }
         } else {
             NSLog(@"[AppDelegate] test_rect.swf not found in bundle");
-            // Dump a short listing so we can tell from on-screen logs
+            // Dump a short listing so on-screen logs show
             // roughly what IS in the bundle.
             NSString* bundlePath = [[NSBundle mainBundle] bundlePath];
             NSArray* entries = [[NSFileManager defaultManager]
@@ -145,16 +145,16 @@ extern "C" void mcle_save_now_sync(void);
 - (void)applicationDidEnterBackground:(UIApplication*)application {
     // The main thread MUST return from this callback quickly. Earlier
     // attempts called mcle_save_now_sync() inline here and the iOS
-    // watchdog reaped us mid-save (log: BG_SAVE starts, sim keeps
+    // watchdog killed the app mid-save (log: BG_SAVE starts, sim keeps
     // ticking, then process dies before any per-level "done" line).
     //
     // The correct shape is:
-    //   1. beginBackgroundTask to tell iOS we have real work pending -
-    //      the kernel extends our background runtime to ~30 seconds.
+    //   1. beginBackgroundTask to tell iOS there is real work pending -
+    //      the kernel extends the background runtime to ~30 seconds.
     //   2. Dispatch the blocking save onto a global queue so the main
     //      thread returns immediately, keeping the watchdog happy.
     //   3. endBackgroundTask only after the save thread actually
-    //      finishes, so iOS doesn't suspend us mid-write.
+    //      finishes, so iOS doesn't suspend the app mid-write.
     __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
     task = [application beginBackgroundTaskWithName:@"mcle.save"
                                   expirationHandler:^{
@@ -174,9 +174,9 @@ extern "C" void mcle_save_now_sync(void);
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
-    // Terminate path: iOS gives us only a few seconds and there's no
+    // Terminate path: iOS gives only a few seconds and there's no
     // beginBackgroundTask escape hatch - run the save inline and hope
-    // we finish before the kernel pulls the plug.
+    // it finishes before the kernel pulls the plug.
     mcle_save_now_sync();
     mcle_swf_shutdown();
     mcle_ios_input_shutdown();
