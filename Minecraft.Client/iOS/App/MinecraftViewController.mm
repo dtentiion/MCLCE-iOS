@@ -16,6 +16,7 @@
 #include "../Game/MCLEHud.h"
 #include "../Game/MCLETooltips.h"
 #include "../Game/MCLEContainerMenu.h"
+#include "../Game/MCLESignEntryMenu.h"
 #include "../Game/MCLETutorialPopup.h"
 #include "../Game/MCLESkinSelectMenu.h"
 #include "../Game/MCLEDLC.h"
@@ -4027,6 +4028,26 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     MCLEGameTooltipsReset();
 }
 
+// ClientConnection::handleTileEditorOpen's LocalPlayer::openTextEdit:
+// app.LoadSignEntryMenu
+- (void)openSignEntryMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"SignEntryMenu1080.swf"];
+    [self showContainerOverWorld];
+}
+
+// UIScene_SignEntryMenu's constructor once its movie is up, or its
+// reloadMovie coming back from the keyboard
+- (void)initSignEntryMenu {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    if (g_container_reloading) mcle_container_reload();
+    else mcle_sign_entry_open();
+    MCLEContainerApplyOps();
+}
+
 // UIScene_Keyboard's constructor, over the scene that navigated to it
 - (void)initKeyboardMenu {
     self.menuButtonConfig = nil;
@@ -5076,6 +5097,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
             [self initCreativeMenu];
         } else if ([swfName isEqualToString:[NSString stringWithUTF8String:mcle_container_server_movie()]]) {
             [self initServerContainer];
+        } else if ([swfName isEqualToString:@"SignEntryMenu1080.swf"]) {
+            [self initSignEntryMenu];
         } else if ([swfName isEqualToString:@"Keyboard1080.swf"]) {
             [self initKeyboardMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
@@ -5254,6 +5277,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
             else if (request == MCLE_CONTAINER_CRAFTING_3X3) [self openCraftingMenu:YES];
             else if (request == MCLE_CONTAINER_CREATIVE) [self openCreativeMenu];
             else if (request == MCLE_CONTAINER_SERVER) [self openServerContainer];
+            // ClientConnection::handleTileEditorOpen
+            if (mcle_sign_entry_take_request()) [self openSignEntryMenu];
         }
         mcle_render_frame();
         if (g_world_container) {
