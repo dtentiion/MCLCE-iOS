@@ -2992,7 +2992,7 @@ static int MCLEPadIsPlayStation(void) {
 // ShowHints, ShowTooltips, InGameGamertags, ShowMashUpWorlds,
 // Autosave, Difficulty, DifficultyText, Languages).
 //
-// This round only drives SetLabel + Init so the scene shows readable
+// This only drives SetLabel + Init so the scene shows readable
 // text instead of FJ_Label placeholders. The full port needs
 // two more pieces that don't exist yet:
 //   - iOS-side game settings storage so checkbox/slider initial
@@ -3085,7 +3085,7 @@ static int MCLEPadIsPlayStation(void) {
 // Ports UIScene_SettingsAudioMenu (Common/UI/UIScene_SettingsAudioMenu.cpp).
 // Two FJ_Slider controls, ranges 0..100, labels formatted "X: N%".
 // Defaults are console's Options profile: music 100, sound 100.
-// Real values need the iOS game-settings store (follow-up round).
+// Real values need the iOS game-settings store.
 - (void)initSettingsAudioMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;

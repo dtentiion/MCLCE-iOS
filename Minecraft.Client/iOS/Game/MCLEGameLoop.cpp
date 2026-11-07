@@ -4996,7 +4996,7 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
 }
 
 // Layered call into upstream Level::getSkyColor pieces so
-// the next sideload's log pins which step crashed at addr 0x130. Logs
+// the log pins which step crashed at addr 0x130. Logs
 // once per second to avoid spamming. Try/catch only catches C++
 // throws; SIGSEGV bypasses but the per-step log still shows which
 // step was last reached before the kill.

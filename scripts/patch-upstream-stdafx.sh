@@ -1247,7 +1247,7 @@ fi
 # half is in and ticks run cleanly. The scripts still
 # live in scripts/ for archive reference but no longer mutate upstream.
 
-# Bracket the LevelRenderer::render path so each sideload pins the
+# Bracket the LevelRenderer::render path so the log pins the
 # upstream-renderer null deref. Includes an early `if (!mc) return 0;`
 # guard so the most common crash path (mc=nullptr passed to the ctor)
 # is sidestepped until there's a real Minecraft instance.
@@ -1280,7 +1280,7 @@ if [ -f "$LRR_PY" ]; then
 fi
 
 # Bracket renderSky / renderClouds / renderAdvancedClouds
-# with checkpoints so the next sideload pins which deref crashes.
+# with checkpoints so the log pins which deref crashes.
 LRSKY_PY="$REPO_ROOT/scripts/patch-rendersky-checkpoints.py"
 if [ -f "$LRSKY_PY" ]; then
     python3 "$LRSKY_PY"
