@@ -5972,29 +5972,19 @@ static void MCLEConnectingHoldStart(void) {
                         } else if (id == 4) {
                             [self navigateForwardTo:@"DLCMainMenu1080.swf"];
                         } else if (id == 5) {
-                            // Exit Game. Console opens a confirm
-                            // dialog before quitting; IUIScene_
-                            // PauseMenu::ExitGameDialogReturned
-                            // (IUIScene_PauseMenu.cpp:19) runs the
-                            // actual shutdown only on Accept. Match
-                            // that path here through the
-                            // presentDialog helper. iOS self-
-                            // terminate is normally an App Store
-                            // reject but this is a sideloaded dev
-                            // build so exit(0) is fine. Small delay
-                            // after the callback so the SFX plays
-                            // before the process dies.
-                            // Title IDS_WINDOWS_EXIT / body
-                            // IDS_WARNING_ARCADE_TEXT per
-                            // strings_Misc.txt - MainMenu exit is
-                            // a distinct pair from the in-game
-                            // pause-menu exit (IDS_CONFIRM_EXIT_GAME).
-                            [self presentDialogWithTitle:@"Exit Minecraft"
-                                                 content:@"Are you sure you want to exit the game?"
-                                                 buttons:@[@"OK", @"Cancel"]
-                                              focusIndex:1
+                            // UIScene_MainMenu's eControl_Exit:
+                            // RequestErrorMessage(IDS_WINDOWS_EXIT,
+                            // IDS_WARNING_ARCADE_TEXT) with Cancel then
+                            // OK, focus on Cancel. ExitGameReturned has
+                            // the buttons reversed, OK is the Decline
+                            // that runs app.ExitGame. Small delay so the
+                            // SFX plays before the process goes.
+                            [self presentDialogWithTitle:MCLEStr(IDS_WINDOWS_EXIT)
+                                                 content:MCLEStr(IDS_WARNING_ARCADE_TEXT)
+                                                 buttons:@[MCLEStr(IDS_CANCEL), MCLEStr(IDS_OK)]
+                                              focusIndex:0
                                                 callback:^(MCLEDialogResult r) {
-                                if (r != MCLEDialogResultAccept) return;
+                                if (r != MCLEDialogResultDecline) return;
                                 dispatch_after(
                                     dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                                     dispatch_get_main_queue(), ^{
