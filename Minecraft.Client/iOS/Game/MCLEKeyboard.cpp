@@ -11,6 +11,8 @@
 
 #include <string>
 
+#include "../../../upstream/Minecraft.World/SoundTypes.h"
+
 namespace {
 
 // g_Win64KeyboardResult. wchar_t is 4 bytes here, so it's kept as a
