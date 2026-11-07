@@ -17,6 +17,7 @@
 #include "../Game/MCLETooltips.h"
 #include "../Game/MCLEContainerMenu.h"
 #include "../Game/MCLESignEntryMenu.h"
+#include "../Game/MCLEInGameInfoMenu.h"
 #include "../Game/MCLETutorialPopup.h"
 #include "../Game/MCLESkinSelectMenu.h"
 #include "../Game/MCLEDLC.h"
@@ -112,6 +113,9 @@ static bool g_world_container = false;
 // A container scene's movie is going back up for its reloadMovie, after the
 // scene that was over it went
 static bool g_container_reloading = false;
+// The container scenes up are UIScene_InGameInfoMenu's, which isn't a
+// container menu or one that holds off the autosave
+static bool g_world_info = false;
 static bool MCLELabelAt(const char* path, std::wstring* label);
 // Exit Game: FullscreenProgress is up while the world is torn down
 static bool g_exiting_world = false;
@@ -4055,6 +4059,36 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     MCLEContainerApplyOps();
 }
 
+// Minecraft::tick's game info action: UIScene_InGameInfoMenu over the
+// running world, which goes on ticking under it
+- (void)openInGameInfoMenu {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    self.menuStack = nil;
+    [self transitionToMenuNamed:@"InGameInfoMenu1080.swf"];
+    [self showContainerOverWorld];
+    g_world_info = mcle_container_is_open();
+}
+
+// UIScene_InGameInfoMenu's constructor once its movie is up, or its
+// reloadMovie coming back from the host or player options
+- (void)initInGameInfoMenu {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    if (g_container_reloading) mcle_container_reload();
+    else mcle_ingame_info_open();
+    MCLEContainerApplyOps();
+}
+
+// UIScene_InGameHostOptionsMenu's or UIScene_InGamePlayerOptionsMenu's
+// constructor, over the info menu that navigated to it
+- (void)initInGameOptionsMenu {
+    self.menuButtonConfig = nil;
+    self.menuFocusIndex = 0;
+    mcle_container_open_navigated();
+    MCLEContainerApplyOps();
+}
+
 // UIScene_Keyboard's constructor, over the scene that navigated to it
 - (void)initKeyboardMenu {
     self.menuButtonConfig = nil;
@@ -4160,6 +4194,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     mcle_container_close();
     MCLEContainerApplyOps();
     g_world_container = false;
+    g_world_info = false;
     if (backToGame) [self enterWorldUI];
 }
 
@@ -5108,6 +5143,11 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
             [self initSignEntryMenu];
         } else if ([swfName isEqualToString:@"Keyboard1080.swf"]) {
             [self initKeyboardMenu];
+        } else if ([swfName isEqualToString:@"InGameInfoMenu1080.swf"]) {
+            [self initInGameInfoMenu];
+        } else if ([swfName isEqualToString:@"InGameHostOptions1080.swf"] ||
+                   [swfName isEqualToString:@"InGamePlayerOptions1080.swf"]) {
+            [self initInGameOptionsMenu];
         } else if ([swfName isEqualToString:@"LeaderboardMenu1080.swf"]) {
             [self initLeaderboardMenu];
         } else if ([swfName isEqualToString:@"DLCMainMenu1080.swf"]) {
@@ -5242,7 +5282,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
         // Minecraft::run's autosave: not with the pause menu or a scene
         // that ignores autosaves up (death, containers, a level change,
         // the End poem), and the timer starts again once the save has gone
-        if (!g_world_paused && !g_world_dead && !g_world_container && !g_world_connecting && !g_world_won) {
+        if (!g_world_paused && !g_world_dead && (!g_world_container || g_world_info) && !g_world_connecting &&
+            !g_world_won) {
             unsigned char autosave = mcle_settings_get(MCLE_SETTING_Autosave);
             if (autosave != 0 && CACurrentMediaTime() > g_autosave_due) {
                 NSLog(@"[MinecraftVC] autosave");
@@ -5250,9 +5291,11 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
                 MCLESetAutosaveTimerTime();
             }
         }
-        // Minecraft::tick shows the death menu once the player has died, and
-        // goes back to the game when the respawned player is alive
-        if (!g_world_dead && !g_world_paused && !g_world_connecting && !g_world_won && mcle_player_is_dead()) {
+        // Minecraft::tick shows the death menu once the player has died with
+        // no menu up (the in game info menu holds it off), and goes back to
+        // the game when the respawned player is alive
+        if (!g_world_dead && !g_world_paused && !g_world_connecting && !g_world_won &&
+            !(g_world_container && g_world_info) && mcle_player_is_dead()) {
             [self openDeathMenu];
         } else if (g_world_dead && !mcle_player_is_dead()) {
             g_world_dead = false;
@@ -5263,8 +5306,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
                 [self enterWorldUI];
             }
         }
-        // Minecraft::tick: Start opens the pause menu, the inventory action
-        // the inventory
+        // Minecraft::tick: the game info action opens the in game info menu,
+        // Start the pause menu, the inventory action the inventory
         const bool sceneUp = g_world_connecting || g_world_won;
         if (!g_world_paused && !g_world_dead && !g_world_container && !sceneUp) {
             mcle_ios_pad_state pad;
@@ -5272,8 +5315,10 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
                 bool startNow = (pad.buttons & 0x00000010u) != 0;
                 bool startBefore = (self.lastPadButtons & 0x00000010u) != 0;
                 bool inventoryPressed = (pad.buttons & ~self.lastPadButtons & mcle_container_inventory_buttons()) != 0;
+                bool gameInfoPressed = (pad.buttons & ~self.lastPadButtons & mcle_ingame_info_buttons()) != 0;
                 self.lastPadButtons = pad.buttons;
-                if (startNow && !startBefore) [self openPauseMenu];
+                if (gameInfoPressed && mcle_ingame_info_input_allowed()) [self openInGameInfoMenu];
+                else if (startNow && !startBefore) [self openPauseMenu];
                 else if (inventoryPressed) [self openInventoryMenu];
             }
         }
