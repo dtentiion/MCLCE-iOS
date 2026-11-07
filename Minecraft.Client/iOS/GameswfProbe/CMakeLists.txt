@@ -1,13 +1,13 @@
 # Probe target for compiling GameSWF core for iOS ARM64.
 #
 # Flip on with -DENABLE_GAMESWF_PROBE=ON. Expected to fail on the first few
-# passes, just like the world probe. The errors tell us which Marmalade /
+# passes, just like the world probe. The errors show which Marmalade /
 # Windows assumptions remain in GameSWF and guide the iOS port of the
 # library.
 
 set(GAMESWF_ROOT "${THIRD_PARTY_DIR}/gameswf/GameSwfPort/GameSwf")
 
-# Base library. Skipped: ogl.cpp + test_ogl.cpp (OpenGL on desktop, we use
+# Base library. Skipped: ogl.cpp + test_ogl.cpp (OpenGL on desktop; iOS uses
 # Metal), Stackwalker.cpp (Windows debug tool), tu_file_SDL.cpp (SDL dep),
 # png_helper.cpp (libpng disabled for now in gameswf_ios_config.h), demo.cpp
 # and test_*.cpp (examples).
@@ -38,9 +38,9 @@ set(GAMESWF_PROBE_SOURCES
 )
 
 # Player library. Picked up via glob after excluding platform-specific ones.
-# Skipped: render_handler_{d3d,ogl,ogles,iwgl,xbox}.cpp (backend-specific, we
-# bring our own Metal render_handler), sound_handler_{sdl,openal}.cpp (we
-# wire an AVFoundation handler later), freetype.cpp (needs FreeType; fonts
+# Skipped: render_handler_{d3d,ogl,ogles,iwgl,xbox}.cpp (backend-specific; the
+# Metal render_handler replaces them), sound_handler_{sdl,openal}.cpp (an
+# AVFoundation handler comes later), freetype.cpp (needs FreeType; fonts
 # come in a follow-up pass).
 file(GLOB GAMESWF_PLAYER_SOURCES_ALL CONFIGURE_DEPENDS
   "${GAMESWF_ROOT}/gameswf/*.cpp"
@@ -67,7 +67,7 @@ target_include_directories(mcle_gameswf_probe PRIVATE
 )
 
 target_compile_options(mcle_gameswf_probe PRIVATE
-  # Replace the Marmalade compatibility_include.h with our iOS config.
+  # Replace the Marmalade compatibility_include.h with the iOS config.
   -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/UI/gameswf_ios_config.h"
   # Quiet the flood of warnings from the legacy codebase so errors stand out.
   -w

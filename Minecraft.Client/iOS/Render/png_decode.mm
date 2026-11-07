@@ -1,4 +1,4 @@
-// G4-step3: iOS-native PNG decoder. Mirrors upstream's per-platform pattern -
+// iOS-native PNG decoder. Mirrors upstream's per-platform pattern -
 // each console plugs its own decoder into RenderManager.LoadTextureData;
 // iOS plugs CGImageSource. PNG bytes in, RGBA bytes out, free with the
 // matching mcle_png_decode_free().
@@ -84,7 +84,7 @@ extern "C" int mcle_log_msg(const char *msg) {
     //      file that 3uTools / Files app users already pull. Kept so
     //      existing tooling keeps working.
     //   2. Documents/mcle_log.txt  - mcle-only, dedicated. Ruffle does
-    //      NOT open this path, so our lines never get overwritten by
+    //      NOT open this path, so these lines never get overwritten by
     //      a non-O_APPEND writer racing on the same file. Use THIS
     //      file for crash diagnosis - the legacy crash_log.txt loses
     //      early-game-init log lines to the Ruffle write race.

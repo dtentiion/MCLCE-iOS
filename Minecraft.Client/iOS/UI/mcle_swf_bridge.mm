@@ -17,7 +17,7 @@ gameswf::render_handler* g_rh = nullptr;
 gameswf::player* g_player = nullptr;
 
 // Strong hold on the loaded root. player::m_current_root is a weak_ptr,
-// so without this the root gets garbage-collected the moment our local
+// so without this the root gets garbage-collected the moment the local
 // gc_ptr in mcle_swf_load goes out of scope.
 gameswf::gc_ptr<gameswf::root> g_root;
 
@@ -36,7 +36,7 @@ tu_file* mcle_swf_file_opener(const char* url) {
 }
 
 // GameSWF log callback: mirrors to NSLog and keeps the last few lines in
-// a wraparound buffer so we can surface them on the on-device overlay.
+// a wraparound buffer to surface them on the on-device overlay.
 void mcle_swf_log_callback(bool is_error, const char* msg) {
     if (!msg) msg = "";
     NSLog(@"[gameswf%s] %s", is_error ? " ERR" : "", msg);
@@ -229,14 +229,14 @@ extern "C" int mcle_swf_load(const char* path) {
     return 0;
 }
 
-// Phase 1 of HUD-via-Ruffle: thin wrapper over Ruffle's
+// Thin wrapper over Ruffle's
 // ruffle_ios_call_root_method_numbers. Lets C++ pump state into the HUD
 // SWF (SetHealth, SetActiveSlot, etc.) the same way upstream's
 // IUIScene_HUD does on console via IggyPlayerCallMethodRS.
 //
 // Targets the global Ruffle player (g_ruffle_player, owned by AppDelegate).
-// Phase 2 lands a separate HUD player handle - this function will then
-// take an additional handle parameter or get a HUD-specific variant.
+// A separate HUD player would need an additional handle parameter
+// here, or a HUD-specific variant.
 extern "C" {
     typedef struct PlayerHandle PlayerHandle;
     extern PlayerHandle *g_ruffle_player;

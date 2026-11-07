@@ -39,7 +39,7 @@ typedef double   F64;
 typedef int      rrbool;
 
 // RAD calling-convention markers. Iggy headers attach these to public
-// entry points; on iOS we don't care about calling convention so they
+// entry points; calling convention doesn't matter on iOS, so they
 // expand to nothing.
 #ifndef RADLINK
 #  define RADLINK
@@ -55,12 +55,12 @@ typedef int      rrbool;
 #endif
 
 // Iggy uses UTF-16 strings on every platform. iOS wchar_t is 32-bit so
-// we can't typedef IggyUTF16 to wchar_t - use unsigned short to match
+// IggyUTF16 can't be a typedef of wchar_t - use unsigned short to match
 // the upstream Iggy ABI.
 typedef unsigned short IggyUTF16;
 
 // IggyName is a value-type aggregate. Upstream defines it as
-// `struct { U32 idx; }` but for the probe target we only need an
+// `struct { U32 idx; }` but the probe target only needs an
 // integer-shaped type that hashes for free in std::unordered_map.
 // This avoids needing a `std::hash<IggyName>` specialization for
 // the `unordered_map<wstring, IggyName>` member in UIScene.h.

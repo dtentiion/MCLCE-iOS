@@ -1,4 +1,4 @@
-// Link-level smoke test. Creates a gameswf::player and wires our Metal
+// Link-level smoke test. Creates a gameswf::player and wires the Metal
 // render_handler into it. If this TU links, the render_handler's virtual
 // table is complete and the player's entry points resolve.
 //

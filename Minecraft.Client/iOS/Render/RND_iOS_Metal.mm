@@ -1,5 +1,5 @@
-// Triangle renderer. Kept as a visual fallback when no SWF is loaded so we
-// can tell at a glance that the Metal pipeline is alive. Once GameSWF drives
+// Triangle renderer. Kept as a visual fallback when no SWF is loaded, so
+// a glance shows that the Metal pipeline is alive. Once GameSWF drives
 // the frame end to end, this file becomes optional.
 //
 // All device / queue / drawable state lives in MetalContext now; this file
@@ -22,15 +22,15 @@ extern "C" int  mcle_swf_has_movie(void);
 
 // World render bridge (MCLEGameLoop.cpp). Once the world simulation goes
 // to ticking state the iOS frame switches from charcoal+menu to a sky
-// clear so we have a visible signal that bootstrap is alive.
+// clear as a visible signal that bootstrap is alive.
 extern "C" int  mcle_world_is_ticking(void);
 extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b);
 
-// G2a: Tesselator -> Metal counter so we can verify upstream DrawVertices
-// calls are arriving once LevelRenderer is wired up in G2b/G3.
+// Tesselator -> Metal counter, to verify upstream DrawVertices
+// calls are arriving from LevelRenderer.
 extern "C" unsigned long long mcle_metal_draw_count(void);
 
-// G2c: per-frame upstream renderer drive. No-op if g_levelRenderer is null.
+// Per-frame upstream renderer drive. No-op if g_levelRenderer is null.
 extern "C" void mcle_world_drive_renderer(void);
 extern "C" void mcle_metal_add_phase_ms(int phase, double ms);
 
@@ -89,7 +89,7 @@ bool build_pipeline() {
     desc.vertexFunction = [lib newFunctionWithName:@"triangle_vert"];
     desc.fragmentFunction = [lib newFunctionWithName:@"triangle_frag"];
     desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    // G3d-step2: render pass has a depth attachment now; pipelines must
+    // The render pass has a depth attachment now; pipelines must
     // match the format even if they don't write depth themselves.
     desc.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
 
@@ -149,11 +149,10 @@ extern "C" void mcle_render_frame(void) {
             mcle_swf_draw_test_rect(vw, vh);
         }
     } else {
-        // G2c: drive upstream LevelRenderer::render() so chunk geometry +
-        // entity renderers + clouds dispatch through Tesselator -> our
-        // DrawVertices Metal hook every frame. No actual Metal draw calls
-        // happen yet (the hook still counts only); G3 is real vertex
-        // upload + MTLBuffer dispatch.
+        // Drive upstream LevelRenderer::render() so chunk geometry +
+        // entity renderers + clouds dispatch through Tesselator -> the
+        // DrawVertices Metal hook every frame, which uploads each batch
+        // into an MTLBuffer and draws it.
         const uint64_t t0 = mach_absolute_time();
         mcle_world_drive_renderer();
         static mach_timebase_info_data_t tb = {0};

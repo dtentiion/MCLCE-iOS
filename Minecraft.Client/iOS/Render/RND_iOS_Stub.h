@@ -2,8 +2,8 @@
 
 // Absolute bare minimum renderer interface. The upstream game calls into
 // 4J_Render's C-style API. That API is huge and half of it is bound to D3D11.
-// We will grow this header as we wire things up. For now it exposes the
-// lifecycle hooks the app shell needs so we can verify the build links.
+// This header grows as things get wired up. For now it exposes the
+// lifecycle hooks the app shell needs to link.
 
 #ifdef __cplusplus
 extern "C" {

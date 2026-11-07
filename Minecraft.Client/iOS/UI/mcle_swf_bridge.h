@@ -1,14 +1,14 @@
 #pragma once
 
 // Minimal C bridge the Obj-C app layer uses to bring up GameSWF. Keeps
-// C++/Obj-C details out of the AppDelegate, and lets us hot-swap the SWF
+// C++/Obj-C details out of the AppDelegate, and allows hot-swapping the SWF
 // runtime later without touching UIKit code.
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Initialize the SWF runtime: create our Metal render_handler, install it,
+// Initialize the SWF runtime: create the Metal render_handler, install it,
 // and allocate a player. Safe to call multiple times (subsequent calls are
 // no-ops). Returns 0 on success, non-zero on failure.
 int mcle_swf_init(void);

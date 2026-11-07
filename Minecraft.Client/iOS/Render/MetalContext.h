@@ -24,7 +24,7 @@ int  mcle_metal_ensure_device(void);
 // True if the Metal device is ready.
 int  mcle_metal_available(void);
 
-// Configure the layer with our device + pixel format. Call once after the
+// Configure the layer with the Metal device + pixel format. Call once after the
 // view is created, or whenever the drawable size changes.
 void mcle_metal_attach_layer(void* ca_metal_layer, int width, int height);
 
@@ -50,10 +50,10 @@ void mcle_metal_thumbnail_world_frame(void);
 int  mcle_metal_thumbnail_pending(void);
 int  mcle_metal_take_thumbnail(unsigned char* rgba);
 
-// G2a: Tesselator -> Metal hook. Upstream Tesselator::end() calls
+// Tesselator -> Metal hook. Upstream Tesselator::end() calls
 // RenderManager.DrawVertices(prim, count, data, fmt, shader). The
-// C4JRenderStub forwards into here. For now this counter-logs only;
-// real Metal vertex buffer upload + draw lands in G3.
+// C4JRenderStub forwards into here, which uploads the vertices into a
+// Metal buffer and draws them (or records them into a display list).
 //
 //   prim:   C4JRenderStub::ePrimitiveType  (4 = triangles, 5 = strip)
 //   count:  number of vertices

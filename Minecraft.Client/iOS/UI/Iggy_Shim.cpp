@@ -9,9 +9,9 @@
 // C++ SWF player. The .iggy files the game ships with are standard SWFs
 // under a renamed extension, which GameSWF can consume. See ROADMAP.md.
 //
-// For now only a handful of lifecycle calls are stubbed. When we start
-// linking upstream UI sources into the iOS build, the linker will complain
-// about the rest and we add them incrementally.
+// For now only a handful of lifecycle calls are stubbed. Once upstream UI
+// sources link into the iOS build, the linker will complain
+// about the rest and they get added incrementally.
 
 #include "iggy.h"
 #include "iggyperfmon.h"

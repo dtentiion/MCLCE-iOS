@@ -44,7 +44,7 @@ NSString* const kSolidColorShader = @R"(
     };
 
     struct VertexIn {
-        // GameSWF passes Sint16 pairs. We read them as int16_t via the
+        // GameSWF passes Sint16 pairs, read as int16_t via the
         // [[attribute]] binding path and convert to float in the shader.
         short2 pos [[attribute(0)]];
     };
@@ -150,7 +150,7 @@ struct metal_render_handler : public gameswf::render_handler {
         desc.vertexFunction = [lib newFunctionWithName:@"swf_solid_vert"];
         desc.fragmentFunction = [lib newFunctionWithName:@"swf_solid_frag"];
         desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-        // G3d-step2: render pass has a depth attachment now; pipelines
+        // The render pass has a depth attachment now; pipelines
         // must declare its format even if they don't write depth.
         desc.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
         desc.colorAttachments[0].blendingEnabled = YES;
@@ -325,7 +325,7 @@ struct metal_render_handler : public gameswf::render_handler {
     {
         (void)fill_side; (void)bi; (void)m; (void)wm; (void)bm;
         g_total_fill_bitmaps.fetch_add(1, std::memory_order_relaxed);
-        // Fall back to white until we wire a textured pipeline.
+        // Fall back to white until a textured pipeline is wired.
         fill_r = fill_g = fill_b = 1.0f;
         fill_a = 1.0f;
         fill_enabled = true;

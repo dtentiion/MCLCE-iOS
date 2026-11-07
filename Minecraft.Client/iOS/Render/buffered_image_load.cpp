@@ -1,4 +1,4 @@
-// G5-step33: iOS-side body for RenderManager::LoadTextureData. Reads a
+// iOS-side body for RenderManager::LoadTextureData. Reads a
 // PNG file from disk, decodes it via the existing CGImageSource bridge
 // (mcle_png_decode_rgba8 in png_decode.mm), and packs pixels into the
 // ARGB int* layout that upstream BufferedImage's `int *data[10]` array
@@ -23,7 +23,7 @@ extern "C" void mcle_png_decode_free(unsigned char *pixels);
 
 // iOS sandboxes everything under Documents. BufferedImage passes paths
 // like "Common/res/textures/blocks/dirt.png" relative to upstream's
-// Win64 working directory; we prepend the sandbox Documents path.
+// Win64 working directory; the sandbox Documents path is prepended.
 extern "C" const char *ios_documents_dir(void);
 
 namespace {
@@ -78,7 +78,7 @@ extern "C" long mcle_buffered_image_load_path(const char *path,
     // 4J's tubuild.plx flattens Common/res/1_2_2/* into Common/res/ at
     // install time on Win64/Xbox, so a TU 1.2.2 texture (terrain/moon_phases,
     // mob/cavespider, etc.) resolves at Common/res/terrain/moon_phases.png
-    // on deployed hardware. Our iOS bundle copies Common/res/ verbatim,
+    // on deployed hardware. The iOS bundle copies Common/res/ verbatim,
     // keeping 1_2_2/ as a subdir - so the same asset lives at
     // Common/res/1_2_2/terrain/moon_phases.png. Inject 1_2_2/ after the
     // Common/res/ prefix as a fallback so both layouts work.
