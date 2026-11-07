@@ -79,6 +79,11 @@ static int  g_load_save_index = -1;
 // UIScene_LoadOrJoinMenu::m_iDefaultButtonsC: Create New World and the level
 // generators come before the saves
 static int  g_load_default_buttons = 1;
+// UIScene_LoadOrJoinMenu's m_iSaveListIndex and m_bIgnoreInput, and the
+// control UIScene has the focus on (m_iFocusControl)
+static int  g_load_save_list_index = 0;
+static int  g_load_focus_control = -1;
+static bool g_load_or_join_ignore_input = false;
 static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
 static bool g_load_has_been_in_creative = false;
 static bool g_load_is_save_owner = true;       // m_bIsSaveOwner
@@ -142,6 +147,8 @@ extern "C" int mcle_game_exit_world(int save);
 extern "C" int mcle_game_exit_world_done(void);
 
 static void MCLESelectSaveSize(int saveIndex);
+static void MCLELoadOrJoinFocusChange(int controlId, int childId);
+static void MCLELoadOrJoinTooltips(void);
 extern "C" int  mcle_world_is_ticking(void);  // MCLEGameLoop.cpp
 extern "C" void mcle_render_frame(void);      // RND_iOS_Metal.mm
 extern "C" void mcle_metal_add_phase_ms(int phase, double ms);
@@ -843,7 +850,9 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // the list-widget path here.
         int listId = (int)id;
         int itemId = (int)value;
-        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
+        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && !g_pending_dialog) {
+            // m_bIgnoreInput, handleInput wouldn't have let the press through
+            if (g_load_or_join_ignore_input) return;
             if (listId == 0) {
                 // UIScene_LoadOrJoinMenu::handlePress: item 0 is Create New
                 // World, then the level generators, then the saves.
@@ -978,13 +987,11 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             });
             return;
         }
-        // UIScene_LoadOrJoinMenu::handleFocusChange -> m_bUpdateSaveSize
-        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && (int)id == 0) {
+        // UIScene_LoadOrJoinMenu::handleFocusChange
+        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && !g_pending_dialog) {
+            int cid = (int)id;
             int child = (int)value;
-            int defaultButtons = g_load_default_buttons;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                MCLESelectSaveSize(child - defaultButtons);
-            });
+            dispatch_async(dispatch_get_main_queue(), ^{ MCLELoadOrJoinFocusChange(cid, child); });
         }
     } else if (strcmp(method, "handleSelectionChanged") == 0) {
         // IUIScene_StartGame::handleSelectionChanged, the texture pack under the cursor
@@ -1021,6 +1028,13 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             int cid = (int)id;
             int child = (int)value;
             dispatch_async(dispatch_get_main_queue(), ^{ mcle_keyboard_front_end_focus_change(cid, child, true); });
+            return;
+        }
+        // UIScene::_handleInitFocus goes on to handleFocusChange
+        if ([g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ MCLELoadOrJoinFocusChange(cid, child); });
             return;
         }
         // LCE fires this once per scene when SetFocus(-1) finds
@@ -1079,6 +1093,40 @@ static void MCLESelectSaveSize(int saveIndex) {
     MCLECallPath(@"SaveSizeBar", @"setTotalSize", @[@(total / kMax)]);
     MCLECallPath(@"SaveSizeBar", @"setSaveGameSize", @[@(size)]);
     MCLECallPath(@"SaveSizeBar", @"setSaveGameOffset", @[@(offset)]);
+}
+
+// UIScene_LoadOrJoinMenu::DoesSavesListHaveFocus, a save rather than Create
+// New World or a level generator
+static bool MCLELoadOrJoinSavesListHasFocus(void) {
+    return g_load_focus_control == 0 && g_load_save_list_index > g_load_default_buttons - 1;
+}
+
+// UIScene_LoadOrJoinMenu::updateTooltips. The join list is always empty and
+// there's no party, and no mash-up worlds are listed to Hide. Saving is
+// never disabled and EnoughSpaceForAMinSaveGame is always true in the
+// Windows64 storage, so a save gets Save Options. X is Change Storage
+// Device, which SetTooltips takes off.
+static void MCLELoadOrJoinTooltips(void) {
+    int iRB = -1;
+    if (MCLELoadOrJoinSavesListHasFocus() && g_load_default_buttons > 0 &&
+        g_load_save_list_index >= g_load_default_buttons) {
+        iRB = IDS_TOOLTIPS_SAVEOPTIONS;
+    }
+    int ids[11] = { IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK, IDS_TOOLTIPS_CHANGEDEVICE, -1, -1, -1, -1, iRB, -1, -1, -1 };
+    MCLESetTooltips(ids);
+}
+
+// UIScene::_handleFocusChange then UIScene_LoadOrJoinMenu::handleFocusChange,
+// from the movie's callback once it's done
+static void MCLELoadOrJoinFocusChange(int controlId, int childId) {
+    if (![g_current_scene_name isEqualToString:@"LoadOrJoinMenu1080.swf"] || g_pending_dialog) return;
+    g_load_focus_control = controlId;
+    if (controlId == 0) {   // eControl_SavesList
+        g_load_save_list_index = childId;
+        // m_bUpdateSaveSize, the bar shows the focused save
+        MCLESelectSaveSize(childId - g_load_default_buttons);
+    }
+    MCLELoadOrJoinTooltips();
 }
 
 static void MCLESetPathVisible(NSString* path, BOOL visible) {
@@ -2631,6 +2679,9 @@ static int MCLEPadIsPlayStation(void) {
     } else if ([swfName isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
         MCLEMoreOptionsTooltips();
         return;
+    } else if ([swfName isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
+        MCLELoadOrJoinTooltips();
+        return;
     }
     MCLESetTooltips(ids);
 }
@@ -3095,6 +3146,13 @@ static int MCLEPadIsPlayStation(void) {
 - (void)initLoadOrJoinMenu {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
+
+    // Initialise starts on the first item, the focus is wherever SetFocus
+    // below puts it, and input is back on by the end like the constructor
+    // and handleGainFocus
+    g_load_save_list_index = 0;
+    g_load_focus_control = -1;
+    g_load_or_join_ignore_input = false;
 
     [self attachMenuScenery];
 
