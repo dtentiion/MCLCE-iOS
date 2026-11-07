@@ -1479,6 +1479,9 @@ static void MCLESetTooltips(const int in[11]) {
     bool relayout = false;
     for (int i = 0; i < 11; i++) {
         int id = in[i];
+        // UIController::SetTooltips strips out the storage device ones off
+        // the 360
+        if (i == 2 && (id == IDS_TOOLTIPS_SELECTDEVICE || id == IDS_TOOLTIPS_CHANGEDEVICE)) id = -1;
         if (id == g_tooltips.ids[i] && !(id > -1 && !g_tooltips.shown[i])) continue;
         g_tooltips.ids[i] = id;
         relayout = true;
@@ -2608,8 +2611,9 @@ static int MCLEPadIsPlayStation(void) {
         ids[1] = -1;
     } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
         // UIScene_PauseMenu::updateTooltips: the primary host of a full
-        // game with saving on gets Change Storage Device on X, sharing
-        // is never allowed on Windows64
+        // game with saving on gets Change Storage Device on X (which
+        // SetTooltips takes off again), sharing is never allowed on
+        // Windows64
         ids[2] = IDS_TOOLTIPS_CHANGEDEVICE;
     } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
         // UIScene_Credits: Back only
