@@ -2276,6 +2276,30 @@ static int MCLEPadIsPlayStation(void) {
                     self.fontStatus = [NSString stringWithFormat:
                         @"Mojangles7 stage rc=%d", rc];
                 }
+                // UIController::SetupFont registers Mojangles11 next to
+                // Mojangles7 (the End poem and the small labels use it).
+                // Without its own file it goes to the 7 one, the way the
+                // TTF fonts take both names with IggyFontSetIndirectUTF8.
+                NSData* font11Data = nil;
+                for (NSString* subdir in fontSubdirs) {
+                    NSString* dir = subdir.length
+                        ? [docsPath stringByAppendingPathComponent:subdir]
+                        : docsPath;
+                    for (NSString* name in @[@"Mojangles11.ttf", @"Mojang Font_11.ttf"]) {
+                        NSString* p = [dir stringByAppendingPathComponent:name];
+                        if ([fm fileExistsAtPath:p]) font11Data = [NSData dataWithContentsOfFile:p];
+                        if (font11Data.length) break;
+                    }
+                    if (font11Data.length) break;
+                }
+                if (!font11Data.length) font11Data = fontData;
+                const char* name11 = "Mojangles11";
+                rc = ruffle_ios_stage_device_font(
+                    (const uint8_t*)name11, strlen(name11),
+                    (const uint8_t*)font11Data.bytes, font11Data.length,
+                    0, 0);
+                NSLog(@"[MinecraftVC] staged Mojangles11 (%luk) rc=%d",
+                      (unsigned long)(font11Data.length / 1024), rc);
             } else {
                 // List what's actually in Documents so the user can see
                 // whether the file even landed where we expect.
