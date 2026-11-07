@@ -1775,6 +1775,12 @@ if [ -f "$MLP_PY" ]; then
     python3 "$MLP_PY"
 fi
 
+# The limit and peaceful warnings a player sends itself reach the local player
+DML_PY="$REPO_ROOT/scripts/patch-display-message-local.py"
+if [ -f "$DML_PY" ]; then
+    python3 "$DML_PY"
+fi
+
 # Map icons include the item frame and End portal ones the client would get
 MMD_PY="$REPO_ROOT/scripts/patch-minimap-ios-decorations.py"
 if [ -f "$MMD_PY" ]; then
