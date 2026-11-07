@@ -2,7 +2,8 @@
 // movie's own keys type into KeyboardTextInput, which is read back when
 // Done goes. The physical keyboard part of its tick has no keys to read
 // here. KeyboardScene stands in for the UIScene like the container menus'
-// scenes do (MCLEContainerScene.h).
+// scenes do (MCLEContainerScene.h). Over a front end menu it isn't in their
+// stack, so it's held and driven here like UIScene_SkinSelectMenu is.
 
 #include "MCLEKeyboard.h"
 #include "MCLEContainerMenu.h"
@@ -16,17 +17,21 @@ namespace {
 // wstring rather than read back into a uint16_t buffer.
 std::wstring g_keyboardResult;
 
+// The navigateBack of the keyboard over a front end menu
+bool g_frontEndCloseRequested = false;
+
 #define KEYBOARD_DONE_TIMER_ID 0
 #define KEYBOARD_DONE_TIMER_TIME 100
 
 class KeyboardScene : public MCLEMenuScene {
 public:
-    KeyboardScene(int iPad, const MCLEKeyboardInitData &kbData)
+    KeyboardScene(int iPad, const MCLEKeyboardInitData &kbData, bool frontEnd = false)
         : m_EnterTextLabel("EnterTextLabel"), m_KeyboardTextInput("KeyboardTextInput"),
           m_ButtonSpace("Button_space"), m_ButtonCursorLeft("Button_CursorLeft"),
           m_ButtonCursorRight("Button_CursorRight"), m_ButtonCaps("Button_Caps"), m_ButtonDone("Button_Done"),
           m_ButtonSymbols("Button_symbols"), m_ButtonBackspace("Button_bspace") {
         m_iPad = iPad;
+        m_frontEnd = frontEnd;
 
         m_win64Callback = kbData.callback;
         m_win64CallbackParam = kbData.lpParam;
@@ -146,6 +151,7 @@ public:
 
 private:
     bool m_bKeyboardDonePressed = false;
+    bool m_frontEnd = false;
 
     int (*m_win64Callback)(LPVOID, const bool) = nullptr;
     LPVOID m_win64CallbackParam = nullptr;
@@ -166,6 +172,18 @@ private:
         m_timerStart = -1;
     }
     void killTimer(int) { m_timerMs = 0; }
+
+    // UIScene::navigateBack. Over a front end menu it's the view
+    // controller's menu stack that goes back.
+    void navigateBack() {
+        if (!m_frontEnd) {
+            MCLEMenuScene::navigateBack();
+            return;
+        }
+        //CD - Added for audio
+        mcleContainerUI.PlayUISFX(eSFX_Back);
+        g_frontEndCloseRequested = true;
+    }
 
     void updateTooltips() override {
         mcleContainerUI.SetTooltips(m_iPad, IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK, -1, -1);
@@ -202,6 +220,18 @@ private:
     }
 };
 
+// A front end menu's NavigateToScene waiting for the keyboard's movie, then
+// the keyboard over it
+bool g_frontEndPending = false;
+int g_frontEndPad = 0;
+MCLEKeyboardInitData g_frontEndInitData;
+KeyboardScene *g_frontEndScene = nullptr;
+
+// UIController::handleInput's key repeat
+const double kRepeatDelay = 0.3; // UI_REPEAT_KEY_DELAY_MS
+const double kRepeatRate = 0.1;  // UI_REPEAT_KEY_REPEAT_RATE_MS
+double g_repeatTimer[ACTION_MAX_MENU + 1];
+
 } // namespace
 
 void mcle_keyboard_navigate_to(int iPad, const MCLEKeyboardInitData &kbData) {
@@ -214,4 +244,81 @@ void mcle_keyboard_navigate_to(int iPad, const MCLEKeyboardInitData &kbData) {
 
 const std::wstring &mcle_keyboard_text() {
     return g_keyboardResult;
+}
+
+void mcle_keyboard_front_end_navigate_to(int iPad, const MCLEKeyboardInitData &kbData) {
+    g_frontEndPending = true;
+    g_frontEndPad = iPad;
+    g_frontEndInitData = kbData;
+}
+
+bool mcle_keyboard_front_end_open() {
+    if (!g_frontEndPending) return false;
+    g_frontEndPending = false;
+    mcle_keyboard_front_end_close();
+    mcle_container_prepare();
+    for (double &t : g_repeatTimer) t = 0;
+    g_frontEndScene = new KeyboardScene(g_frontEndPad, g_frontEndInitData, true);
+    return true;
+}
+
+void mcle_keyboard_front_end_navigate_done() {
+    if (!g_frontEndPending) return;
+    // The movie never came up, so the menu that asked is still the one up
+    g_frontEndPending = false;
+    if (g_frontEndInitData.callback) g_frontEndInitData.callback(g_frontEndInitData.lpParam, false);
+}
+
+bool mcle_keyboard_front_end_is_open() {
+    return g_frontEndScene != nullptr;
+}
+
+void mcle_keyboard_front_end_frame(unsigned int buttons, unsigned int prevButtons, double now) {
+    if (!g_frontEndScene || g_frontEndCloseRequested) return;
+
+    // UIController::handleInput: handleKeyPress for every menu action, then
+    // UILayer::handleInput
+    for (int key = 0; key <= ACTION_MAX_MENU && !g_frontEndCloseRequested; ++key) {
+        unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), key);
+        bool down = (buttons & mapped) != 0;
+        bool pressed = down && (prevButtons & mapped) == 0;
+        bool released = !down && (prevButtons & mapped) != 0;
+        bool repeat = false;
+        if (pressed) {
+            g_repeatTimer[key] = now + kRepeatDelay;
+        } else if (released) {
+            g_repeatTimer[key] = 0;
+        } else if (down && g_repeatTimer[key] > 0 && now > g_repeatTimer[key]) {
+            repeat = true;
+            pressed = true;
+            g_repeatTimer[key] = now + kRepeatRate;
+        }
+        if (!(repeat || pressed || released)) continue;
+        if (repeat && !g_frontEndScene->allowRepeat(key)) continue;
+        g_frontEndScene->handleInput(key, repeat, pressed, released);
+    }
+
+    if (!g_frontEndCloseRequested) g_frontEndScene->tick(now);
+}
+
+void mcle_keyboard_front_end_press(int controlId, int childId) {
+    if (g_frontEndScene && !g_frontEndCloseRequested) g_frontEndScene->handlePress(controlId, childId);
+}
+
+void mcle_keyboard_front_end_focus_change(int controlId, int childId, bool init) {
+    if (g_frontEndScene && !g_frontEndCloseRequested) g_frontEndScene->handleFocusChange(controlId, childId, init);
+}
+
+bool mcle_keyboard_front_end_close_requested() {
+    return g_frontEndScene != nullptr && g_frontEndCloseRequested;
+}
+
+void mcle_keyboard_front_end_close() {
+    if (!g_frontEndScene) return;
+    g_frontEndScene->handleDestroy();
+    delete g_frontEndScene;
+    g_frontEndScene = nullptr;
+    g_frontEndCloseRequested = false;
+    // Nothing it left goes to the menu under it
+    mcle_container_prepare();
 }

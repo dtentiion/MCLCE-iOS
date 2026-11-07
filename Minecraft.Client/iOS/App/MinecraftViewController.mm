@@ -16,6 +16,7 @@
 #include "../Game/MCLEHud.h"
 #include "../Game/MCLETooltips.h"
 #include "../Game/MCLEContainerMenu.h"
+#include "../Game/MCLEKeyboard.h"
 #include "../Game/MCLESignEntryMenu.h"
 #include "../Game/MCLEInGameInfoMenu.h"
 #include "../Game/MCLETutorialPopup.h"
@@ -113,6 +114,8 @@ static bool g_world_container = false;
 // A container scene's movie is going back up for its reloadMovie, after the
 // scene that was over it went
 static bool g_container_reloading = false;
+// The same for a front end menu, after the keyboard over it went
+static bool g_menu_reloading = false;
 // The container scenes up are UIScene_InGameInfoMenu's, which isn't a
 // container menu or one that holds off the autosave
 static bool g_world_info = false;
@@ -787,6 +790,13 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_press(cid, child); });
             return;
         }
+        // UIScene_Keyboard over a front end menu
+        if (mcle_keyboard_front_end_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_keyboard_front_end_press(cid, child); });
+            return;
+        }
         // UIScene_ControlsMenu::handlePress: the layout buttons pick the scheme
         if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
             int control = (int)id;
@@ -921,6 +931,12 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_focus_change(cid, child, false); });
             return;
         }
+        if (mcle_keyboard_front_end_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_keyboard_front_end_focus_change(cid, child, false); });
+            return;
+        }
         // UIScene_ControlsMenu::handleFocusChange: show the layout being
         // looked at, from tick
         if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
@@ -975,6 +991,12 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             int cid = (int)id;
             int child = (int)value;
             dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_focus_change(cid, child, true); });
+            return;
+        }
+        if (mcle_keyboard_front_end_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_keyboard_front_end_focus_change(cid, child, true); });
             return;
         }
         // LCE fires this once per scene when SetFocus(-1) finds
@@ -2405,6 +2427,9 @@ static BOOL MCLEPlayStationPadConnected(void) {
 - (void)applyLogoVisibilityForScene:(NSString*)swfName {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
+    // UIScene_Keyboard has no updateComponents, the logo stays as the scene
+    // under it had it
+    if ([swfName isEqualToString:@"Keyboard1080.swf"]) return;
     NSSet<NSString*>* logoOff = [NSSet setWithArray:@[
         @"SkinSelectMenu1080.swf",
         @"LeaderboardMenu1080.swf",
@@ -4091,10 +4116,59 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
 
 // UIScene_Keyboard's constructor, over the scene that navigated to it
 - (void)initKeyboardMenu {
+    extern PlayerHandle* g_ruffle_player;
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
-    mcle_container_open_navigated();
+    if (mcle_keyboard_front_end_open()) {
+        // parentLayer->addComponent(eUIComponent_MenuBackground)
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
+    } else {
+        mcle_container_open_navigated();
+    }
     MCLEContainerApplyOps();
+}
+
+// ui.NavigateToScene(iPad, eUIScene_Keyboard, &kbData) from a front end
+// menu: the keyboard goes on the menu stack over it
+- (void)navigateToKeyboard:(const MCLEKeyboardInitData&)kbData {
+    NSUInteger depth = self.menuStack.count;
+    mcle_keyboard_front_end_navigate_to(0, kbData);
+    [self navigateForwardTo:@"Keyboard1080.swf"];
+    // Its movie never came up, the menu is still the one up
+    if (!mcle_keyboard_front_end_is_open()) {
+        while (self.menuStack.count > depth) [self.menuStack removeLastObject];
+    }
+    mcle_keyboard_front_end_navigate_done();
+}
+
+// ~UIScene_Keyboard over a front end menu, and the menu background it added
+- (void)closeFrontEndKeyboard {
+    extern PlayerHandle* g_ruffle_player;
+    mcle_keyboard_front_end_close();
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
+}
+
+// A UI frame of the keyboard over a front end menu: the pad
+// (UIController::handleInput) and the scene's tick, then the movie. Its
+// navigateBack puts the menu's movie back up for its reloadMovie.
+- (void)frontEndKeyboardFrame {
+    extern PlayerHandle* g_ruffle_player;
+    mcle_ios_pad_state pad = {};
+    mcle_ios_input_poll(0, &pad);
+    mcle_keyboard_front_end_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+    self.lastPadButtons = pad.buttons;
+    MCLEContainerApplyOps();
+    if (mcle_keyboard_front_end_close_requested()) {
+        [self closeFrontEndKeyboard];
+        g_menu_reloading = true;
+        [self navigateBack];
+        g_menu_reloading = false;
+        return;
+    }
+    int tips[11];
+    mcle_container_tooltips(tips);
+    MCLESetTooltips(tips);
+    ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
 }
 
 // UIController::NavigateToScene from the scene that's up: the new scene's
@@ -5047,6 +5121,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     NSLog(@"[MinecraftVC] transition -> %@ rc=%d", swfName, rc);
     if (rc == 1) {
         if (mcle_skin_select_is_open()) [self closeSkinSelectMenu];
+        if (mcle_keyboard_front_end_is_open()) [self closeFrontEndKeyboard];
         self.currentMenuSwf = swfName;
         g_current_scene_name = swfName ?: @"";
         self.menuFocusIndex = 0;
@@ -5432,6 +5507,11 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     // hands it to the scene
     if (g_ruffle_player && mcle_skin_select_is_open() && !g_pending_dialog) {
         [self skinSelectMenuFrame];
+        return;
+    }
+    // and so does UIScene_Keyboard over a front end menu
+    if (g_ruffle_player && mcle_keyboard_front_end_is_open() && !g_pending_dialog) {
+        [self frontEndKeyboardFrame];
         return;
     }
 
