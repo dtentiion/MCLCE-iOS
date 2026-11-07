@@ -2948,6 +2948,9 @@ extern "C" int mcle_game_load_status(int *percent) {
 // frames don't burn CPU.
 static void *mcle_sim_thread_loop(void *) {
     mcle_install_sig_altstack();
+    // ServerThreadProc: the levels tick on the server thread, whose entities
+    // get the small ids the extra wandering and the tracker go by
+    Entity::useSmallIds();
     MCLE_LOG("mcle_sim_thread_loop: started, beginning ticks");
     for (;;) {
         mcle_game_tick();
@@ -3335,6 +3338,9 @@ extern "C" void mcle_game_tick(void) {
                 MCLE_LOG("SLOW_TICK level=%d took=%lldms", i, (long long)lvlMs);
             }
         }
+        // MinecraftServer::tick, after the levels: which of the despawn
+        // protected animals get to wander, to find out if they're penned in
+        Entity::tickExtraWandering();
         // LevelRenderer::tick increments the renderer-side `ticks` member
         // which renderClouds reads for the cloud drift offset
         // (time * 0.03f at LevelRenderer.cpp:1330). Without this the cloud
@@ -5103,6 +5109,9 @@ extern "C" int mcle_game_exit_world(int save) {
             mcle_world_thread_begin();
             Tesselator::CreateNewThreadStorage(16 * 1024);
             Chunk::CreateNewThreadStorage();
+            // stopServer runs on the server thread, so the entities it
+            // deletes give their small ids back
+            Entity::useSmallIds();
             mcle_exit_world(saving);
             Chunk::ReleaseThreadStorage();
             mcle_world_thread_end();
