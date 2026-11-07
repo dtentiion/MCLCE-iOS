@@ -193,7 +193,8 @@ void glBindTexture(unsigned int /*target*/, unsigned int id)  { mcle_glbridge_bi
 void glTexParameteri(unsigned int, unsigned int pname, int value) { mcle_glbridge_tex_parameter((int)pname, value); }
 extern "C" void mcle_glbridge_set_depth_func(int func);
 void glDepthFunc(unsigned int func)                        { mcle_glbridge_set_depth_func((int)func); }
-void glAlphaFunc(unsigned int, float)                      {}
+extern "C" void mcle_glbridge_set_alpha_func(int func, float ref);
+void glAlphaFunc(unsigned int func, float ref)             { mcle_glbridge_set_alpha_func((int)func, ref); }
 // glBlendFunc: route src/dst factors to the bridge. Current Metal
 // pipeline bakes srcAlpha/oneMinusSrcAlpha as the static blend func,
 // so the bridge ignores them for now - sun's additive (srcAlpha,ONE)

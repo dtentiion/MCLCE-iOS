@@ -195,9 +195,12 @@ id<MTLDepthStencilState> g_lastDepthState = nil;
 // rely on the cutout for foliage / flowers. renderSky's
 // glDisable(GL_ALPHA_TEST) before sun/moon flips it off so their
 // semi-transparent texture bodies aren't discarded, then re-enables
-// for subsequent chunk passes. Threshold 0.1 matches upstream's
-// glAlphaFunc(GL_GREATER, 0.1).
+// for subsequent chunk passes.
 thread_local bool g_alpha_test_enabled = true;
+// glAlphaFunc's ref, RenderManager.StateSetAlphaFunc. The 4J renderer
+// ignores the func and its pixel shaders discard when the final alpha is
+// below the ref, which is 0 while the test is off. StartFrame sets 0.1.
+thread_local float g_alpha_ref = 0.1f;
 
 // glEnable/glDisable(GL_TEXTURE_2D) writes here. Default on. renderSky
 // disables texturing for the sky dome (skyList), sunrise gradient,
@@ -354,6 +357,11 @@ extern "C" void mcle_glbridge_set_alpha_test(int enabled) {
     }
 }
 
+// glAlphaFunc, Renderer::StateSetAlphaFunc keeps only the ref
+extern "C" void mcle_glbridge_set_alpha_func(int /*func*/, float ref) {
+    g_alpha_ref = ref;
+}
+
 extern "C" void mcle_glbridge_set_blend_enabled(int enabled) {
     g_blend_enabled = (enabled != 0);
 }
@@ -480,6 +488,10 @@ NSString* const kWorldShaderSrc = @R"(
         float4 fogRange;        // start in x, end in y, modeLinear in z
         float4 modelviewRow2;   // row 2 of modelview for eye-z calc
     };
+    // The 4J pixel shaders' alphaTest cbuffer, the ref in w
+    struct AlphaTestParams {
+        float4 alphaRef;
+    };
     // The 4J renderer's lighting and light layer. flags: x lit, y the
     // light layer, zw StateSetVertexTextureUV's u - 1, v - 1. nm0..2 are
     // the modelview's 3x3 columns for the normal.
@@ -587,10 +599,12 @@ NSString* const kWorldShaderSrc = @R"(
                                 texture2d<float>     lightmap [[texture(1)]],
                                 sampler              texSamp  [[sampler(0)]],
                                 sampler              lmSamp   [[sampler(1)]],
-                                constant FogParams&  f        [[buffer(3)]]) {
+                                constant FogParams&  f        [[buffer(3)]],
+                                constant AlphaTestParams& alphaTest [[buffer(4)]]) {
         float4 t = sample_tex(i, tex, texSamp);
-        if (t.a < 0.1) discard_fragment();
         float4 outc = i.color * t;
+        // The texture times the colour, below the ref is discarded
+        if (outc.a < alphaTest.alphaRef.w) discard_fragment();
         // Lightmap sampled with the dedicated linear-filter sampler so
         // fragments whose UV lands between two cells get a smooth mix.
         // Gives soft shadow gradients across block faces.
@@ -942,7 +956,7 @@ bool ensure_world_pipeline() {
 
     // No-cutout additive variant for sun/moon (renderSky disables alpha
     // test before this pass). Same blend factors, but fragment shader is
-    // world_frag_nocut which skips the t.a < 0.1 discard - lets
+    // world_frag_nocut which skips the alpha test discard - lets
     // semi-transparent moon body pixels survive into the additive blend.
     desc.fragmentFunction = [lib newFunctionWithName:@"world_frag_nocut"];
     g_world_pso_additive_nocut = [g.device newRenderPipelineStateWithDescriptor:desc error:&err];
@@ -1840,6 +1854,12 @@ inline void immediate_dispatch(int prim, int count, const void* data,
         [g.enc setVertexBytes:fogBuf   length:sizeof(fogBuf) atIndex:3];
         [g.enc setFragmentBytes:fogBuf length:sizeof(fogBuf) atIndex:3];
 
+        // StateSetAlphaTestEnable: the ref with the test on, 0 with it off.
+        // The chunks always cut out.
+        const bool cut = isCompact || g_alpha_test_enabled;
+        float alphaBuf[4] = { 0.0f, 0.0f, 0.0f, cut ? g_alpha_ref : 0.0f };
+        [g.enc setFragmentBytes:alphaBuf length:sizeof(alphaBuf) atIndex:4];
+
         // GL_LIGHTING only reaches the PF3_TF2_CB4_NB4_XW1 format, as in
         // the 4J renderer's DrawVertexSetup
         if (!isCompact) {
@@ -2215,6 +2235,7 @@ extern "C" void mcle_glbridge_start_frame(void) {
     g_cull_face_enabled   = true;
     g_depth_test_enabled  = false;
     g_alpha_test_enabled  = true;
+    g_alpha_ref           = 0.1f;
 }
 
 // CConsoleMinecraftApp::CaptureSaveThumbnail, RenderManager.CaptureThumbnail
@@ -2449,6 +2470,7 @@ extern "C" int mcle_metal_frame_begin(float r, float gn, float b, float a) {
     g_cull_face_enabled   = true;
     g_depth_write_enabled = true;
     g_alpha_test_enabled  = true;
+    g_alpha_ref           = 0.1f;
     g_blend_enabled       = false;
     g_blend_func_mode     = 0;
     g_blend_src           = 0x0302;
@@ -2631,6 +2653,7 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g_cull_face_enabled   = true;
     g_depth_write_enabled = true;
     g_alpha_test_enabled  = true;
+    g_alpha_ref           = 0.1f;
     g_blend_enabled       = false;
     g_blend_func_mode     = 0;
     g_blend_src           = 0x0302;
