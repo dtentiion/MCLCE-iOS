@@ -5327,6 +5327,12 @@ static void MCLEConnectingHoldStart(void) {
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 
+    // The smoky band (depth 1) and the tab and bottom bars in TabSelector
+    // (depth 2) run the width of the 16:9 stage, from one side of TU19's
+    // screen to the other. On a wider screen they go on to its sides.
+    static const int strips[] = { 1, 2 };
+    MCLEExtendStripsToScreen(g_ruffle_player, self.view.bounds.size, strips, 2);
+
     mcle_skin_select_open(CACurrentMediaTime());
     MCLEContainerApplyOps();
     int tips[11];
