@@ -273,6 +273,9 @@ std::mutex g_destroyingBlocksMutex;
 // drawn on the render thread. Recursive since a level event can add more
 // than one.
 std::recursive_mutex g_particleMutex;
+// Gui's chat lines and jukebox message for UIScene_HUD's chat timer on the
+// main thread. The Gui ticks on the sim thread.
+std::mutex s_guiMutex;
 // Single player pause (UIScene_PauseMenu): the server stops ticking
 std::atomic<bool> g_gamePaused{false};
 // Death menu: whether the player is dead, and its Respawn press waiting for
@@ -330,7 +333,11 @@ public:
     void entityRemoved(shared_ptr<Entity> entity) override { r->entityRemoved(entity); }
     void playerRemoved(shared_ptr<Entity> entity) override { r->playerRemoved(entity); }
     void skyColorChanged() override { r->skyColorChanged(); }
-    void playStreamingMusic(const wstring &name, int x, int y, int z) override { r->playStreamingMusic(name, x, y, z); }
+    // LevelRenderer::playStreamingMusic puts the disc's name up with gui->setNowPlaying
+    void playStreamingMusic(const wstring &name, int x, int y, int z) override {
+        std::lock_guard<std::mutex> lock(s_guiMutex);
+        r->playStreamingMusic(name, x, y, z);
+    }
     void globalLevelEvent(int type, int x, int y, int z, int data) override { r->globalLevelEvent(type, x, y, z, data); }
     void levelEvent(shared_ptr<Player> source, int type, int x, int y, int z, int data) override {
         std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
@@ -1830,6 +1837,8 @@ void initImpl() {
     if (g_minecraftShim && !g_gui) {
         try {
             g_gui = new Gui(g_minecraftShim);
+            // Minecraft::gui, which LevelRenderer's now playing message goes to
+            g_minecraftShim->gui = g_gui;
             MCLE_LOG("mcle_game_init: Gui ctor at %p", (void*)g_gui);
         } catch (const std::exception &e) {
             MCLE_LOG("mcle_game_init: Gui ctor threw: %{public}s", e.what());
@@ -1870,10 +1879,6 @@ void initImpl() {
 }
 
 } // anonymous namespace
-
-// Gui's chat lines for UIScene_HUD's chat timer on the main thread. The Gui
-// ticks on the sim thread.
-static std::mutex s_guiMutex;
 
 static void copyUtf8(const std::wstring &w, char *out, int cap) {
     int n = 0;

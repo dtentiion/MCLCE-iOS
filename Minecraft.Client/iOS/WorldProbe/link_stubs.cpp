@@ -611,9 +611,6 @@ void GameRenderer::turnOffLightLayer(double /*alpha*/) { mcle_glbridge_set_light
 #include "LocalPlayer.h"
 void LocalPlayer::updateRichPresence() {}
 
-#include "Gui.h"
-void Gui::setNowPlaying(const std::wstring & /*s*/) {}
-
 #include "Common/UI/UIScene_SettingsGraphicsMenu.h"
 // The graphics menu's render distance table, which LevelRenderer::allChanged
 // sizes the render area from
