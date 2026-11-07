@@ -1205,6 +1205,40 @@ pub unsafe extern "C" fn ruffle_ios_call_child_path(
     if status.starts_with("ok:") { 1 } else { -2 }
 }
 
+/// method() on the object at a dotted path, for the string it returns,
+/// like UIControl_Base::getLabel reading IggyPlayerCallMethodRS's result.
+/// The string goes to `out` as UTF-8, cut at a character to fit `cap`
+/// with its NUL. Returns its length in bytes, -1 lock fail, -2 call err
+/// or not a string, -3 bad args.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_call_child_path_string(
+    raw: *mut PlayerHandle,
+    path_ptr: *const u8,
+    path_len: usize,
+    method_ptr: *const u8,
+    method_len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> c_int {
+    if raw.is_null() || method_ptr.is_null() || method_len == 0 || out.is_null() || cap == 0 { return -3; }
+    let Some(handle) = borrow_handle(raw) else { return -3; };
+    let Some(path) = utf8_arg(path_ptr, path_len) else { return -3; };
+    let Some(method) = utf8_arg(method_ptr, method_len) else { return -3; };
+    let Ok(mut p) = handle.player.lock() else { return -1; };
+    let (status, text) = p.call_method_on_child_path_string(path, method, &[]);
+    drop(p);
+    avm_log_push(format!(
+        "[ruffle_ios] call_child_path_string('{}', '{}') -> {}",
+        path, method, status
+    ));
+    let Some(text) = text else { return -2; };
+    let mut n = text.len().min(cap - 1);
+    while !text.is_char_boundary(n) { n -= 1; }
+    std::ptr::copy_nonoverlapping(text.as_ptr(), out, n);
+    *out.add(n) = 0;
+    n as c_int
+}
+
 /// Show/hide the object at a dotted path from the root clip.
 /// Returns 1 found, 0 not found / bad args, -1 lock fail.
 #[no_mangle]

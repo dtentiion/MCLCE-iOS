@@ -305,6 +305,15 @@ int           ruffle_ios_call_child_path(PlayerHandle* h,
                                          const uint8_t* const* strs, const size_t* str_lens,
                                          size_t argc);
 
+// method() on the object at a dotted path, for the string it returns
+// (UIControl_Base::getLabel's GetLabel). The UTF-8 string goes to out,
+// cut to fit cap with its NUL. Returns its length, -1 lock fail, -2 call
+// err or not a string, -3 bad args. Not from inside an ExtInt callback.
+int           ruffle_ios_call_child_path_string(PlayerHandle* h,
+                                                const uint8_t* path, size_t path_len,
+                                                const uint8_t* method, size_t method_len,
+                                                uint8_t* out, size_t cap);
+
 // setVisible on the object at a dotted path. 1 found, 0 not found.
 int           ruffle_ios_set_child_path_visible(PlayerHandle* h,
                                                 const uint8_t* path, size_t path_len,
