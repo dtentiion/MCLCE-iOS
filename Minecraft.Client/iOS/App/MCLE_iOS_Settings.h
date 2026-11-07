@@ -88,6 +88,12 @@ void          mcle_settings_set_favorite_skins_pos(unsigned char pos);
 void          mcle_settings_get_tutorial(unsigned char *completion, int bytes, unsigned int *special);
 void          mcle_settings_set_tutorial(const unsigned char *completion, int bytes, unsigned int special);
 
+// Longer Loading Screens, an option of this port's that TU19 doesn't have.
+// Off by default. Saved after the tutorial fields, so an older settings.dat
+// loads with it off.
+unsigned char mcle_settings_get_longer_loading(void);
+void          mcle_settings_set_longer_loading(unsigned char on);
+
 #ifdef __cplusplus
 }
 #endif

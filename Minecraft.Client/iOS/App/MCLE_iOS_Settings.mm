@@ -34,10 +34,16 @@ struct TutorialSettings {
     uint32_t specialBitmask;
 };
 
+// The port's own options, which TU19's GAME_SETTINGS doesn't have
+struct PortSettings {
+    uint8_t longerLoading;
+};
+
 std::mutex g_mu;
 unsigned char g_values[MCLE_SETTING_MAX] = {};
 SkinSettings g_skin = {};
 TutorialSettings g_tutorial = {};
+PortSettings g_port = {};
 std::atomic<bool> g_loaded{false};
 
 NSString* settings_path() {
@@ -99,6 +105,9 @@ void apply_defaults() {
     for (int i = 0; i < kMaxFavoriteSkins; i++) {
         g_skin.favoriteSkins[i] = 0xFFFFFFFF;
     }
+
+    // Port options start off, the game as TU19 has it
+    g_port.longerLoading = 0;
 }
 
 void save_locked() {
@@ -111,6 +120,7 @@ void save_locked() {
     std::fwrite(g_values, 1, MCLE_SETTING_MAX, f);
     std::fwrite(&g_skin, 1, sizeof(g_skin), f);
     std::fwrite(&g_tutorial, 1, sizeof(g_tutorial), f);
+    std::fwrite(&g_port, 1, sizeof(g_port), f);
     std::fclose(f);
 }
 
@@ -125,7 +135,8 @@ extern "C" void mcle_settings_load(void) {
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         FILE* f = std::fopen(path.UTF8String, "rb");
         if (f) {
-            unsigned char buf[MCLE_SETTING_MAX + sizeof(SkinSettings) + sizeof(TutorialSettings)] = {};
+            unsigned char buf[MCLE_SETTING_MAX + sizeof(SkinSettings) + sizeof(TutorialSettings) +
+                              sizeof(PortSettings)] = {};
             size_t n = std::fread(buf, 1, sizeof(buf), f);
             std::fclose(f);
             // Tolerate shorter files: newer builds may have more
@@ -133,9 +144,11 @@ extern "C" void mcle_settings_load(void) {
             // Copy what we got, leave defaults for the rest.
             if (n > 0) {
                 const size_t skinEnd = MCLE_SETTING_MAX + sizeof(SkinSettings);
+                const size_t tutorialEnd = skinEnd + sizeof(TutorialSettings);
                 std::memcpy(g_values, buf, n < MCLE_SETTING_MAX ? n : MCLE_SETTING_MAX);
                 if (n >= skinEnd) std::memcpy(&g_skin, buf + MCLE_SETTING_MAX, sizeof(g_skin));
-                if (n == sizeof(buf)) std::memcpy(&g_tutorial, buf + skinEnd, sizeof(g_tutorial));
+                if (n >= tutorialEnd) std::memcpy(&g_tutorial, buf + skinEnd, sizeof(g_tutorial));
+                if (n > tutorialEnd) std::memcpy(&g_port, buf + tutorialEnd, n - tutorialEnd);
                 NSLog(@"[settings] loaded %zu byte(s) from %@", n, path);
             }
         }
@@ -236,4 +249,17 @@ extern "C" void mcle_settings_set_tutorial(const unsigned char *completion, int 
         g_tutorial.specialBitmask = special;
         save_locked();
     }
+}
+
+extern "C" unsigned char mcle_settings_get_longer_loading(void) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    return g_port.longerLoading;
+}
+
+extern "C" void mcle_settings_set_longer_loading(unsigned char on) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    on = on ? 1 : 0;
+    if (g_port.longerLoading == on) return;
+    g_port.longerLoading = on;
+    save_locked();
 }
