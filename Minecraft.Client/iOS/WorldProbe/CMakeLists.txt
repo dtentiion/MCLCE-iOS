@@ -2,7 +2,7 @@
 #
 # Flip on with -DENABLE_WORLD_PROBE=ON. Expected to fail loudly. Each failure
 # here is a signal about another Windows-ism or missing platform shim that
-# has to be addressed as part of Phase 1.
+# has to be addressed.
 #
 # Start with a tiny set (just AABB for now) and grow as things compile.
 # Do not link this into the app yet; it exists to drive a TU-compile pass
@@ -1015,25 +1015,25 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.Client/MultiPlayerLevel.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/MinecraftServer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/LevelRenderer.cpp
-  # G2b: real upstream Tesselator. Replaces the no-op stubs in
-  # link_stubs.cpp; routes vertex pushes into our Metal DrawVertices hook
+  # Real upstream Tesselator. Replaces the no-op stubs in
+  # link_stubs.cpp; routes vertex pushes into the Metal DrawVertices hook
   # via Tesselator::end() -> RenderManager.DrawVertices(...).
   ${UPSTREAM_DIR}/Minecraft.Client/Tesselator.cpp
-  # G2b: real MemoryTracker (genLists, genTextures wrappers). Needs the
-  # upstream-wrapper glGenTextures()/glDeleteTextures(int) variants we
+  # Real MemoryTracker (genLists, genTextures wrappers). Needs the
+  # upstream-wrapper glGenTextures()/glDeleteTextures(int) variants
   # added in iOS_WinCompat.h + probe_stub.cpp.
   ${UPSTREAM_DIR}/Minecraft.Client/MemoryTracker.cpp
-  # G2b: real Lighting (turnOn / turnOff). Needs glLight(int,int,FloatBuffer*)
+  # Real Lighting (turnOn / turnOff). Needs glLight(int,int,FloatBuffer*)
   # variant added to iOS_WinCompat.h + probe_stub.cpp.
   ${UPSTREAM_DIR}/Minecraft.Client/Lighting.cpp
-  # G2b: real OffsettedRenderList. Needs glCallLists(IntBuffer*) overload
+  # Real OffsettedRenderList. Needs glCallLists(IntBuffer*) overload
   # added to iOS_WinCompat.h + probe_stub.cpp.
   ${UPSTREAM_DIR}/Minecraft.Client/OffsettedRenderList.cpp
-  # Phase E: pulled in to satisfy ServerLevel/MinecraftServer link refs.
+  # Pulled in to satisfy ServerLevel/MinecraftServer link refs.
   # Both are auto-probe greens; just weren't in the lib source list yet.
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerChunkMap.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/TrackedEntity.cpp
-  # Phase F: real upstream save-loading sources, unblocked by the iOS Win32
+  # Real upstream save-loading sources, unblocked by the iOS Win32
   # POSIX shim (iOS_WinFileShim.h) and patch-upstream-stdafx StringHelpers
   # iOS branch.
   ${UPSTREAM_DIR}/Minecraft.World/File.cpp
@@ -1195,7 +1195,7 @@ set(WORLD_PROBE_SOURCES
 add_library(mcle_world_probe STATIC
   ${WORLD_PROBE_SOURCES}
   probe_stub.cpp
-  # Phase E: bodies for upstream symbols whose owning .cpp files don't
+  # Bodies for upstream symbols whose owning .cpp files don't
   # compile yet. See link_stubs.cpp comments for the per-class story.
   link_stubs.cpp
   # pthread-backed real implementations behind the Win32 threading +
@@ -1224,7 +1224,7 @@ target_include_directories(mcle_world_probe PRIVATE
 # Force-include the iOS PCH-equivalent at the top of every TU. iOS_stdafx.h
 # pulls in the C++ standard headers upstream's stdafx.h chain assumes plus
 # iOS_WinCompat.h's Win32 type aliases, so upstream files that start with
-# `#include "stdafx.h"` resolve cleanly without us having to edit them.
+# `#include "stdafx.h"` resolve cleanly without being edited.
 target_compile_options(mcle_world_probe PRIVATE
   -include "${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/iOS_stdafx.h"
   # Upstream uses __declspec(thread) for thread-local storage in a few
@@ -1239,8 +1239,8 @@ target_compile_definitions(mcle_world_probe PRIVATE
   # Skip debug/profiling code paths that need the global `app`
   # (CMinecraftApp instance). PerformanceTimer.cpp gates its body on
   # !_CONTENT_PACKAGE; many other Minecraft.World files do the same.
-  # We do not have a real `app` to bind against in the probe so we
-  # take the content-only branch.
+  # The probe has no real `app` to bind against, so it
+  # takes the content-only branch.
   _CONTENT_PACKAGE
   # Marker for probe-only stubs in iOS_WinCompat.h. The main app
   # build does not get this define, so it picks up real upstream
@@ -1260,10 +1260,10 @@ set_target_properties(mcle_world_probe PROPERTIES
 )
 
 # ----------------------------------------------------------------------------
-# Phase C link-test target. Pulls every TU out of the static archive via
+# Link-test target. Pulls every TU out of the static archive via
 # -force_load so the linker tries to resolve every symbol referenced by the
 # probe set. Almost certainly fails to link against the iOS toolchain - the
-# undefined-symbol list is the Phase C work item priority queue.
+# undefined-symbol list is the link work queue.
 #
 # Gated behind ENABLE_WORLD_PROBE_LINK so the regular probe job stays fast.
 # The CI driver runs `cmake --build --target mcle_world_probe_link_test` with
@@ -1301,7 +1301,7 @@ if(ENABLE_WORLD_PROBE_LINK)
   )
   # Force-load every .o in the archive so undefined symbols actually surface.
   # Without this the linker would only pull TUs that satisfy the test's
-  # tiny call set, hiding 99% of the Phase C work list.
+  # tiny call set, hiding 99% of the missing symbols.
   target_link_options(mcle_world_probe_link_test PRIVATE
     "LINKER:-force_load,$<TARGET_FILE:mcle_world_probe>"
   )

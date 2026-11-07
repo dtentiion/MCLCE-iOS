@@ -1,7 +1,7 @@
-// Phase C bootstrap: a one-symbol executable that force-loads the
+// Link bootstrap: a one-symbol executable that force-loads the
 // mcle_world_probe static archive so every TU in it gets pulled into
 // the link. The linker then surfaces every unresolved external symbol
-// as a hard error, which is the Phase C work list.
+// as a hard error, which is the link work list.
 //
 // This is expected to fail to link with a large number of undefined
 // symbols. That is the point: the failure log is the next-step
@@ -14,7 +14,7 @@
 //   - a CMinecraftApp method not absorbed by McleAppStub - need to
 //     add the method to the stub
 //
-// We DO NOT promise this target builds clean. The world-probe job
+// This target is NOT promised to build clean. The world-probe job
 // continues to be the source of truth for compile coverage. This
 // target's failure log is the source of truth for link coverage.
 

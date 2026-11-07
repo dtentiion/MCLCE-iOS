@@ -1,4 +1,4 @@
-// Phase E link-stub TU.
+// Link-stub TU.
 //
 // When mcle_ios_game's MCLEGameLoop.cpp calls `new ServerLevel(...)` the
 // linker walks the live transitive set out of the probe archive: ServerLevel
@@ -14,7 +14,7 @@
 // which the bootstrap already handles.
 //
 // Each block is grouped by the class it belongs to. When the owning .cpp
-// becomes compilable (Phase F+), drop the corresponding block and add the
+// becomes compilable, drop the corresponding block and add the
 // real source to mcle_world_probe's source list.
 
 #include "iOS_stdafx.h"
@@ -239,8 +239,8 @@ const int AddEntityPacket::FISH_HOOK;
 Minecraft *Minecraft::m_instance = nullptr;
 // ColourTable shim. ColourTable is an unsigned int array indexed by
 // eMinecraftColour. Real upstream loads values from a DLC .col binary;
-// the authoring source is Common/res/TitleUpdate/res/colours.xml. We
-// parse the XML directly on first access so sunrise gradient, fog
+// the authoring source is Common/res/TitleUpdate/res/colours.xml;
+// the XML is parsed directly on first access so sunrise gradient, fog
 // color, cloud color, biome tints, etc. all get their proper LCE values
 // instead of a flat plains-blue fallback. The fallback (0x78A7FF) is
 // still used for any enum entries not present in the XML.
@@ -491,18 +491,18 @@ extern "C" void mcle_delete_reassigned_storage(void) {
 // from the .cpp; old stub removed.
 
 // ---------------------------------------------------------------------------
-// G2b: leaf-symbol stubs so LevelRenderer.cpp links. Each upstream class
+// Leaf-symbol stubs so LevelRenderer.cpp links. Each upstream class
 // owning these would normally define them in its .cpp, but the matching
 // .cpp doesn't compile cleanly on iOS yet (missing GL wrapper variants,
-// transitive deps). No-op stubs let the rest of the renderer link; G3 +
-// real C4JRender_iOS impls replace them with working bodies.
+// transitive deps). No-op stubs let the rest of the renderer link
+// until working bodies replace them.
 // ---------------------------------------------------------------------------
 
 // Tesselator: real upstream Tesselator.cpp now compiles. Stubs removed.
 
 // MemoryTracker: real upstream MemoryTracker.cpp now compiles via the
-// upstream-wrapper glGenTextures()/glDeleteTextures(int) variants we
-// added. Stubs removed.
+// upstream-wrapper glGenTextures()/glDeleteTextures(int) variants
+// added for iOS. Stubs removed.
 
 // OffsettedRenderList: real upstream OffsettedRenderList.cpp now compiles
 // via the glCallLists(IntBuffer*) overload added in iOS_WinCompat.h.
@@ -515,16 +515,16 @@ extern "C" void mcle_delete_reassigned_storage(void) {
 class MemTextureProcessor;
 class MemTexture;
 
-// G4-step3: PNG decoder + Metal texture upload bridge.
+// PNG decoder + Metal texture upload bridge.
 extern "C" unsigned int mcle_glbridge_load_or_get_png_path(const char* path);
 extern "C" void         mcle_glbridge_bind_texture(unsigned int id);
 
 // Mirrors upstream's Textures::preLoaded[] for the texture-name enum
-// values our shipped renderer actually requests. Each entry is the
+// values the shipped renderer actually requests. Each entry is the
 // relative path under Common/res/TitleUpdate/res (no leading slash, no
 // .png extension - matches upstream exactly).
 // External linkage so the patched upstream Textures::bindTexture can
-// call it (G5-step29).
+// call it.
 const char *texture_name_relpath(_TEXTURE_NAME tn) {
     switch (tn) {
         case TN_TERRAIN:             return "terrain";
@@ -577,14 +577,14 @@ std::string wstr_to_utf8(const std::wstring &w) {
 
 } // namespace
 
-// G5-step29: Textures methods (bindTexture, addMemTexture,
+// Textures methods (bindTexture, addMemTexture,
 // removeMemTexture, getMissingIcon) removed from here. Upstream
 // Textures.cpp is now compiled in WorldProbe and provides those.
-// The G4 iOS CGImageSource PNG path now goes through upstream's
+// The iOS CGImageSource PNG path now goes through upstream's
 // loadTexture / TextureManager chain. If iOS-specific behavior
 // is needed for any of those, patch upstream rather than re-stub.
 
-// G5-step32: TextureManager::createStitcher reads this for the atlas size.
+// TextureManager::createStitcher reads this for the atlas size.
 // 2048 matches Metal's safe minimum on every iOS device.
 #include "Minecraft.h"
 int Minecraft::maxSupportedTextureSize() { return 2048; }
@@ -595,7 +595,7 @@ void Minecraft::delayTextureReload() {
 }
 
 #include "GameRenderer.h"
-// G5: TileRenderer reads this for anaglyph color filtering; we keep it
+// TileRenderer reads this for anaglyph color filtering; it stays
 // false so the standard non-stereo path runs.
 bool GameRenderer::anaglyph3d = false;
 // The chunk update thread is the sim thread's updateDirtyChunks (MCLEGameLoop.cpp)
@@ -623,12 +623,12 @@ int UIScene_SettingsGraphicsMenu::LevelToDistance(int level) {
 
 // MobSkinMemTextureProcessor: real .cpp doesn't compile (uses
 // BufferedImage::Graphics which needs the full BufferedImage class
-// we haven't pulled in). Stub the vtable anchor.
+// that isn't pulled in). Stub the vtable anchor.
 #include "MobSkinMemTextureProcessor.h"
 BufferedImage *MobSkinMemTextureProcessor::process(BufferedImage *in) { return in; }
 
 // ClientConstants: real .cpp uses Win32-style VER_FILEVERSION_STR_W /
-// VER_BRANCHVERSION_STR_W macros from a generated version.h we don't have.
+// VER_BRANCHVERSION_STR_W macros from a generated version.h that doesn't exist here.
 // Gui.cpp's debug overlay reads these strings; iOS shows them as empty.
 #include "ClientConstants.h"
 const std::wstring ClientConstants::VERSION_STRING = std::wstring();
@@ -682,12 +682,12 @@ void glLight(int light, int mode, FloatBuffer *values) {
 }
 
 // Screen size accessed by Gui::render via extern int g_rScreen{Width,Height}.
-// Gui only reads these in a couple of branches we don't hit; default 0.
+// Gui only reads these in a couple of branches that aren't hit; default 0.
 int g_rScreenWidth  = 0;
 int g_rScreenHeight = 0;
 
 // setupGuiScreen sets up the orthographic projection for HUD rendering.
-// Parity with upstream GameRenderer.cpp:1923-1934 - clear depth, ortho
+// As in upstream GameRenderer.cpp:1923-1934: clear depth, ortho
 // projection in SCALED gui coords (rawWidth/rawHeight), modelview at
 // z=-2000 so HUD vertices end up at the near plane. Critical: ortho
 // uses scaled dims, NOT physical, because Gui.cpp emits all vertices in
@@ -726,6 +726,6 @@ std::wstring Minecraft::gatherStats3() { return std::wstring(); }
 std::wstring Minecraft::gatherStats4() { return std::wstring(); }
 // Returning false skips Gui::render's renderVignette call - that's a
 // full-screen overlay that without the proper texture binding paints
-// the screen blue. Once vignette texture loading is wired we can flip
-// this back on.
+// the screen blue. Once vignette texture loading is wired this can
+// flip back on.
 bool         Minecraft::useFancyGraphics() { return false; }

@@ -25,7 +25,7 @@ C4JStorage  StorageManager;
 C4JRender   RenderManager;
 C_4JInput   InputManager;
 
-// G2a/G3a: probe-lib weak fallbacks. The real Metal-backed impls live
+// Probe-lib weak fallbacks. The real Metal-backed impls live
 // in Render/MetalContext.mm and override these in the iOS app link.
 // Marked weak so the probe link-test (which doesn't link Render) still
 // resolves while the iOS-app build picks up the strong definitions.
@@ -34,7 +34,7 @@ __attribute__((weak)) extern "C" void mcle_metal_draw_vertices(int /*prim*/, int
                                                                 int /*fmt*/, int /*shader*/) {}
 __attribute__((weak)) extern "C" unsigned long long mcle_metal_draw_count(void) { return 0; }
 
-// G3a: weak fallbacks for the display-list bridge so the probe link
+// Weak fallbacks for the display-list bridge so the probe link
 // resolves without depending on mcle_ios_render. Real impls in
 // Render/MetalContext.mm record + replay DrawVertices payloads.
 __attribute__((weak)) extern "C" int  mcle_glbridge_gen_lists(int /*range*/)            { return 1; }
@@ -43,7 +43,7 @@ __attribute__((weak)) extern "C" void mcle_glbridge_end_list(void)              
 __attribute__((weak)) extern "C" void mcle_glbridge_call_list(int /*id*/)                {}
 __attribute__((weak)) extern "C" void mcle_glbridge_release_lists(int /*id*/, int /*range*/) {}
 
-// G3d-step3: weak fallbacks for the matrix bridge.
+// Weak fallbacks for the matrix bridge.
 __attribute__((weak)) extern "C" void mcle_glbridge_matrix_mode(int /*mode*/)            {}
 __attribute__((weak)) extern "C" void mcle_glbridge_load_identity(void)                  {}
 __attribute__((weak)) extern "C" void mcle_glbridge_load_matrix(const float* /*m*/)      {}
@@ -56,13 +56,13 @@ __attribute__((weak)) extern "C" void mcle_glbridge_scale(float, float, float)  
 __attribute__((weak)) extern "C" void mcle_glbridge_metal_perspective(float, float, float, float) {}
 __attribute__((weak)) extern "C" void mcle_glbridge_set_texgen_col(int, float, float, float, float, bool) {}
 
-// G3f: weak fallbacks for the GL_CURRENT_COLOR bridge.
+// Weak fallbacks for the GL_CURRENT_COLOR bridge.
 __attribute__((weak)) extern "C" void mcle_glbridge_color4f(float, float, float, float)  {}
 __attribute__((weak)) extern "C" void mcle_glbridge_color3f(float, float, float)         {}
 __attribute__((weak)) extern "C" void mcle_glbridge_color4ub(unsigned char, unsigned char,
                                                               unsigned char, unsigned char) {}
 
-// G4-step2: weak fallbacks for the texture bridge.
+// Weak fallbacks for the texture bridge.
 __attribute__((weak)) extern "C" unsigned int mcle_glbridge_gen_texture(void) { return 1; }
 __attribute__((weak)) extern "C" void mcle_glbridge_gen_textures_n(int, unsigned int*)   {}
 __attribute__((weak)) extern "C" void mcle_glbridge_delete_texture(unsigned int)         {}
@@ -75,7 +75,7 @@ __attribute__((weak)) extern "C" unsigned int mcle_glbridge_load_or_get_png_path
 
 // Out-of-line definitions for upstream class statics that were declared
 // with in-class initializers but never defined out-of-line in the .cpp
-// chain we have. MSVC tolerates this; macOS/iOS clang+ld require the
+// chain here. MSVC tolerates this; macOS/iOS clang+ld require the
 // definition for any odr-use (e.g. taking the address, passing by
 // reference, or initialiser-list evaluation).
 //
@@ -87,8 +87,8 @@ const int ZonedChunkStorage::CHUNKS_PER_ZONE = 1 << ZonedChunkStorage::CHUNKS_PE
 
 // Stubs for upstream gameplay-host class methods whose .cpp files are
 // blocked on the UI / render chain (Minecraft.cpp, MinecraftServer.cpp,
-// LevelRenderer.cpp). The real bodies come back when Phase D2's GL ES
-// renderer lands and unblocks those TUs. Until then, every stub is a
+// LevelRenderer.cpp). The real bodies come back once those
+// TUs compile. Until then, every stub is a
 // safe no-op returning nullptr / false / 0; gameplay code that calls
 // these in dev-build init paths will see "no server", "no players",
 // etc and route around them.
@@ -114,11 +114,11 @@ INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
 // to stub here for LevelRenderer anymore.
 
 // Legacy OpenGL function bodies. iOS doesn't have legacy GL; calls
-// route through the Metal-backed C4JRender_iOS in Phase D2. For now
-// these are no-ops so any TU that calls them links cleanly without
+// route through the Metal-backed mcle_glbridge_* layer where they can; the rest
+// are no-ops so any TU that calls them links cleanly without
 // pulling actual GL into the .ipa.
 //
-// G2b: defined with C++ linkage (no extern "C") so the header decls
+// Defined with C++ linkage (no extern "C") so the header decls
 // in iOS_WinCompat.h can declare upstream-wrapper overloads.
 // Track GL_DEPTH_TEST and GL_BLEND. Other caps are no-op.
 //   GL_DEPTH_TEST 0x0B71: HUD path needs it off so HUD fragments at
@@ -286,7 +286,7 @@ void glLightModelfv(unsigned int, const float*)            {}
 // (0x0BA6) to read the live matrices, then computes the 6 clip planes for
 // cubeInFrustum. With a no-op shim the planes stay zero and every cube
 // (including each renderAdvancedClouds cube cell) gets rejected. Wire it
-// to our real matrix stacks so frustum culling works.
+// to the real matrix stacks so frustum culling works.
 #include "../../../upstream/Minecraft.World/FloatBuffer.h"
 extern "C" void mcle_glbridge_get_modelview(float *out16);
 extern "C" void mcle_glbridge_get_projection(float *out16);
@@ -336,7 +336,7 @@ void glTexGen(int coord, int mode, FloatBuffer *vec) {
 void glMaterialfv(unsigned int, unsigned int, const float*) {}
 // Fog parameter shim. Upstream GameRenderer::setupFog issues:
 //   glFog(GL_FOG_COLOR, vec4)        - via glFogfv
-//   glFogi(GL_FOG_MODE, GL_LINEAR)   - we always linear; no-op
+//   glFogi(GL_FOG_MODE, GL_LINEAR)   - always linear here; no-op
 //   glFogf(GL_FOG_START, near)
 //   glFogf(GL_FOG_END, far)
 // GL constants: GL_FOG_COLOR=0x0B66, GL_FOG_MODE=0x0B65,
