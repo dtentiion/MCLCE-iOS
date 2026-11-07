@@ -3329,8 +3329,15 @@ extern "C" void mcle_game_tick(void) {
             if (!g_levels[i]) continue;
             const auto lvlStart = hrclock::now();
             g_levels[i]->tick();
-            if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
-            g_levels[i]->tickEntities();
+            // 4J added to stop ticking entities in levels when players are
+            // not in those levels, unless there are entities to be removed.
+            // The local player isn't in the PlayerList's players.
+            const bool playerInLevel = g_server->getPlayers()->getPlayerCount(g_levels[i]) > 0 ||
+                                       (g_player && g_player->level == g_levels[i]);
+            if (playerInLevel || g_levels[i]->hasEntitiesToRemove()) {
+                if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
+                g_levels[i]->tickEntities();
+            }
             mcle_tracker_item_frame_maps(i);
             const auto lvlMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                    hrclock::now() - lvlStart).count();
