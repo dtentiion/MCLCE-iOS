@@ -1350,6 +1350,21 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: chunk preload done, %d loaded, %d failed", loaded, failed);
     }
 
+    // loadLevel (and run again before its loop): a level without a stronghold
+    // position gets the one generation put in the terrain features list, which
+    // only has it if some overworld chunk was generated during this load
+    if (g_levels[0]->dimension->id == 0 && !g_levels[0]->getLevelData()->getHasStronghold()) {
+        int x, z;
+        if (app.GetTerrainFeaturePosition(eTerrainFeature_Stronghold, &x, &z)) {
+            g_levels[0]->getLevelData()->setXStronghold(x);
+            g_levels[0]->getLevelData()->setZStronghold(z);
+            g_levels[0]->getLevelData()->setHasStronghold();
+            MCLE_LOG("mcle_game_init: stronghold at chunk %d %d", x, z);
+        } else {
+            MCLE_LOG("mcle_game_init: no stronghold in the terrain features list");
+        }
+    }
+
     // Step 8: spawn a ServerPlayer at the overworld's shared spawn pos
     // and register it. Parity-light: upstream's full network flow runs
     // through PendingConnection -> AddPlayerPacket -> PlayerList::add;

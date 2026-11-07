@@ -52,6 +52,12 @@ void mcle_local_player_set_custom_cape(unsigned int capeId);
 unsigned int mcle_cape_id_from_path(const std::wstring &cape);
 std::wstring mcle_cape_path_from_id(unsigned int capeId);
 
+// App_structs.h's FEATURE_DATA, one place in the terrain feature list
+typedef struct {
+    int x, z;
+    _eTerrainFeatureType eTerrainFeature;
+} FEATURE_DATA;
+
 struct McleAppStub {
     // Heavyweight returning ptr to opaque object; nullptr is fine
     // for most call sites that just check for non-null OR pass it
@@ -77,6 +83,44 @@ struct McleAppStub {
     LevelRuleset *getGameRuleDefinitions() { return m_gameRules.getGameRuleDefinitions(); }
     LevelGenerationOptions *getLevelGenerationOptions() { return m_gameRules.getLevelGenerationOptions(); }
     LPCWSTR GetGameRulesString(const std::wstring &key) { return m_gameRules.GetGameRulesString(key); }
+
+    // CMinecraftApp's terrain feature list (Consoles_App.cpp): where level
+    // generation put the structures, which loadLevel takes the stronghold from
+    std::vector<FEATURE_DATA *> m_vTerrainFeatures;
+    void AddTerrainFeaturePosition(_eTerrainFeatureType eFeatureType, int x, int z) {
+        // check we don't already have this in
+        for (FEATURE_DATA *pFeatureData : m_vTerrainFeatures) {
+            if ((pFeatureData->eTerrainFeature == eFeatureType) && (pFeatureData->x == x) && (pFeatureData->z == z)) return;
+        }
+        FEATURE_DATA *pFeatureData = new FEATURE_DATA;
+        pFeatureData->eTerrainFeature = eFeatureType;
+        pFeatureData->x = x;
+        pFeatureData->z = z;
+        m_vTerrainFeatures.push_back(pFeatureData);
+    }
+    _eTerrainFeatureType IsTerrainFeature(int x, int z) {
+        for (FEATURE_DATA *pFeatureData : m_vTerrainFeatures) {
+            if ((pFeatureData->x == x) && (pFeatureData->z == z)) return pFeatureData->eTerrainFeature;
+        }
+        return eTerrainFeature_None;
+    }
+    bool GetTerrainFeaturePosition(_eTerrainFeatureType eType, int *pX, int *pZ) {
+        for (const FEATURE_DATA *pFeatureData : m_vTerrainFeatures) {
+            if (pFeatureData->eTerrainFeature == eType) {
+                *pX = pFeatureData->x;
+                *pZ = pFeatureData->z;
+                return true;
+            }
+        }
+        return false;
+    }
+    void ClearTerrainFeaturePosition() {
+        while (m_vTerrainFeatures.size() > 0) {
+            FEATURE_DATA *pFeatureData = m_vTerrainFeatures.back();
+            m_vTerrainFeatures.pop_back();
+            delete pFeatureData;
+        }
+    }
 
     bool m_bTutorialMode = false;
     bool GetTutorialMode() { return m_bTutorialMode; }
@@ -509,8 +553,6 @@ struct McleAppStub {
     }
     // Real signature returns `MOJANG_DATA*` - declared in stdafx.
     template<class... A> struct MOJANG_DATA* GetMojangDataForXuid(A...) { return nullptr; }
-    template<class... A> int            GetTerrainFeaturePosition(A...) { return 0; }
-    template<class... A> void           AddTerrainFeaturePosition(A...) {}
     // A DLC skin's extra boxes as parts on the player model, and its
     // animation overrides (Game/MCLEDLC.cpp)
     void SetAdditionalSkinBoxes(DWORD dwSkinID, SKIN_BOX *SkinBoxA, DWORD dwSkinBoxC);
@@ -608,7 +650,6 @@ struct McleAppStub {
     template<class... A> void           DisplayNewDLCTip(A...)        {}
     template<class... A> int            FormatHTMLString(A...)        { return 0; }
     template<class... A> void           AddMemoryTPDFile(A...)        {}
-    template<class... A> void           ClearTerrainFeaturePosition(A...) {}
     template<class... A> bool           DLCAlreadyPurchased(A...)     { return false; }
     template<class... A> bool           DLCInstalled(A...)            { return false; }
     template<class... A> void           DLCContentRetrieved(A...)     {}
