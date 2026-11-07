@@ -4095,6 +4095,10 @@ static void mcle_gui_animated_character(float a) {
     g_player->yRotO = g_player->yRot;
     g_player->xRot = xRotAngle;
 
+    // 4J - TomK don't offset the player. Gui's player is the client's, and
+    // PlayerRenderer::render takes its heightOffset of 1.62 off y, so its
+    // feet sit that far below the corner. ServerPlayer's is 0.
+    glTranslatef(0, g_player->heightOffset - 1.62f, 0);
     dispatcher->playerRotY = 180;
     dispatcher->isGuiRender = true;
     // The renderer without postRender's flame, as Gui puts the fire out for
