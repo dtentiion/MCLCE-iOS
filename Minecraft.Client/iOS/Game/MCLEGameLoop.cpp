@@ -1,7 +1,7 @@
 // iOS top-level game shell.
 //
 // Bypasses the upstream Minecraft.cpp construction path (blocked on
-// the tutorial / trial / UI cascade we replaced with SWF) and instead
+// the tutorial / trial / UI cascade the SWF menus replace) and instead
 // constructs the minimum subset of upstream gameplay classes that the
 // simulation tick needs:
 //
@@ -11,10 +11,10 @@
 //   4. LevelSettings(LevelData*) -> world settings
 //   5. new Level(...) -> the world simulation
 //
-// On each tick from the iOS render loop we call Level::tick() +
+// Each tick from the iOS render loop calls Level::tick() +
 // tickEntities() so the simulation actually runs.
 //
-// This file is parity-preserving for everything below the top level
+// Everything below the top level is upstream's own code
 // (Entity, Level, Player, Mob, NBT, packets, simulation logic). The
 // only thing it replaces is Minecraft::init() / Minecraft::tick().
 //
@@ -48,11 +48,11 @@
 #include <cmath>
 #include <new>
 
-// G2a: declared in Render lib (MetalContext.mm). Forward decl here so
+// Declared in Render lib (MetalContext.mm). Forward decl here so
 // the tick log can read the cumulative DrawVertices count.
 extern "C" unsigned long long mcle_metal_draw_count(void);
 
-// G3a: number of recorded display lists. Bumps once per glNewList during
+// Number of recorded display lists. Bumps once per glNewList during
 // LevelRenderer ctor (skyList, starList, darkList, cloudList, chunkLists)
 // and stays flat after init - so this is a static signal that recording
 // is wired correctly. Counter version of draws climbs per frame once
@@ -72,7 +72,7 @@ extern "C" void mcle_glbridge_skip_autoreplay(int id);
 extern "C" void mcle_glbridge_set_autoreplay_range(int first, int count);
 extern "C" void mcle_metal_clear_depth(void);
 
-// G1B-probe: defined later in this same TU; forward-declared here so
+// Defined later in this same TU; forward-declared here so
 // the tick path can call it before the definition appears.
 extern "C" void mcle_world_g1b_probe_tick(void);
 
@@ -368,12 +368,12 @@ std::atomic<bool> g_levelChanging{false};
 // ClientLevelListener instead of as its own listener. Once the world is drawn
 // this runs with g_frameMutex held.
 //
-// G3e: the live ServerLevel is mc->level so upstream renderSky can read
+// The live ServerLevel is mc->level so upstream renderSky can read
 // getSkyColor / dimension / time-of-day. ServerLevel and MultiPlayerLevel
 // are siblings under Level - the cast keeps virtual dispatch routed through
 // the actual ServerLevel vtable.
 //
-// G5: LevelRenderer::setLevel(0, lvl) sets level[0] and calls allChanged(0)
+// LevelRenderer::setLevel(0, lvl) sets level[0] and calls allChanged(0)
 // to allocate the chunk mesh array. Without this, chunks[0].length stays at
 // 0 and renderChunks dispatches no geometry.
 void mcle_client_set_level(ServerLevel *level) {
@@ -400,7 +400,7 @@ void mcle_client_set_level(ServerLevel *level) {
         MCLE_LOG("client level: setLevel threw unknown");
     }
 
-    // G5-step16: re-center the render grid around the player.
+    // Re-center the render grid around the player.
     // setLevel -> allChanged calls resortChunks but only if mc->
     // cameraTargetPlayer was wired BEFORE setLevel ran. Calling
     // it explicitly here with current player coords guarantees
@@ -499,7 +499,7 @@ std::atomic<uint64_t>         g_lastSimTickNs{ 0 };
 std::atomic<uint64_t>         g_nextSimTickNs{ 0 };
 uint64_t                      g_pendingSimTickNs = 0;
 // Gui instance for HUD rendering (hotbar, health bars, crosshair).
-// Constructed in mcle_game_init after textures->stitch (parity with
+// Constructed in mcle_game_init after textures->stitch (as in
 // upstream Minecraft::init). Render thread calls g_gui->render() each frame.
 Gui                          *g_gui = nullptr;
 uint64_t                      g_tickCount    = 0;
@@ -507,8 +507,8 @@ uint64_t                      g_tickCount    = 0;
 // to render the placeholder SWF + handle input while save loading is
 // in progress. Set once on first tick, never reset.
 std::atomic<bool>             g_initStarted{ false };
-// Phase 3a: dedicated sim thread. Once init succeeds we spawn this
-// thread and it runs the body of mcle_game_tick in a loop. The
+// Dedicated sim thread. Once init succeeds this
+// thread starts and runs the body of mcle_game_tick in a loop. The
 // main thread's call becomes a no-op so chunk-rebuild WaitForAll
 // barriers and entity ticks never block the render frame.
 std::atomic<bool>             g_simThreadStarted{ false };
@@ -690,7 +690,7 @@ std::wstring widen(const char *utf8) {
     out.reserve(64);
     for (const char *p = utf8; *p; ++p) {
         // ASCII-only fast path; iOS sandboxed paths never have multi-byte
-        // sequences, so we treat each byte as a wchar_t.
+        // sequences, so each byte is treated as a wchar_t.
         out.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
     }
     return out;
@@ -796,7 +796,7 @@ bool mcle_open_save_bundle(const std::wstring &saveFolder) {
     g_saveFile->ConvertToLocalPlatform();
     MCLE_LOG("mcle_game_init: saveData.ms parsed at %p", (void*)g_saveFile);
 
-    // Diagnostic: enumerate the parsed bundle's file table. If level.dat
+    // Enumerate the parsed bundle's file table. If level.dat
     // isn't here, prepareLevel() will return null and the bootstrap idles
     // with "simulation idle, state=-1".
     try {
@@ -837,9 +837,9 @@ static void mcle_make_options(Minecraft *minecraft) {
         minecraft->options = new Options();
         // fancyGraphics=true gives leaves the cutout-transparency path
         // (LevelRenderer.cpp:427 Tile::leaves->setFancy). Clouds normally
-        // branch to renderAdvancedClouds when this is true, but our
+        // branch to renderAdvancedClouds when this is true, but
         // patch-renderclouds-force-simple.py rewires renderClouds to
-        // always take the simple 2D path on iOS - so we get fancy leaves
+        // always take the simple 2D path on iOS - so leaves are fancy
         // without the unsupported advanced cloud path.
         minecraft->options->fancyGraphics = true;
         // Ambient occlusion controls TileRenderer's per-vertex
@@ -848,8 +848,8 @@ static void mcle_make_options(Minecraft *minecraft) {
         // shadows look blocky. With it on, each face corner averages the
         // light of 4 neighbour blocks so shadows fade smoothly across
         // tree canopies, terrain folds, etc. Upstream Options::init sets
-        // ambientOcclusion = true by default; our zero-buffer Options
-        // skips init so we have to set it explicitly.
+        // ambientOcclusion = true by default; the zero-buffer Options here
+        // skips init so it's set explicitly.
         minecraft->options->ambientOcclusion = true;
         MCLE_LOG("minecraft init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
                  (void*)minecraft->options,
@@ -868,8 +868,8 @@ static void mcle_make_textures(Minecraft *minecraft) {
     Options *options = reinterpret_cast<Options *>(s_optsBuf);
 
     // TextureManager is a singleton - createTextureID() and createTexture()
-    // both go through getInstance() which returns nullptr until we allocate
-    // one. Upstream's per-platform main does this at boot.
+    // both go through getInstance() which returns nullptr until one is
+    // allocated. Upstream's per-platform main does this at boot.
     if (TextureManager::getInstance() == nullptr) {
         TextureManager::createInstance();
         MCLE_LOG("minecraft init: TextureManager::createInstance done at %p",
@@ -900,11 +900,11 @@ static void mcle_make_textures(Minecraft *minecraft) {
 void mcle_world_static_ctors() {
     static std::once_flag s_once;
     std::call_once(s_once, [] {
-        // Parity-correct upstream static init order, mirroring
+        // Upstream's static init order, from
         // Minecraft.World.cpp's MinecraftWorld_RunStaticCtors at lines 30-79.
         // Each call wrapped in try/catch so a single C++ throw doesn't kill
         // the whole sequence (SIGSEGV will still terminate; that's by design
-        // - we want to know which static init has a bad dep on iOS).
+        // - the log shows which static init has a bad dep on iOS).
         #define MCLE_STATIC(name, body) \
             try { body; MCLE_LOG("mcle_game_init: " name " done"); } \
             catch (...) { MCLE_LOG("mcle_game_init: " name " threw"); }
@@ -1001,7 +1001,7 @@ void initImpl() {
     // used liberally throughout the renderer (Level::getSkyColor,
     // getCloudColor, getSunriseColor, ...) and reads tls->pool[idx]. If
     // unset on this thread, deref produces a corrupt-pointer-shaped
-    // SIGSEGV (which was the G3e crash inside Level::getSkyColor).
+    // SIGSEGV (which was the crash inside Level::getSkyColor).
     Vec3::CreateNewThreadStorage();
     MCLE_LOG("mcle_game_init: Vec3::CreateNewThreadStorage done");
 
@@ -1056,7 +1056,7 @@ void initImpl() {
 
     // Step 2: enumerate saves. Upstream's DirectoryLevelStorageSource::
     // getLevelList() body is `#if 0`'d (Xbox saves enumerated differently),
-    // so we list Documents/saves/ ourselves via File::listFiles. Each
+    // so Documents/saves/ is listed here via File::listFiles. Each
     // subdirectory there is a candidate levelId. The one picked in
     // LoadMenu wins; the first folder is only a fallback.
     std::wstring levelId = g_pendingLevelId;
@@ -1096,10 +1096,10 @@ void initImpl() {
         return;
     }
 
-    // Step 3: build the storage directly. Parity with MinecraftServer.cpp:919
+    // Step 3: build the storage directly, as in MinecraftServer.cpp:919
     // (`storage = make_shared<McRegionLevelStorage>(pSave, File(L"."), name, true)`).
     // The McRegionLevelStorageSource->selectLevel path is for Xbox-style save
-    // folders; for in-memory bundle storage we wrap pSave straight away.
+    // folders; for in-memory bundle storage pSave is wrapped straight away.
     try {
         g_levelStorage = std::make_shared<McRegionLevelStorage>(
             g_saveFile, File(L"."), levelId, /*createPlayerDir*/ true);
@@ -1177,7 +1177,7 @@ void initImpl() {
     delete levelData;
     levelData = nullptr;
 
-    // Step 5.5: construct a real MinecraftServer instance. Parity with
+    // Step 5.5: construct a real MinecraftServer instance, as in
     // MinecraftServer::main:2251 (`server = new MinecraftServer()`).
     // The ctor sets up command dispatcher + dispenser bootstrap +
     // pause-event - all things ServerLevel ctor expects to call back
@@ -1221,7 +1221,7 @@ void initImpl() {
     g_server->setPvpAllowed(app.GetGameHostOption(eGameHostOption_PvP) > 0);
     g_server->setFlightAllowed(true);
 
-    // Step 5.6: attach a PlayerList. Parity with MinecraftServer.cpp:690
+    // Step 5.6: attach a PlayerList, as in MinecraftServer.cpp:690
     // (`setPlayers(new PlayerList(this))`). Without this, ServerLevel ctor
     // crashes inside `server->getPlayers()->getViewDistance()`.
     MCLE_LOG("mcle_game_init: constructing PlayerList...");
@@ -1231,10 +1231,10 @@ void initImpl() {
         // Default with _LARGE_WORLDS is 16 (33x33 = 1089 chunks). Way
         // too much on iOS without worker-thread meshing - the main thread
         // can't keep up. With extended-mem entitlement + unloaded-cache
-        // LRU eviction in place we can hold 8 (17x17 = 289). Bump toward
+        // LRU eviction in place it can hold 8 (17x17 = 289). Bump toward
         // 16 once worker threads land. (CPU-budget test at vd=6 didn't
         // extend session length, so the kill isn't CPU-related - keep
-        // the better visual parity.)
+        // the longer view.)
         pl->setViewDistance(8);
         MCLE_LOG("mcle_game_init: PlayerList viewDistance=%d", pl->getViewDistance());
         g_server->setPlayers(pl);
@@ -1251,7 +1251,7 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: PlayerList at %p", (void*)g_server->getPlayers());
 
-    // Parity with MinecraftServer.cpp:891 - levels array must be sized to 3
+    // As in MinecraftServer.cpp:891, the levels array must be sized to 3
     // before any ServerLevel ctor runs setLevel(dim, this) on the server.
     // Default-constructed ServerLevelArray has data=nullptr/length=0 so
     // levels[0] = level would null-deref.
@@ -1259,7 +1259,7 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: server->levels sized to 3");
 
     // Step 6: construct three ServerLevels (overworld + nether + end).
-    // Parity with MinecraftServer.cpp:956-1007 - levels[0] is a real
+    // As in MinecraftServer.cpp:956-1007, levels[0] is a real
     // ServerLevel, levels[1] (nether, dim=-1) and levels[2] (end, dim=1)
     // are DerivedServerLevels that share state with levels[0].
     static const int kDimForIndex[3] = { 0, -1, 1 };
@@ -1351,14 +1351,14 @@ void initImpl() {
         }
     }
 
-    // Step 7: preload chunks around spawn for the overworld. Parity with
-    // MinecraftServer::run lines 1115-1146. Iterates a 13x13 chunk grid
+    // Step 7: preload chunks around spawn for the overworld, as
+    // MinecraftServer::run does at lines 1115-1146. Iterates a 13x13 chunk grid
     // (208-block radius) calling ServerChunkCache::create which loads
     // existing chunks from saveData.ms's region data or generates new
     // ones for missing tiles. Wrapped per-chunk so a single bad chunk
     // doesn't kill the whole bootstrap.
     {
-        // G5-step13: bump radius to 3 now that IntCache TLS is init'd.
+        // Bump radius to 3 now that IntCache TLS is init'd.
         // Original target was 7 (mirroring upstream MinecraftServer::run
         // which preloads 13x13 = ~208-block radius). r=3 = 7x7 = 49
         // chunks, enough to walk a meaningful distance without leaving
@@ -1389,7 +1389,7 @@ void initImpl() {
                     // (chunk->checkPostProcess) instead of routing through
                     // MinecraftServer::addPostProcessRequest, which derefs
                     // m_postProcessCS - that's only InitializeCriticalSection'd
-                    // late inside MinecraftServer::run() which we don't call.
+                    // late inside MinecraftServer::run(), which isn't called here.
                     if (g_levels[0]->cache && g_levels[0]->cache->create(cx, cz, false)) {
                         loaded++;
                         MCLE_LOG("mcle_game_init: chunk preload (%d,%d) ok", cx, cz);
@@ -1426,9 +1426,9 @@ void initImpl() {
     }
 
     // Step 8: spawn a ServerPlayer at the overworld's shared spawn pos
-    // and register it. Parity-light: upstream's full network flow runs
+    // and register it. Upstream's full network flow runs
     // through PendingConnection -> AddPlayerPacket -> PlayerList::add;
-    // for a single-player iOS shell we shortcut to the same end state
+    // a single-player iOS shell shortcuts to the same end state
     // that PlayerList::add would produce (player constructed against
     // levels[0], registered with the server, added to the level).
     MCLE_LOG("mcle_game_init: building ServerPlayerGameMode...");
@@ -1631,7 +1631,7 @@ void initImpl() {
         new (&g_minecraftShim->cameraTargetPlayer) std::shared_ptr<LivingEntity>(g_player);
     }
 
-    // G5: localplayers[0] is what LevelRenderer::updateDirtyChunks reads
+    // localplayers[0] is what LevelRenderer::updateDirtyChunks reads
     // to find the nearest dirty chunk for rebuild (uses player x/y/z).
     // ServerPlayer != MultiplayerLocalPlayer but they share Entity base
     // and only the position fields are touched in this loop, so a
@@ -1650,8 +1650,8 @@ void initImpl() {
                  (void*)slot->get());
     }
 
-    // G2d: Options was made at launch (mcle_minecraft_init). GameRenderer
-    // is a zero buffer - it has no virtual methods and the four methods our
+    // Options was made at launch (mcle_minecraft_init). GameRenderer
+    // is a zero buffer - it has no virtual methods and the four methods this
     // render path calls (DisableUpdateThread, EnableUpdateThread,
     // turnOnLightLayer, turnOffLightLayer) are stubbed in link_stubs.cpp
     // and don't deref this.
@@ -1667,14 +1667,14 @@ void initImpl() {
     MCLE_LOG("mcle_game_init: GameRenderer shim at %p (sizeof=%zu)",
              (void*)g_minecraftShim->gameRenderer, sizeof(GameRenderer));
 
-    // Singleton: Minecraft::GetInstance() must return our shim before
+    // Singleton: Minecraft::GetInstance() must return the shim before
     // LevelRenderer::allChanged runs (it calls GetInstance()->gameRenderer
     // -> DisableUpdateThread).
     Minecraft::m_instance = g_minecraftShim;
     MCLE_LOG("mcle_game_init: Minecraft::m_instance set to %p",
              (void*)Minecraft::m_instance);
 
-    // G2b: LevelRenderer construction. Leaf-symbol stubs added in
+    // LevelRenderer construction. Leaf-symbol stubs added in
     // WorldProbe/link_stubs.cpp let the link resolve. The ctor body still
     // executes upstream code - renderStars, createCloudMesh, the sky list
     // build via Tesselator - so this can SIGSEGV at runtime. Behind the
@@ -1684,8 +1684,8 @@ void initImpl() {
     if (!g_levelRenderer) try {
         // Allocate the chunk-rebuild event arrays + spawn the 7 worker
         // threads before the renderer ctor so the very first dispatch
-        // has them ready. Upstream Minecraft::init calls this; we
-        // bypass that path so we have to do it here.
+        // has them ready. Upstream Minecraft::init calls this;
+        // that path is bypassed, so it's done here.
         MCLE_LOG("mcle_game_init: LevelRenderer::staticCtor()...");
         LevelRenderer::staticCtor();
         MCLE_LOG("mcle_game_init: LevelRenderer::staticCtor done");
@@ -1700,7 +1700,7 @@ void initImpl() {
         // again draws a second copy anchored to the player. The 100-
         // radius haloRingList is the worst offender: upstream never
         // calls it (gated on a specific skin id) so without skipping it
-        // we render a textured ring on every frame that sits as a
+        // a textured ring is drawn on every frame that sits as a
         // stuck "wedge" across the upper sky.
         const int starList     = g_levelRenderer->starList;
         const int skyList      = starList + 1;
@@ -1712,7 +1712,7 @@ void initImpl() {
         mcle_glbridge_skip_autoreplay(haloRingList);
         // createCloudMesh allocates 7 list IDs immediately after the
         // four above. The 7-deep range stays in MemoryTracker's
-        // genLists order so we can derive it from haloRingList + 1.
+        // genLists order, so it follows from haloRingList + 1.
         for (int i = 0; i < 7; i++) {
             mcle_glbridge_skip_autoreplay(haloRingList + 1 + i);
         }
@@ -1776,7 +1776,7 @@ void initImpl() {
                 if (EntityRenderDispatcher::instance) {
                     EntityRenderDispatcher::instance->itemInHandRenderer = new ItemInHandRenderer(g_minecraftShim, false);
                 }
-                // Diagnostic: confirm grass / dirt icons resolved to distinct
+                // Confirm grass / dirt icons resolved to distinct
                 // atlas slots. If grass-DOWN icon == grass-UP icon, the bug
                 // isn't in tessellation - it's in icon registration / lookup.
                 try {
@@ -1851,7 +1851,7 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: minecraft->player aliased to g_player");
     }
 
-    // Construct Gui (HUD renderer) - parity with upstream Minecraft::init.
+    // Construct Gui (HUD renderer), as upstream Minecraft::init does.
     // Stores minecraft pointer + initialises bookkeeping. Actual render
     // happens in mcle_world_drive_renderer per frame.
     if (g_minecraftShim && !g_gui) {
@@ -2204,7 +2204,7 @@ static void mcle_open_crash_log_fd(void) {
     char path[1024];
     // Open mcle_log.txt - the dedicated mcle-only file. Ruffle does
     // not write here, so signal-handler writes can't be overwritten
-    // by a racing non-O_APPEND writer (which was happening when we
+    // by a racing non-O_APPEND writer (which was happening when it
     // shared crash_log.txt with ruffle).
     int n = snprintf(path, sizeof(path), "%s/mcle_log.txt", root);
     if (n <= 0 || (size_t)n >= sizeof(path)) {
@@ -2254,7 +2254,7 @@ static size_t mcle_safe_hex(char *buf, size_t cap, uintptr_t v) {
 // requirement - everything in here must be async-signal-safe (no
 // malloc, no NSLog, no fprintf, no objc_msgSend). Otherwise the
 // handler crashes inside itself and the process dies silently with
-// no log. We use a pre-opened fd + write() + manual int/hex format.
+// no log. This uses a pre-opened fd + write() + manual int/hex format.
 static void mcle_crash_handler(int sig, siginfo_t *info, void *) {
     if (g_crash_log_fd >= 0) {
         char buf[160]; size_t n = 0;
@@ -2289,7 +2289,7 @@ static void mcle_terminate_handler() {
     // Uncaught C++ throw turns into std::terminate -> abort -> SIGABRT,
     // which the default handler kills the process on without printing
     // anything. Catch the in-flight exception here and log its type +
-    // what() so we know which upstream call threw.
+    // what() to show which upstream call threw.
     auto ex = std::current_exception();
     if (ex) {
         try {
@@ -2351,7 +2351,7 @@ static void mcle_install_crash_handler() {
 
 extern "C" void mcle_game_init(void) {
     if (g_initState != kStateUnstarted) return;
-    // Build identifier so any log we look at shows immediately which
+    // Build identifier so any log shows immediately which
     // build is running. Plain %s here (not %{public}s) because the
     // file-write path uses fprintf which doesn't understand the
     // os_log "public" modifier - it leaks "{public}s" as literal text
@@ -3018,10 +3018,10 @@ extern "C" int mcle_game_load_status(int *percent) {
     return g_loadStage.load();
 }
 
-// Phase 3a: sim thread runs the tick body in a loop at ~60Hz. The
+// The sim thread runs the tick body in a loop at ~60Hz. The
 // internal 50ms simulation throttle inside mcle_game_tick gates the
-// actual sim step to 20Hz; we sleep 16ms between calls so unused
-// frames don't burn CPU.
+// actual sim step to 20Hz; a 16ms sleep between calls keeps unused
+// frames from burning CPU.
 static void *mcle_sim_thread_loop(void *) {
     mcle_install_sig_altstack();
     // ServerThreadProc: the levels tick on the server thread, whose entities
@@ -3281,8 +3281,8 @@ extern "C" void mcle_game_tick(void) {
         }
     }
 
-    // Throttle simulation to 20Hz (50ms per tick) to match upstream parity.
-    // CADisplayLink calls us at 60Hz; without this, aiStep + tickEntities run
+    // Throttle simulation to 20Hz (50ms per tick), upstream's tick rate.
+    // CADisplayLink calls this at 60Hz; without this, aiStep + tickEntities run
     // 3x too fast and walking / gravity / friction all feel sped up.
     // Publish tick start time so the render thread can compute partial-tick
     // alpha for smooth camera interp between 20Hz simulation steps.
@@ -3408,7 +3408,7 @@ extern "C" void mcle_game_tick(void) {
         g_levels[i]->setSpawnSettings(g_levels[i]->difficulty > 0 && !Minecraft::GetInstance()->isTutorial(), g_server->isAnimals());
     }
 
-    // Tick all three dimensions in order. Parity with how the upstream
+    // Tick all three dimensions in order, the way the upstream
     // server's runUpdate iterates levels[] each frame.
     using hrclock = std::chrono::steady_clock;
     const auto tickStart = hrclock::now();
@@ -3472,7 +3472,7 @@ extern "C" void mcle_game_tick(void) {
                 }
             }
         }
-        // DAYTIME diagnostic: every 100 sim ticks, log getDayTime so we can
+        // DAYTIME log: every 100 sim ticks, log getDayTime to
         // verify ServerLevel::tick is actually incrementing it. If this is
         // flat, virtual dispatch isn't reaching ServerLevel::tick or
         // RULE_DAYLIGHT is false.
@@ -3610,7 +3610,7 @@ extern "C" void mcle_game_tick(void) {
             PlayerChunkMap *cm = g_player->getLevel()->getChunkMap();
             if (cm) {
                 // Log player pos vs lastMove + addRequests size every
-                // ~30 ticks so we can see whether move() is queuing
+                // ~30 ticks to show whether move() is queuing
                 // anything and whether tick() drains it.
                 static int s_pcmLog = 0;
                 if ((s_pcmLog++ % 30) == 0) {
@@ -3625,7 +3625,7 @@ extern "C" void mcle_game_tick(void) {
                              dx * dx + dz * dz);
                 }
                 // Wide MEMSTATS line: one snapshot of every leak suspect
-                // in a single log message so we can correlate growth
+                // in a single log message, to correlate growth
                 // across resident memory, the display-list cache, and
                 // the live chunk + entity counts. 5-second wall-clock
                 // cadence so the rhythm isn't tied to sim tick rate.
@@ -3747,7 +3747,7 @@ extern "C" void mcle_game_tick(void) {
     if ((g_tickCount % kLogEveryN) == 0) {
         size_t entityCount = 0;
         try { if (g_levels[0]) entityCount = g_levels[0]->entities.size(); } catch (...) {}
-        // G2a: include cumulative DrawVertices count so we can see the
+        // Include the cumulative DrawVertices count to show the
         // moment upstream renderer code starts driving the Metal hook.
         unsigned int chunksLen = 0;
         try { if (g_levelRenderer) chunksLen = (unsigned int)g_levelRenderer->chunks[0].length; } catch (...) {}
@@ -3760,19 +3760,19 @@ extern "C" void mcle_game_tick(void) {
                  chunksLen);
     }
 
-    // G1B-probe runs once per second from the simulation tick (not the
+    // mcle_world_g1b_probe_tick runs once per second from the simulation tick (not the
     // render thread, where the upstream getSkyColor crash actually fires).
     // Different thread but same upstream code path - if the probe lands
     // cleanly here, the crash is render-thread-specific (TLS / state).
     mcle_world_g1b_probe_tick();
 }
 
-// G2c: drive upstream LevelRenderer::render() per frame from the iOS
+// Drive upstream LevelRenderer::render() per frame from the iOS
 // render thread. Increments DrawVertices counter when the renderer
 // dispatches Tesselator batches (chunk geometry, entities, clouds,
 // terrain). Wrapped in try/catch but SIGSEGV bypasses - the Minecraft::
 // m_instance null chain (Biome::getSkyColor etc) may bite here. If so
-// the signal handler logs the address, we patch the next null deref.
+// the signal handler logs the address of the next null deref to patch.
 extern "C" void mcle_glbridge_replay_all_lists(void);
 extern "C" void mcle_glbridge_metal_ortho(float left, float right, float bottom, float top, float zNear,
                                           float zFar);
@@ -4389,9 +4389,9 @@ extern "C" void mcle_world_drive_renderer(void) {
     }
 
     try {
-        // G3d-step3: set up projection + view via the GL matrix stack
+        // Set up projection + view via the GL matrix stack
         // each frame. Once upstream renderSky/renderClouds drive replays
-        // naturally (G3e), they'll layer their per-pass glPush/Translate
+        // naturally, they'll layer their per-pass glPush/Translate
         // /Rotate calls on top of this base camera.
         int vw = 0, vh = 0;
         mcle_metal_current_size(&vw, &vh);
@@ -4918,7 +4918,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             if (s_guiErr++ < 3) MCLE_LOG("gui overlays threw");
         }
 
-        // G5: every ~120 frames, log the call_list stats so we know whether
+        // Every ~120 frames, log the call_list stats to show whether
         // the chunk display lists are actually being replayed.
         static int s_statsFrame = 0;
         if ((s_statsFrame++ % 120) == 0) {
@@ -4940,7 +4940,7 @@ extern "C" void mcle_world_drive_renderer(void) {
     } catch (...) {}
 }
 
-// G3d: expose player position so the Metal pipeline can place the
+// Expose player position so the Metal pipeline can place the
 // view matrix correctly. Returns 0 if the player is not yet constructed.
 extern "C" int mcle_world_get_player_pos(float *out_x, float *out_y, float *out_z) {
     if (!g_player) return 0;
@@ -4957,7 +4957,7 @@ extern "C" int mcle_world_is_ticking(void) {
     return (g_initState == kStateTicking && g_levels[0] != nullptr && g_renderReady) ? 1 : 0;
 }
 
-// Route through upstream Level::getSkyColor for full parity with LCE
+// Route through upstream Level::getSkyColor, the same sky colour as LCE
 // Win64. That function returns biome-tinted RGB modulated by time-of-day
 // brightness, rain darkening, thunder darkening, and sky-flash. The
 // older stub used a hardcoded plains-biome color (no biome tint) - which
@@ -4986,7 +4986,7 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
             }
         } catch (...) {
             // Keep fallback values on any throw - matches the old stub's
-            // behavior so we don't regress visible state.
+            // behavior so visible state doesn't regress.
         }
     }
 
@@ -4995,10 +4995,10 @@ extern "C" void mcle_world_get_sky_color(float *r, float *g, float *b) {
     if (b) *b = fb;
 }
 
-// G1B-probe: layered call into upstream Level::getSkyColor pieces so
+// Layered call into upstream Level::getSkyColor pieces so
 // the next sideload's log pins which step crashed at addr 0x130. Logs
 // once per second to avoid spamming. Try/catch only catches C++
-// throws; SIGSEGV bypasses but the per-step log still tells us which
+// throws; SIGSEGV bypasses but the per-step log still shows which
 // step was last reached before the kill.
 extern "C" void mcle_world_g1b_probe_tick(void) {
     if (g_initState != kStateTicking || !g_levels[0] || !g_player) return;
@@ -5020,7 +5020,7 @@ extern "C" void mcle_world_g1b_probe_tick(void) {
         if (!biome) return;
         float temp = biome->getTemperature();
         MCLE_LOG("G1B-probe: biome->getTemperature=%f", (double)temp);
-        // G3e-step3: now that the Minecraft singleton + ColourTable shim
+        // Now that the Minecraft singleton + ColourTable shim
         // are wired, retry the path that crashed renderSky. If
         // biome->getSkyColor logs cleanly, the bad pointer is downstream
         // (Vec3::newTemp / shared_ptr dtor / virtual on level). If this
