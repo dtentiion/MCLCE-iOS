@@ -156,6 +156,249 @@ protected:
     }
 };
 
+void navigateToHostOptions(int iPad);
+void navigateToPlayerOptions(const PlayerOptionsInitData &initData);
+
+// UIScene_InGameInfoMenu
+class InGameInfoScene : public InGameMenuScene {
+    enum EControls {
+        eControl_GameOptions,
+        eControl_GamePlayers,
+    };
+
+    struct PlayerInfo {
+        BYTE m_smallId;
+        char m_voiceStatus;
+        short m_colorState;
+        std::wstring m_name;
+    };
+
+public:
+    explicit InGameInfoScene(int iPad)
+        : m_buttonGameOptions("GameOptions"), m_playerList("GamePlayers"), m_labelTitle("Title") {
+        m_iPad = iPad;
+
+        m_buttonGameOptions.init(app.GetString(IDS_HOST_OPTIONS), eControl_GameOptions);
+        m_labelTitle.init(app.GetString(IDS_PLAYERS_INVITE));
+        m_playerList.init(eControl_GamePlayers);
+
+        DWORD playerCount = g_network.GetPlayerCount();
+
+        for (DWORD i = 0; i < playerCount; ++i) {
+            HostNetworkPlayer *player = g_network.GetPlayerByIndex(i);
+
+            if (player != nullptr) {
+                PlayerInfo *info = BuildPlayerInfo(player);
+
+                m_players.push_back(info);
+                m_playerList.addItem(info->m_name, info->m_colorState, info->m_voiceStatus);
+            }
+        }
+
+        // RegisterPlayerChangedCallback: nobody else joins an offline game
+
+        HostNetworkPlayer *thisPlayer = g_network.GetLocalPlayerByUserIndex(m_iPad);
+        m_isHostPlayer = false;
+        if (thisPlayer != nullptr) m_isHostPlayer = thisPlayer->IsHost();
+
+        std::shared_ptr<ServerPlayer> localPlayer = mcle_local_player();
+        if (!m_isHostPlayer && !localPlayer->isModerator()) {
+            removeControl(m_buttonGameOptions.path, false);
+        }
+
+        updateTooltips();
+
+        gainFocus();
+    }
+
+    ~InGameInfoScene() override {
+        // Delete player infos
+        for (size_t i = 0; i < m_players.size(); i++) delete m_players[i];
+    }
+
+    const char *movieName() override { return "InGameInfoMenu1080.swf"; }
+
+    // UIScene::reloadMovie: the controls go back on the movie, handleReload,
+    // the focus where it was, then gainFocus's tooltips
+    void reloadMovie() override {
+        m_buttonGameOptions.ReInit();
+        m_playerList.ReInit();
+        m_labelTitle.init(m_labelTitle.label);
+        handleReload();
+        mcle_ui_call("", "SetFocus", {mcle_ui_num(m_iFocusControl)});
+        updateTooltips();
+    }
+
+    void handleInput(int key, bool repeat, bool pressed, bool released) override {
+        mcleContainerUI.AnimateKeyPress(m_iPad, key, repeat, pressed, released);
+
+        switch (key) {
+        case ACTION_MENU_CANCEL:
+            if (pressed && !repeat) {
+                mcleContainerUI.PlayUISFX(eSFX_Back);
+                navigateBack();
+            }
+            break;
+        case ACTION_MENU_Y:
+            // ProfileManager.ShowProfileCard, which is empty on Windows64
+            break;
+        case ACTION_MENU_X:
+            // SendInviteGUI, not in a local game
+            break;
+        case ACTION_MENU_OK:
+        case ACTION_MENU_UP:
+        case ACTION_MENU_DOWN:
+        case ACTION_MENU_PAGEUP:
+        case ACTION_MENU_PAGEDOWN:
+            sendInputToMovie(key, repeat, pressed, released);
+            break;
+        }
+    }
+
+    void handlePress(int controlId, int childId) override {
+        switch (controlId) {
+        case eControl_GameOptions:
+            navigateToHostOptions(m_iPad);
+            break;
+        case eControl_GamePlayers: {
+            int currentSelection = childId;
+            if (currentSelection < 0 || currentSelection >= static_cast<int>(m_players.size())) break;
+            HostNetworkPlayer *selectedPlayer = g_network.GetPlayerBySmallId(m_players[currentSelection]->m_smallId);
+
+            std::shared_ptr<ServerPlayer> localPlayer = mcle_local_player();
+
+            bool isOp = m_isHostPlayer || localPlayer->isModerator();
+            bool cheats = app.GetGameHostOption(eGameHostOption_CheatsEnabled) != 0;
+            bool trust = app.GetGameHostOption(eGameHostOption_TrustPlayers) != 0;
+
+            if (isOp && selectedPlayer != nullptr) {
+                bool editingHost = selectedPlayer->IsHost();
+                if ((cheats && (m_isHostPlayer || !editingHost)) || (!trust && (m_isHostPlayer || !editingHost))) {
+                    PlayerOptionsInitData initData;
+                    initData.iPad = m_iPad;
+                    initData.networkSmallId = m_players[currentSelection]->m_smallId;
+                    initData.playerPrivileges = app.GetPlayerPrivileges(m_players[currentSelection]->m_smallId);
+                    navigateToPlayerOptions(initData);
+                }
+                // else the kick prompt, for a player on another system
+            }
+        } break;
+        }
+    }
+
+protected:
+    void updateTooltips() override {
+        int keyX = IDS_TOOLTIPS_INVITE_FRIENDS;
+        int ikeyY = -1;
+
+        // XPartyGetUserList: there's no party to invite
+
+        if (g_network.IsLocalGame()) keyX = -1;
+
+        HostNetworkPlayer *selectedPlayer = nullptr;
+        if (m_playerList.getCurrentSelection() < static_cast<int>(m_players.size())) {
+            selectedPlayer = g_network.GetPlayerBySmallId(m_players[m_playerList.getCurrentSelection()]->m_smallId);
+        }
+
+        int keyA = -1;
+        std::shared_ptr<ServerPlayer> localPlayer = mcle_local_player();
+
+        bool isOp = m_isHostPlayer || localPlayer->isModerator();
+        bool cheats = app.GetGameHostOption(eGameHostOption_CheatsEnabled) != 0;
+        bool trust = app.GetGameHostOption(eGameHostOption_TrustPlayers) != 0;
+
+        if (isOp) {
+            if (controlHasFocus(eControl_GameOptions)) {
+                keyA = IDS_TOOLTIPS_SELECT;
+            } else if (selectedPlayer != nullptr) {
+                bool editingHost = selectedPlayer->IsHost();
+                if ((cheats && (m_isHostPlayer || !editingHost)) || (!trust && (m_isHostPlayer || !editingHost))) {
+                    keyA = IDS_TOOLTIPS_PRIVILEGES;
+                } else if (!selectedPlayer->IsLocal() && !selectedPlayer->IsSameSystem(g_network.GetHostPlayer())) {
+                    // Only ops will hit this, can kick anyone not local and not local to the host
+                    keyA = IDS_TOOLTIPS_KICK;
+                }
+            }
+        }
+
+        if (!controlHasFocus(eControl_GameOptions)) {
+            // if the player is me, then view gamer profile
+            if (selectedPlayer != nullptr && selectedPlayer->IsLocal() && selectedPlayer->GetUserIndex() == m_iPad) {
+                ikeyY = IDS_TOOLTIPS_VIEW_GAMERPROFILE;
+            } else {
+                ikeyY = IDS_TOOLTIPS_VIEW_GAMERCARD;
+            }
+        }
+        mcleContainerUI.SetTooltips(m_iPad, keyA, IDS_TOOLTIPS_BACK, keyX, ikeyY);
+    }
+
+    void focusChanged(int controlId, int childId) override {
+        switch (controlId) {
+        case eControl_GamePlayers:
+            m_playerList.updateChildFocus(childId);
+        }
+        updateTooltips();
+    }
+
+private:
+    void handleReload() {
+        DWORD playerCount = g_network.GetPlayerCount();
+
+        // Remove all player info
+        for (size_t i = 0; i < m_players.size(); i++) delete m_players[i];
+        m_players.clear();
+
+        for (DWORD i = 0; i < playerCount; ++i) {
+            HostNetworkPlayer *player = g_network.GetPlayerByIndex(i);
+
+            if (player != nullptr) {
+                PlayerInfo *info = BuildPlayerInfo(player);
+
+                m_players.push_back(info);
+                m_playerList.addItem(info->m_name, info->m_colorState, info->m_voiceStatus);
+            }
+        }
+
+        HostNetworkPlayer *thisPlayer = g_network.GetLocalPlayerByUserIndex(m_iPad);
+        m_isHostPlayer = false;
+        if (thisPlayer != nullptr) m_isHostPlayer = thisPlayer->IsHost();
+
+        std::shared_ptr<ServerPlayer> localPlayer = mcle_local_player();
+        if (!m_isHostPlayer && !localPlayer->isModerator()) {
+            removeControl(m_buttonGameOptions.path, false);
+        }
+
+        updateTooltips();
+
+        if (controlHasFocus(eControl_GamePlayers)) {
+            m_playerList.setCurrentSelection(getControlChildFocus());
+        }
+    }
+
+    PlayerInfo *BuildPlayerInfo(HostNetworkPlayer *player) {
+        PlayerInfo *info = new PlayerInfo();
+        info->m_smallId = player->GetSmallId();
+
+        std::wstring playerName = player->GetDisplayName();
+
+        // The muted, talking and not talking icons are for players with voice
+        int voiceStatus = 0;
+
+        info->m_voiceStatus = voiceStatus;
+        info->m_colorState = app.GetPlayerColour(info->m_smallId);
+        info->m_name = playerName;
+
+        return info;
+    }
+
+    bool m_isHostPlayer = false;
+    std::vector<PlayerInfo *> m_players;
+
+    MCLEUIControl m_buttonGameOptions;
+    MCLEUIPlayerList m_playerList;
+    MCLEUILabel m_labelTitle;
+};
+
 // UIScene_InGameHostOptionsMenu
 class HostOptionsScene : public InGameMenuScene {
     enum EControls {
@@ -541,3 +784,25 @@ void navigateToPlayerOptions(const PlayerOptionsInitData &initData) {
 }
 
 } // namespace
+
+unsigned int mcle_ingame_info_buttons() {
+    return InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), MINECRAFT_ACTION_GAME_INFO);
+}
+
+bool mcle_ingame_info_input_allowed() {
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    if (!mcle_local_player()) return false;
+    return mcle_tutorial_input_allowed(MINECRAFT_ACTION_GAME_INFO);
+}
+
+bool mcle_ingame_info_open() {
+    if (mcle_container_is_open()) return false;
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    if (!mcle_local_player()) return false;
+    mcle_container_prepare();
+    // NavigateToScene sets the menu displayed before it makes the scene
+    mcle_game_set_menu_displayed(true);
+    mcle_container_begin(new InGameInfoScene(0));
+    mcleContainerUI.PlayUISFX(eSFX_Press);
+    return true;
+}
