@@ -23,6 +23,8 @@ only their client copies do:
 - LightningBolt::tick flashes the sky. The game loop counts skyFlashTime
   down like Minecraft::tick.
 - FireworksRocketEntity::tick leaves the rocket's trail of sparks.
+- EnderDragon::aiStep plays the wing flaps and growls, and breathes while
+  landing and sitting.
 
 Idempotent.
 """
@@ -120,4 +122,31 @@ patch(UP / "Minecraft.World" / "FireworksRocketEntity.cpp", [
      "\t// the client's rocket, which here is the server's\n"
      "\tif ((level->isClientSide || mcle_client_level(level)) && (life % 2) < 2)\n"
      "#else\n" + SPARK + "#endif\n"),
+])
+
+patch(UP / "Minecraft.World" / "EnderDragon.cpp", [
+    ("void EnderDragon::aiStep()\n", CLIENT_LEVEL + "void EnderDragon::aiStep()\n"),
+    ("\t\tsetHealth(getHealth());\n",
+     "\t\tsetHealth(getHealth());\n"
+     "#ifdef __APPLE_IOS__\n"
+     "\t}\n"
+     "\t// the client's wing flaps and growls, from the server's dragon here\n"
+     "\tif (level->isClientSide || mcle_client_level(level))\n"
+     "\t{\n"
+     "#endif\n"),
+    ("\tif (level->isClientSide)\n\t{\n\t\tif (lSteps > 0)\n",
+     "#ifdef __APPLE_IOS__\n"
+     "\t// and its breath. Only a client's dragon ever has lSteps.\n"
+     "\tif (level->isClientSide || mcle_client_level(level))\n"
+     "#else\n"
+     "\tif (level->isClientSide)\n"
+     "#endif\n"
+     "\t{\n\t\tif (lSteps > 0)\n"),
+    ("\telse\n\t{\n\t\tdouble xdd = xTarget - x;\n",
+     "#ifdef __APPLE_IOS__\n"
+     "\tif (!level->isClientSide)\n"
+     "#else\n"
+     "\telse\n"
+     "#endif\n"
+     "\t{\n\t\tdouble xdd = xTarget - x;\n"),
 ])
