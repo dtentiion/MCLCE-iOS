@@ -24,11 +24,12 @@ struct MCLEUIArg {
 };
 
 struct MCLEUIOp {
-    enum Kind { Call, Sound, Key, Visible } kind;
+    enum Kind { Call, Sound, Key, Visible, AnimateKey } kind;
     std::string path;   // value path, "" for the root
     std::string method; // the method, or the sound's name
     // the call's arguments; a sound's pitch; a key's Iggy key code and
-    // whether it went down; whether the control is visible
+    // whether it went down; whether the control is visible; the Iggy key
+    // code of a press the tooltips animate
     std::vector<MCLEUIArg> args;
 };
 

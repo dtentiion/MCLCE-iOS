@@ -123,8 +123,9 @@ struct MCLEContainerUI {
                      bool forceUpdate = false);
     // UIController::IsTutorialVisible, the popup's
     bool IsTutorialVisible(int iPad);
-    // The strip animates from the keys Ruffle gets from the pad
-    template <class... A> void AnimateKeyPress(A...) {}
+    // UIController::AnimateKeyPress
+    void AnimateKeyPress(int iPad, int iAction, bool bRepeat = false, bool bPressed = true,
+                         bool bReleased = false);
     // UIComponent_Tooltips plays nothing either way
     template <class... A> void OverrideSFX(A...) {}
     void NavigateBack(int);

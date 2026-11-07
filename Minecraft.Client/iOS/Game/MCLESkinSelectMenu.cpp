@@ -243,8 +243,7 @@ private:
 struct MCLESkinSelectUI {
     void PlayUISFX(int sfx) { mcleContainerUI.PlayUISFX(sfx); }
     template <class... A> void SetTooltips(A... a) { mcleContainerUI.SetTooltips(a...); }
-    // The strip animates from the keys Ruffle gets from the pad
-    template <class... A> void AnimateKeyPress(A...) {}
+    template <class... A> void AnimateKeyPress(A... a) { mcleContainerUI.AnimateKeyPress(a...); }
     // The upsell for a DLC skin that isn't owned. Every pack counts as owned
     // here (DLCPack::hasPurchasedFile), so it's never asked.
     template <class... A> void RequestAlertMessage(A...) {}

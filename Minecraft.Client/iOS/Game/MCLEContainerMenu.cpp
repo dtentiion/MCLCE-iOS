@@ -220,6 +220,15 @@ void mcle_ui_set_visible(const std::string &path, bool visible) {
 
 MCLEContainerUI mcleContainerUI;
 
+// UIController::AnimateKeyPress, the press into the tooltips movie
+void MCLEContainerUI::AnimateKeyPress(int, int iAction, bool, bool bPressed, bool) {
+    // only animating button press
+    if (!bPressed) return;
+    int iggyKeyCode = convertGameActionToIggyKeycode(iAction);
+    if (iggyKeyCode < 0) return;
+    g_ops.push_back(MCLEUIOp{MCLEUIOp::AnimateKey, std::string(), std::string(), {mcle_ui_num(iggyKeyCode)}});
+}
+
 // UIController::PlayUISFX
 void MCLEContainerUI::PlayUISFX(int sfx) {
     // ConsoleSoundEngine::wchUISoundNames

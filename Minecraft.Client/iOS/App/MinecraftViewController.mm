@@ -1494,6 +1494,14 @@ static void MCLESetTooltips(const int in[11]) {
     }
 }
 
+// UIController::AnimateKeyPress: a press goes into the tooltips movie
+// through UIComponent_Tooltips::handleInput, and its glyph animates
+static void MCLEAnimateKeyPress(int iggyKeyCode) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player || iggyKeyCode < 0) return;
+    ruffle_ios_sibling_key(g_ruffle_player, kTooltipsDepth, iggyKeyCode, 1);
+}
+
 // enterWorldUI hides the strip, the next pump puts it back per the setting
 static void MCLEGameTooltipsReset(void) {
     g_tooltips.enabled = -1;
@@ -2402,6 +2410,11 @@ static BOOL MCLEPlayStationPadConnected(void) {
         // UILayer adds the tutorial popup hidden
         ruffle_ios_set_xui_sibling_visible_at_depth(
             g_ruffle_player, kTutorialPopupDepth, 0);
+        // UILayer::handleInput: components can't take input or focus.
+        // The tooltips only get the presses AnimateKeyPress sends them.
+        const int components[] = { -2, kLogoDepth, kMenuBackgroundDepth, kDimDepth,
+                                   kTooltipsDepth, kTutorialPopupDepth };
+        for (int depth : components) ruffle_ios_set_sibling_takes_input(g_ruffle_player, depth, 0);
 
         // Tick the player a few frames so each sibling SWF's
         // ADDED_TO_STAGE event fires and its FJ_Document.init
@@ -3954,6 +3967,10 @@ static void MCLEContainerApplyOps(void) {
             if (g_ruffle_player && op.args.size() == 2) {
                 ruffle_ios_player_key(g_ruffle_player, static_cast<int>(op.args[0].number), op.args[1].number != 0);
             }
+            continue;
+        }
+        if (op.kind == MCLEUIOp::AnimateKey) {
+            if (op.args.size() == 1) MCLEAnimateKeyPress(static_cast<int>(op.args[0].number));
             continue;
         }
         if (op.kind == MCLEUIOp::Visible) {
@@ -5582,21 +5599,23 @@ static void MCLEConnectingHoldStart(void) {
     if (g_ruffle_player) {
         mcle_ios_pad_state pad;
         if (mcle_ios_input_poll(0, &pad)) {
-            static const struct { uint32_t mask; int code; } btnMap[] = {
-                { 0x00000001u,  0 },  // A     -> South
-                { 0x00000002u,  1 },  // B     -> East
-                { 0x00000008u,  2 },  // Y     -> North
-                { 0x00000004u,  3 },  // X     -> West
-                { 0x00000010u,  4 },  // START
-                { 0x00000020u,  5 },  // BACK  -> Select
-                { 0x00000400u,  6 },  // DPadUp
-                { 0x00000800u,  7 },  // DPadDown
-                { 0x00001000u,  8 },  // DPadLeft
-                { 0x00002000u,  9 },  // DPadRight
-                { 0x00000080u, 10 },  // LB    -> LeftTrigger
-                { 0x00000040u, 11 },  // RB    -> RightTrigger
-                { 0x00800000u, 12 },  // LT    -> LeftTrigger2
-                { 0x00400000u, 13 },  // RT    -> RightTrigger2
+            // iggy is the key UIScene::convertGameActionToIggyKeycode
+            // gives the button's menu action, -1 for none
+            static const struct { uint32_t mask; int code; int iggy; } btnMap[] = {
+                { 0x00000001u,  0,  13 },  // A     -> South, ENTER
+                { 0x00000002u,  1,  27 },  // B     -> East, ESCAPE
+                { 0x00000008u,  2, 113 },  // Y     -> North, F2
+                { 0x00000004u,  3, 112 },  // X     -> West, F1
+                { 0x00000010u,  4,  -1 },  // START
+                { 0x00000020u,  5,  -1 },  // BACK  -> Select
+                { 0x00000400u,  6,  38 },  // DPadUp, UP
+                { 0x00000800u,  7,  40 },  // DPadDown, DOWN
+                { 0x00001000u,  8,  37 },  // DPadLeft, LEFT
+                { 0x00002000u,  9,  39 },  // DPadRight, RIGHT
+                { 0x00000080u, 10, 115 },  // LB    -> LeftTrigger, F4
+                { 0x00000040u, 11, 114 },  // RB    -> RightTrigger, F3
+                { 0x00800000u, 12,  33 },  // LT    -> LeftTrigger2, PAGE_UP
+                { 0x00400000u, 13,  34 },  // RT    -> RightTrigger2, PAGE_DOWN
             };
             uint32_t now = pad.buttons;
             uint32_t prev = self.lastPadButtons;
@@ -5604,6 +5623,8 @@ static void MCLEConnectingHoldStart(void) {
             for (size_t i = 0; i < sizeof(btnMap)/sizeof(btnMap[0]); ++i) {
                 if (changed & btnMap[i].mask) {
                     if (now & btnMap[i].mask) {
+                        // The scene's handleInput animates the press first
+                        MCLEAnimateKeyPress(btnMap[i].iggy);
                         ruffle_ios_player_gamepad_down(g_ruffle_player, btnMap[i].code);
                     } else {
                         ruffle_ios_player_gamepad_up(g_ruffle_player, btnMap[i].code);
