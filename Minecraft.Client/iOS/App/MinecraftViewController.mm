@@ -255,8 +255,12 @@ static const int kTutorialPopupDepth = 150;
 - (void)moreOptionsSlider:(int)sliderId value:(int)value;
 - (void)moreOptionsCheckbox:(int)controlId checked:(BOOL)selected;
 - (void)moreOptionsFocus:(int)controlId;
+- (void)introNavigate;
 @end
 static __weak MinecraftViewController* g_active_vc = nil;
+
+// UIScene_Intro::m_bIgnoreNavigate
+static bool g_intro_ignore_navigate = false;
 
 static int MCLECallPath(NSString* path, NSString* method, NSArray* args);
 static void MCLETutorialPopupApplyOps(void);
@@ -931,6 +935,12 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // UIScene_SkinSelectMenu::handleAnimationEnd only changes the
         // scene's own state, so it's safe from inside the movie's tick
         if ([g_current_scene_name isEqualToString:@"SkinSelectMenu1080.swf"]) mcle_skin_select_animation_end();
+        // UIScene_Intro::handleAnimationEnd changes scene, so after the tick
+        if ([g_current_scene_name isEqualToString:@"Intro1080.swf"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [g_active_vc introNavigate];
+            });
+        }
     } else if (strcmp(method, "handleInitFocus") == 0) {
         // LCE fires this once per scene when SetFocus(-1) finds
         // the tabIndex==1 child (FJ_Document.SetFocus line 81-160,
@@ -1587,17 +1597,21 @@ static void MCLEReloadSkinLibraries(void) {
 @implementation MinecraftViewController
 
 // Find a SWF to play. Preference order:
-//   1. Documents/MainMenu1080.swf  (user-supplied via Files app)
-//   2. Documents/*.swf             (anything the user dropped in)
-//   3. Bundled test_rect.swf       (built-in fallback)
+//   1. Documents/Intro1080.swf     (UIController::postInit's first scene)
+//   2. Documents/MainMenu1080.swf  (user-supplied via Files app)
+//   3. Documents/*.swf             (anything the user dropped in)
+//   4. Bundled test_rect.swf       (built-in fallback)
 - (NSString*)resolveSwfPath {
     NSFileManager* fm = NSFileManager.defaultManager;
     NSURL* docs = [fm URLsForDirectory:NSDocumentDirectory
                              inDomains:NSUserDomainMask].firstObject;
     NSString* docsPath = docs.path;
 
-    // Preferred explicit filename: MainMenu1080.swf.
     if (docsPath.length) {
+        // UIController::postInit navigates to eUIScene_Intro
+        NSString* intro = [docsPath stringByAppendingPathComponent:@"Intro1080.swf"];
+        if ([fm fileExistsAtPath:intro]) return intro;
+        // Then MainMenu1080.swf.
         NSString* preferred = [docsPath stringByAppendingPathComponent:@"MainMenu1080.swf"];
         if ([fm fileExistsAtPath:preferred]) return preferred;
 
@@ -1995,7 +2009,10 @@ static BOOL MCLEPlayStationPadConnected(void) {
                                              encoding:NSUTF8StringEncoding]
                     : @"<empty>";
                 NSLog(@"[MinecraftVC] root children:\n%@", childList);
-
+            }
+            if (g_ruffle_player && [self.currentMenuSwf isEqualToString:@"Intro1080.swf"]) {
+                [self initIntro];
+            } else if (g_ruffle_player) {
                 // Populate the main menu buttons + attach panorama via
                 // the shared -initMainMenuButtons path (also used on
                 // transition back from submenus).
@@ -2434,6 +2451,29 @@ static BOOL MCLEPlayStationPadConnected(void) {
     [self applyMenuButtonConfig:cfg];
     // UIScene_MainMenu::handleGainFocus
     MCLESetPathVisible(@"Timer", NO);
+}
+
+// UIScene_Intro constructor. No panorama, logo or tooltips with it, the
+// movie plays the logos for the platform and calls handleAnimationEnd.
+- (void)initIntro {
+    g_intro_ignore_navigate = false;
+    self.menuButtonConfig = nil;
+    self.splashLabel.hidden = YES;
+    // Windows64's platformIdx 0, no ESRB skip, not China
+    MCLECallPath(@"", @"SetIntroPlatform", @[@0, @NO, @NO]);
+}
+
+// UIScene_Intro::handleInput (A) and handleAnimationEnd: once, on to the
+// save message
+- (void)introNavigate {
+    if (g_intro_ignore_navigate || ![self.currentMenuSwf isEqualToString:@"Intro1080.swf"]) return;
+    g_intro_ignore_navigate = true;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    BOOL haveSaveMessage = [NSFileManager.defaultManager fileExistsAtPath:
+        [docs stringByAppendingPathComponent:@"SaveMessage1080.swf"]];
+    if (haveSaveMessage) [self transitionToMenuNamed:@"SaveMessage1080.swf"];
+    else [self navigateToHomeMenu];
 }
 
 // UIScene_SaveMessage constructor
@@ -5478,6 +5518,11 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                     }
                 }
             }
+            // UIScene_Intro::handleInput: A skips the rest of the logos
+            if (!g_pending_dialog && (pressedNow & 0x00000001u) &&
+                [self.currentMenuSwf isEqualToString:@"Intro1080.swf"]) {
+                [self introNavigate];
+            }
             // B button (code=1, mask 0x00000002). Priority order:
             //   1. Dialog up -> Cancelled (regardless of which
             //      underlying scene is showing). Matches console
@@ -5505,8 +5550,9 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
                     [self finishDialogWithResult:MCLEDialogResultCancelled];
                 } else if ([self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
                     // UIScene_DeathMenu::handleInput swallows B
-                } else if ([self.currentMenuSwf isEqualToString:@"SaveMessage1080.swf"]) {
-                    // UIScene_SaveMessage::handleInput only takes A
+                } else if ([self.currentMenuSwf isEqualToString:@"Intro1080.swf"] ||
+                           [self.currentMenuSwf isEqualToString:@"SaveMessage1080.swf"]) {
+                    // UIScene_Intro and UIScene_SaveMessage::handleInput only take A
                 } else if ([self.currentMenuSwf isEqualToString:@"EndPoem1080.swf"]) {
                     // UIScene_EndPoem::handleInput: on to eAppAction_Respawn,
                     // ConnectingProgress while the player respawns
