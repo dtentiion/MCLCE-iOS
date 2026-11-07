@@ -1805,3 +1805,9 @@ DIM_PY="$REPO_ROOT/scripts/patch-dimension-ios.py"
 if [ -f "$DIM_PY" ]; then
     python3 "$DIM_PY"
 fi
+
+# An ender pearl landing teleports the local player, who has no connection
+PEARL_PY="$REPO_ROOT/scripts/patch-enderpearl-local-player.py"
+if [ -f "$PEARL_PY" ]; then
+    python3 "$PEARL_PY"
+fi
