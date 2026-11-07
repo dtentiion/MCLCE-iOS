@@ -1931,9 +1931,13 @@ extern "C" float mcle_hud_jukebox(char *out, int cap) {
     return opacity;
 }
 
-// PlayerConnection::teleport's player->absMoveTo, see WorldProbe/link_stubs.cpp
-void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot) {
-    if (g_player) g_player->absMoveTo(x, y, z, yRot, xRot);
+// PlayerConnection::teleport's player->absMoveTo, see WorldProbe/link_stubs.cpp.
+// The packet it sends has ClientConnection::handleMovePlayer stop the client's
+// player, which is this one.
+void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot, bool sendPacket) {
+    if (!g_player) return;
+    if (sendPacket) g_player->xd = g_player->yd = g_player->zd = 0;
+    g_player->absMoveTo(x, y, z, yRot, xRot);
 }
 
 // PlayerList::broadcastAll's send for the local player, who isn't in its list

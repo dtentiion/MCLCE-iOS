@@ -412,10 +412,11 @@ void PlayerConnection::send(std::shared_ptr<Packet> packet) {
 bool PlayerConnection::isLocal() { return true; }
 // PlayerConnection::teleport moves the server's player and tells its client
 // where it went. The one ServerPlayer here is the local player and has no
-// connection, so only the move is left (beds, portals, respawn).
-extern void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot);
-void PlayerConnection::teleport(double x, double y, double z, float yRot, float xRot, bool) {
-    mcle_local_player_abs_move_to(x, y, z, yRot, xRot);
+// connection, so the move is left, with what the client does when it's told
+// (beds, portals, respawn, ender pearls).
+extern void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot, bool sendPacket);
+void PlayerConnection::teleport(double x, double y, double z, float yRot, float xRot, bool sendPacket) {
+    mcle_local_player_abs_move_to(x, y, z, yRot, xRot, sendPacket);
 }
 void PlayerConnection::queueSend(std::shared_ptr<Packet> /*packet*/) {}
 int  PlayerConnection::countDelayedPackets() { return 0; }
