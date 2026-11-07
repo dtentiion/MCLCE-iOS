@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <random>
 
@@ -61,6 +62,22 @@ int g_keyboardMaxChars = 0;
 
 MCLEContainerScene *g_scene = nullptr;
 
+// UILayer's scene stack under the scene that's up, what a navigateBack
+// goes back to
+std::vector<MCLEContainerScene *> g_backScenes;
+
+// The close is ui.CloseUIScenes rather than a navigateBack
+bool g_closeAll = false;
+
+// A NavigateToScene waiting for its movie, and whether the view controller
+// is putting the movie up
+std::string g_navigateMovie;
+std::function<MCLEContainerScene *()> g_navigateMake;
+std::function<void()> g_navigateFailed;
+bool g_navigating = false;
+
+bool (*g_labelReader)(const char *path, std::wstring *label) = nullptr;
+
 std::string toUtf8(const std::wstring &w) {
     std::string s;
     for (wchar_t wc : w) {
@@ -93,6 +110,15 @@ void resetTooltips() {
     }
 }
 
+// What was queued from `start` on for a movie that's gone, all but the sounds
+void dropMovieOps(size_t start = 0) {
+    std::vector<MCLEUIOp> kept(g_ops.begin(), g_ops.begin() + start);
+    for (size_t i = start; i < g_ops.size(); ++i) {
+        if (g_ops[i].kind == MCLEUIOp::Sound) kept.push_back(g_ops[i]);
+    }
+    g_ops.swap(kept);
+}
+
 } // namespace
 
 MCLEUIArg mcle_ui_num(double v) { return MCLEUIArg{MCLEUIArg::Number, v, std::string()}; }
@@ -105,6 +131,92 @@ void mcle_ui_call(const std::string &path, const char *method, std::vector<MCLEU
 
 void mcle_ui_key(int iggyKeyCode, bool down) {
     g_ops.push_back(MCLEUIOp{MCLEUIOp::Key, std::string(), std::string(), {mcle_ui_num(iggyKeyCode), mcle_ui_bool(down)}});
+}
+
+namespace {
+
+// iggy.h's key codes
+const int IGGY_KEYCODE_ENTER = 13;
+const int IGGY_KEYCODE_ESCAPE = 27;
+const int IGGY_KEYCODE_PAGE_UP = 33;
+const int IGGY_KEYCODE_PAGE_DOWN = 34;
+const int IGGY_KEYCODE_LEFT = 37;
+const int IGGY_KEYCODE_UP = 38;
+const int IGGY_KEYCODE_RIGHT = 39;
+const int IGGY_KEYCODE_DOWN = 40;
+const int IGGY_KEYCODE_F1 = 112;
+const int IGGY_KEYCODE_F2 = 113;
+const int IGGY_KEYCODE_F3 = 114;
+const int IGGY_KEYCODE_F4 = 115;
+const int IGGY_KEYCODE_F5 = 116;
+const int IGGY_KEYCODE_F11 = 122;
+const int IGGY_KEYCODE_F12 = 123;
+
+// UIScene::convertGameActionToIggyKeycode
+int convertGameActionToIggyKeycode(int action) {
+    int keycode = -1;
+    switch (action) {
+    case ACTION_MENU_A:
+        keycode = IGGY_KEYCODE_ENTER;
+        break;
+    case ACTION_MENU_B:
+        keycode = IGGY_KEYCODE_ESCAPE;
+        break;
+    case ACTION_MENU_X:
+        keycode = IGGY_KEYCODE_F1;
+        break;
+    case ACTION_MENU_Y:
+        keycode = IGGY_KEYCODE_F2;
+        break;
+    case ACTION_MENU_OK:
+        keycode = IGGY_KEYCODE_ENTER;
+        break;
+    case ACTION_MENU_CANCEL:
+        keycode = IGGY_KEYCODE_ESCAPE;
+        break;
+    case ACTION_MENU_UP:
+        keycode = IGGY_KEYCODE_UP;
+        break;
+    case ACTION_MENU_DOWN:
+        keycode = IGGY_KEYCODE_DOWN;
+        break;
+    case ACTION_MENU_RIGHT:
+        keycode = IGGY_KEYCODE_RIGHT;
+        break;
+    case ACTION_MENU_LEFT:
+        keycode = IGGY_KEYCODE_LEFT;
+        break;
+    case ACTION_MENU_PAGEUP:
+        keycode = IGGY_KEYCODE_PAGE_UP;
+        break;
+    case ACTION_MENU_PAGEDOWN:
+        keycode = IGGY_KEYCODE_PAGE_DOWN;
+        break;
+    case ACTION_MENU_RIGHT_SCROLL:
+        keycode = IGGY_KEYCODE_F3;
+        break;
+    case ACTION_MENU_LEFT_SCROLL:
+        keycode = IGGY_KEYCODE_F4;
+        break;
+    case ACTION_MENU_OTHER_STICK_PRESS:
+        keycode = IGGY_KEYCODE_F5;
+        break;
+    case ACTION_MENU_OTHER_STICK_UP:
+        keycode = IGGY_KEYCODE_F11;
+        break;
+    case ACTION_MENU_OTHER_STICK_DOWN:
+        keycode = IGGY_KEYCODE_F12;
+        break;
+    }
+    return keycode;
+}
+
+} // namespace
+
+void mcle_ui_send_input(int key, bool pressed) {
+    int iggyKeyCode = convertGameActionToIggyKeycode(key);
+    if (iggyKeyCode < 0) return;
+    mcle_ui_key(iggyKeyCode, pressed);
 }
 
 void mcle_ui_set_visible(const std::string &path, bool visible) {
@@ -153,7 +265,10 @@ void MCLEContainerUI::SetTooltips(int, int iA, int iB, int iX, int iY, int iLT, 
 }
 
 void MCLEContainerUI::NavigateBack(int) { g_closeRequested = true; }
-void MCLEContainerUI::CloseUIScenes(int) { g_closeRequested = true; }
+void MCLEContainerUI::CloseUIScenes(int) {
+    g_closeRequested = true;
+    g_closeAll = true;
+}
 
 bool MCLEContainerUI::IsTutorialVisible(int) { return mcle_tutorial_popup_is_visible(); }
 
@@ -177,6 +292,30 @@ bool MCLEContainerScene::allowRepeat(int key) {
     return true;
 }
 
+void MCLEMenuScene::handleFocusChange(int controlId, int childId, bool init) {
+    if (init) {
+        m_iFocusControl = controlId;
+        m_iFocusChild = childId;
+        return;
+    }
+    if (controlId != m_iFocusControl || childId != m_iFocusChild) {
+        m_iFocusControl = controlId;
+        m_iFocusChild = childId;
+        mcleContainerUI.PlayUISFX(eSFX_Focus);
+    }
+}
+
+void MCLEMenuScene::gainFocus() {
+    updateTooltips();
+    mcle_ui_call("", "SetFocus", {mcle_ui_num(-1)});
+}
+
+void MCLEMenuScene::navigateBack() {
+    //CD - Added for audio
+    mcleContainerUI.PlayUISFX(eSFX_Back);
+    mcleContainerUI.NavigateBack(m_iPad);
+}
+
 void MCLEUILabel::init(const std::wstring &text) {
     label = text;
     mcle_ui_call(path, "Init", {mcle_ui_str(text)});
@@ -192,12 +331,27 @@ void MCLEUILabel::setLabel(const std::wstring &text, bool instant, bool force) {
     }
 }
 
+// UIControl_Base::getLabel
+const std::wstring &MCLEUILabel::getLabel() {
+    std::wstring text;
+    if (g_labelReader && g_labelReader(path.c_str(), &text)) label = text;
+    return label;
+}
+
 // UIControl_Base::tick
 void MCLEUILabel::tick() {
     if (!changed) return;
     changed = false;
     mcle_ui_call(path, "SetLabel", {mcle_ui_str(label)});
 }
+
+void MCLEUIControl::init(const std::wstring &text, int controlId) {
+    label = text;
+    id = controlId;
+    mcle_ui_call(path, "Init", {mcle_ui_str(text), mcle_ui_num(controlId)});
+}
+
+void MCLEUIControl::SetCharLimit(int iLimit) { mcle_ui_call(path, "SetCharLimit", {mcle_ui_num(iLimit)}); }
 
 void MCLEUIProgress::init(const std::wstring &label, int id, int minValue, int maxValue, int current) {
     min = minValue;
@@ -243,6 +397,7 @@ void mcle_container_prepare() {
     g_ops.clear();
     resetTooltips();
     g_closeRequested = false;
+    g_closeAll = false;
     g_keyboardRequested = false;
 }
 
@@ -571,7 +726,26 @@ const int kActions[] = {
     ACTION_MENU_OTHER_STICK_LEFT, ACTION_MENU_OTHER_STICK_RIGHT,
 };
 const int kActionCount = sizeof(kActions) / sizeof(kActions[0]);
-double g_repeatTimer[kActionCount];
+// The rest of them, for the scenes that take every menu action
+const int kMoreActions[] = {ACTION_MENU_STICK_PRESS, ACTION_MENU_OK, ACTION_MENU_CANCEL};
+const int kMoreActionCount = sizeof(kMoreActions) / sizeof(kMoreActions[0]);
+double g_repeatTimer[kActionCount + kMoreActionCount];
+
+// A scene going, the way the tutorial and the frame loop let go of it
+void destroyScene(MCLEContainerScene *scene) {
+    scene->handleDestroy();
+    // The popup can't be left pointing at a scene that's gone, whatever
+    // state the tutorial was put back in
+    mcle_tutorial_popup_remove_interact_scene(mcle_ui_scene(scene));
+    delete scene;
+}
+
+// Nothing the last scene had going carries over to the next
+void resetSceneState() {
+    g_keyboardRequested = false;
+    resetTooltips();
+    for (double &t : g_repeatTimer) t = 0;
+}
 
 // What the world asked to open, see mcle_container_take_request
 std::mutex g_requestMutex;
@@ -696,8 +870,9 @@ void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double
     }
 
     // UIController::handleKeyPress for each action, then UILayer::handleInput
-    for (int i = 0; i < kActionCount && !g_closeRequested; ++i) {
-        int action = kActions[i];
+    const int actionCount = kActionCount + (g_scene->takesAllMenuActions() ? kMoreActionCount : 0);
+    for (int i = 0; i < actionCount && !g_closeRequested; ++i) {
+        int action = i < kActionCount ? kActions[i] : kMoreActions[i - kActionCount];
         unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), action);
         bool down = (buttons & mapped) != 0;
         bool pressed = down && (prevButtons & mapped) == 0;
@@ -717,7 +892,17 @@ void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double
         g_scene->handleInput(action, repeat, pressed, released);
     }
 
-    if (!g_closeRequested) g_scene->tick(now);
+    if (!g_closeRequested) {
+        g_scene->tick(now);
+        // UILayer::tick goes down the stack. The movies of the scenes under
+        // the top one aren't up, what they'd make on them is dropped and
+        // their reloadMovie puts it back.
+        for (auto it = g_backScenes.rbegin(); it != g_backScenes.rend() && !g_closeRequested; ++it) {
+            size_t queued = g_ops.size();
+            (*it)->tick(now);
+            dropMovieOps(queued);
+        }
+    }
     g_scene->snapshot();
 }
 
@@ -762,25 +947,113 @@ void mcle_container_close() {
     if (!g_scene) return;
     {
         std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
-        g_scene->handleDestroy();
-        // The popup can't be left pointing at a scene that's gone, whatever
-        // state the tutorial was put back in
-        mcle_tutorial_popup_remove_interact_scene(mcle_ui_scene(g_scene));
-        delete g_scene;
-        g_scene = nullptr;
+        // UIGroup::closeAllScenes, from the top of the stack down
+        while (g_scene) {
+            destroyScene(g_scene);
+            g_scene = nullptr;
+            if (!g_backScenes.empty()) {
+                g_scene = g_backScenes.back();
+                g_backScenes.pop_back();
+            }
+        }
         mcle_game_set_menu_displayed(false);
     }
     // The back sound handleDestroy's closeContainer plays is all that's left
     // to make, the rest is for the movie that's going
-    std::vector<MCLEUIOp> sounds;
-    for (MCLEUIOp &op : g_ops) {
-        if (op.kind == MCLEUIOp::Sound) sounds.push_back(op);
-    }
-    g_ops.swap(sounds);
+    dropMovieOps();
     g_closeRequested = false;
-    g_keyboardRequested = false;
-    resetTooltips();
-    for (double &t : g_repeatTimer) t = 0;
+    g_closeAll = false;
+    // A scene that was to go up over them goes with them
+    g_navigateMake = nullptr;
+    g_navigateFailed = nullptr;
+    resetSceneState();
+}
+
+void mcle_container_set_label_reader(bool (*reader)(const char *path, std::wstring *label)) {
+    g_labelReader = reader;
+}
+
+void mcle_container_press(int controlId, int childId) {
+    if (!g_scene || g_closeRequested) return;
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    g_scene->handlePress(controlId, childId);
+}
+
+void mcle_container_focus_change(int controlId, int childId, bool init) {
+    if (!g_scene || g_closeRequested) return;
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    g_scene->handleFocusChange(controlId, childId, init);
+}
+
+bool mcle_container_menu_background() {
+    return g_scene != nullptr && g_scene->hasMenuBackground();
+}
+
+void mcle_container_navigate_to(const char *movie, std::function<MCLEContainerScene *()> make,
+                                std::function<void()> failed) {
+    g_navigateMovie = movie;
+    g_navigateMake = std::move(make);
+    g_navigateFailed = std::move(failed);
+}
+
+const char *mcle_container_take_navigate() {
+    if (!g_scene || !g_navigateMake || g_navigating || g_closeRequested) return nullptr;
+    g_navigating = true;
+    return g_navigateMovie.c_str();
+}
+
+// The scene that was up goes under the new one, its movie gone
+void mcle_container_open_navigated() {
+    if (!g_scene || !g_navigating || !g_navigateMake) return;
+    std::function<MCLEContainerScene *()> make;
+    make.swap(g_navigateMake);
+    g_navigateFailed = nullptr;
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    dropMovieOps();
+    resetSceneState();
+    g_backScenes.push_back(g_scene);
+    g_scene = nullptr;
+    mcle_container_begin(make());
+}
+
+void mcle_container_navigate_done() {
+    if (!g_navigating) return;
+    g_navigating = false;
+    if (!g_navigateMake) return;
+    // The movie never came up, so the scene that asked is still the one up
+    g_navigateMake = nullptr;
+    std::function<void()> failed;
+    failed.swap(g_navigateFailed);
+    if (failed && g_scene) {
+        std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+        failed();
+    }
+}
+
+const char *mcle_container_back_movie() {
+    if (!g_scene || !g_closeRequested || g_closeAll || g_backScenes.empty()) return nullptr;
+    return g_backScenes.back()->movieName();
+}
+
+// UILayer::NavigateBack: the top scene goes and the one under it has the
+// focus again
+void mcle_container_navigate_back() {
+    if (!g_scene || g_backScenes.empty()) return;
+    {
+        std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+        destroyScene(g_scene);
+        g_scene = g_backScenes.back();
+        g_backScenes.pop_back();
+    }
+    dropMovieOps();
+    g_closeRequested = false;
+    resetSceneState();
+}
+
+void mcle_container_reload() {
+    if (!g_scene) return;
+    std::lock_guard<std::mutex> lock(mcle_sim_tick_mutex());
+    g_scene->reloadMovie();
 }
 
 bool mcle_container_is_open() {

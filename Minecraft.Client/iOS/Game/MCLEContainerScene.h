@@ -5,6 +5,7 @@
 // makes, and the controls whose Iggy calls get queued for the view
 // controller (see MCLEContainerMenu.h).
 
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -52,6 +53,25 @@ public:
 
     // What XuiCraftingTask casts the tutorial's scene to, the crafting menus'
     virtual IUIScene_CraftingMenu *craftingMenu() { return nullptr; }
+
+    // UIController::handleInput goes through every menu action. The
+    // container scenes take the frame loop's list, a scene that's true here
+    // gets ACTION_MENU_STICK_PRESS, OK and CANCEL too.
+    virtual bool takesAllMenuActions() { return false; }
+
+    // UIScene::_handlePress, and _handleFocusChange / _handleInitFocus, from
+    // the movie's ExternalInterface calls
+    virtual void handlePress(int controlId, int childId) {}
+    virtual void handleFocusChange(int controlId, int childId, bool init) {}
+
+    // parentLayer->addComponent(eUIComponent_MenuBackground) in the
+    // scene's constructor
+    virtual bool hasMenuBackground() { return false; }
+
+    // The movie the scene is on, and UIScene::reloadMovie once it's back up
+    // after a scene navigated to over this one has gone
+    virtual const char *movieName() { return ""; }
+    virtual void reloadMovie() {}
 };
 
 // The UIScene a scene is to the tutorial, the one it gives
@@ -72,6 +92,10 @@ void mcle_game_set_menu_displayed(bool displayed);
 void mcle_container_prepare();
 // Hands a constructed scene to the frame loop
 void mcle_container_begin(MCLEContainerScene *scene);
+// UIController::NavigateToScene over the scene that's up: the movie, what
+// makes the scene once the movie is up, and what to do if it never is
+void mcle_container_navigate_to(const char *movie, std::function<MCLEContainerScene *()> make,
+                                std::function<void()> failed);
 // The container id of the last ContainerOpenPacket taken
 int mcle_container_open_id();
 // UIScene_TradingMenu over the server's MerchantMenu, for the
@@ -90,6 +114,8 @@ MCLEUIArg mcle_ui_bool(bool v);
 MCLEUIArg mcle_ui_str(const std::wstring &v);
 // UIScene::sendInputToMovie, a key down or up by its Iggy key code
 void mcle_ui_key(int iggyKeyCode, bool down);
+// UIScene::sendInputToMovie from the game action
+void mcle_ui_send_input(int key, bool pressed);
 // UIControl::setVisible on a value path
 void mcle_ui_set_visible(const std::string &path, bool visible);
 // InputManager.RequestKeyboard: the system keyboard, answered through the
@@ -125,6 +151,8 @@ struct MCLEUILabel {
     explicit MCLEUILabel(const char *p) : path(p) {}
     void init(const std::wstring &text);
     void setLabel(const std::wstring &text, bool instant = false, bool force = false);
+    // UIControl_Base::getLabel, GetLabel off the movie
+    const std::wstring &getLabel();
     void tick();
 };
 
@@ -153,4 +181,45 @@ struct MCLEUISlotList {
     void setSlotHighlighted(int index, bool highlight);
     void showSlotRedBox(int index, bool show);
     void setFocus(bool focus);
+};
+
+// UIControl_Button and UIControl_TextInput: Init with the label and id, a
+// label's SetLabel and GetLabel, and the same Init again for ReInit
+struct MCLEUIControl : MCLEUILabel {
+    int id = -1;
+
+    explicit MCLEUIControl(const char *p) : MCLEUILabel(p) {}
+    void init(const std::wstring &text, int controlId);
+    void ReInit() { init(label, id); }
+    // UIControl_TextInput::SetCharLimit
+    void SetCharLimit(int iLimit);
+};
+
+// The UIScene parts of a scene whose movie has the focus, rather than a
+// container menu's pointer: the focus the movie reports, the first
+// SetFocus, the keys it's sent and going back
+class MCLEMenuScene : public MCLEContainerScene {
+public:
+    bool takesAllMenuActions() override { return true; }
+    void customDraw(const MCLECustomDrawRegion &) override {}
+    // UIScene::_handleInitFocus and _handleFocusChange
+    void handleFocusChange(int controlId, int childId, bool init) override;
+
+protected:
+    int m_iPad = 0;
+    int m_iFocusControl = -1;
+    int m_iFocusChild = 0;
+
+    virtual void updateTooltips() = 0;
+
+    bool controlHasFocus(int iControlId) { return m_iFocusControl == iControlId; }
+
+    // UIScene::gainFocus the first time: SetFocus(-1) focuses the movie's
+    // first control, which the movie reports with handleInitFocus
+    void gainFocus();
+
+    void sendInputToMovie(int key, bool repeat, bool pressed, bool released) { mcle_ui_send_input(key, pressed); }
+
+    // UIScene::navigateBack
+    void navigateBack();
 };

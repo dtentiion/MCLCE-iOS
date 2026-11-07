@@ -108,6 +108,10 @@ static bool g_world_paused = false;
 static bool g_world_dead = false;
 // A container menu (UIScene_InventoryMenu) is up over the running world
 static bool g_world_container = false;
+// A container scene's movie is going back up for its reloadMovie, after the
+// scene that was over it went
+static bool g_container_reloading = false;
+static bool MCLELabelAt(const char* path, std::wstring* label);
 // Exit Game: FullscreenProgress is up while the world is torn down
 static bool g_exiting_world = false;
 // UIScene_ConnectingProgress is up while the player changes level, until the
@@ -764,6 +768,13 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             });
         }
     } else if (strcmp(method, "handlePress") == 0) {
+        // The scene over the game (UIScene_SignEntryMenu, UIScene_Keyboard)
+        if (mcle_container_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_press(cid, child); });
+            return;
+        }
         // UIScene_ControlsMenu::handlePress: the layout buttons pick the scheme
         if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
             int control = (int)id;
@@ -892,6 +903,12 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                   g_current_scene_name, listId, itemId);
         }
     } else if (strcmp(method, "handleFocusChange") == 0) {
+        if (mcle_container_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_focus_change(cid, child, false); });
+            return;
+        }
         // UIScene_ControlsMenu::handleFocusChange: show the layout being
         // looked at, from tick
         if ([g_current_scene_name isEqualToString:@"Controls1080.swf"]) {
@@ -942,6 +959,12 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             });
         }
     } else if (strcmp(method, "handleInitFocus") == 0) {
+        if (mcle_container_is_open() && !g_pending_dialog) {
+            int cid = (int)id;
+            int child = (int)value;
+            dispatch_async(dispatch_get_main_queue(), ^{ mcle_container_focus_change(cid, child, true); });
+            return;
+        }
         // LCE fires this once per scene when SetFocus(-1) finds
         // the tabIndex==1 child (FJ_Document.SetFocus line 81-160,
         // OnFocusChange(false) calls through to handleInitFocus).
@@ -2092,6 +2115,8 @@ static BOOL MCLEPlayStationPadConnected(void) {
     // (e.g. UIScene_SettingsOptionsMenu.cpp:379).
     extern void mcle_ios_settings_event_bridge(const char*, double, double);
     ruffle_ios_set_settings_event_callback(&mcle_ios_settings_event_bridge);
+    // How the scenes' UIControl_Base::getLabel reads the movie
+    mcle_container_set_label_reader(MCLELabelAt);
 
     g_active_vc = self;
 }
@@ -3944,6 +3969,21 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     return MCLEControlRect{ r[0], r[1], r[2], r[3] };
 }
 
+// UIControl_Base::getLabel, GetLabel on the control. Iggy would have made
+// the calls the scene queued before it already, so they go first.
+static bool MCLELabelAt(const char* path, std::wstring* label) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return false;
+    MCLEContainerApplyOps();
+    char text[1024];
+    int n = ruffle_ios_call_child_path_string(g_ruffle_player, (const uint8_t*)path, strlen(path),
+                                              (const uint8_t*)"GetLabel", 8, (uint8_t*)text, sizeof(text));
+    if (n < 0) return false;
+    NSString* s = [[NSString alloc] initWithBytes:text length:(NSUInteger)n encoding:NSUTF8StringEncoding];
+    *label = MCLEWideString(s ?: @"");
+    return true;
+}
+
 // Minecraft::tick's inventory action: app.LoadInventoryMenu
 - (void)openInventoryMenu {
     extern PlayerHandle* g_ruffle_player;
@@ -3976,11 +4016,35 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     }
     g_world_container = true;
     // The container scenes don't change the components, so it's the world
-    // under it like the HUD had. The tooltips show while a menu is up.
+    // under it like the HUD had, with the menu background if the scene
+    // added it. The tooltips show while a menu is up.
     const int depths[] = { -2, kMenuBackgroundDepth, kLogoDepth, kDimDepth };
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
+    if (mcle_container_menu_background()) {
+        ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
+    }
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
     MCLEGameTooltipsReset();
+}
+
+// UIController::NavigateToScene from the scene that's up: the new scene's
+// movie takes the place of that one's
+- (void)containerNavigateTo:(NSString*)movie {
+    [self transitionToMenuNamed:movie];
+    mcle_container_navigate_done();
+    [self showContainerOverWorld];
+}
+
+// A navigateBack to the scene under the one that's up: its movie goes back
+// up for its reloadMovie
+- (void)containerNavigateBack {
+    NSString* movie = [NSString stringWithUTF8String:mcle_container_back_movie()];
+    mcle_container_navigate_back();
+    MCLEContainerApplyOps();
+    g_container_reloading = true;
+    [self transitionToMenuNamed:movie];
+    g_container_reloading = false;
+    [self showContainerOverWorld];
 }
 
 // UIScene_CraftingMenu's constructor, once the movie is up
@@ -4076,7 +4140,12 @@ static MCLEControlRect MCLEControlRectAt(const char* path) {
     }
     MCLEContainerApplyOps();
     if (mcle_container_close_requested()) {
-        [self closeContainerMenu:YES];
+        if (mcle_container_back_movie()) [self containerNavigateBack];
+        else [self closeContainerMenu:YES];
+        return;
+    }
+    if (const char* movie = mcle_container_take_navigate()) {
+        [self containerNavigateTo:[NSString stringWithUTF8String:movie]];
         return;
     }
     std::wstring kbTitle, kbText;

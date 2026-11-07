@@ -118,12 +118,39 @@ bool mcle_container_pointer(float *x, float *y);
 // ui.CloseUIScenes from the scene
 bool mcle_container_close_requested();
 
+// How UIControl_Base::getLabel reads a control's label off the movie,
+// false when it couldn't
+void mcle_container_set_label_reader(bool (*reader)(const char *path, std::wstring *label));
+
+// The movie's handlePress, and handleFocusChange / handleInitFocus, for the
+// scene that's up
+void mcle_container_press(int controlId, int childId);
+void mcle_container_focus_change(int controlId, int childId, bool init);
+
+// Whether the scene that's up has the menu background under it
+bool mcle_container_menu_background();
+
+// A scene the one that's up navigated to, taken once: its movie, null for
+// none. Then its scene, made by the init for that movie, and done once the
+// transition is over, which gives up on it if the movie never came up.
+const char *mcle_container_take_navigate();
+void mcle_container_open_navigated();
+void mcle_container_navigate_done();
+
+// When the close the scene asked for is a navigateBack to a scene under
+// it: that scene's movie, otherwise null and the whole menu closes
+const char *mcle_container_back_movie();
+// Closes the scene that's up for the one under it, and reloadMovie on that
+// one once its movie is up again
+void mcle_container_navigate_back();
+void mcle_container_reload();
+
 // The keyboard a scene asked for, taken once; then its answer, ok false
 // when it was cancelled
 bool mcle_container_take_keyboard(std::wstring *title, std::wstring *text, int *maxChars);
 void mcle_container_keyboard_done(bool ok, const std::wstring &text);
 
-// The scene's handleDestroy
+// The scenes' handleDestroy, the one that's up and any under it
 void mcle_container_close();
 
 bool mcle_container_is_open();
