@@ -17,6 +17,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <zlib.h>
 #include <algorithm>
 #include <cstdio>
@@ -497,4 +498,36 @@ extern "C" int mcle_saves_host_options(int i, unsigned int *out) {
 extern "C" unsigned int mcle_saves_texture_pack(int i) {
     auto e = entry(i);
     return e ? e->texturePack : 0;
+}
+
+// Win64_DeleteSaveDirectory (UIScene_LoadOrJoinMenu.cpp:2391): what's in the
+// folder, then the folder. The names are read first so none get skipped
+// while they go, and a link is removed rather than followed.
+static bool delete_save_directory(const std::string &path) {
+    std::vector<std::string> children;
+    if (DIR *d = opendir(path.c_str())) {
+        while (struct dirent *e = readdir(d)) {
+            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+            children.push_back(path + "/" + e->d_name);
+        }
+        closedir(d);
+    }
+    for (const std::string &child : children) {
+        struct stat st;
+        if (lstat(child.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) delete_save_directory(child);
+        else unlink(child.c_str());
+    }
+    return rmdir(path.c_str()) == 0;
+}
+
+// DeleteSaveDialogReturned on Windows64 deletes GameHDD\<save filename>, here
+// saves/<folder>. Never saves/ itself or anything outside it.
+extern "C" int mcle_saves_delete(int i) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    auto e = entry(i);
+    const char *root = ios_documents_dir();
+    if (!e || !root || !*root) return 0;
+    const std::string &folder = e->folder;
+    if (folder.empty() || folder == "." || folder == ".." || folder.find('/') != std::string::npos) return 0;
+    return delete_save_directory(std::string(root) + "/saves/" + folder) ? 1 : 0;
 }

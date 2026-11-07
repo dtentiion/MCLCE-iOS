@@ -15,6 +15,10 @@ unsigned int mcle_saves_texture_pack(int i);  // the pack id it was played with,
 const char *mcle_saves_thumbnail(int i);  // thumbnails/thumbData.png path, "" if none
 long long   mcle_saves_size(int i);       // .ms size in bytes
 
+// The Windows64 delete, save i's folder and everything in it. 0 if it
+// didn't all go.
+int         mcle_saves_delete(int i);
+
 #ifdef __cplusplus
 }
 #endif

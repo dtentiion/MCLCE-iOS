@@ -3130,6 +3130,62 @@ static int MCLEPadIsPlayStation(void) {
     self.menuFocusIndex = 0;
 }
 
+// UIScene_LoadOrJoinMenu::AddDefaultButtons, then the saves its tick adds
+// once GetSaveInfo has them, onto the cleared SavesList
+- (void)loadOrJoinAddSaves {
+    extern PlayerHandle* g_ruffle_player;
+    const char* saves = "SavesList";
+
+    // Default first item: "Create New World". Console adds this
+    // at JOIN_LOAD_CREATE_BUTTON_INDEX=0 regardless of whether
+    // any saves exist (UIScene_LoadOrJoinMenu.cpp:1098).
+    const char* createLabel = "Create New World";
+    ruffle_ios_call_list_add_item(g_ruffle_player,
+        (const uint8_t*)saves, strlen(saves),
+        (const uint8_t*)createLabel, strlen(createLabel),
+        0.0,
+        (const uint8_t*)"", 0);
+    g_load_default_buttons = 1;
+
+    // AddDefaultButtons: then the level generators, the tutorial first
+    int generatorCount = mcle_level_generators_refresh();
+    for (int i = 0; i < generatorCount; ++i) {
+        const char* name = mcle_level_generator_name(i);
+        ruffle_ios_call_list_add_item(g_ruffle_player,
+            (const uint8_t*)saves, strlen(saves),
+            (const uint8_t*)name, strlen(name),
+            (double)g_load_default_buttons,
+            (const uint8_t*)"", 0);
+        ++g_load_default_buttons;
+    }
+
+    // Saves after the default buttons, newest first, item data is the
+    // running index (UIControl_SaveList::addItem passes m_itemCount).
+    int saveCount = mcle_saves_refresh();
+    for (int i = 0; i < saveCount; ++i) {
+        const char* name = mcle_saves_name(i);
+        ruffle_ios_call_list_add_item(g_ruffle_player,
+            (const uint8_t*)saves, strlen(saves),
+            (const uint8_t*)name, strlen(name),
+            (double)(i + g_load_default_buttons),
+            (const uint8_t*)"", 0);
+    }
+
+    // Thumbnails, keyed by save folder like the Win64 tick() does
+    for (int i = 0; i < saveCount; ++i) {
+        NSString* thumb = [NSString stringWithUTF8String:mcle_saves_thumbnail(i)];
+        NSData* png = thumb.length ? [NSData dataWithContentsOfFile:thumb] : nil;
+        const char* tex = mcle_saves_folder(i);
+        if (png.length) {
+            ruffle_ios_register_xui_bitmap(g_ruffle_player,
+                (const uint8_t*)tex, strlen(tex),
+                (const uint8_t*)png.bytes, png.length, 1.0f, 1.0f);
+        }
+        MCLECallPath(@"SavesList", @"SetTextureName",
+                     @[@(i + g_load_default_buttons), [NSString stringWithUTF8String:tex]]);
+    }
+}
+
 // Ports UIScene_LoadOrJoinMenu constructor
 // (Common/UI/UIScene_LoadOrJoinMenu.cpp:536+). Two
 // FJ_ButtonList_ListIconLeft controls on stage:
@@ -3224,54 +3280,7 @@ static int MCLEPadIsPlayStation(void) {
     ruffle_ios_call_list_remove_all(g_ruffle_player,
         (const uint8_t*)games, strlen(games));
 
-    // Default first item: "Create New World". Console adds this
-    // at JOIN_LOAD_CREATE_BUTTON_INDEX=0 regardless of whether
-    // any saves exist (UIScene_LoadOrJoinMenu.cpp:1098).
-    const char* createLabel = "Create New World";
-    ruffle_ios_call_list_add_item(g_ruffle_player,
-        (const uint8_t*)saves, strlen(saves),
-        (const uint8_t*)createLabel, strlen(createLabel),
-        0.0,
-        (const uint8_t*)"", 0);
-    g_load_default_buttons = 1;
-
-    // AddDefaultButtons: then the level generators, the tutorial first
-    int generatorCount = mcle_level_generators_refresh();
-    for (int i = 0; i < generatorCount; ++i) {
-        const char* name = mcle_level_generator_name(i);
-        ruffle_ios_call_list_add_item(g_ruffle_player,
-            (const uint8_t*)saves, strlen(saves),
-            (const uint8_t*)name, strlen(name),
-            (double)g_load_default_buttons,
-            (const uint8_t*)"", 0);
-        ++g_load_default_buttons;
-    }
-
-    // Saves after the default buttons, newest first, item data is the
-    // running index (UIControl_SaveList::addItem passes m_itemCount).
-    int saveCount = mcle_saves_refresh();
-    for (int i = 0; i < saveCount; ++i) {
-        const char* name = mcle_saves_name(i);
-        ruffle_ios_call_list_add_item(g_ruffle_player,
-            (const uint8_t*)saves, strlen(saves),
-            (const uint8_t*)name, strlen(name),
-            (double)(i + g_load_default_buttons),
-            (const uint8_t*)"", 0);
-    }
-
-    // Thumbnails, keyed by save folder like the Win64 tick() does
-    for (int i = 0; i < saveCount; ++i) {
-        NSString* thumb = [NSString stringWithUTF8String:mcle_saves_thumbnail(i)];
-        NSData* png = thumb.length ? [NSData dataWithContentsOfFile:thumb] : nil;
-        const char* tex = mcle_saves_folder(i);
-        if (png.length) {
-            ruffle_ios_register_xui_bitmap(g_ruffle_player,
-                (const uint8_t*)tex, strlen(tex),
-                (const uint8_t*)png.bytes, png.length, 1.0f, 1.0f);
-        }
-        MCLECallPath(@"SavesList", @"SetTextureName",
-                     @[@(i + g_load_default_buttons), [NSString stringWithUTF8String:tex]]);
-    }
+    [self loadOrJoinAddSaves];
 
     // m_spaceIndicatorSaves: init(L"", eControl_SpaceIndicator, 0, MAXIMUM_SAVE_STORAGE)
     // then addSave per save, with the focused save highlighted.
@@ -3285,6 +3294,89 @@ static int MCLEPadIsPlayStation(void) {
 
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
+}
+
+// The message box was on the same stage and took its focus. The scene's own
+// movie keeps it on Windows64, so it goes back to the save it was on.
+static void MCLELoadOrJoinRefocusSave(void) {
+    MCLECallPath(@"SavesList", @"HighlightItem", @[@(g_load_save_list_index)]);
+}
+
+// UIScene_LoadOrJoinMenu::handleInput's ACTION_MENU_RIGHT_SCROLL, and the
+// ACTION_MENU_X Windows64 adds for it. Saving is never disabled and there's
+// always space for a save, so it's Save Options rather than Delete Save.
+- (void)loadOrJoinSaveOptions {
+    if (g_load_or_join_ignore_input) return;
+    // 4J-PB - check we are on a valid save
+    if (!MCLELoadOrJoinSavesListHasFocus() || g_load_default_buttons == 0 ||
+        g_load_save_list_index < g_load_default_buttons) return;
+    g_load_or_join_ignore_input = true;
+    __weak MinecraftViewController* weakSelf = self;
+    [self presentDialogWithTitle:MCLEStr(IDS_TOOLTIPS_SAVEOPTIONS)
+                         content:MCLEStr(IDS_TEXT_SAVEOPTIONS)
+                         buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_TITLE_RENAMESAVE),
+                                   MCLEStr(IDS_TOOLTIPS_DELETESAVE)]
+                      focusIndex:0
+                        callback:^(MCLEDialogResult r) {
+        [weakSelf loadOrJoinSaveOptionsReturned:r];
+    }];
+    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+}
+
+// UIScene_LoadOrJoinMenu::SaveOptionsDialogReturned, results switched for
+// this dialog: the first button (Cancel) is Accept
+- (void)loadOrJoinSaveOptionsReturned:(MCLEDialogResult)result {
+    MCLELoadOrJoinRefocusSave();
+    if (result == MCLEDialogResultThird) {
+        // delete the save game
+        // Have to ask the player if they are sure they want to delete this game
+        __weak MinecraftViewController* weakSelf = self;
+        [self presentDialogWithTitle:MCLEStr(IDS_TOOLTIPS_DELETESAVE)
+                             content:MCLEStr(IDS_TEXT_DELETE_SAVE)
+                             buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
+                          focusIndex:0
+                            callback:^(MCLEDialogResult r) {
+            [weakSelf loadOrJoinDeleteSaveDialogReturned:r];
+        }];
+    } else {
+        // reset the tooltips
+        MCLELoadOrJoinTooltips();
+        g_load_or_join_ignore_input = false;
+    }
+}
+
+// UIScene_LoadOrJoinMenu::DeleteSaveDialogReturned, results switched: OK
+// deletes. Windows64 removes the save's own folder rather than going through
+// StorageManager.DeleteSaveData.
+- (void)loadOrJoinDeleteSaveDialogReturned:(MCLEDialogResult)result {
+    MCLELoadOrJoinRefocusSave();
+    // Check that we have a valid save selected (can get a bad index if the save list has been refreshed)
+    bool validSelection = g_load_default_buttons != 0 && g_load_save_list_index >= g_load_default_buttons;
+    if (result == MCLEDialogResultDecline && validSelection) {
+        // Use m_saveDetails (sorted display order) so the correct folder is targeted
+        int displayIdx = g_load_save_list_index - g_load_default_buttons;
+        bool bSuccess = mcle_saves_delete(displayIdx) != 0;
+        [self loadOrJoinDeleteSaveDataReturned:bSuccess];
+    } else {
+        g_load_or_join_ignore_input = false;
+    }
+}
+
+// UIScene_LoadOrJoinMenu::DeleteSaveDataReturned, then its tick's
+// e_SavesRepopulateAfterDelete: the list is wiped and filled again from disk
+- (void)loadOrJoinDeleteSaveDataReturned:(bool)bRes {
+    extern PlayerHandle* g_ruffle_player;
+    if (bRes) {
+        g_load_or_join_ignore_input = false;
+        const char* saves = "SavesList";
+        ruffle_ios_call_list_remove_all(g_ruffle_player, (const uint8_t*)saves, strlen(saves));
+        [self loadOrJoinAddSaves];
+        // m_spaceIndicatorSaves.reset(), then addSave for each
+        MCLESelectSaveSize(-1);
+    } else {
+        g_load_or_join_ignore_input = false;
+    }
+    MCLELoadOrJoinTooltips();
 }
 
 static NSString* MCLEDifficultyLabel(int d) {
@@ -6041,6 +6133,12 @@ static void MCLEConnectingHoldStart(void) {
             if (!g_pending_dialog && (pressedNow & (0x00000080u | 0x00000040u)) &&
                 [self.currentMenuSwf isEqualToString:@"LaunchMoreOptionsMenu1080.swf"]) {
                 MCLEMoreOptionsChangeTab();
+            }
+            // UIScene_LoadOrJoinMenu::handleInput: RB, and X on Windows64,
+            // are the focused save's options
+            if (!g_pending_dialog && (pressedNow & (0x00000040u | 0x00000004u)) &&
+                [self.currentMenuSwf isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
+                [self loadOrJoinSaveOptions];
             }
             if (pressedNow & 0x00000002u) {
                 if (g_pending_dialog) {
