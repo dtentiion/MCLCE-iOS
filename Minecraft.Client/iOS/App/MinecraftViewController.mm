@@ -1519,6 +1519,15 @@ static void MCLEHudChatTimer(void) {
     MCLEHudLabel(@"Jukebox", text, g_hudChat.jukebox, g_hudChat.jukeboxSet);
 }
 
+// The chat lines' background strips (Label1Background to Label10Background)
+// run the width of HUD1080's 16:9 stage, from one side of TU19's screen to
+// the other. On a wider screen they go on to its sides.
+static void MCLEHudExtendChatStrips(void) {
+    extern PlayerHandle* g_ruffle_player;
+    static const int depths[] = { 7, 9, 11, 13, 15, 17, 19, 21, 23, 25 };
+    MCLEExtendStripsToScreen(g_ruffle_player, g_active_vc.view.bounds.size, depths, 10);
+}
+
 // IUIScene_HUD::updateFrameTick, called every frame in game
 static void MCLEHudPump(void) {
     MCLEHudState st;
@@ -1529,7 +1538,10 @@ static void MCLEHudPump(void) {
     MCLEHudChatTimer();
 
     // SetHudSize -> LoadHud
+    const int hudSize = g_hud.guiScale;
     MCLEHudNumber(@"LoadHud", mcle_settings_get(MCLE_SETTING_UISize), g_hud.guiScale);
+    // A new HUD movie loads its size first
+    if (g_hud.guiScale != hudSize) MCLEHudExtendChatStrips();
 
     // SetDisplayName
     if (strcmp(st.displayName, g_hud.displayName) != 0) {
