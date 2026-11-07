@@ -3861,6 +3861,34 @@ static NSString* MCLETipHTML(void) {
             MCLEStr(MCLENextTip())];
 }
 
+// UIScene_FullscreenProgress::handleTimerComplete, the next tip every
+// TIMER_FULLSCREEN_TIPS_TIME
+static const CFTimeInterval kProgressTipTime = 7.0;
+static void MCLEProgressTipTick(void) {
+    CFTimeInterval now = CACurrentMediaTime();
+    if (now - g_progress_tip_time >= kProgressTipTime) {
+        g_progress_tip_time = now;
+        MCLECallPath(@"Tip", @"SetLabel", @[MCLETipHTML()]);
+    }
+}
+
+// Longer Loading Screens: the screen stays up until two tips have shown.
+// What's ready by then waits under it with the game paused, so nothing
+// ticks that the player can't see.
+static CFTimeInterval g_loading_hold_start = 0;
+static bool g_loading_hold_paused = false;
+
+static bool MCLELoadingHeld(void) {
+    return mcle_settings_get_longer_loading() &&
+           CACurrentMediaTime() - g_loading_hold_start < 2 * kProgressTipTime;
+}
+
+static void MCLELoadingHoldPause(bool paused) {
+    if (!paused && !g_loading_hold_paused) return;
+    g_loading_hold_paused = paused;
+    mcle_game_set_paused(paused ? 1 : 0);
+}
+
 // UIScene_FullscreenProgress constructor
 - (void)initFullscreenProgress {
     extern PlayerHandle* g_ruffle_player;
@@ -3875,6 +3903,7 @@ static NSString* MCLETipHTML(void) {
     g_progress_stage = -2;
     g_progress_pct = -1;
     g_progress_tip_time = CACurrentMediaTime();
+    g_loading_hold_start = g_progress_tip_time;
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
 }
@@ -4451,6 +4480,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     int st = mcle_game_load_status(&pct);
     if (st < 0) {
         g_loading_world = false;
+        MCLELoadingHoldPause(false);
         __weak MinecraftViewController* weakSelf = self;
         [self presentDialogWithTitle:MCLEStr(IDS_CORRUPT_OR_DAMAGED_SAVE_TITLE)
                              content:@""
@@ -4479,11 +4509,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
         g_progress_pct = pct;
         MCLECallPath(@"ProgressBar", @"setProgress", @[@(pct)]);
     }
-    CFTimeInterval now = CACurrentMediaTime();
-    if (now - g_progress_tip_time >= 7.0) {   // TIMER_FULLSCREEN_TIPS_TIME
-        g_progress_tip_time = now;
-        MCLECallPath(@"Tip", @"SetLabel", @[MCLETipHTML()]);
-    }
+    MCLEProgressTipTick();
 }
 
 // UIScene_PauseMenu / UIScene_DeathMenu Exit Game for the host with saving
@@ -5323,7 +5349,15 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     // doesn't keep drawing on top of the world output.
     MCLEPanoramaTick();
 
-    if (mcle_world_is_ticking()) {
+    // Longer Loading Screens: the world stays paused under its loading
+    // screen until the hold is over, then starts as it would have
+    bool loadHeld = false;
+    if (g_loading_world) {
+        loadHeld = MCLELoadingHeld();
+        MCLELoadingHoldPause(loadHeld);
+    }
+
+    if (mcle_world_is_ticking() && !loadHeld) {
         if (self.splashLabel) self.splashLabel.hidden = YES;
         if (g_loading_world) {
             g_loading_world = false;
@@ -5442,7 +5476,11 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     // Not over the HUD or a menu in game, so the tutorial popup is hidden
     MCLETutorialPopupFrame(false);
 
-    if (g_loading_world) [self pollWorldLoad];
+    if (g_loading_world) {
+        // A world that's ready leaves the last progress up, the tips go on
+        if (loadHeld && mcle_world_is_ticking()) MCLEProgressTipTick();
+        else [self pollWorldLoad];
+    }
     if (g_exiting_world && mcle_game_exit_world_done()) [self finishExitWorld];
 
     // Splash text pulse + position. Mirrors CXuiCtrlSplashPulser::
