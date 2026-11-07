@@ -401,7 +401,7 @@ static int mcle_map_checkbox(int boxId) {
 // value and a press flips it
 static const int kOptionsLanguagesControl = 6;   // eControl_Languages
 static NSString* MCLELongerLoadingLabel(void) {
-    return [NSString stringWithFormat:@"Longer Loading Screens: %@",
+    return [NSString stringWithFormat:@"Longer Loading: %@",
             MCLEStr(mcle_settings_get_longer_loading() ? IDS_ON : IDS_OFF)];
 }
 
