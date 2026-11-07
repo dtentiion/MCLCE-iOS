@@ -591,8 +591,8 @@ void mcle_ui_handle_dlc_mounting_complete() {
     if (g_scene) g_scene->HandleDLCMountingComplete();
 }
 
-// The game's renderer is made with the first world, so there's nothing to
-// draw the characters with before one has loaded
+// The characters draw with what Minecraft::init made at launch
+// (mcle_minecraft_init)
 void mcle_skin_select_custom_draw(const MCLECustomDrawRegion *regions, int count) {
     if (!g_scene || count <= 0) return;
     Minecraft *pMinecraft = Minecraft::GetInstance();

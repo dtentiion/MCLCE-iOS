@@ -830,6 +830,71 @@ static Minecraft *mcle_minecraft_shim() {
     return reinterpret_cast<Minecraft *>(s_minecraftShimBuf);
 }
 
+// Minecraft::init's options
+static void mcle_make_options(Minecraft *minecraft) {
+    if (minecraft->options) return;
+    try {
+        minecraft->options = new Options();
+        // fancyGraphics=true gives leaves the cutout-transparency path
+        // (LevelRenderer.cpp:427 Tile::leaves->setFancy). Clouds normally
+        // branch to renderAdvancedClouds when this is true, but our
+        // patch-renderclouds-force-simple.py rewires renderClouds to
+        // always take the simple 2D path on iOS - so we get fancy leaves
+        // without the unsupported advanced cloud path.
+        minecraft->options->fancyGraphics = true;
+        // Ambient occlusion controls TileRenderer's per-vertex
+        // light-blending pass (TileRenderer.cpp:5246+). With it off, every
+        // face gets a single uniform light value from one block and
+        // shadows look blocky. With it on, each face corner averages the
+        // light of 4 neighbour blocks so shadows fade smoothly across
+        // tree canopies, terrain folds, etc. Upstream Options::init sets
+        // ambientOcclusion = true by default; our zero-buffer Options
+        // skips init so we have to set it explicitly.
+        minecraft->options->ambientOcclusion = true;
+        MCLE_LOG("minecraft init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
+                 (void*)minecraft->options,
+                 minecraft->options->viewDistance,
+                 (int)minecraft->options->fancyGraphics);
+    } catch (...) {
+        MCLE_LOG("minecraft init: Options ctor threw");
+    }
+}
+
+// Minecraft::init's textures and the fonts made right after them, with the
+// texture pack repository from launch
+static void mcle_make_textures(Minecraft *minecraft) {
+    if (minecraft->textures) return;
+    static char s_optsBuf[sizeof(Options)] = {0};
+    Options *options = reinterpret_cast<Options *>(s_optsBuf);
+
+    // TextureManager is a singleton - createTextureID() and createTexture()
+    // both go through getInstance() which returns nullptr until we allocate
+    // one. Upstream's per-platform main does this at boot.
+    if (TextureManager::getInstance() == nullptr) {
+        TextureManager::createInstance();
+        MCLE_LOG("minecraft init: TextureManager::createInstance done at %p",
+                 (void*)TextureManager::getInstance());
+    }
+
+    try {
+        Textures *textures = new Textures(minecraft->skins, options);
+        minecraft->textures = textures;
+        MCLE_LOG("minecraft init: Textures ctor done at %p", (void*)textures);
+        // Minecraft::init makes the fonts right after Textures. Signs
+        // and name tags draw with them. Same locations as
+        // Minecraft::DEFAULT_FONT_LOCATION / ALT_FONT_LOCATION.
+        static ResourceLocation s_defaultFontLocation(TN_DEFAULT_FONT);
+        static ResourceLocation s_altFontLocation(TN_ALT_FONT);
+        minecraft->font = new Font(options, L"font/Default.png", textures, false,
+                                   &s_defaultFontLocation, 23, 20, 8, 8,
+                                   SFontData::Codepoints);
+        minecraft->altFont = new Font(options, L"font/alternate.png", textures, false,
+                                      &s_altFontLocation, 16, 16, 8, 8);
+    } catch (...) {
+        MCLE_LOG("minecraft init: Textures ctor threw");
+    }
+}
+
 // Minecraft::main runs these once per process, not per world, before the
 // menus. Whichever thread gets here first runs them, the other waits.
 void mcle_world_static_ctors() {
@@ -1585,38 +1650,12 @@ void initImpl() {
                  (void*)slot->get());
     }
 
-    // G2d: heap-allocate Options and GameRenderer for the shim. Options
-    // ctor calls init() which sets the defaults LevelRenderer reads
-    // (viewDistance, fancyGraphics, renderClouds). GameRenderer is a
-    // zero buffer - it has no virtual methods and the four methods our
+    // G2d: Options was made at launch (mcle_minecraft_init). GameRenderer
+    // is a zero buffer - it has no virtual methods and the four methods our
     // render path calls (DisableUpdateThread, EnableUpdateThread,
     // turnOnLightLayer, turnOffLightLayer) are stubbed in link_stubs.cpp
     // and don't deref this.
-    if (!g_minecraftShim->options) try {
-        g_minecraftShim->options = new Options();
-        // fancyGraphics=true gives leaves the cutout-transparency path
-        // (LevelRenderer.cpp:427 Tile::leaves->setFancy). Clouds normally
-        // branch to renderAdvancedClouds when this is true, but our
-        // patch-renderclouds-force-simple.py rewires renderClouds to
-        // always take the simple 2D path on iOS - so we get fancy leaves
-        // without the unsupported advanced cloud path.
-        g_minecraftShim->options->fancyGraphics = true;
-        // Ambient occlusion controls TileRenderer's per-vertex
-        // light-blending pass (TileRenderer.cpp:5246+). With it off, every
-        // face gets a single uniform light value from one block and
-        // shadows look blocky. With it on, each face corner averages the
-        // light of 4 neighbour blocks so shadows fade smoothly across
-        // tree canopies, terrain folds, etc. Upstream Options::init sets
-        // ambientOcclusion = true by default; our zero-buffer Options
-        // skips init so we have to set it explicitly.
-        g_minecraftShim->options->ambientOcclusion = true;
-        MCLE_LOG("mcle_game_init: Options allocated at %p (viewDistance=%d, fancyGraphics=%d)",
-                 (void*)g_minecraftShim->options,
-                 g_minecraftShim->options->viewDistance,
-                 (int)g_minecraftShim->options->fancyGraphics);
-    } catch (...) {
-        MCLE_LOG("mcle_game_init: Options ctor threw");
-    }
+    mcle_make_options(g_minecraftShim);
 
     // ApplyGameSettingsChanged at the start of the game: the render
     // distance setting, before setLevel's allChanged sizes the area
@@ -1708,27 +1747,18 @@ void initImpl() {
     }
 
     // Minecraft::init: the textures, fonts and hand renderers stay for the
-    // whole process. They're made with the texture pack repository from
-    // launch, so PreStitchedTextureMap::stitch reads the selected pack.
-    if (!g_minecraftShim->textures) {
-    static char s_optsBuf[sizeof(Options)] = {0};
-    TexturePackRepository *skins = g_minecraftShim->skins;
-    Options *options = reinterpret_cast<Options *>(s_optsBuf);
-
-    // TextureManager is a singleton - createTextureID() and createTexture()
-    // both go through getInstance() which returns nullptr until we allocate
-    // one. Upstream's per-platform main does this at boot.
-    if (TextureManager::getInstance() == nullptr) {
-        TextureManager::createInstance();
-        MCLE_LOG("mcle_game_init: TextureManager::createInstance done at %p",
-                 (void*)TextureManager::getInstance());
-    }
-
+    // whole process. The textures and fonts were made at launch
+    // (mcle_minecraft_init), the rest waits for the level renderer. They
+    // use the texture pack repository from launch, so
+    // PreStitchedTextureMap::stitch reads the selected pack.
+    static bool s_rendererTexturesDone = false;
+    mcle_make_textures(g_minecraftShim);
+    if (!s_rendererTexturesDone && g_minecraftShim->textures) {
     if (g_levelRenderer) {
+        s_rendererTexturesDone = true;
         try {
-            Textures *textures = new Textures(skins, options);
+            Textures *textures = g_minecraftShim->textures;
             g_levelRenderer->textures = textures;
-            g_minecraftShim->textures = textures;
             // Minecraft::init makes the particle engine with the textures.
             // The one from before only had to catch events and has none.
             {
@@ -1736,17 +1766,6 @@ void initImpl() {
                 g_minecraftShim->particleEngine = new ParticleEngine(g_clientLevel, textures);
                 delete early;
             }
-            MCLE_LOG("mcle_game_init: Textures ctor done at %p", (void*)textures);
-            // Minecraft::init makes the fonts right after Textures. Signs
-            // and name tags draw with them. Same locations as
-            // Minecraft::DEFAULT_FONT_LOCATION / ALT_FONT_LOCATION.
-            static ResourceLocation s_defaultFontLocation(TN_DEFAULT_FONT);
-            static ResourceLocation s_altFontLocation(TN_ALT_FONT);
-            g_minecraftShim->font = new Font(options, L"font/Default.png", textures, false,
-                                             &s_defaultFontLocation, 23, 20, 8, 8,
-                                             SFontData::Codepoints);
-            g_minecraftShim->altFont = new Font(options, L"font/alternate.png", textures, false,
-                                                &s_altFontLocation, 16, 16, 8, 8);
             try {
                 textures->stitch();
                 MCLE_LOG("mcle_game_init: textures->stitch done");
@@ -2875,6 +2894,18 @@ extern "C" void mcle_game_progress(int reset, int *title, int *status, int *perc
     if (title) *title = progress->getCurrentTitle();
     if (status) *status = progress->getType() == ProgressRenderer::eProgressStringType_ID ? progress->getCurrentStatus() : -1;
     if (percent) *percent = progress->getCurrentPercent();
+}
+
+// Minecraft::init's part before the menus, once the renderer is up: the
+// options, the textures and the fonts. A menu that draws the game's models
+// (Change Skin's characters) has them before any world has been loaded.
+extern "C" void mcle_minecraft_init(void) {
+    static bool s_done = false;
+    if (s_done) return;
+    s_done = true;
+    Minecraft *minecraft = mcle_minecraft_shim();
+    mcle_make_options(minecraft);
+    mcle_make_textures(minecraft);
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after

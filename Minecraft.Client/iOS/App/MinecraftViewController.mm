@@ -37,6 +37,7 @@ extern "C" int  mcle_game_load_status(int *percent);        // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_is_new(void);                // MCLEGameLoop.cpp
 extern "C" int  mcle_game_load_finding_seed(void);          // MCLEGameLoop.cpp
 extern "C" void mcle_minecraft_main(void);                  // MCLEGameLoop.cpp
+extern "C" void mcle_minecraft_init(void);                  // MCLEGameLoop.cpp
 extern "C" int  mcle_level_generators_refresh(void);        // MCLEGameLoop.cpp
 extern "C" const char* mcle_level_generator_name(int i);    // MCLEGameLoop.cpp
 extern "C" int  mcle_game_start_level_gen(int i);           // MCLEGameLoop.cpp
@@ -2430,6 +2431,9 @@ static int MCLEPadIsPlayStation(void) {
     // layer above it, so both can draw every frame.
     mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
     mcle_metal_attach_ui_layer((__bridge void*)self.customDrawView.layer, pw, ph);
+    // Minecraft::init once there's a renderer: the options, textures and
+    // fonts the menus can draw the game's models with
+    mcle_minecraft_init();
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
