@@ -149,6 +149,8 @@ extern "C" int  mcle_game_respawns(void);            // MCLEGameLoop.cpp
 extern "C" void mcle_end_poem_init(void);            // MCLEEndPoem.cpp
 extern "C" int  mcle_end_poem_paragraph_count(void); // MCLEEndPoem.cpp
 extern "C" const char *mcle_end_poem_paragraph(int index); // MCLEEndPoem.cpp
+extern "C" void mcle_end_poem_input(unsigned int buttons, unsigned int prevButtons,
+                                    void (*sendKey)(int iggyKeyCode, int down)); // MCLEEndPoem.cpp
 extern "C" int mcle_game_exit_world(int save);
 extern "C" int mcle_game_exit_world_done(void);
 
@@ -1114,6 +1116,22 @@ static int MCLECallPath(NSString* path, NSString* method, NSArray* args) {
     return ruffle_ios_call_child_path(g_ruffle_player,
         (const uint8_t*)pth, strlen(pth), (const uint8_t*)m, strlen(m),
         kinds.data(), nums.data(), strs.data(), lens.data(), n);
+}
+
+// IggyPlayerDispatchEventRS for UIScene::sendInputToMovie's key
+static void MCLEEndPoemSendKey(int iggyKeyCode, int down) {
+    extern PlayerHandle* g_ruffle_player;
+    if (g_ruffle_player) ruffle_ios_player_key(g_ruffle_player, iggyKeyCode, down);
+}
+
+// UIScene_EndPoem::handleInput, which does nothing once m_bIgnoreInput is set
+static void MCLEEndPoemInput(void) {
+    static uint32_t s_prevButtons = 0;
+    mcle_ios_pad_state pad = {};
+    mcle_ios_input_poll(0, &pad);
+    const uint32_t buttons = g_endpoem_ignore_input ? 0 : pad.buttons;
+    mcle_end_poem_input(buttons, s_prevButtons, MCLEEndPoemSendKey);
+    s_prevButtons = buttons;
 }
 
 // UIControl_SpaceIndicatorBar over the save list. Bar values are 0..1 of
@@ -6067,7 +6085,10 @@ static void MCLEConnectingHoldStart(void) {
     extern PlayerHandle* g_ruffle_player;
 
     if ([self.currentMenuSwf isEqualToString:@"Credits1080.swf"]) MCLECreditsTick();
-    if ([self.currentMenuSwf isEqualToString:@"EndPoem1080.swf"]) MCLEEndPoemTick();
+    if ([self.currentMenuSwf isEqualToString:@"EndPoem1080.swf"]) {
+        MCLEEndPoemInput();
+        MCLEEndPoemTick();
+    }
     // UIScene_ControlsMenu::tick
     if ([self.currentMenuSwf isEqualToString:@"Controls1080.swf"] && g_controls_layout_changed) {
         MCLEControlsPositionAllText();

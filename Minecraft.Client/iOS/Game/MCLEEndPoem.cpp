@@ -150,3 +150,27 @@ extern "C" const char *mcle_end_poem_paragraph(int index) {
     g_utf8 = toUtf8(m_paragraphs[index]);
     return g_utf8.c_str();
 }
+
+// UIScene_EndPoem::handleInput's up and down on both sticks:
+// sendInputToMovie gives the movie a key down while one is held and a key
+// up when it's let go, and the movie scrolls back or speeds up meanwhile.
+// The d-pad's keys already reach the movie through Ruffle's gamepad
+// mapping, so they're left out here.
+extern "C" void mcle_end_poem_input(unsigned int buttons, unsigned int prevButtons,
+                                    void (*sendKey)(int iggyKeyCode, int down)) {
+    static const struct {
+        int action;
+        int iggyKeyCode;
+    } keys[] = {
+        {ACTION_MENU_DOWN, 40},              // IGGY_KEYCODE_DOWN
+        {ACTION_MENU_UP, 38},                // IGGY_KEYCODE_UP
+        {ACTION_MENU_OTHER_STICK_DOWN, 123}, // IGGY_KEYCODE_F12
+        {ACTION_MENU_OTHER_STICK_UP, 122},   // IGGY_KEYCODE_F11
+    };
+    const unsigned int dpad = _360_JOY_BUTTON_DPAD_UP | _360_JOY_BUTTON_DPAD_DOWN;
+    for (const auto &k : keys) {
+        unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), k.action) & ~dpad;
+        bool down = (buttons & mapped) != 0;
+        if (down != ((prevButtons & mapped) != 0)) sendKey(k.iggyKeyCode, down ? 1 : 0);
+    }
+}
