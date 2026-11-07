@@ -26,6 +26,7 @@ set(MCLE_GAME_SOURCES
   MCLEHowToPlay.cpp
   MCLEChat.cpp
   MCLEPlayerInfo.cpp
+  MCLEInGameInfoMenu.cpp
   MCLEContainerMenu.cpp
   MCLECraftingMenu.cpp
   MCLECreativeMenu.cpp
