@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Add micro-checkpoints inside LevelData(CompoundTag *) ctor so we can
-see which line crashes during the second prepareLevel invocation
+"""Add micro-checkpoints inside LevelData(CompoundTag *) ctor to
+show which line crashes during the second prepareLevel invocation
 (called from Level::Level ctor inside ServerLevel construction).
 """
 import sys

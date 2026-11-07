@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Auto-probe: try compiling every upstream/Minecraft.World/*.cpp file
-# individually against the iOS toolchain with our existing shim
+# individually against the iOS toolchain with the existing shim
 # infrastructure. Output: a CMakeLists-ready list of files that
 # compile clean.
 #
@@ -21,7 +21,7 @@ SHIM="$REPO_ROOT/Minecraft.Client/iOS/iOS_stdafx.h"
 mkdir -p "$LOG_DIR"
 > "$OUT_FILE"
 
-# Locate iOS SDK + clang. CI runner has Xcode 15.x, we use iPhoneOS SDK.
+# Locate iOS SDK + clang. CI runner has Xcode 15.x; this uses the iPhoneOS SDK.
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
 CXX="$(xcrun --sdk iphoneos -f clang++)"
 ARCH="-arch arm64 -isysroot $SDK -mios-version-min=14.0"
@@ -73,7 +73,7 @@ done
 # Probe set 3: upstream/Minecraft.Client/*.cpp (root) for the gameplay-
 # host classes (Minecraft, MinecraftServer, PlayerList, ServerLevel,
 # MultiPlayerLevel, ...). Renderers in this dir will fail compile under
-# our toolchain (they need GL ES + MetalANGLE bringup, Phase D), but
+# this toolchain (they need GL ES + MetalANGLE bringup), but
 # the auto-probe just records what passes.
 probe_one_file() {
     local src="$1"
@@ -101,7 +101,7 @@ while IFS= read -r src; do probe_one_file "$src"; done < <(find "$MC_DIR/Common"
 
 # Top-level Minecraft.Client/*.cpp (gameplay-host: Minecraft, MinecraftServer,
 # PlayerList, ServerLevel, MultiPlayerLevel, ...) plus a bunch of renderers
-# that will fail under iOS until Phase D. Auto-probe just records what passes.
+# that will fail under iOS for now. Auto-probe just records what passes.
 while IFS= read -r src; do probe_one_file "$src"; done < <(find "$MC_DIR" -maxdepth 1 -name "*.cpp")
 
 echo

@@ -132,7 +132,7 @@ def make_define_shape(shape_id: int, w_twips: int, h_twips: int,
     bw.write_bits(num_fill_bits, 4)
     bw.write_bits(num_line_bits, 4)
 
-    # StyleChangeRecord: set fill style 0 to 1 (our solid fill), move to (0,0)
+    # StyleChangeRecord: set fill style 0 to 1 (the solid fill), move to (0,0)
     bw.write_bits(0, 1)  # TypeFlag = 0 (style change)
     bw.write_bits(0, 1)  # StateNewStyles
     bw.write_bits(0, 1)  # StateLineStyle
@@ -218,7 +218,7 @@ def build_swf(width_px: int, height_px: int,
     body.extend(struct.pack("<H", int(round(frame_rate * 256))))
     body.extend(struct.pack("<H", frame_count))
 
-    # SetBackgroundColor (tag 9): gray-ish so we can see the rect + the clear.
+    # SetBackgroundColor (tag 9): gray-ish so the rect + the clear both show.
     body.extend(encode_tag(9, bytes([0x18, 0x18, 0x1C])))
 
     # DefineShape (tag 2)

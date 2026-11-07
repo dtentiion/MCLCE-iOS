@@ -24,8 +24,8 @@ fi
 
 # Neutralize the Marmalade compatibility_include.h. It sets
 # TU_CONFIG_LINK_TO_THREAD=2 and TU_USE_OGLES / TU_USE_OPENAL unconditionally,
-# which overrides our iOS config. Replace its body with guarded defines so
-# our -include wins.
+# which overrides the iOS config. Replace its body with guarded defines so
+# the -include wins.
 COMPAT_FILE="$ROOT/compatibility_include.h"
 if [[ -f "$COMPAT_FILE" ]]; then
     cat > "$COMPAT_FILE" <<'H'
@@ -59,7 +59,7 @@ VM_STACK_NEW = "struct vm_stack : public array<as_value>"
 # rejects as duplicate case when x == 0. The macro is used in generic
 # template bodies as an "unreachable, should specialize" trip, and modern
 # clang parses those bodies eagerly. Swap the macro for a no-op so the
-# library compiles; we lose a compile-time tripwire but never relied on it.
+# library compiles; it loses a compile-time tripwire nothing relied on.
 CA_DEF_OLD = "#define compiler_assert(x)\tswitch(0){case 0: case x:;}"
 CA_DEF_NEW = "#define compiler_assert(x)\t((void)0)"
 

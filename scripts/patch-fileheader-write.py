@@ -58,7 +58,7 @@ if old_body not in src:
 patched = src.replace(old_body, new_body, 1)
 
 # Also patch GetFileSize() to use 144 bytes per entry on iOS (otherwise
-# finalizeWrite's "are we big enough" check uses the wrong size).
+# finalizeWrite's big-enough check uses the wrong size).
 gfs_old = (
     "return GetStartOfNextData() + ( sizeof(FileEntrySaveData) * static_cast<unsigned int>(fileTable.size()) );"
 )

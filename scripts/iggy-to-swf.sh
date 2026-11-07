@@ -4,7 +4,7 @@
 #
 # Why: the LCE UI is authored in Flash and shipped as .iggy files (a 4J
 # wrapper around SWF). GameSWF cannot read .iggy directly but it can read
-# .swf. Converting at build time lets us stay on an actively maintained
+# .swf. Converting at build time keeps the port on an actively maintained
 # SWF runtime without writing an iggy parser.
 #
 # Requires: Java 8+ and ffdec.jar (JPEXS CLI). Download from

@@ -38,7 +38,7 @@ edits = [
         "\tif (!level[playerIndex]) return;\n"
         "\tVec3 *sc = level[playerIndex]->getSkyColor(mc->cameraTargetPlayer, alpha);",
     ),
-    # mc->player is null in our shim; use cameraTargetPlayer as the
+    # mc->player is null in the shim; use cameraTargetPlayer as the
     # stand-in. ServerPlayer extends Entity so getPos works through
     # the Entity base.
     (

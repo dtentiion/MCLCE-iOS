@@ -66,7 +66,7 @@ else:
     if old2 not in src:
         sys.exit("Texture _init glGen anchor not found")
     # The replace_all-equivalent: use replace, anchor is unique
-    # but we need to drop the original glId = glGenTextures(); line that follows
+    # but the original glId = glGenTextures(); line that follows has to go
     # Actually the new2 contains glGenTextures() too, so replace once
     src = src.replace(old2, new2, 1)
 

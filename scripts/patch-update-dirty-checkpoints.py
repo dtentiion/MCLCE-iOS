@@ -22,8 +22,7 @@ if "UDC2_CKPT" in src:
 edits = [
     # Function entry: log only on every-60 cadence. Force-dirty was
     # tried earlier but the search hit a 0x0 crash deeper than the lc
-    # null guard reaches - reverted to safe diagnostic mode for now.
-    # G5 work continues via static analysis of upstream code paths.
+    # null guard reaches - reverted to safe logging for now.
     (
         "bool LevelRenderer::updateDirtyChunks()\n{\n",
         "bool LevelRenderer::updateDirtyChunks()\n{\n"
@@ -82,7 +81,7 @@ edits = [
         "\t\t\t\t\t\t{\n"
         "\t\t\t\t\t\t\tdirtyCount++;",
     ),
-    # Log dirtyCount inside the chunk loop (after dirtyCount++) so we see
+    # Log dirtyCount inside the chunk loop (after dirtyCount++) to show
     # at least how many dirty chunks the loop saw on the first call.
     (
         "\t\t\t\t\t\t\tdirtyCount++;",
@@ -93,7 +92,7 @@ edits = [
     # makes the search run every call which exposes a crash where
     # level->getChunkAt returns null for unloaded chunks - upstream's
     # code assumes it always returns at least emptyChunk, but that's not
-    # true through our ServerLevel cast. Treat null as "empty" (skip).
+    # true through the ServerLevel cast. Treat null as "empty" (skip).
     (
         "\t\t\t\t\t\t\t\t\tChunk *chunk = pClipChunk->chunk;\n"
         "\t\t\t\t\t\t\t\t\tLevelChunk *lc = level[p]->getChunkAt(chunk->x,chunk->z);\n"

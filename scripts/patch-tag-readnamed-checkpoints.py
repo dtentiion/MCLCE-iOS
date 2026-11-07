@@ -23,7 +23,7 @@ if "TAG_CKPT" in src:
 # Print every 200 tags (so the total volume stays under the iOS log's
 # message cap) plus a print on cap conditions (depth > 256, totalTagCount
 # > MAX_TOTAL_TAGS). Whatever the last line before silence is = where
-# we are when the parse hangs/crashes.
+# the parse hangs/crashes.
 anchor = "byte type = dis->readByte();\n\tif (type == 0) { "
 replacement = (
     "byte type = dis->readByte();\n"

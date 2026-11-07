@@ -7,9 +7,9 @@ either dark-blue (overworld) or sky color (other dimensions). It's a
 horizon a darker band when viewed through the visible chunk gap to
 the sky.
 
-With our GL_TEXTURE_2D disable now properly honored, that draw lands
+With the GL_TEXTURE_2D disable now properly honored, that draw lands
 as a solid dark-blue plane near eye height. Because chunks render
-*after* renderSky in our build (via replay_all_lists), any unloaded
+*after* renderSky in this build (via replay_all_lists), any unloaded
 or rebuilding chunk fragment shows the dark-blue dome through it -
 visible as blue patches that jitter as chunks come and go.
 

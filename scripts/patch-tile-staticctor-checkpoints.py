@@ -78,7 +78,7 @@ for line in lines:
         continue
     if not in_static:
         continue
-    # Track braces to know when we leave the function. The function body
+    # Track braces to know when the function ends. The function body
     # starts with { and ends when depth returns to 0.
     brace_depth += line.count("{") - line.count("}")
     if brace_depth == 0 and "}" in line:
@@ -86,14 +86,14 @@ for line in lines:
         continue
     # Only insert checkpoints after lines that look like a complete
     # Tile::xxx = ... ; assignment (ends with ;). Match those that begin
-    # with "\tTile::" so we don't fire on every line.
+    # with "\tTile::" so it doesn't fire on every line.
     stripped = line.lstrip()
     if stripped.startswith("Tile::") and stripped.rstrip().endswith(";"):
-        # Skip lines we already patched
+        # Skip lines already patched
         if "TILE_CKPT" in line:
             continue
         # Extract the assignee name (Tile::stone, Tile::grass, etc.) for
-        # the log so we know which tile just succeeded.
+        # the log, to show which tile just succeeded.
         m = re.match(r"Tile::(\w+)\s*=", stripped)
         name = m.group(1) if m else f"line{ckpt_idx}"
         out_lines.append(f'\tapp.DebugPrintf("TILE_CKPT after {name}");')
