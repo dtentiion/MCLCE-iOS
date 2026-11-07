@@ -54,11 +54,6 @@ public:
     // What XuiCraftingTask casts the tutorial's scene to, the crafting menus'
     virtual IUIScene_CraftingMenu *craftingMenu() { return nullptr; }
 
-    // UIController::handleInput goes through every menu action. The
-    // container scenes take the frame loop's list, a scene that's true here
-    // gets ACTION_MENU_STICK_PRESS, OK and CANCEL too.
-    virtual bool takesAllMenuActions() { return false; }
-
     // UIScene::_handlePress, and _handleFocusChange / _handleInitFocus, from
     // the movie's ExternalInterface calls
     virtual void handlePress(int controlId, int childId) {}
@@ -202,7 +197,6 @@ struct MCLEUIControl : MCLEUILabel {
 // SetFocus, the keys it's sent and going back
 class MCLEMenuScene : public MCLEContainerScene {
 public:
-    bool takesAllMenuActions() override { return true; }
     void customDraw(const MCLECustomDrawRegion &) override {}
     // UIScene::_handleInitFocus and _handleFocusChange
     void handleFocusChange(int controlId, int childId, bool init) override;

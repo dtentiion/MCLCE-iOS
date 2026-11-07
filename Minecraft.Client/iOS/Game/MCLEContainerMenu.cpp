@@ -716,20 +716,7 @@ protected:
 // UIController::handleInput's key repeat
 const double kRepeatDelay = 0.3; // UI_REPEAT_KEY_DELAY_MS
 const double kRepeatRate = 0.1;  // UI_REPEAT_KEY_REPEAT_RATE_MS
-
-// The menu actions UIController::handleInput goes through
-const int kActions[] = {
-    ACTION_MENU_A,         ACTION_MENU_B,          ACTION_MENU_X,           ACTION_MENU_Y,
-    ACTION_MENU_UP,        ACTION_MENU_DOWN,       ACTION_MENU_LEFT,        ACTION_MENU_RIGHT,
-    ACTION_MENU_PAGEUP,    ACTION_MENU_PAGEDOWN,   ACTION_MENU_LEFT_SCROLL, ACTION_MENU_RIGHT_SCROLL,
-    ACTION_MENU_PAUSEMENU, ACTION_MENU_OTHER_STICK_UP, ACTION_MENU_OTHER_STICK_DOWN,
-    ACTION_MENU_OTHER_STICK_LEFT, ACTION_MENU_OTHER_STICK_RIGHT,
-};
-const int kActionCount = sizeof(kActions) / sizeof(kActions[0]);
-// The rest of them, for the scenes that take every menu action
-const int kMoreActions[] = {ACTION_MENU_STICK_PRESS, ACTION_MENU_OK, ACTION_MENU_CANCEL};
-const int kMoreActionCount = sizeof(kMoreActions) / sizeof(kMoreActions[0]);
-double g_repeatTimer[kActionCount + kMoreActionCount];
+double g_repeatTimer[ACTION_MAX_MENU + 1];
 
 // A scene going, the way the tutorial and the frame loop let go of it
 void destroyScene(MCLEContainerScene *scene) {
@@ -869,27 +856,26 @@ void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double
         return;
     }
 
-    // UIController::handleKeyPress for each action, then UILayer::handleInput
-    const int actionCount = kActionCount + (g_scene->takesAllMenuActions() ? kMoreActionCount : 0);
-    for (int i = 0; i < actionCount && !g_closeRequested; ++i) {
-        int action = i < kActionCount ? kActions[i] : kMoreActions[i - kActionCount];
-        unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), action);
+    // UIController::handleInput: handleKeyPress for every menu action, then
+    // UILayer::handleInput
+    for (int key = 0; key <= ACTION_MAX_MENU && !g_closeRequested; ++key) {
+        unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), key);
         bool down = (buttons & mapped) != 0;
         bool pressed = down && (prevButtons & mapped) == 0;
         bool released = !down && (prevButtons & mapped) != 0;
         bool repeat = false;
         if (pressed) {
-            g_repeatTimer[i] = now + kRepeatDelay;
+            g_repeatTimer[key] = now + kRepeatDelay;
         } else if (released) {
-            g_repeatTimer[i] = 0;
-        } else if (down && g_repeatTimer[i] > 0 && now > g_repeatTimer[i]) {
+            g_repeatTimer[key] = 0;
+        } else if (down && g_repeatTimer[key] > 0 && now > g_repeatTimer[key]) {
             repeat = true;
             pressed = true;
-            g_repeatTimer[i] = now + kRepeatRate;
+            g_repeatTimer[key] = now + kRepeatRate;
         }
         if (!(repeat || pressed || released)) continue;
-        if (repeat && !g_scene->allowRepeat(action)) continue;
-        g_scene->handleInput(action, repeat, pressed, released);
+        if (repeat && !g_scene->allowRepeat(key)) continue;
+        g_scene->handleInput(key, repeat, pressed, released);
     }
 
     if (!g_closeRequested) {
