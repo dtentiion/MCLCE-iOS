@@ -4379,6 +4379,18 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
+// Longer Loading Screens on a level change's ConnectingProgress, which
+// hides the tips in TU19: here it shows them like FullscreenProgress and
+// is held from when the change started
+static bool g_connecting_hold = false;
+static void MCLEConnectingHoldStart(void) {
+    if (g_connecting_hold || !mcle_settings_get_longer_loading()) return;
+    g_connecting_hold = true;
+    g_progress_tip_time = CACurrentMediaTime();
+    g_loading_hold_start = g_progress_tip_time;
+    MCLESetPathVisible(@"Tip", YES);
+}
+
 // ClientConnection::handleRespawn going to another dimension, and
 // eAppAction_Respawn: UIScene_ConnectingProgress over the game, the
 // FullscreenProgress movie with the panorama and logo and only the title
@@ -4393,6 +4405,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     if (g_world_connecting) {
         // The scene it navigates to over the last one only has a new title
         MCLECallPath(@"Title", @"SetLabel", @[title]);
+        if (!respawn) MCLEConnectingHoldStart();
         return;
     }
     // 4J Stu - Fix for #13543 - Crash: Game crashes if entering a portal with the inventory menu open
@@ -4405,6 +4418,8 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     MCLECallPath(@"Title", @"SetLabel", @[title]);
     MCLESetPathVisible(@"ProgressBar", NO);
     MCLESetPathVisible(@"Tip", NO);
+    g_connecting_hold = false;
+    if (!respawn) MCLEConnectingHoldStart();
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kLogoDepth, 1);
@@ -4418,6 +4433,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
 - (void)closeConnectingProgress {
     g_world_connecting = false;
     g_connecting_respawn = false;
+    g_connecting_hold = false;
     if (g_world_dead && !mcle_player_is_dead()) g_world_dead = false;
     mcle_game_set_menu_displayed(false);
     // UIGroup::closeAllScenes lets the tutorial popup show again
@@ -5383,9 +5399,16 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
                 [self openEndPoem];
             }
             // eAppAction_WaitForDimensionChangeComplete / WaitForRespawnComplete
-            if (g_world_connecting && finished == g_level_changes_seen &&
-                (!g_connecting_respawn || mcle_game_respawns() != g_respawns_seen)) {
+            const bool connected = g_world_connecting && finished == g_level_changes_seen &&
+                                   (!g_connecting_respawn || mcle_game_respawns() != g_respawns_seen);
+            // Longer Loading Screens: once the change is done the game waits
+            // paused under the screen for the rest of the hold
+            const bool connectHeld = connected && g_connecting_hold && MCLELoadingHeld();
+            MCLELoadingHoldPause(connectHeld);
+            if (connected && !connectHeld) {
                 [self closeConnectingProgress];
+            } else if (g_world_connecting && g_connecting_hold) {
+                MCLEProgressTipTick();
             }
         }
         // Minecraft::run's autosave: not with the pause menu or a scene
