@@ -1823,3 +1823,9 @@ SDB_PY="$REPO_ROOT/scripts/patch-stop-destroy-block-tu19.py"
 if [ -f "$SDB_PY" ]; then
     python3 "$SDB_PY"
 fi
+
+# The hand is lit at the client player's eye height, not the server player's feet
+HLE_PY="$REPO_ROOT/scripts/patch-iteminhand-light-eye.py"
+if [ -f "$HLE_PY" ]; then
+    python3 "$HLE_PY"
+fi
