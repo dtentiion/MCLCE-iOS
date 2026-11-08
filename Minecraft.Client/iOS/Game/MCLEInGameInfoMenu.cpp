@@ -256,6 +256,7 @@ public:
     }
 
     void handlePress(int controlId, int childId) override {
+        app.DebugPrintf("Pressed = %d, %d\n", controlId, childId);
         switch (controlId) {
         case eControl_GameOptions:
             navigateToHostOptions(m_iPad);
