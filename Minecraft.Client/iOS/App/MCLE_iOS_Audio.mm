@@ -83,13 +83,18 @@ std::vector<std::string> findAllMenuTracks() {
                                          @"wav", @"aiff", @"caf", @"flac"];
     NSSet<NSString*>* overworldSet =
         [NSSet setWithArray:overworldTrackBaseNames()];
-    NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:docs error:nil];
-    for (NSString* e in entries) {
-        NSString* ext = e.pathExtension.lowercaseString;
-        if (![extsAllowed containsObject:ext]) continue;
-        NSString* base = [e stringByDeletingPathExtension].lowercaseString;
-        if (![overworldSet containsObject:base]) continue;
-        out.push_back([docs stringByAppendingPathComponent:e].UTF8String);
+    // The top of the folder, then music/music where Windows64 keeps them
+    NSMutableSet<NSString*>* found = [NSMutableSet set];
+    for (NSString* dir in @[docs, [docs stringByAppendingPathComponent:@"music/music"]]) {
+        NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:dir error:nil];
+        for (NSString* e in entries) {
+            NSString* ext = e.pathExtension.lowercaseString;
+            if (![extsAllowed containsObject:ext]) continue;
+            NSString* base = [e stringByDeletingPathExtension].lowercaseString;
+            if (![overworldSet containsObject:base] || [found containsObject:base]) continue;
+            [found addObject:base];
+            out.push_back([dir stringByAppendingPathComponent:e].UTF8String);
+        }
     }
     return out;
 }
@@ -271,6 +276,11 @@ extern "C" void mcle_audio_load_ui_sfx(void) {
         if (g_ui_loaded[i]) continue;
         NSString* path = [docs stringByAppendingPathComponent:
             [NSString stringWithFormat:@"UI/%s.ogg", g_ui_names[i]]];
+        // Else where Windows64 has them
+        if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+            path = [docs stringByAppendingPathComponent:
+                [NSString stringWithFormat:@"Windows64Media/Sound/Minecraft/UI/%s.ogg", g_ui_names[i]]];
+        }
         if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
             NSLog(@"[audio] UI sfx missing: %@", path);
             continue;
