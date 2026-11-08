@@ -296,6 +296,7 @@ static bool g_intro_ignore_navigate = false;
 
 static int MCLECallPath(NSString* path, NSString* method, NSArray* args);
 static void MCLETutorialPopupApplyOps(void);
+static void MCLETutorialPopupMovieReloaded(void);
 void mcle_game_set_menu_displayed(bool displayed); // Game/MCLEGameLoop.cpp
 bool mcle_game_menu_displayed();                   // Game/MCLEGameLoop.cpp
 extern "C" void mcle_game_check_menu_displayed(void); // Game/MCLEGameLoop.cpp
@@ -2088,7 +2089,10 @@ static int MCLEPadIsPlayStation(void) {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
     MCLEReloadSkinLibraries(true);
-    if (self.scenerAttached) [self reloadTooltipsComponent];
+    if (self.scenerAttached) {
+        [self reloadTooltipsComponent];
+        [self reloadTutorialPopupComponent];
+    }
     // ReloadAll for the scenes that draw the pad
     if (!g_pending_dialog && ([self.currentMenuSwf isEqualToString:@"Controls1080.swf"] ||
                               [self.currentMenuSwf isEqualToString:@"HowToPlay1080.swf"])) {
@@ -2120,6 +2124,40 @@ static int MCLEPadIsPlayStation(void) {
     }
     ruffle_ios_set_sibling_takes_input(g_ruffle_player, kTooltipsDepth, 0);
     MCLETooltipsMovieReloaded();
+}
+
+// The tutorial popup's movie up again on the new skins, with what it showed
+- (void)reloadTutorialPopupComponent {
+    extern PlayerHandle* g_ruffle_player;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString* path = [docs stringByAppendingPathComponent:@"TutorialPopup1080.swf"];
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data.length) return;
+    NSString* url = [NSString stringWithFormat:@"file://%@",
+        [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+    ruffle_ios_remove_sibling_at_depth(g_ruffle_player, kTutorialPopupDepth);
+    int rc = ruffle_ios_add_sibling_swf_to_root(g_ruffle_player,
+        (const uint8_t*)data.bytes, data.length,
+        (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
+        kTutorialPopupDepth, 1.0f, 1.0f, 0.0f, 0.0f);
+    NSLog(@"[skin] tutorial popup movie reloaded -> %d", rc);
+    if (rc != 1) return;
+    for (int i = 0; i < 10; ++i) {
+        ruffle_ios_player_tick_headless_preserve_xui(g_ruffle_player, 1.0f / 60.0f);
+    }
+    ruffle_ios_set_sibling_takes_input(g_ruffle_player, kTutorialPopupDepth, 0);
+    MCLETutorialPopupMovieReloaded();
+}
+
+// UIController::ReloadSkin for a texture pack: the libraries, then
+// UILayer::ReloadAll reloading the components that stay up. The scenes
+// load with the new libraries as they come.
+- (void)reloadSkin {
+    MCLEReloadSkinLibraries();
+    if (!self.scenerAttached) return;
+    [self reloadTooltipsComponent];
+    [self reloadTutorialPopupComponent];
 }
 
 - (void)viewDidLoad {
@@ -2971,7 +3009,7 @@ static int MCLEPadIsPlayStation(void) {
     self.menuStack = nil;
     mcle_texture_packs_navigate_to_home_menu();
     mcle_handle_xui_actions();
-    if (mcle_ui_take_skin_reload()) MCLEReloadSkinLibraries();
+    if (mcle_ui_take_skin_reload()) [self reloadSkin];
     [self transitionToMenuNamed:@"MainMenu1080.swf"];
 }
 
@@ -4545,6 +4583,16 @@ static void MCLETutorialPopupFrame(bool inGame) {
     }
 }
 
+// The popup's movie loaded again: shown as it was, then its reloadMovie
+static void MCLETutorialPopupMovieReloaded(void) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTutorialPopupDepth,
+                                                g_tutorial_popup_shown ? 1 : 0);
+    mcle_tutorial_popup_movie_reloaded();
+    MCLETutorialPopupApplyOps();
+}
+
 // The popup's iggy_ regions after the movie has drawn, for its customDraw
 static void MCLETutorialPopupRegions(void) {
     extern PlayerHandle* g_ruffle_player;
@@ -5237,7 +5285,7 @@ static void MCLEConnectingHoldStart(void) {
     // (m_navigateToHomeOnReload)
     mcle_texture_packs_navigate_to_home_menu();
     mcle_handle_xui_actions();
-    if (mcle_ui_take_skin_reload()) MCLEReloadSkinLibraries();
+    if (mcle_ui_take_skin_reload()) [self reloadSkin];
     [self transitionToMenuNamed:@"MainMenu1080.swf"];
     if (g_ruffle_player) {
         ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
@@ -5896,7 +5944,7 @@ static void MCLEConnectingHoldStart(void) {
 - (void)tick:(CADisplayLink*)link {
     // The main loop's app.HandleXuiActions, the texture pack reload
     mcle_handle_xui_actions();
-    if (mcle_ui_take_skin_reload()) MCLEReloadSkinLibraries();
+    if (mcle_ui_take_skin_reload()) [self reloadSkin];
 
     mcle_game_tick();
 

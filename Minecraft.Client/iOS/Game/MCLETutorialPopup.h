@@ -48,6 +48,8 @@ bool mcle_tutorial_popup_is_visible();
 // UIScene::initialiseMovie's part after the movie is up: the constructor's
 // calls on it
 void mcle_tutorial_popup_movie_ready();
+// UIScene::reloadMovie's calls once the movie is loaded again on new skins
+void mcle_tutorial_popup_movie_reloaded();
 // UIScene::tick, the fade and move timers
 void mcle_tutorial_popup_tick();
 // What the popup wants done on its movie since the last call. Paths are

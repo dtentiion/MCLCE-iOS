@@ -68,6 +68,8 @@ struct PopupControl {
             isVisible = visible;
         }
     }
+    // UIControl::ReInit, on the movie loaded again
+    void reInit() { g_ops.push_back(MCLEUIOp{MCLEUIOp::Visible, path, std::string(), {argBool(isVisible)}}); }
 };
 
 // UIControl_Label
@@ -94,6 +96,11 @@ struct PopupLabel : PopupControl {
         if (!labelChanged) return;
         labelChanged = false;
         movieCall(path, "SetLabel", {argStr(label)});
+    }
+    // UIControl_Label::ReInit
+    void reInit() {
+        PopupControl::reInit();
+        init(label);
     }
 };
 
@@ -137,6 +144,17 @@ public:
         m_iconType = e_ICON_TYPE_IGGY;
 
         m_labelDescription.init(L"");
+    }
+
+    // UIScene::reloadMovie after a skin reload, once the movie is up again:
+    // the controls' ReInit, then handleReload
+    void reloadMovie() {
+        m_labelDescription.reInit();
+        m_labelTitle.reInit();
+        m_controlIconHolder.reInit();
+        m_controlExitScreenshot.reInit();
+        movieCall("", "AdjustLayout", {argBool(m_bSplitscreenGamertagVisible && !m_bContainerMenuVisible)});
+        setupIconHolder(m_iconType);
     }
 
     void SetContainerMenuVisible(bool bContainerMenuVisible) { m_bContainerMenuVisible = bContainerMenuVisible; }
@@ -537,6 +555,11 @@ void mcle_tutorial_popup_reset() {
 void mcle_tutorial_popup_movie_ready() {
     std::lock_guard<std::recursive_mutex> lock(g_mutex);
     g_popup.movieReady();
+}
+
+void mcle_tutorial_popup_movie_reloaded() {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
+    g_popup.reloadMovie();
 }
 
 void mcle_tutorial_popup_tick() {
