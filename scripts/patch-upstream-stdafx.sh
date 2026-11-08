@@ -1817,3 +1817,9 @@ PEARL_PY="$REPO_ROOT/scripts/patch-enderpearl-local-player.py"
 if [ -f "$PEARL_PY" ]; then
     python3 "$PEARL_PY"
 fi
+
+# A finished break destroys the block straight away, TU19's stopDestroyBlock
+SDB_PY="$REPO_ROOT/scripts/patch-stop-destroy-block-tu19.py"
+if [ -f "$SDB_PY" ]; then
+    python3 "$SDB_PY"
+fi
