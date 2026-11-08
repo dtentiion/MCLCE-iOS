@@ -3417,6 +3417,16 @@ extern "C" void mcle_game_tick(void) {
         g_levels[i]->setSpawnSettings(g_levels[i]->difficulty > 0 && !Minecraft::GetInstance()->isTutorial(), g_server->isAnimals());
     }
 
+    // Where the local player is as the levels start ticking. The client's
+    // Level::tick leaves its player's xOld here every tick, its chunk cache
+    // always says it has the chunks (MultiPlayerChunkCache::hasChunk).
+    double xLevelTick = 0, yLevelTick = 0, zLevelTick = 0;
+    if (g_player) {
+        xLevelTick = g_player->x;
+        yLevelTick = g_player->y;
+        zLevelTick = g_player->z;
+    }
+
     // Tick all three dimensions in order, the way the upstream
     // server's runUpdate iterates levels[] each frame.
     using hrclock = std::chrono::steady_clock;
@@ -3541,11 +3551,14 @@ extern "C" void mcle_game_tick(void) {
                 // Level::tick saves where the world is drawn from, but skips a
                 // player whose chunks aren't all in yet, like after a respawn.
                 // The client player doesn't move until then, this one does.
-                const int pxc = Mth::floor(xBefore), pzc = Mth::floor(zBefore);
+                // It's where the player was before the levels ticked, so a
+                // pearl that lands it near unloaded chunks still glides in
+                // over the tick like the client's teleport.
+                const int pxc = Mth::floor(xLevelTick), pzc = Mth::floor(zLevelTick);
                 if (g_player->level && !g_player->level->hasChunksAt(pxc - 32, 0, pzc - 32, pxc + 32, 0, pzc + 32)) {
-                    g_player->xOld = xBefore;
-                    g_player->yOld = yBefore;
-                    g_player->zOld = zBefore;
+                    g_player->xOld = xLevelTick;
+                    g_player->yOld = yLevelTick;
+                    g_player->zOld = zLevelTick;
                 }
                 g_player->doTick(false);
                 // Entity::rideTick: the client's player ticks inside its ride
