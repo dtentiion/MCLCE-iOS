@@ -1547,25 +1547,61 @@ static inline void XMemDestroyDecompressionContext(void*) {}
 // because those collided with the real definitions when the probe
 // library was actually linked.
 
-// SystemTimeToFileTime: Win32 conversion helper. Probe stubs to a
-// no-op zero fill; nothing reads FILETIME on iOS.
-static inline BOOL SystemTimeToFileTime(const SYSTEMTIME*, FILETIME* ft) {
-    if (ft) { ft->dwLowDateTime = 0; ft->dwHighDateTime = 0; }
+// The Win32 UTC clock. System::currentTimeMillis is GetSystemTime through
+// SystemTimeToFileTime, so these have to be real or every timer built on
+// it (UIScene timers, the glint, the End portal, LastPlayed) stands still.
+// FILETIME counts 100 ns steps from 1601-01-01.
+#include <sys/time.h>
+#include <time.h>
+static const int64_t kMcleFileTimeUnixOffsetSecs = 11644473600LL;
+
+static inline BOOL SystemTimeToFileTime(const SYSTEMTIME* st, FILETIME* ft) {
+    if (!st || !ft) return FALSE;
+    struct tm t = {};
+    t.tm_year = st->wYear - 1900;
+    t.tm_mon = st->wMonth - 1;
+    t.tm_mday = st->wDay;
+    t.tm_hour = st->wHour;
+    t.tm_min = st->wMinute;
+    t.tm_sec = st->wSecond;
+    const int64_t secs = (int64_t)timegm(&t) + kMcleFileTimeUnixOffsetSecs;
+    const uint64_t ticks = (uint64_t)secs * 10000000ULL + (uint64_t)st->wMilliseconds * 10000ULL;
+    ft->dwLowDateTime = (DWORD)(ticks & 0xFFFFFFFFULL);
+    ft->dwHighDateTime = (DWORD)(ticks >> 32);
     return TRUE;
 }
-static inline BOOL FileTimeToSystemTime(const FILETIME*, SYSTEMTIME* st) {
-    if (!st) return FALSE;
-    st->wYear = 2026; st->wMonth = 1; st->wDayOfWeek = 0; st->wDay = 1;
-    st->wHour = 0; st->wMinute = 0; st->wSecond = 0; st->wMilliseconds = 0;
+static inline BOOL FileTimeToSystemTime(const FILETIME* ft, SYSTEMTIME* st) {
+    if (!ft || !st) return FALSE;
+    const uint64_t ticks = ((uint64_t)ft->dwHighDateTime << 32) | ft->dwLowDateTime;
+    const time_t secs = (time_t)((int64_t)(ticks / 10000000ULL) - kMcleFileTimeUnixOffsetSecs);
+    struct tm t = {};
+    gmtime_r(&secs, &t);
+    st->wYear = (WORD)(t.tm_year + 1900);
+    st->wMonth = (WORD)(t.tm_mon + 1);
+    st->wDayOfWeek = (WORD)t.tm_wday;
+    st->wDay = (WORD)t.tm_mday;
+    st->wHour = (WORD)t.tm_hour;
+    st->wMinute = (WORD)t.tm_min;
+    st->wSecond = (WORD)t.tm_sec;
+    st->wMilliseconds = (WORD)((ticks / 10000ULL) % 1000ULL);
     return TRUE;
 }
 
-// GetSystemTime for upstream system.cpp. Fills SYSTEMTIME from
-// localtime. Compile-only correctness; nothing calls this.
 static inline void GetSystemTime(LPSYSTEMTIME st) {
     if (!st) return;
-    st->wYear = 2026; st->wMonth = 1; st->wDayOfWeek = 0; st->wDay = 1;
-    st->wHour = 0; st->wMinute = 0; st->wSecond = 0; st->wMilliseconds = 0;
+    struct timeval tv = {};
+    gettimeofday(&tv, NULL);
+    const time_t secs = tv.tv_sec;
+    struct tm t = {};
+    gmtime_r(&secs, &t);
+    st->wYear = (WORD)(t.tm_year + 1900);
+    st->wMonth = (WORD)(t.tm_mon + 1);
+    st->wDayOfWeek = (WORD)t.tm_wday;
+    st->wDay = (WORD)t.tm_mday;
+    st->wHour = (WORD)t.tm_hour;
+    st->wMinute = (WORD)t.tm_min;
+    st->wSecond = (WORD)t.tm_sec;
+    st->wMilliseconds = (WORD)(tv.tv_usec / 1000);
 }
 
 // GetTickCount returns ms since boot. Tie to mach for iOS.
