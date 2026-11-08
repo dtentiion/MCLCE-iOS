@@ -3373,14 +3373,6 @@ extern "C" void mcle_game_tick(void) {
         }
     }
 
-    // Minecraft::tick: if (!pause) particleEngine->tick();
-    if (Minecraft *mcPE = Minecraft::GetInstance()) {
-        if (mcPE->particleEngine) {
-            std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
-            try { mcPE->particleEngine->tick(); } catch (...) {}
-        }
-    }
-
     // Minecraft::tick runs these once per frame so storage queued for
     // delete actually gets freed
     SparseLightStorage::tick();
@@ -3489,6 +3481,17 @@ extern "C" void mcle_game_tick(void) {
                     MCLE_LOG("LR_TICK_THREW unknown");
                     s_lrTickLog++;
                 }
+            }
+        }
+        // Minecraft::tick: if (!pause) particleEngine->tick(), after the
+        // levels, so what their entities and the input made this tick moves
+        // this tick too (a pearl's landing burst, the mining cracks). Still
+        // under the frame lock with the entities, so no frame draws the
+        // particles' new places with the last tick's time.
+        if (Minecraft *mcPE = Minecraft::GetInstance()) {
+            if (mcPE->particleEngine) {
+                std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
+                try { mcPE->particleEngine->tick(); } catch (...) {}
             }
         }
         // DAYTIME log: every 100 sim ticks, log getDayTime to
