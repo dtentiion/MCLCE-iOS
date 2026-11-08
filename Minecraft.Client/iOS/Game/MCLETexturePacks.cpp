@@ -6,6 +6,7 @@
 #include "MCLESound.h"
 #include "../iOS_TexturePacks.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -267,15 +268,34 @@ void mcle_texture_packs_navigate_to_home_menu() {
     }
 }
 
-void mcle_texture_packs_wait_for_reload() {
-    TexturePack *tPack = Minecraft::GetInstance()->skins->getSelected();
-    while (tPack->isLoadingData() || (Minecraft::GetInstance()->skins->needsUIUpdate() || ui.IsReloadingSkin())) {
-        Sleep(50);
-    }
-}
-
 namespace {
 bool s_skinReloadPending = false;
+std::atomic<bool> s_texturePackReloading{false};
+} // namespace
+
+// The selected pack's data still coming in, or the main loop still to
+// reload with it
+static bool texturePackBusy() {
+    TexturePack *tPack = Minecraft::GetInstance()->skins->getSelected();
+    if (tPack->isLoadingData() || Minecraft::GetInstance()->skins->needsUIUpdate() || ui.IsReloadingSkin()) return true;
+    // DLCTexturePack::packMounted clears m_bLoadingData before it reads the
+    // pack, and asks for the reload once it has
+    if (!tPack->hasData() || s_texturePackReloading) return true;
+    for (int i = 0; i < XUSER_MAX_COUNT; i++) {
+        if (app.GetXuiAction(i) == eAppAction_ReloadTexturePack) return true;
+    }
+    return false;
+}
+
+// _RunNetworkGame's wait. Upstream only waits for the pack, the main loop's
+// reload then runs beside the world starting. Here the world's start makes
+// the level renderer and stitches with it, so it waits for the reload too,
+// and for two clear checks in a row as packMounted sets its flags apart.
+void mcle_texture_packs_wait_for_reload() {
+    for (int clear = 0; clear < 2;) {
+        clear = texturePackBusy() ? 0 : clear + 1;
+        if (clear < 2) Sleep(50);
+    }
 }
 
 // UIController::ReloadSkin. The movies load their skin libraries again
@@ -328,13 +348,15 @@ void McleAppStub::HandleXuiActions() {
 
         switch (eAction) {
         case eAppAction_ReloadTexturePack: {
+            s_texturePackReloading = true;
             SetAction(i, eAppAction_Idle);
             Minecraft *pMinecraft = Minecraft::GetInstance();
-            // The textures are made with the first world here. Until then
-            // there's nothing to reload, and they're made from the selected
-            // pack.
+            // The textures are made at launch. Before the first world the
+            // stitch has no level renderer to give the breaking textures to
+            // (patch-stitch-before-level-renderer.py).
             if (pMinecraft->textures) pMinecraft->textures->reloadAll();
             pMinecraft->skins->updateUI();
+            s_texturePackReloading = false;
 
             // 4J-PB  - If the texture pack has audio, we need to switch to this
             if (pMinecraft->skins->getSelected()->hasAudio()) {

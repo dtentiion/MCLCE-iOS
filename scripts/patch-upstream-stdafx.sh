@@ -1331,6 +1331,12 @@ if [ -f "$ST_PY" ]; then
     python3 "$ST_PY"
 fi
 
+# A texture pack picked before the first world stitches without a level renderer
+SLR_PY="$REPO_ROOT/scripts/patch-stitch-before-level-renderer.py"
+if [ -f "$SLR_PY" ]; then
+    python3 "$SLR_PY"
+fi
+
 # bracket BufferedImage ctor
 BIM_PY="$REPO_ROOT/scripts/patch-bufferedimage-ctor-ckpts.py"
 if [ -f "$BIM_PY" ]; then
