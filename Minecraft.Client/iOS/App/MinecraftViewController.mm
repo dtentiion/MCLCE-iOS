@@ -5475,13 +5475,23 @@ static void MCLEConnectingHoldStart(void) {
     mcle_hud_custom_draw(NULL, 0);
 }
 
+// IggyPlayerTickRS from the skin select scene's UIScene::tick: what the scene
+// has made so far goes to the movie, then the movie runs one frame
+static void MCLESkinSelectTickMovie(void) {
+    extern PlayerHandle* g_ruffle_player;
+    MCLEContainerApplyOps();
+    // SkinSelectMenu1080 runs at 30 frames a second
+    if (g_ruffle_player) ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 30.0f);
+}
+
 // A UI frame of the skin select menu: the pad (UIController::handleInput),
-// the scene's tick, then the movie with the characters drawn in
+// the scene's tick with the movie's frames in it, then the movie drawn with
+// the characters drawn in
 - (void)skinSelectMenuFrame {
     extern PlayerHandle* g_ruffle_player;
     mcle_ios_pad_state pad = {};
     mcle_ios_input_poll(0, &pad);
-    mcle_skin_select_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+    mcle_skin_select_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime(), MCLESkinSelectTickMovie);
     self.lastPadButtons = pad.buttons;
     MCLEContainerApplyOps();
     if (mcle_skin_select_close_requested()) {
@@ -5491,7 +5501,8 @@ static void MCLEConnectingHoldStart(void) {
     int tips[11];
     mcle_container_tooltips(tips);
     MCLESetTooltips(tips);
-    ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+    // The scene's tick ran the movie's frames, this only draws it
+    ruffle_ios_player_tick(g_ruffle_player, 0.0f);
     RuffleIosCustomDrawRegion regions[16];
     int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 16);
     n = std::max(0, std::min(n, 16));

@@ -11,8 +11,10 @@ void mcle_skin_select_open(double now);
 bool mcle_skin_select_is_open();
 
 // One UI frame: the pad's presses (UIController::handleInput) then the
-// scene's tick. `prevButtons` is the last frame's.
-void mcle_skin_select_frame(unsigned int buttons, unsigned int prevButtons, double now);
+// scene's tick. `prevButtons` is the last frame's. The scene's tick runs
+// the movie's frames through `tickMovie`, one per call, like
+// UIScene::tick's IggyPlayerTickRS.
+void mcle_skin_select_frame(unsigned int buttons, unsigned int prevButtons, double now, void (*tickMovie)());
 
 // navigateBack from the scene
 bool mcle_skin_select_close_requested();

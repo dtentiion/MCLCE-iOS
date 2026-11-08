@@ -223,6 +223,8 @@ public:
     }
 
     void setTime(double now) { m_now = now; }
+    // IggyPlayerTickRS, one frame of the scene's movie
+    void setMovieTicker(void (*tickMovie)()) { m_tickMovie = tickMovie; }
     bool closeRequested() const { return m_closeRequested; }
 
 protected:
@@ -237,6 +239,7 @@ private:
     double m_now = 0;
     double m_nextTick = 0;
     bool m_closeRequested = false;
+    void (*m_tickMovie)() = nullptr;
 };
 
 // The UIController calls the scene makes
@@ -347,13 +350,17 @@ private:
     void InputActionOK(unsigned int iPad);
 };
 
-// UIScene::tick: the controls tick with the movie's frames
+// UIScene::tick: while the movie is ready to tick, the controls tick and then
+// the movie does. The previews turn on the same frames the carousel slides
+// on, and the slide's handleAnimationEnd lands before the scene's own tick
+// swaps the skins, so the frame that's drawn has both.
 void UIScene::tick() {
     if (m_nextTick == 0 || m_now - m_nextTick > 0.5) m_nextTick = m_now;
     while (m_now >= m_nextTick) {
         for (UIControl *control : m_controls) {
             control->tick();
         }
+        if (m_tickMovie) m_tickMovie();
         m_nextTick += kMovieFrameTime;
     }
 }
@@ -543,9 +550,10 @@ bool mcle_skin_select_is_open() {
 }
 
 // UIController::handleInput then the scene's tick
-void mcle_skin_select_frame(unsigned int buttons, unsigned int prevButtons, double now) {
+void mcle_skin_select_frame(unsigned int buttons, unsigned int prevButtons, double now, void (*tickMovie)()) {
     if (!g_scene || g_scene->closeRequested()) return;
     g_scene->setTime(now);
+    g_scene->setMovieTicker(tickMovie);
 
     for (int key = 0; key <= ACTION_MAX_MENU && !g_scene->closeRequested(); ++key) {
         unsigned int mapped = InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), key);
