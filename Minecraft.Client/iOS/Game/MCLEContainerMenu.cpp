@@ -14,6 +14,7 @@
 #include "MCLETutorialPopup.h"
 
 #include <cassert>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -274,6 +275,12 @@ void MCLEContainerScene::slideRight() { mcle_ui_call("", "SlideRight", {}); }
 
 MCLEContainerScene *mcle_container_current_scene() {
     return g_scene;
+}
+
+static std::atomic<bool> g_inventoryUpdated{false};
+
+void mcle_container_inventory_updated() {
+    g_inventoryUpdated = true;
 }
 
 bool MCLEContainerScene::allowRepeat(int key) {
@@ -874,6 +881,7 @@ void mcle_container_frame(unsigned int buttons, unsigned int prevButtons, double
     }
 
     if (!g_closeRequested) {
+        if (g_inventoryUpdated.exchange(false)) g_scene->handleInventoryUpdated();
         g_scene->tick(now);
         // UILayer::tick goes down the stack. The movies of the scenes under
         // the top one aren't up, what they'd make on them is dropped, so are

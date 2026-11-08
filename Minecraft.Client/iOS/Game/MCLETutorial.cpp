@@ -34,6 +34,9 @@
 #include "../../../upstream/Minecraft.World/UpdateGameRuleProgressPacket.h"
 #include "../../../upstream/Minecraft.World/PlayerInfoPacket.h"
 #include "../../../upstream/Minecraft.World/GameEventPacket.h"
+#include "../../../upstream/Minecraft.World/ContainerSetSlotPacket.h"
+#include "../../../upstream/Minecraft.World/ContainerSetContentPacket.h"
+#include "../../../upstream/Minecraft.World/net.minecraft.world.inventory.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
 #include "../../../upstream/Minecraft.Client/LocalPlayer.h"
@@ -293,10 +296,10 @@ void mcle_local_player_on_crafted(Player *player, std::shared_ptr<ItemInstance> 
     g_tutorial->onCrafted(item);
 }
 
-// LocalPlayer::handleCollectItem's tutorial part
+// LocalPlayer::handleCollectItem
 void mcle_local_player_collect_item(Player *player, std::shared_ptr<ItemInstance> item) {
-    if (!g_tutorial || player == nullptr || player != localPlayer().get()) return;
-    if (item != nullptr) {
+    if (player == nullptr || player != localPlayer().get()) return;
+    if (g_tutorial && item != nullptr) {
         unsigned int itemCountAnyAux = 0;
         unsigned int itemCountThisAux = 0;
         for (unsigned int k = 0; k < player->inventory->items.length; ++k) {
@@ -315,7 +318,29 @@ void mcle_local_player_collect_item(Player *player, std::shared_ptr<ItemInstance
         }
         g_tutorial->onTake(item, itemCountAnyAux, itemCountThisAux);
     }
+    // if(ui.IsContainerMenuDisplayed(m_iPad)) ui.HandleInventoryUpdated(m_iPad)
+    mcle_container_inventory_updated();
 }
+
+namespace {
+
+// Whether the client's copy of this slot is the player's inventory, so
+// setting it goes through Inventory::setItem or setCarried, which call
+// handleCollectItem. The crafting grid and the other containers don't.
+bool packetSlotIsInventory(const std::shared_ptr<ServerPlayer> &player, int containerId, int slot) {
+    if (containerId == AbstractContainerMenu::CONTAINER_ID_CARRIED) return true;
+    AbstractContainerMenu *menu = nullptr;
+    if (containerId == AbstractContainerMenu::CONTAINER_ID_INVENTORY) {
+        menu = player->inventoryMenu;
+    } else if (player->containerMenu != nullptr && containerId == player->containerMenu->containerId) {
+        menu = player->containerMenu;
+    }
+    if (menu == nullptr || slot < 0 || slot >= (int)menu->getSize()) return false;
+    Slot *s = menu->getSlot(slot);
+    return s != nullptr && s->container.get() == static_cast<Container *>(player->inventory.get());
+}
+
+} // namespace
 
 namespace {
 
@@ -354,6 +379,24 @@ void mcle_tutorial_local_player_packet(std::shared_ptr<Packet> packet) {
             std::dynamic_pointer_cast<UpdateGameRuleProgressPacket>(packet)) {
         handleUpdateGameRuleProgressPacket(progress);
         saveProfile();
+        return;
+    }
+    // handleContainerSetSlot and handleContainerContent set the client's
+    // inventory, and Inventory::setItem / setCarried tell the LocalPlayer.
+    // The inventory here is already the server's, only the call is left.
+    if (std::shared_ptr<ContainerSetSlotPacket> set = std::dynamic_pointer_cast<ContainerSetSlotPacket>(packet)) {
+        if (player && packetSlotIsInventory(player, set->containerId, set->slot))
+            mcle_local_player_collect_item(player.get(), set->item);
+        return;
+    }
+    if (std::shared_ptr<ContainerSetContentPacket> content =
+            std::dynamic_pointer_cast<ContainerSetContentPacket>(packet)) {
+        if (player) {
+            for (unsigned int i = 0; i < content->items.length; ++i) {
+                if (packetSlotIsInventory(player, content->containerId, (int)i))
+                    mcle_local_player_collect_item(player.get(), content->items[i]);
+            }
+        }
         return;
     }
     if (!g_tutorial || !player) return;

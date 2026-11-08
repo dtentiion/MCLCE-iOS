@@ -206,6 +206,9 @@ public:
         handleTick();
     }
 
+    // UIScene_TradingMenu::handleInventoryUpdated
+    void handleInventoryUpdated() override { HandleInventoryUpdated(); }
+
     // The tutorial goes back to its state before the menu, and the client's
     // closeContainer() is the server's handleContainerClose, doCloseContainer()
     void handleDestroy() override {

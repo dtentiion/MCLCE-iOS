@@ -321,6 +321,9 @@ public:
         }
     }
 
+    // UIScene_CraftingMenu::handleInventoryUpdated
+    void handleInventoryUpdated() override { HandleInventoryUpdated(); }
+
     // The tutorial goes back to its state before the menu. As for the
     // inventory, the client's closeContainer() is the server's
     // doCloseContainer() here.

@@ -66,7 +66,14 @@ public:
     // after a scene navigated to over this one has gone
     virtual const char *movieName() { return ""; }
     virtual void reloadMovie() {}
+
+    // HandleMessage(eUIMessage_InventoryUpdated)
+    virtual void handleInventoryUpdated() {}
 };
+
+// UIController::HandleInventoryUpdated, from any thread. The scene that's
+// up gets it on its next tick.
+void mcle_container_inventory_updated();
 
 // The UIScene a scene is to the tutorial, the one it gives
 // Tutorial::changeTutorialState and the popup hands back
