@@ -350,7 +350,9 @@ struct C4JRenderStub {
     // as LoadTextureData had). Dropped so chunk display lists actually
     // route through mcle_glbridge_call_list.
     template<class... A> bool   CBuffCallMultiple(A...)       { return false; }
-    template<class... A> void   CBuffDeferredModeStart(A...)  {}
+    // Near chunk rebuilds held back and swapped in together
+    inline void CBuffDeferredModeStart();
+    inline void CBuffDeferredModeEnd();
     template<class... A> void   CBuffLockStaticCreations(A...) {}
     template<class... A> int    CBuffSize(A...)               { return 0; }
     template<class... A> int    CBuffCreate(A...)             { return 0; }
@@ -489,6 +491,14 @@ inline bool C4JRenderStub::CBuffCallCutOut(int list, bool /*first*/) {
 extern "C" void mcle_glbridge_release_lists(int id, int range);
 inline void C4JRenderStub::CBuffClear(int list) {
     mcle_glbridge_release_lists(list, 1);
+}
+extern "C" void mcle_glbridge_deferred_lists_start(void);
+extern "C" void mcle_glbridge_deferred_lists_end(void);
+inline void C4JRenderStub::CBuffDeferredModeStart() {
+    mcle_glbridge_deferred_lists_start();
+}
+inline void C4JRenderStub::CBuffDeferredModeEnd() {
+    mcle_glbridge_deferred_lists_end();
 }
 // Now that C4JRender is a known type (alias to C4JRenderStub), pull
 // in the iOS 4J_Render.h header which declares

@@ -42,6 +42,8 @@ __attribute__((weak)) extern "C" void mcle_glbridge_begin_list(int /*id*/, int /
 __attribute__((weak)) extern "C" void mcle_glbridge_end_list(void)                       {}
 __attribute__((weak)) extern "C" void mcle_glbridge_call_list(int /*id*/)                {}
 __attribute__((weak)) extern "C" void mcle_glbridge_release_lists(int /*id*/, int /*range*/) {}
+__attribute__((weak)) extern "C" void mcle_glbridge_deferred_lists_start(void)           {}
+__attribute__((weak)) extern "C" void mcle_glbridge_deferred_lists_end(void)             {}
 
 // Weak fallbacks for the matrix bridge.
 __attribute__((weak)) extern "C" void mcle_glbridge_matrix_mode(int /*mode*/)            {}

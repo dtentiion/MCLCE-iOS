@@ -105,6 +105,13 @@ thread_local DisplayList              g_recording_buffer;
 // Texture bound inside the list being compiled (GL_COMPILE records the
 // bind instead of doing it)
 thread_local unsigned int             g_recording_tex = 0;
+// C4JRender::CBuffDeferredModeStart / End. The 4J renderer keeps the
+// buffers a context finishes while deferred and swaps them all in at the
+// end, so the near chunks updateDirtyChunks rebuilds as one group show up
+// in the same frame, with no holes between a chunk and its neighbours.
+// Per thread, like the renderer's contexts.
+thread_local bool                     g_deferred_lists_on = false;
+thread_local std::vector<std::pair<int, DisplayList>> g_deferred_lists;
 std::atomic<int>                      g_next_list_id{1};
 
 // Per-vertex stride in bytes. Tesselator's _array stores 8 ints / 32 bytes
@@ -2766,7 +2773,9 @@ extern "C" void mcle_glbridge_end_list(void) {
     // Splice the per-thread recording buffer into the shared map under
     // a single exclusive lock. Hold time scales with one move-assign
     // not with the number of DrawCmds.
-    {
+    if (g_deferred_lists_on) {
+        g_deferred_lists.emplace_back(id, std::move(g_recording_buffer));
+    } else {
         std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
         g_lists[id] = std::move(g_recording_buffer);
     }
@@ -2836,6 +2845,22 @@ extern "C" void mcle_glbridge_call_list_stats_ext(unsigned long *hits_low,
 extern "C" void mcle_glbridge_release_lists(int id, int range) {
     std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
     for (int i = 0; i < range; i++) g_lists.erase(id + i);
+}
+
+extern "C" void mcle_glbridge_deferred_lists_start(void) {
+    g_deferred_lists_on = true;
+}
+
+// Every list held back goes in under one lock, a later one for the same
+// id over an earlier one
+extern "C" void mcle_glbridge_deferred_lists_end(void) {
+    if (!g_deferred_lists_on) return;
+    g_deferred_lists_on = false;
+    {
+        std::unique_lock<std::shared_mutex> _lk(g_lists_mu);
+        for (auto &held : g_deferred_lists) g_lists[held.first] = std::move(held.second);
+    }
+    g_deferred_lists.clear();
 }
 
 // Number of recorded display lists (to correlate with

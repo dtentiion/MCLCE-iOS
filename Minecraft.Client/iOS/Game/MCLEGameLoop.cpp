@@ -3104,6 +3104,8 @@ static void *mcle_chunk_update_thread_loop(void *) {
                         count++;
                     } while (shouldContinue && count < MAX_DEFERRED_UPDATES);
                 } catch (...) {}
+                // The near chunks that were rebuilt as one group show together
+                RenderManager.CBuffDeferredModeEnd();
                 try { g_levelRenderer->fullyFlagRenderableTileEntitiesToBeRemoved(); } catch (...) {}
                 mcle_delete_reassigned_storage();
                 AABB::resetPool();
