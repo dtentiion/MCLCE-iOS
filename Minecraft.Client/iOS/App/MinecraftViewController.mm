@@ -4454,6 +4454,9 @@ static void MCLELoadingHoldPause(bool paused) {
     extern PlayerHandle* g_ruffle_player;
     if (!g_ruffle_player) return;
     [self attachMenuScenery];
+    // m_controlTimer.setVisible(false): the spinner is only for
+    // ConnectingProgress, here it would sit over the bar
+    MCLESetPathVisible(@"Timer", NO);
     MCLECallPath(@"Confirm", @"Init", @[MCLEStr(IDS_CONFIRM_OK), @0]);
     MCLESetPathVisible(@"Confirm", NO);
     MCLECallPath(@"ProgressBar", @"Init", @[@""]);
@@ -4994,6 +4997,8 @@ static void MCLEConnectingHoldStart(void) {
     MCLECallPath(@"Title", @"SetLabel", @[title]);
     MCLESetPathVisible(@"ProgressBar", NO);
     MCLESetPathVisible(@"Tip", NO);
+    // UIScene_ConnectingProgress leaves the movie's Timer spinning
+    MCLESetPathVisible(@"Timer", YES);
     g_connecting_hold = false;
     if (!respawn) MCLEConnectingHoldStart();
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 1);
