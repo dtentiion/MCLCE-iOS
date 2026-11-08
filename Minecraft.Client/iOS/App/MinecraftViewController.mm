@@ -4406,6 +4406,15 @@ static int g_progress_title = -1;
 static int g_progress_status = -1;
 static CFTimeInterval g_progress_tip_time = 0;
 
+// UIControl_Progress::setProgress. The scene's bar runs from 0 to 100 and
+// the movie wants how far along it is from 0 to 1, a percent sent as it
+// is fills the bar at 1%.
+static void MCLEFullscreenProgressSetBar(int current) {
+    const int barMin = 0, barMax = 100;
+    const double percent = (double)(current - barMin) / (barMax - barMin);
+    MCLECallPath(@"ProgressBar", @"setProgress", @[@(percent)]);
+}
+
 static NSString* MCLETipHTML(void) {
     // FullscreenProgress wraps each tip like this (eHTMLColor_White)
     return [NSString stringWithFormat:@"<font color=\"#ffffffff\"><p align=center>%@</p>",
@@ -5065,7 +5074,7 @@ static void MCLEConnectingHoldStart(void) {
     if (pct < 0) pct = 0;
     if (pct != g_progress_pct) {
         g_progress_pct = pct;
-        MCLECallPath(@"ProgressBar", @"setProgress", @[@(pct)]);
+        MCLEFullscreenProgressSetBar(pct);
     }
     if (title >= 0 && title != g_progress_title) {
         g_progress_title = title;
@@ -5186,7 +5195,7 @@ static void MCLEConnectingHoldStart(void) {
     }
     if (pct != g_progress_pct) {
         g_progress_pct = pct;
-        MCLECallPath(@"ProgressBar", @"setProgress", @[@(pct)]);
+        MCLEFullscreenProgressSetBar(pct);
     }
     MCLEProgressTipTick();
 }
