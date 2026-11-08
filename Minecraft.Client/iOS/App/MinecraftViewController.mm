@@ -5583,6 +5583,13 @@ static void MCLESkinSelectTickMovie(void) {
     // can be rewound to its pre-dialog matrix on the way out.
     ruffle_ios_player_snapshot_xui_matrices(g_ruffle_player);
 
+    // UIComponent_Panorama ticks its own movie, making the message box
+    // takes none of its frames. The components are held still for the
+    // frames the box takes to build, or the panorama's timeline runs on
+    // under its restored matrix and skips ahead on the next frame. The box
+    // goes on after this, so it isn't held.
+    ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 0);
+
     int rc = ruffle_ios_add_sibling_swf_to_root(
         g_ruffle_player,
         (const uint8_t*)data.bytes, data.length,
@@ -5592,17 +5599,15 @@ static void MCLESkinSelectTickMovie(void) {
 
     // 30-tick headless burst so the sibling's preload + ABC class
     // construct + first-frame placement finish before its
-    // AS3 is driven. Don't freeze siblings here: set_xui_siblings_playing(0)
-    // would also freeze the just-attached MessageBox, and it needs
-    // those exact frames to advance from preloaded to constructed.
-    // matricesRestore at the bottom of this method wipes any drift
-    // on the other siblings.
+    // AS3 is driven. The other siblings were held before the box was
+    // added, so the box itself still gets these frames.
     for (int i = 0; i < 30; ++i) {
         ruffle_ios_player_tick_headless(g_ruffle_player, 1.0f / 60.0f);
     }
 
     [self populateMessageBoxSibling];
 
+    ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 1);
     ruffle_ios_player_restore_xui_matrices(g_ruffle_player);
 
     // Swap the bottom-strip tooltips to MessageBox's pair
