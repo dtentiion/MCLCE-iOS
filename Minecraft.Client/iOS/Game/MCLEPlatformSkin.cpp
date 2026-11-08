@@ -10,31 +10,31 @@
 
 namespace {
 
-struct Tag {
+struct SwfTag {
     unsigned code;
     size_t start; // header
     size_t body;
     size_t len;
 };
 
-struct Swf {
+struct SwfFile {
     std::vector<unsigned char> d;
     size_t first = 0;
-    std::vector<Tag> tags;
+    std::vector<SwfTag> tags;
     std::unordered_map<unsigned, size_t> chars; // char id -> tag index
     std::unordered_map<std::string, unsigned> classes;
 };
 
-unsigned u16(const std::vector<unsigned char>& d, size_t p) { return d[p] | (d[p + 1] << 8); }
-unsigned u32(const std::vector<unsigned char>& d, size_t p) {
+unsigned readU16(const std::vector<unsigned char>& d, size_t p) { return d[p] | (d[p + 1] << 8); }
+unsigned readU32(const std::vector<unsigned char>& d, size_t p) {
     return d[p] | (d[p + 1] << 8) | (d[p + 2] << 16) | ((unsigned)d[p + 3] << 24);
 }
 
-bool isBitmap(unsigned code) {
+bool isBitmapTag(unsigned code) {
     return code == 6 || code == 20 || code == 21 || code == 35 || code == 36 || code == 90;
 }
 
-bool isDefinition(unsigned code) {
+bool isDefinitionTag(unsigned code) {
     switch (code) {
     case 2: case 6: case 7: case 10: case 11: case 20: case 21: case 22: case 32:
     case 33: case 34: case 35: case 36: case 37: case 39: case 46: case 48:
@@ -44,12 +44,12 @@ bool isDefinition(unsigned code) {
     return false;
 }
 
-bool parse(const std::vector<unsigned char>& in, Swf& s) {
+bool parseSwf(const std::vector<unsigned char>& in, SwfFile& s) {
     if (in.size() < 8) return false;
     if (in[0] == 'F' && in[1] == 'W' && in[2] == 'S') {
         s.d = in;
     } else if (in[0] == 'C' && in[1] == 'W' && in[2] == 'S') {
-        uLongf size = u32(in, 4);
+        uLongf size = readU32(in, 4);
         if (size < 8) return false;
         s.d.assign(in.begin(), in.begin() + 8);
         s.d.resize(size);
@@ -64,26 +64,26 @@ bool parse(const std::vector<unsigned char>& in, Swf& s) {
     size_t rectBytes = (5 + 4 * (d[8] >> 3) + 7) / 8;
     size_t pos = 8 + rectBytes + 4;
     while (pos + 2 <= d.size()) {
-        Tag t;
+        SwfTag t;
         t.start = pos;
-        unsigned h = u16(d, pos);
+        unsigned h = readU16(d, pos);
         pos += 2;
         t.code = h >> 6;
         t.len = h & 63;
         if (t.len == 63) {
             if (pos + 4 > d.size()) return false;
-            t.len = u32(d, pos);
+            t.len = readU32(d, pos);
             pos += 4;
         }
         t.body = pos;
         if (pos + t.len > d.size()) return false;
         pos += t.len;
-        if (isDefinition(t.code) && t.len >= 2) s.chars[u16(d, t.body)] = s.tags.size();
+        if (isDefinitionTag(t.code) && t.len >= 2) s.chars[readU16(d, t.body)] = s.tags.size();
         if (t.code == 76 && t.len >= 2) { // SymbolClass
-            unsigned n = u16(d, t.body);
+            unsigned n = readU16(d, t.body);
             size_t q = t.body + 2, end = t.body + t.len;
             for (unsigned i = 0; i < n && q + 2 < end; ++i) {
-                unsigned id = u16(d, q);
+                unsigned id = readU16(d, q);
                 q += 2;
                 size_t e = q;
                 while (e < end && d[e]) ++e;
@@ -99,16 +99,16 @@ bool parse(const std::vector<unsigned char>& in, Swf& s) {
 }
 
 // The bitmap tag behind a class that is just a bitmap
-const Tag* classBitmap(const Swf& s, const char* name) {
+const SwfTag* classBitmap(const SwfFile& s, const char* name) {
     auto c = s.classes.find(name);
     if (c == s.classes.end()) return nullptr;
     auto t = s.chars.find(c->second);
     if (t == s.chars.end()) return nullptr;
-    const Tag& tag = s.tags[t->second];
-    return isBitmap(tag.code) ? &tag : nullptr;
+    const SwfTag& tag = s.tags[t->second];
+    return isBitmapTag(tag.code) ? &tag : nullptr;
 }
 
-void putTag(std::vector<unsigned char>& out, unsigned code, const unsigned char* body, size_t len) {
+void writeTag(std::vector<unsigned char>& out, unsigned code, const unsigned char* body, size_t len) {
     unsigned h = (code << 6) | 63;
     out.push_back(h & 0xFF);
     out.push_back(h >> 8);
@@ -121,17 +121,17 @@ void putTag(std::vector<unsigned char>& out, unsigned code, const unsigned char*
 bool mcle_merge_platform_skin(const std::vector<unsigned char>& orbis,
                               const std::vector<unsigned char>& win,
                               std::vector<unsigned char>& out) {
-    Swf o, w;
-    if (!parse(orbis, o) || !parse(win, w)) return false;
+    SwfFile o, w;
+    if (!parseSwf(orbis, o) || !parseSwf(win, w)) return false;
     // Logo is a sprite around MenuTitle in both, so MenuTitle covers it
     static const char* kFromWin[] = {
         "MenuTitle", "MenuTitleSmall", "CreditBackground", "Panorama_Background_N",
         "Panorama_Background_S", "DefaultPack_Comparison", "TutorialExitScreenshot",
     };
-    std::unordered_map<size_t, const Tag*> replace; // orbis tag index -> win tag
+    std::unordered_map<size_t, const SwfTag*> replace; // orbis tag index -> win tag
     for (const char* name : kFromWin) {
-        const Tag* from = classBitmap(w, name);
-        const Tag* to = classBitmap(o, name);
+        const SwfTag* from = classBitmap(w, name);
+        const SwfTag* to = classBitmap(o, name);
         // DefineBits needs the file's own JPEGTables, so it can't move
         if (!from || !to || from->code == 6) continue;
         replace[to - o.tags.data()] = from;
@@ -140,18 +140,18 @@ bool mcle_merge_platform_skin(const std::vector<unsigned char>& orbis,
 
     std::vector<unsigned char> body(o.d.begin(), o.d.begin() + o.first);
     for (size_t i = 0; i < o.tags.size(); ++i) {
-        const Tag& t = o.tags[i];
+        const SwfTag& t = o.tags[i];
         auto r = replace.find(i);
         if (r == replace.end()) {
             body.insert(body.end(), o.d.begin() + t.start, o.d.begin() + t.body + t.len);
             continue;
         }
         // Windows64's bitmap under the PS4 skin's character id
-        const Tag& from = *r->second;
+        const SwfTag& from = *r->second;
         std::vector<unsigned char> b(w.d.begin() + from.body, w.d.begin() + from.body + from.len);
         b[0] = o.d[t.body];
         b[1] = o.d[t.body + 1];
-        putTag(body, from.code, b.data(), b.size());
+        writeTag(body, from.code, b.data(), b.size());
     }
 
     uLongf packed = compressBound(body.size() - 8);
