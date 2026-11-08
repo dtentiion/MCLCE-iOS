@@ -5475,8 +5475,8 @@ static void MCLEConnectingHoldStart(void) {
     mcle_hud_custom_draw(NULL, 0);
 }
 
-// IggyPlayerTickRS from the skin select scene's UIScene::tick: what the scene
-// has made so far goes to the movie, then the movie runs one frame
+// IggyPlayerTickRS from the skin select scene's UIScene::tick: the calls the
+// scene has queued go to the movie, then the movie runs one frame
 static void MCLESkinSelectTickMovie(void) {
     extern PlayerHandle* g_ruffle_player;
     MCLEContainerApplyOps();
@@ -5583,11 +5583,11 @@ static void MCLESkinSelectTickMovie(void) {
     // can be rewound to its pre-dialog matrix on the way out.
     ruffle_ios_player_snapshot_xui_matrices(g_ruffle_player);
 
-    // UIComponent_Panorama ticks its own movie, making the message box
-    // takes none of its frames. The components are held still for the
-    // frames the box takes to build, or the panorama's timeline runs on
-    // under its restored matrix and skips ahead on the next frame. The box
-    // goes on after this, so it isn't held.
+    // UIComponent_Panorama ticks its own movie, so building the message box
+    // takes none of its frames. The components are held while the box
+    // builds, or the panorama's timeline would run on under its restored
+    // matrix and skip ahead on the next frame. The box is added after this,
+    // so it isn't held.
     ruffle_ios_player_set_xui_siblings_playing(g_ruffle_player, 0);
 
     int rc = ruffle_ios_add_sibling_swf_to_root(
