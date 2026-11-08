@@ -24,6 +24,7 @@
 #include "../Game/MCLEDLC.h"
 #include "../Game/MCLEStartGame.h"
 #include "../Game/MCLETexturePacks.h"
+#include "../Game/MCLEPlatformSkin.h"
 #include "../../../upstream/Minecraft.Client/Windows64Media/strings.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Xbox_BuildVer.h"
 
@@ -1895,12 +1896,25 @@ static void MCLEReloadSkinLibraries(bool platformChanged = false) {
         @[ @"skinHDTooltips.swf", @"skinHDTooltips.swf" ],
         @[ @"skinHD.swf", @"skinHD.swf" ],
     ];
+    // A pack's own Windows64 platform skin under the PS4 one's buttons
+    bool (^packPlatformSkin)(NSString*, std::vector<unsigned char>&) =
+        ^bool(NSString* skinPath, std::vector<unsigned char>& out) {
+        if (![skinPath containsString:@"Orbis"]) return false;
+        NSString* winName = [skinPath stringByReplacingOccurrencesOfString:@"Orbis" withString:@"Win"];
+        std::vector<unsigned char> win;
+        if (!mcle_texture_pack_archive_file(MCLEWideString(winName), win)) return false;
+        NSData* orbis = [NSData dataWithContentsOfFile:[docs stringByAppendingPathComponent:skinPath]];
+        if (!orbis.length) return false;
+        const unsigned char* p = static_cast<const unsigned char*>(orbis.bytes);
+        return mcle_merge_platform_skin(std::vector<unsigned char>(p, p + orbis.length), win, out);
+    };
     static NSMutableSet<NSString*>* fromPack = [NSMutableSet set];
     for (NSArray<NSString*>* skin in skins) {
         NSString* skinPath = skin[0];
         NSString* skinName = skin[1];
         std::vector<unsigned char> bytes;
-        const bool packSkin = mcle_texture_pack_archive_file(MCLEWideString(skinPath), bytes);
+        const bool packSkin = mcle_texture_pack_archive_file(MCLEWideString(skinPath), bytes) ||
+                              packPlatformSkin(skinPath, bytes);
         NSString* file = [docs stringByAppendingPathComponent:skinName];
         if (!packSkin) {
             const bool platform = platformChanged && [skinName hasPrefix:@"platformskin"];
@@ -2022,10 +2036,37 @@ static int MCLEPadIsPlayStation(void) {
                 [candidate writeToFile:markerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 break;
             }
-            if ([current isEqualToString:candidate] && [fm fileExistsAtPath:aliasPath]) break;
+            // The PS4 skin keeps only its buttons, the rest is the Windows64
+            // skin's (its title says PlayStation 4 Edition)
+            NSString* winPath = [candidate containsString:@"Orbis"]
+                ? [docs stringByAppendingPathComponent:
+                      [candidate stringByReplacingOccurrencesOfString:@"Orbis" withString:@"Win"]]
+                : nil;
+            if (winPath && ![fm fileExistsAtPath:winPath]) winPath = nil;
+            NSString* mergedPath = [aliasPath stringByAppendingString:@".win"];
+            if ([current isEqualToString:candidate] && [fm fileExistsAtPath:aliasPath] &&
+                (!winPath || [fm fileExistsAtPath:mergedPath])) break;
             [fm removeItemAtPath:aliasPath error:nil];
+            [fm removeItemAtPath:mergedPath error:nil];
             NSError* err = nil;
-            if ([fm copyItemAtPath:srcPath toPath:aliasPath error:&err]) {
+            BOOL made = NO;
+            if (winPath) {
+                NSData* orbis = [NSData dataWithContentsOfFile:srcPath];
+                NSData* win = [NSData dataWithContentsOfFile:winPath];
+                const unsigned char* o = static_cast<const unsigned char*>(orbis.bytes);
+                const unsigned char* w = static_cast<const unsigned char*>(win.bytes);
+                std::vector<unsigned char> merged;
+                if (orbis.length && win.length &&
+                    mcle_merge_platform_skin(std::vector<unsigned char>(o, o + orbis.length),
+                                             std::vector<unsigned char>(w, w + win.length), merged)) {
+                    made = [[NSData dataWithBytes:merged.data() length:merged.size()]
+                               writeToFile:aliasPath atomically:YES];
+                    if (made) [winPath.lastPathComponent writeToFile:mergedPath atomically:YES
+                                                            encoding:NSUTF8StringEncoding error:nil];
+                }
+            }
+            if (!made) made = [fm copyItemAtPath:srcPath toPath:aliasPath error:&err];
+            if (made) {
                 [candidate writeToFile:markerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 NSLog(@"[platformskin] aliased %@ -> %@", candidate, pairs[i].alias);
                 changed = YES;

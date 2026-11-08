@@ -41,6 +41,7 @@ set(MCLE_GAME_SOURCES
   MCLEDLC.cpp
   MCLEStorageDLC.cpp
   MCLETexturePacks.cpp
+  MCLEPlatformSkin.cpp
   MCLE_iOS_MachHandler.cpp
 )
 
