@@ -1563,6 +1563,10 @@ void initImpl() {
         } catch (...) {
             MCLE_LOG("mcle_game_init: chunkMap->add threw unknown");
         }
+
+        // PlayerList::placeNewPlayer: the player listens to its own inventory
+        // menu, which is how its slot changes reach the client
+        g_player->initMenu();
     }
 
     // PlayerList::updatePlayerGameMode: a new player takes the level's game type
