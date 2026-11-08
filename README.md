@@ -5,63 +5,72 @@
 [![Downloads](https://img.shields.io/github/downloads/dtentiion/MCLCE-iOS/total?color=6cc644&label=downloads)](https://github.com/dtentiion/MCLCE-iOS/releases)
 [![Stars](https://img.shields.io/github/stars/dtentiion/MCLCE-iOS?color=6cc644)](https://github.com/dtentiion/MCLCE-iOS/stargazers)
 
-Native iOS port of TU19 Legacy Console Edition. **Code only - no Minecraft game assets are included in or distributed with this repo. Users must supply their own.**
+Native iOS port of TU19 Legacy Console Edition. **There are no Minecraft game files in this repo, you must provide them.**
 
-**Status: menus working, gameplay code linked into the .ipa, simulation hook ticking on device.** The app launches to the real LCE main menu with the panorama, logo, music, and controller navigation all working. The full Help & Options / Settings tree walks. Underneath, the upstream gameplay simulation library (Entity, Level, LevelChunk, Player, Tile, TileEntity, Mob, LivingEntity, ItemInstance, Container, ServerLevel, PlayerList, MultiPlayerLevel and ~840 supporting files) is now linked into the binary. A bootstrap entry point fires from the render loop on launch and ticks once per frame, confirmed via live device log. The next phase constructs a real `Minecraft` instance and drives the tick against a loaded save. See [STATUS.md](STATUS.md) for the full breakdown.
+**It's playable!** All aspects of the game except multiplayer are working, including the full menu tree, HUD, inventory/crafting screens, survival/creative modes, the tutorial, the Nether and the End, saving and use of texture/skin packs. See [STATUS.md](STATUS.md) for more details and known issues.
 
-CI builds an `.ipa` on every push. Grab the latest from [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest).
+The most recent build is available on [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest), and will be updated on each commit to `main`.
 
-## Distribution variants
+## Further options
 
-This repo ports the TU19 Legacy Console Edition base. No game assets ship in this repo; users must supply their own. If you want a different LCE flavour, look for a sibling iOS repo:
+This builds the TU19 Legacy Console Edition base. If you're after a different version, there are other repos which build similar content:
 
-- **MCLCE-iOS** (this one): TU19 base, the canonical LCE codebase.
-- **NeoLegacy-iOS** (planned): community NeoLegacy fork once that branch is cut.
-- Other variants land as their upstream trees stabilise.
+- **MCLCE-iOS** (this one): TU19 base, the 'canonical' LCE code base.
+- **NeoLegacy-iOS** (planned): a community maintained version of NeoLegacy, once a branch has been created.
+- And other options, maybe.
 
-Pick the repo that matches the LCE flavour you want, grab the `.ipa` from its Releases page, sideload it.
+Select the appropriate repo, and download the resulting `.ipa` from its Releases page, and install via AltStore, Sideloadly, xtool or TrollStore.
 
-## What this is
+## What it is
 
-A straight native iOS build of the LCE codebase. No emulator, no Wine, no JIT tricks. Regular `.ipa` you sideload with AltStore, Sideloadly, xtool, or TrollStore.
+An (almost) direct port of the LCE code, with no emulation, Wine or other tricks. Just an ordinary `.ipa`.
 
-## Controls
+## How to play
 
-Controller only. Xbox, PlayStation, or any MFi gamepad. iOS 14 and up supports Xbox and PS controllers natively. On-screen touch controls aren't planned.
+Using a suitable MFi controller (Xbox or PlayStation, and any others should do) only. There are no input facilities for using the touchscreen.
 
-## Supported devices
+## Requirements
 
-- iPhone and iPad
-- iOS 15 or newer
-- Controller required
+- An iPhone (should work on an iPad, but this hasn't been tested)
+- iOS 14 or later
+- A controller
 
 ## How it's built
 
-The game is C++ with CMake, same as upstream. Since I only have a Windows machine, the actual iOS build runs on GitHub Actions macOS runners and the compiled `.ipa` gets published to Releases. See [.github/workflows/ios.yml](.github/workflows/ios.yml).
+It's written in C++ using CMake, like the original.
 
-If you want to build it yourself you need a Mac with Xcode 15+. On Windows you can fork the repo, push a branch, and grab the artifact from Actions.
+Since I don't have any other OSes to test on, the iOS build is done using GitHub Actions' available macOS runners, and the resulting .ipa is released via Releases. Further details in [.github/workflows/ios.yml](.github/workflows/ios.yml)
 
-Under the hood:
+### Building on your own
 
-- **UI:** the game's menus are all Flash (`.swf`). A custom [Ruffle](https://ruffle.rs/) fork runs them, with patches for the weirder things LCE's Flash authoring does. See `third_party/ruffle_ios/` and the fork at [dtentiion/ruffle](https://github.com/dtentiion/ruffle) (branch `mclce-ios-patches`).
-- **Audio:** [miniaudio](https://miniaud.io), same single-header library the console LCE uses in `SoundEngine.cpp`. Plays the stock `.ogg` tracks directly, no transcoding.
-- **Graphics:** wgpu via Ruffle, which routes through MetalANGLE on iOS.
-- **Controller:** Apple's GameController framework, translated to the Xbox-360-style bitmask the game's 4J input layer already expects.
+You'll need access to a Mac with Xcode 16 to build this. If you have a Windows machine you can still contribute by forking the repo, pushing a branch and retrieving the resulting build from Actions.
+
+### Components
+
+- the TU19 source, adapted to run on iOS, plus some additional shims to deal with the Windows and console versions
+- a Metal implementation of 4J's rendering API, which also handles the game's existing GL calls
+- the game's Flash (`.swf`) menus and other on-screen information, presented using a modified version of [Ruffle](https://ruffle.rs/), in `third_party/ruffle_ios/` and available at [dtentiion/ruffle](https://github.com/dtentiion/ruffle) (on the `mclce-ios-patches` branch)
+- audio via [miniaudio](https://miniaud.io), identical to what's used by the console version in `SoundEngine.cpp`, playing the included `.ogg` sound files
+- controller support via Apple's GameController framework, providing inputs consistent with the 4J input API expected by the game
 
 ## Installing
 
-See [INSTALL.md](INSTALL.md).
+Further details in [INSTALL.md](INSTALL.md)
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) and [STATUS.md](STATUS.md) for where things actually stand.
+See [ROADMAP.md](ROADMAP.md) and [STATUS.md](STATUS.md)
 
 ## Contributing
 
-If you know iOS, Metal, GL ES, or anything about LCE's Flash UI internals, help is very welcome. Open an issue before starting anything big so we don't duplicate work.
+Help is always appreciated, especially where your knowledge of iOS and/or Metal would be useful, or the inner-workings of the Flash UI used by the game. Please open an issue to discuss proposed work to avoid overlap.
 
-For general LCE porting conventions: parity-first with the TU19 Legacy Console Edition codebase, small focused commits, and no game assets in the repo.
+### General guidelines
+
+- strive to make changes equivalent to those in the TU19 Legacy Console Edition source
+- make small, discrete changes
+- don't include any game-related material in the repository
 
 ## Legal
 
-This project is an unofficial native iOS port of TU19 Legacy Console Edition. Minecraft is a trademark of Mojang AB / Microsoft. Not affiliated with, endorsed by, or connected to Mojang, Microsoft, or 4J Studios. **No Minecraft game assets are redistributed in this repo - users supply their own at runtime.**
+This is an unofficial port of TU19 Legacy Console Edition to native iOS. Minecraft is a trademark of Mojang AB / Microsoft. This project is not affiliated in any way at all, endorsed by, or connected to Mojang, Microsoft, or 4J Studios. **You have to provide your own game files, there are no game files supplied in this repository.**

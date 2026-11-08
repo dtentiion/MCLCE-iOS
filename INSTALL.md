@@ -1,85 +1,92 @@
 # Installing MCLCE-iOS
 
-Download the latest `Minecraft.LCE.ipa` from [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest). It gets rebuilt on every push. Then pick one of the methods below.
+You can download the latest `Minecraft.LCE.ipa` from [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest) - this is rebuilt on every push to `main`
+
+There are several ways to get this onto your device...
 
 ## AltStore
 
-Works on Windows and macOS. Requires a free Apple ID.
+This works on both Windows and macOS, and requires a free Apple ID
 
-1. Install AltServer on your computer from https://altstore.io
-2. Install the AltStore app on your iPhone/iPad
-3. Trust your device and sign in with an Apple ID inside AltStore
-4. Drag `Minecraft.LCE.ipa` into AltStore on your computer, or share it to AltStore from the Files app on your device
-5. AltStore signs and installs. Cert lasts 7 days; AltStore refreshes it automatically if you open the app at least once a week
+1. Get AltServer from https://altstore.io
+2. Get the AltStore app on your device
+3. Once installed, set up the app on your device using your Apple ID
+4. Either drag the `.ipa` onto AltServer, or use the Files app on your device to 'share' it to AltStore
+5. AltStore will sign and install it - this certificate is valid for 7 days, but AltStore will update it provided you use it at least once a week
 
 ## Sideloadly
 
-Works on Windows and macOS. Same basic idea as AltStore, different tooling.
+This also works on both Windows and macOS
 
-1. Download Sideloadly from https://sideloadly.io
-2. Plug in your iPhone with a USB cable
-3. Drag the `.ipa` into Sideloadly, sign in with your Apple ID, click Start
-4. Trust the developer profile on the device under Settings > General > VPN & Device Management
+1. Get Sideloadly from https://sideloadly.io
+2. Connect your device to your computer via USB
+3. Drag the `.ipa` onto Sideloadly, use your Apple ID to authenticate and click 'Start'
+4. On your device, go to Settings > General > VPN & Device Management and trust the relevant developer profile
 
 ## xtool (Linux / Windows)
 
-xtool is a cross-platform Xcode replacement. Useful if you don't want to install AltServer.
+Another option is xtool, which is a cross-platform alternative to Xcode
 
-1. Install xtool from https://github.com/xtool-org/xtool
-2. `xtool auth` to sign in with your Apple ID
-3. `xtool install Minecraft.LCE.ipa` with your device plugged in
+1. Get xtool from https://github.com/xtool-org/xtool
+2. Run `xtool auth` to authenticate using your Apple ID
+3. Run `xtool install Minecraft.LCE.ipa`, ensuring your device is connected
 
 ## TrollStore (supported iOS versions only)
 
-If your device is on an iOS version TrollStore supports (15.0 to 16.6.1, plus a few others at time of writing), TrollStore signs the .ipa permanently with no 7-day cert dance.
+Where your device is running an appropriate version of iOS (15.0 to 16.6.1, and a handful of others at the time of writing) you can use TrollStore to obtain a permanent certificate
 
-1. Have TrollStore installed (check https://ios.cfw.guide/installing-trollstore/ for your version)
-2. AirDrop the `.ipa` to your device or share it via Files
-3. Open in TrollStore and install
+1. Get TrollStore (see https://ios.cfw.guide/installing-trollstore/ for instructions relevant to your version)
+2. Either AirDrop the `.ipa` to your device, or use the Files app to 'share' it
+3. Open it within TrollStore and install
 
-## Providing your own LCE assets
+## Enable Developer Mode (iOS 16 and newer)
 
-The app cannot ship Minecraft content because it is copyrighted by Mojang. You provide your own:
+Where you're running iOS 16 or later, you'll be prompted to enable 'Developer Mode' the first time you launch such an app - you need to do this just once per device, and it isn't specific to this app
 
-1. On a PC, extract `MediaWindows64.arc` from your LCE install using [PCK Studio](https://github.com/LCERD/PCK-Studio) or our bundled `scripts/list-arc.py` helper.
-2. Copy every `.swf` from the extracted folder into a single directory. The app will look for them by name. The ones the menu tree currently uses include:
-   - `MainMenu1080.swf`, `HelpAndOptionsMenu1080.swf`, `SettingsMenu1080.swf`
-   - All five `Settings*Menu1080.swf` (Options, Audio, Control, Graphics, UI)
-   - `LoadOrJoinMenu1080.swf`, `HowToPlayMenu1080.swf`, `LeaderboardMenu1080.swf`, `DLCMainMenu1080.swf`, `SkinSelectMenu1080.swf`
-   - `MessageBox1080.swf`, `MenuBackground1080.swf`, `Panorama1080.swf`, `ToolTips1080.swf`, `ComponentLogo1080.swf`
-   - The base skin set: `skinHD.swf`, `skinHDGraphics.swf`, `skinHDLabels.swf`, plus `skinHDWin.swf` (this last one is what the controller-button tooltip glyphs come from on the Windows64 dump; the app aliases it as `platformskinHD.swf` automatically on first launch).
-3. On the iPhone, open the **Files** app.
-4. Navigate to **On My iPhone** then the **Minecraft LCE** folder (the app creates it the first time you launch).
-5. Drop the SWFs in.
-6. Relaunch the app. It looks in this folder on startup and uses whatever it finds.
+1. Go to Settings > Privacy & Security
+2. Scroll to the bottom and select 'Developer Mode'
+3. Toggle this to 'On', agreeing to the resulting reboot
+4. Upon returning, agree to enable Developer Mode again, and enter your passcode
+5. You should now be able to launch the application
 
-Missing SWFs degrade gracefully: a missing `Panorama1080.swf` just leaves the menu background blank, missing `ToolTips1080.swf` hides the bottom hint strip, etc. The minimum to see anything is `MainMenu1080.swf`.
+## Getting the game files
 
-## After the first install: enable Developer Mode
+You won't be able to include any files from the TU19 Windows64 build in the app, but you can copy some important ones from there.
 
-On iOS 16 and newer, the first time you open a sideloaded app the system will refuse and tell you "Developer Mode required". One-time toggle:
+1. Once you've launched the app, you should find its folder in the **Files** app, at **On My iPhone > Minecraft LCE**. All subsequent items should be added to this folder.
+2. From a PC, we'll need to extract `Common/Media/MediaWindows64.arc`:
+   ```
+   python scripts/list-arc.py Common/Media/MediaWindows64.arc --extract arc-out
+   ```
+   (alternatively, [PCK Studio](https://github.com/LCERD/PCK-Studio) will do the job) and add all the resulting files to the top of the app's folder.
+3. Add the following to the top of the app's folder too:
+   - `Mojang Font_7.ttf` and `Mojang Font_11.ttf` from `Common/Media/font`
+   - `Panorama_Background_N.png` and `Panorama_Background_S.png` from `Common/Media/Graphics`
+   - all the files in `music/music` (the menu music)
+   - `skinOrbis.swf` and `skinHDOrbis.swf` from `OrbisMedia/Media` (needed for the PlayStation button icons)
+4. Create a new 'UI' folder in the app's folder, and add all the files from `Windows64Media/Sound/Minecraft/UI` to it (these are the menu sounds).
+5. Add the following folders to the app's folder, retaining their current names:
+   - `Common/res` to `Common/res`
+   - `Windows64Media/DLC`, `Windows64Media/Sound` and `Windows64Media/Tutorial` to `Windows64Media`
+   - `music` to `music`
+6. Quit the app completely, then restart it.
 
-1. Settings -> Privacy & Security
-2. Scroll to the bottom, tap **Developer Mode**
-3. Flip it **On**, confirm the restart prompt
-4. After the phone reboots, confirm once more and enter your passcode
-5. Relaunch the app and it opens normally
+Skin and texture packs should be placed in `Windows64Media/DLC`, just as they would be on a normal Windows64 installation. The app will create its own `saves` folder and `settings.dat`.
 
-You only do this once per device. It is not specific to this app.
+## Common problems
 
-## Troubleshooting
+- 'Unable to install': the app was signed using a different Apple ID - redo this using the appropriate method
+- 'App is damaged': the `.ipa` file may have been incorrectly re-zipped. Obtain a fresh copy from Releases, not from a third party
+- 'Developer Mode required': see the relevant section above
+- Controller isn't working: you'll need to be running iOS 14 or later, and (in the case of an Xbox Series controller) update the controller's firmware using the Xbox Accessories app on Windows
+- Blank or incorrectly-displayed menus: one or more of the files mentioned in steps 2 or 3 may be missing
 
-- "Unable to install": the app has been signed for another Apple ID. Re-sign via the method you used.
-- "App is damaged": the .ipa may have been re-zipped with the wrong structure. Redownload from Actions artifacts, not from a third party repack.
-- "Developer Mode required": see the section above.
-- Controller does not appear: make sure you're on iOS 14 or newer. For Xbox Series pads, update the controller firmware via the Xbox Accessories app on a Windows machine once.
+## Obtaining the latest build from Windows
 
-## Fetching the latest build from Windows
-
-There is a helper script that pulls the newest CI artifact:
+There's a PowerShell script which will acquire the most recent CI build:
 
 ```powershell
 .\scripts\fetch-latest-ipa.ps1
 ```
 
-It uses the GitHub CLI. If you haven't authenticated yet, run `gh auth login` first.
+This uses the GitHub CLI, so if you've not already done so you'll need to authenticate by running `gh auth login`.
