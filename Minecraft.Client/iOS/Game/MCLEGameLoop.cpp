@@ -1606,7 +1606,10 @@ void initImpl() {
     // first tick runs entities=0, second tick runs entities=1 mid-init.
     g_initState = kStateTicking;
     g_loadStage = 2;
-    g_loadPercent = 0;
+    // _RunNetworkGame's "Finalizing..." wait sets the percent to
+    // GetJoiningReadyPercentage, which is 100 on the network stub, so the
+    // bar stays full instead of emptying for the rest of the load
+    g_loadPercent = 100;
     MCLE_LOG("mcle_game_init: 3 levels constructed, ticking enabled");
 
     // The Minecraft made at launch (mcle_minecraft_main), its world fields
