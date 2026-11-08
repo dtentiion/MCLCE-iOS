@@ -1371,7 +1371,7 @@ static void MCLEHudBossTick(void) {
             } else {
                 // ShowDragonHealth(false)
                 g_hud.showDragonHealth = false;
-                MCLECallPath(@"", @"ShowDragonHealth", @[@NO]);
+                MCLECallPath(@"", @"ShowDragonHealthBar", @[@NO]);
             }
         }
     } else {
@@ -1385,7 +1385,7 @@ static void MCLEHudBossTick(void) {
             NSString* label = [NSString stringWithUTF8String:name];
             MCLECallPath(@"", @"SetDragonLabel", @[label ?: @""]);
             g_hud.showDragonHealth = true;
-            MCLECallPath(@"", @"ShowDragonHealth", @[@YES]);
+            MCLECallPath(@"", @"ShowDragonHealthBar", @[@YES]);
         }
     }
 }
