@@ -4469,6 +4469,10 @@ static void MCLELoadingHoldPause(bool paused) {
     g_loading_hold_start = g_progress_tip_time;
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
+    // updateTooltips on gaining focus: no select until the thread is done,
+    // and none of these have a cancelText
+    const int none[11] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    MCLESetTooltips(none);
 }
 
 // FullscreenProgress completes with e_ProgressCompletion_CloseAllPlayersUIScenes,
