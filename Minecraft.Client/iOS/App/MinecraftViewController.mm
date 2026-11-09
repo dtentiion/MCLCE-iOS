@@ -2933,6 +2933,11 @@ static int MCLEPadIsPlayStation(void) {
     } else if ([swfName isEqualToString:@"DeathMenu1080.swf"]) {
         // UIScene_DeathMenu: Select only, B does nothing there
         ids[1] = -1;
+    } else if ([swfName isEqualToString:@"FullscreenProgress1080.swf"]) {
+        // UIScene_FullscreenProgress::updateTooltips: no select until the
+        // thread is done, and none of these have a cancelText
+        ids[0] = -1;
+        ids[1] = -1;
     } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
         // UIScene_PauseMenu::updateTooltips: the primary host of a full
         // game with saving on gets Change Storage Device on X (which
@@ -4494,10 +4499,6 @@ static void MCLELoadingHoldPause(bool paused) {
     g_loading_hold_start = g_progress_tip_time;
     self.menuButtonConfig = nil;
     self.menuFocusIndex = 0;
-    // updateTooltips on gaining focus: no select until the thread is done,
-    // and none of these have a cancelText
-    const int none[11] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-    MCLESetTooltips(none);
 }
 
 // FullscreenProgress completes with e_ProgressCompletion_CloseAllPlayersUIScenes,
