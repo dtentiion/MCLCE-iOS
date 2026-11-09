@@ -1739,7 +1739,15 @@ pub struct PlayerHandle {
     executor: std::cell::RefCell<NullExecutor>,
     // Monotonic count of executor.run() calls, for diagnostics.
     executor_runs: std::sync::atomic::AtomicU64,
+    // The layer over the game's custom draw layer and the object drawn on
+    // it, see Player::render_split. An empty path draws nothing there.
+    overlay: std::cell::RefCell<Option<OverlayBackend>>,
+    overlay_path: std::cell::RefCell<String>,
+    overlay_dirty: std::cell::Cell<bool>,
 }
+
+type OverlayBackend =
+    ruffle_render_wgpu::backend::WgpuRenderBackend<ruffle_render_wgpu::target::SwapChainTarget>;
 
 // Safety: the iOS app always invokes ruffle_ios_player_* functions from the
 // main UIKit thread (CADisplayLink callback). The Mutex on `player` handles
@@ -1753,7 +1761,79 @@ fn to_handle(p: Arc<Mutex<Player>>, executor: NullExecutor) -> *mut PlayerHandle
         player: p,
         executor: std::cell::RefCell::new(executor),
         executor_runs: std::sync::atomic::AtomicU64::new(0),
+        overlay: std::cell::RefCell::new(None),
+        overlay_path: std::cell::RefCell::new(String::new()),
+        overlay_dirty: std::cell::Cell::new(false),
     }))
+}
+
+/// A second CAMetalLayer, over the one the game does its custom draws in,
+/// for ruffle_ios_set_overlay_path. Same size as the player's own layer.
+/// 1 when it's set up.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_player_attach_overlay_layer(
+    h: *mut PlayerHandle,
+    layer_ptr: *mut std::ffi::c_void,
+) -> c_int {
+    use ruffle_render_wgpu::target::SwapChainTarget;
+    let Some(handle) = h.as_ref() else { return 0; };
+    if layer_ptr.is_null() {
+        return 0;
+    }
+    let Ok(mut p) = handle.player.lock() else { return 0; };
+    let renderer: &mut dyn std::any::Any = p.renderer_mut();
+    let Some(main) = renderer.downcast_mut::<OverlayBackend>() else { return 0; };
+    let descriptors = main.descriptors().clone();
+    let dims = ruffle_render::backend::RenderBackend::viewport_dimensions(main);
+    let surface = match descriptors
+        .wgpu_instance
+        .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer_ptr))
+    {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[ruffle_ios] overlay create_surface_unsafe: {e:?}");
+            return 0;
+        }
+    };
+    let target = SwapChainTarget::new(
+        surface,
+        &descriptors.adapter,
+        (dims.width.max(1), dims.height.max(1)),
+        &descriptors.device,
+    );
+    match OverlayBackend::new(descriptors, target) {
+        Ok(mut backend) => {
+            ruffle_render::backend::RenderBackend::set_viewport_dimensions(&mut backend, dims);
+            *handle.overlay.borrow_mut() = Some(backend);
+            handle.overlay_dirty.set(true);
+            1
+        }
+        Err(e) => {
+            eprintln!("[ruffle_ios] overlay WgpuRenderBackend::new: {e:?}");
+            0
+        }
+    }
+}
+
+/// The dotted path from the root clip of the object drawn on the overlay
+/// layer instead of with the rest of the movie. Empty for none.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_set_overlay_path(
+    h: *mut PlayerHandle,
+    path: *const u8,
+    path_len: usize,
+) {
+    let Some(handle) = h.as_ref() else { return; };
+    let path = if path.is_null() || path_len == 0 {
+        String::new()
+    } else {
+        String::from_utf8_lossy(std::slice::from_raw_parts(path, path_len)).into_owned()
+    };
+    let mut current = handle.overlay_path.borrow_mut();
+    if *current != path {
+        *current = path;
+        handle.overlay_dirty.set(true);
+    }
 }
 
 unsafe fn borrow_handle<'a>(raw: *mut PlayerHandle) -> Option<&'a PlayerHandle> {
@@ -2430,7 +2510,26 @@ pub unsafe extern "C" fn ruffle_ios_player_tick(raw: *mut PlayerHandle, dt_secon
         TICK_AFTER_TICK.fetch_add(1, Relaxed);
         TICK_AFTER_RUNFRAME.fetch_add(1, Relaxed);
         let post = p.current_frame().map(|n| n as i32).unwrap_or(-1);
-        p.render();
+        {
+            let mut overlay = handle.overlay.borrow_mut();
+            let path = handle.overlay_path.borrow();
+            match overlay.as_mut() {
+                Some(o) if !path.is_empty() => p.render_split(o, &path),
+                Some(o) => {
+                    p.render();
+                    // Clear what was last drawn there
+                    if handle.overlay_dirty.replace(false) {
+                        ruffle_render::backend::RenderBackend::submit_frame(
+                            o,
+                            swf::Color::from_rgba(0),
+                            ruffle_render::commands::CommandList::new(),
+                            vec![],
+                        );
+                    }
+                }
+                None => p.render(),
+            }
+        }
         TICK_AFTER_RENDER.fetch_add(1, Relaxed);
         (pre, post)
     };

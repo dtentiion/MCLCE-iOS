@@ -1812,6 +1812,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 @property (strong, nonatomic) MetalView* overlayView;
 // Above Ruffle: what Iggy's custom draw callbacks draw (hotbar items)
 @property (strong, nonatomic) MetalView* customDrawView;
+// Above the custom draws: the part of the movie that's over them
+@property (strong, nonatomic) MetalView* swfTopView;
 @property (strong, nonatomic) NSString* loadedSwfName;  // "MainMenu1080.swf" or "test_rect.swf (bundled)"
 @property (strong, nonatomic) NSString* fontStatus;     // "Mojangles7 ok (69k)" or "Mojangles7 missing"
 @property (nonatomic) uint32_t lastPadButtons;          // last seen 4J button bitmask, for edge detection
@@ -2238,6 +2240,17 @@ static int MCLEPadIsPlayStation(void) {
     self.customDrawView.userInteractionEnabled = NO;
     [self.view addSubview:self.customDrawView];
 
+    // What the movie has over its custom draw content, a container's cursor
+    // over the items in its slots
+    self.swfTopView = [[MetalView alloc] initWithFrame:frame];
+    self.swfTopView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.swfTopView.opaque = NO;
+    self.swfTopView.backgroundColor = UIColor.clearColor;
+    self.swfTopView.layer.opaque = NO;
+    self.swfTopView.userInteractionEnabled = NO;
+    [self.view addSubview:self.swfTopView];
+
     // Overlay label with build info + live controller state. Sits inside the
     // safe area so the Dynamic Island does not chew it up on newer iPhones.
     CGRect safeFrame = CGRectInset(frame, 24, 24);
@@ -2367,6 +2380,7 @@ static int MCLEPadIsPlayStation(void) {
     self.metalView.layer.contentsScale = scale;
     self.overlayView.layer.contentsScale = scale;
     self.customDrawView.layer.contentsScale = scale;
+    self.swfTopView.layer.contentsScale = scale;
 
     // Try to stand up a Ruffle wgpu player that owns this CAMetalLayer.
     // If it succeeds, every frame is driven by Ruffle. If it fails, it
@@ -2491,6 +2505,10 @@ static int MCLEPadIsPlayStation(void) {
                 fromDocs ? @"Documents" : @"bundled"];
             NSLog(@"[MinecraftVC] ruffle wgpu player = %p  (loaded %@)",
                   g_ruffle_player, self.loadedSwfName);
+            if (g_ruffle_player &&
+                !ruffle_ios_player_attach_overlay_layer(g_ruffle_player, (__bridge void*)self.swfTopView.layer)) {
+                NSLog(@"[MinecraftVC] no layer over the custom draws");
+            }
 
             // One-shot discovery dump. LCE SWFs are driven by the host calling
             // AS3 methods on named button instances (IggyPlayerCallMethodRS
@@ -4888,11 +4906,22 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     MCLEContainerApplyOps();
 }
 
+// UIScene_AbstractContainerMenu's cursor is over the slots, with the item
+// it carries under its pointer and text. The slot items are drawn on a layer
+// over the movie, so the cursor goes on the one over that.
+static void MCLESetContainerCursorOnTop(bool on) {
+    extern PlayerHandle* g_ruffle_player;
+    if (!g_ruffle_player) return;
+    static const char kCursor[] = "MainPanel.cursor";
+    ruffle_ios_set_overlay_path(g_ruffle_player, (const uint8_t*)kCursor, on ? strlen(kCursor) : 0);
+}
+
 // handleDestroy, back to the HUD unless another scene is taking over
 - (void)closeContainerMenu:(BOOL)backToGame {
     mcle_container_close();
     MCLEContainerApplyOps();
     g_world_container = false;
+    MCLESetContainerCursorOnTop(false);
     g_world_info = false;
     if (backToGame) [self enterWorldUI];
 }
@@ -4925,6 +4954,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     if (!g_ruffle_player) return;
     float px = 0, py = 0;
     if (mcle_container_pointer(&px, &py)) ruffle_ios_player_mouse_move_stage(g_ruffle_player, px, py);
+    MCLESetContainerCursorOnTop(true);
     ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
     // The crafting menus have around 70 slots
     RuffleIosCustomDrawRegion regions[128];

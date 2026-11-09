@@ -358,6 +358,13 @@ int           ruffle_ios_custom_draw_regions(PlayerHandle* h,
 // TutorialPopup1080.swf is driven through these like its own Iggy movie.
 int           ruffle_ios_sibling_custom_draw_regions(PlayerHandle* h, int depth,
                                                      RuffleIosCustomDrawRegion* out, size_t max);
+
+// A second CAMetalLayer, over the one the custom draws go in. The object at
+// the overlay path (dotted, from the root clip) is drawn there instead of
+// with the rest of the movie, so what a scene has over its custom draw
+// content stays over it. An empty path draws nothing there. 1 when set up.
+int           ruffle_ios_player_attach_overlay_layer(PlayerHandle* h, void* ca_metal_layer);
+void          ruffle_ios_set_overlay_path(PlayerHandle* h, const uint8_t* path, size_t path_len);
 int           ruffle_ios_call_sibling_path(PlayerHandle* h, int depth,
                                            const uint8_t* path, size_t path_len,
                                            const uint8_t* method, size_t method_len,
