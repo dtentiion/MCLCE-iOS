@@ -1,36 +1,40 @@
 # Contributing
 
-Thanks for having a look. This is a one-person hobby port at the moment, so the process is pretty informal.
+This is a one-person hobby project, so there aren't elaborate procedures in place - but there are some guidelines to follow.
 
-## What's worth working on
+## What should you work on?
 
-See [STATUS.md](STATUS.md) for the current "what builds, what doesn't" snapshot and [ROADMAP.md](ROADMAP.md) for the broader plan. The biggest unblockers right now:
+- items marked 'Known issues' in [STATUS.md](STATUS.md)
+- items marked 'Upcoming' in [ROADMAP.md](ROADMAP.md)
+- testing on an iPad, or other older iPhones / iOS releases, and raising an issue with results
 
-- Anything that helps the `-DENABLE_WORLD_PROBE=ON` target chew through more of upstream `Minecraft.World`. See the "World probe: current wall" section in STATUS.
-- Research into whether Iggy can be replaced by GameSWF (or Ruffle). Even a small proof of concept rendering one `.iggy` asset on iOS is extremely valuable.
-- A sketch Metal or GL ES renderer backend replacing the `4J_Render` stubs.
+And, crucially, raise an issue before doing anything substantial, to avoid duplication of effort.
 
 ## Ground rules
 
-- Maintain parity with TU19 Legacy Console Edition. This is a code-only port; no Minecraft game assets live in this repo and none should be added.
-- Don't commit Minecraft game assets. The port relies on user-supplied asset files at runtime.
-- Don't commit Apple signing material (`.p12`, `.mobileprovision`, `.p8`). The CI intentionally produces unsigned `.ipa` files.
-- Prefer small, focused commits over big sweeping ones. It is easier to bisect port regressions that way.
+- strive to maintain parity with TU19 - where things behave differently to Windows64, try to emulate what TU19 does, not implement new, different, functionality
+- don't include any minecraft game files in the repository - players provide these
+- don't include any apple signing information (eg .p12, .mobileprovision, .p8) - we deliberately build unsigned .ipa files via CI
 
-## Sending a change
+Small, well-focused changes are easier to identify the relevant code to isolate any problems - 'port bugs' are much more amenable to binary search than other types of issue.
 
-1. Fork, make a feature branch.
-2. Run the build locally if you can. Anyone with a Mac and Xcode can use the provided CMake presets. Otherwise push and let CI tell you.
-3. Open a PR against `main` with a short description of what you changed and why. Link to a STATUS section if the change unblocks something tracked there.
-4. Be patient. This is a side project.
+## How the code is structured
+
+- `upstream/` contains the TU19 source, via a submodule - don't modify this - if you need to make changes to some TU19 source which have implications for iOS, write a suitable script in `scripts/` (eg the existing `patch-*.py` scripts) which will be run by CI prior to building
+- `Minecraft.Client/iOS/` contains the code required to run the game on iOS - the app itself, the metal renderer, the code which ties the other components together, input / storage / sound facilities and the menu / hud
+- `third_party/ruffle_ios/` provides the interface to our modified version of ruffle, which renders the game's .swf based menus
+
+## Sending changes
+
+1. obtain a fork, and create a branch
+2. build - if you have a mac and xcode 16 you can use the relevant cmake presets, otherwise push the branch and obtain the resulting .ipa from actions on your fork
+3. test on a device, if possible
+4. submit a PR against `main`, indicating what you've done, and why
 
 ## Style
 
-- C++17 is fine. No need to restrict to C++14 unless a specific header demands it.
-- Match upstream style where you are editing upstream-derived code (tabs, CamelCase types, m_ prefixed members).
-- For new iOS platform code under `Minecraft.Client/iOS/`, modern Objective-C++ style with ARC is preferred.
-- Keep comments short and about the why, not the what. Dead code and commented-out blocks get removed.
+- where appropriate, follow the existing coding conventions in the affected areas (eg use tabs, CamelCase for types and variables, 'm_' prefixes for member variables)
+- new code in `Minecraft.Client/iOS/` should be written in C++17, or objective-c++
+- comments should indicate the rationale for any particular decision - don't comment out code you wish to remove, simply remove it
 
-## Licensing
-
-The iOS-specific code in `Minecraft.Client/iOS/` is yours to relicense under whatever upstream eventually decides on. Don't add an explicit license header to individual files yet; the project-wide license will be decided once things stabilize.
+There isn't at present a project wide licence - don't include licence markers on files at this time.

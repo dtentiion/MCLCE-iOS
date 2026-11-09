@@ -51,27 +51,16 @@ Where you're running iOS 16 or later, you'll be prompted to enable 'Developer Mo
 
 ## Getting the game files
 
-You won't be able to include any files from the TU19 Windows64 build in the app, but you can copy some important ones from there.
+There are no game files included - you'll need to grab them from another (working) copy of the TU19 Windows64 build.
 
-1. Once you've launched the app, you should find its folder in the **Files** app, at **On My iPhone > Minecraft LCE**. All subsequent items should be added to this folder.
-2. From a PC, we'll need to extract `Common/Media/MediaWindows64.arc`:
-   ```
-   python scripts/list-arc.py Common/Media/MediaWindows64.arc --extract arc-out
-   ```
-   (alternatively, [PCK Studio](https://github.com/LCERD/PCK-Studio) will do the job) and add all the resulting files to the top of the app's folder.
-3. Add the following to the top of the app's folder too:
-   - `Mojang Font_7.ttf` and `Mojang Font_11.ttf` from `Common/Media/font`
-   - `Panorama_Background_N.png` and `Panorama_Background_S.png` from `Common/Media/Graphics`
-   - all the files in `music/music` (the menu music)
-   - `skinOrbis.swf` and `skinHDOrbis.swf` from `OrbisMedia/Media` (needed for the PlayStation button icons)
-4. Create a new 'UI' folder in the app's folder, and add all the files from `Windows64Media/Sound/Minecraft/UI` to it (these are the menu sounds).
-5. Add the following folders to the app's folder, retaining their current names:
-   - `Common/res` to `Common/res`
-   - `Windows64Media/DLC`, `Windows64Media/Sound` and `Windows64Media/Tutorial` to `Windows64Media`
-   - `music` to `music`
-6. Quit the app completely, then restart it.
+1. Launch the app, which will create a folder for it in the **Files** app - **On My iPhone > Minecraft LCE**
+2. Copy the `Common`, `Windows64Media` and `music` folders from your Windows64 copy over to this location, preserving folder and file names
+3. If you wish to use different icons for the PlayStation buttons, copy `skinHDOrbis.swf` and `skinOrbis.swf` from `OrbisMedia/Media` in the TU19 source to `OrbisMedia/Media` in the app's folder - this isn't essential
+4. Make sure you've completely closed the app, then launch it again. Initial load will take slightly longer as it needs to unpack `MediaWindows64.arc`
 
-Skin and texture packs should be placed in `Windows64Media/DLC`, just as they would be on a normal Windows64 installation. The app will create its own `saves` folder and `settings.dat`.
+Skin/texture packs should be placed in `Windows64Media/DLC`, just as they would be for Windows64. Other files are ignored, and the app creates its own `saves` folder and `settings.dat` as appropriate.
+
+If you've set this up according to previous versions of these instructions, you shouldn't need to make any changes - existing files will be left untouched.
 
 ## Common problems
 
@@ -79,7 +68,7 @@ Skin and texture packs should be placed in `Windows64Media/DLC`, just as they wo
 - 'App is damaged': the `.ipa` file may have been incorrectly re-zipped. Obtain a fresh copy from Releases, not from a third party
 - 'Developer Mode required': see the relevant section above
 - Controller isn't working: you'll need to be running iOS 14 or later, and (in the case of an Xbox Series controller) update the controller's firmware using the Xbox Accessories app on Windows
-- Blank or incorrectly-displayed menus: one or more of the files mentioned in steps 2 or 3 may be missing
+- Blank or incorrectly-displayed menus: `Common/Media/MediaWindows64.arc` is missing, or the app wasn't fully closed and reopened after copying
 
 ## Obtaining the latest build from Windows
 
