@@ -2047,8 +2047,15 @@ static int MCLEPadIsPlayStation(void) {
                 : nil;
             if (winPath && ![fm fileExistsAtPath:winPath]) winPath = nil;
             NSString* mergedPath = [aliasPath stringByAppendingString:@".win"];
+            // Made again when a skin it's made from was replaced since
+            NSDate* aliasMade = [fm attributesOfItemAtPath:aliasPath error:nil].fileModificationDate;
+            BOOL stale = NO;
+            for (NSString* from in winPath ? @[ srcPath, winPath ] : @[ srcPath ]) {
+                NSDate* changed = [fm attributesOfItemAtPath:from error:nil].fileModificationDate;
+                if (aliasMade && changed && [changed compare:aliasMade] == NSOrderedDescending) stale = YES;
+            }
             if ([current isEqualToString:candidate] && [fm fileExistsAtPath:aliasPath] &&
-                (!winPath || [fm fileExistsAtPath:mergedPath])) break;
+                (!winPath || [fm fileExistsAtPath:mergedPath]) && !stale) break;
             [fm removeItemAtPath:aliasPath error:nil];
             [fm removeItemAtPath:mergedPath error:nil];
             NSError* err = nil;
