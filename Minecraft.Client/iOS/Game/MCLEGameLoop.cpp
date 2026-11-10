@@ -4715,7 +4715,13 @@ extern "C" void mcle_world_drive_renderer(void) {
         const double zOff = cameraEntity->zOld + (cameraEntity->z - cameraEntity->zOld) * a;
         const bool underWater = g_player->isUnderLiquid(Material::water);
         int hx = 0, hy = 0, hz = 0, hf = 0;
-        const bool haveHit = mcle_player_hit_tile(&hx, &hy, &hz, &hf) != 0;
+        // GameRenderer::renderLevel's pick(a)
+        bool haveHit = false;
+        try {
+            haveHit = mcle_player_frame_hit_tile(g_player, a, &hx, &hy, &hz, &hf);
+        } catch (...) {
+            haveHit = false;
+        }
 
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
@@ -4862,8 +4868,7 @@ extern "C" void mcle_world_drive_renderer(void) {
         glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
 
-        // The selection box round the targeted block, picked on the sim
-        // thread this tick
+        // The selection box round the targeted block
         if (haveHit && !underWater) {
             try {
                 HitResult hit(hx, hy, hz, hf, Vec3::newTemp(hx, hy, hz));

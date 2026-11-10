@@ -49,6 +49,11 @@ HitResult *mcle_player_hit_result();
 // The block the player was targeting at the last tick, if any.
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f);
 
+// The block under the crosshair as the frame at partial tick a has the
+// player looking, for the selection box. Render thread, with the frame held.
+bool mcle_player_frame_hit_tile(const std::shared_ptr<ServerPlayer> &player, float a, int *x, int *y, int *z,
+                                int *f);
+
 // Minecraft::respawnPlayer's new LocalPlayer and Input: the movement state
 // starts over. Sim thread.
 void mcle_player_new_local_player();

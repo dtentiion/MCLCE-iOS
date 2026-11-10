@@ -36,6 +36,7 @@
 #include "../../../upstream/Minecraft.World/Facing.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/ChunkSource.h"
+#include "../../../upstream/Minecraft.World/LevelChunk.h"
 #include "../../../upstream/Minecraft.World/FoodData.h"
 #include "../../../upstream/Minecraft.World/FoodConstants.h"
 #include "../../../upstream/Minecraft.World/MobEffect.h"
@@ -163,9 +164,11 @@ Vec3 *eyePos(ServerPlayer *p, double x, double y, double z, float a) {
 }
 
 // GameRenderer::pick, from an explicit position so the creative repeat
-// placement can pick from where the click should have come from
+// placement can pick from where the click should have come from. The frame
+// picks too, on its own thread: Level::getEntities fills a list the level
+// keeps for the game's thread, so there the chunks are asked one by one.
 HitResult *pickFrom(const std::shared_ptr<ServerPlayer> &player, ServerLevel *level,
-                    double px, double py, double pz, float a) {
+                    double px, double py, double pz, float a, bool frame = false) {
     ServerPlayer *p = player.get();
     // MultiPlayerGameMode::getPickRange / hasFarPickRange
     const bool creative = p->gameMode->isCreative();
@@ -207,8 +210,22 @@ HitResult *pickFrom(const std::shared_ptr<ServerPlayer> &player, ServerLevel *le
     to = from->add(b->x * range, b->y * range, b->z * range);
     std::shared_ptr<Entity> hovered;
     float overlap = 1;
-    std::vector<std::shared_ptr<Entity> > *objects =
-        level->getEntities(player, p->bb->expand(b->x * range, b->y * range, b->z * range)->grow(overlap, overlap, overlap));
+    AABB *area = p->bb->expand(b->x * range, b->y * range, b->z * range)->grow(overlap, overlap, overlap);
+    std::vector<std::shared_ptr<Entity> > frameObjects;
+    std::vector<std::shared_ptr<Entity> > *objects = &frameObjects;
+    if (frame) {
+        int xc0 = Mth::floor((area->x0 - 2) / 16);
+        int xc1 = Mth::floor((area->x1 + 2) / 16);
+        int zc0 = Mth::floor((area->z0 - 2) / 16);
+        int zc1 = Mth::floor((area->z1 + 2) / 16);
+        for (int xc = xc0; xc <= xc1; xc++) {
+            for (int zc = zc0; zc <= zc1; zc++) {
+                if (level->hasChunk(xc, zc)) level->getChunk(xc, zc)->getEntities(player, area, frameObjects, nullptr);
+            }
+        }
+    } else {
+        objects = level->getEntities(player, area);
+    }
     double nearest = dist;
 
     if (objects) {
@@ -1232,6 +1249,26 @@ void mcle_player_bob(float a, float *xBob, float *yBob) {
 
 HitResult *mcle_player_hit_result() {
     return s.hitResult;
+}
+
+// GameRenderer::renderLevel's pick(a), for the selection box: the block
+// under the crosshair as this frame has the player looking. Called on the
+// render thread with the frame held.
+bool mcle_player_frame_hit_tile(const std::shared_ptr<ServerPlayer> &player, float a, int *x, int *y, int *z,
+                                int *f) {
+    if (!player || !player->gameMode) return false;
+    ServerLevel *level = player->getLevel();
+    if (!level) return false;
+    HitResult *hit = pickFrom(player, level, player->x, player->y, player->z, a, true);
+    const bool tile = hit != nullptr && hit->type == HitResult::TILE;
+    if (tile) {
+        *x = hit->x;
+        *y = hit->y;
+        *z = hit->z;
+        *f = hit->f;
+    }
+    delete hit;
+    return tile;
 }
 
 bool mcle_player_hit_tile(int *x, int *y, int *z, int *f) {
