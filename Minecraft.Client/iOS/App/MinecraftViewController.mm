@@ -333,6 +333,13 @@ static void MCLETutorialPopupMovieReloaded(void);
 void mcle_game_set_menu_displayed(bool displayed); // Game/MCLEGameLoop.cpp
 bool mcle_game_menu_displayed();                   // Game/MCLEGameLoop.cpp
 extern "C" void mcle_game_check_menu_displayed(void); // Game/MCLEGameLoop.cpp
+extern "C" int mcle_game_frame_begin(double seconds);   // Game/MCLEGameLoop.cpp
+extern "C" int mcle_game_console_frame(void);           // Game/MCLEGameLoop.cpp
+
+// How far the movies are run on this frame: a 60th for each of the
+// original's frames it stands for, so they keep their speed on a screen
+// of any rate
+static float g_frame_seconds = 1.0f / 60.0f;
 
 // What each UIScene_Settings*Menu labels a slider with, both in init and
 // in handleSliderMove. value is the slider's own value.
@@ -4908,10 +4915,12 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
 // navigateBack puts the menu's movie back up for its reloadMovie.
 - (void)frontEndKeyboardFrame {
     extern PlayerHandle* g_ruffle_player;
-    mcle_ios_pad_state pad = {};
-    mcle_ios_input_poll(0, &pad);
-    mcle_keyboard_front_end_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
-    self.lastPadButtons = pad.buttons;
+    if (mcle_game_console_frame()) {
+        mcle_ios_pad_state pad = {};
+        mcle_ios_input_poll(0, &pad);
+        mcle_keyboard_front_end_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+        self.lastPadButtons = pad.buttons;
+    }
     MCLEContainerApplyOps();
     if (mcle_keyboard_front_end_close_requested()) {
         [self closeFrontEndKeyboard];
@@ -4923,7 +4932,7 @@ static bool MCLELabelAt(const char* path, std::wstring* label) {
     int tips[11];
     mcle_container_tooltips(tips);
     MCLESetTooltips(tips);
-    ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+    ruffle_ios_player_tick(g_ruffle_player, g_frame_seconds);
 }
 
 // UIController::NavigateToScene from the scene that's up: the new scene's
@@ -5044,10 +5053,13 @@ static void MCLESetContainerCursorOnTop(bool on) {
 // mouse move the pointer makes and the movie with its slots drawn in
 - (void)containerMenuFrame {
     extern PlayerHandle* g_ruffle_player;
-    mcle_ios_pad_state pad = {};
-    mcle_ios_input_poll(0, &pad);
-    mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
-    self.lastPadButtons = pad.buttons;
+    // UIController::tick is once a frame of the original's
+    if (mcle_game_console_frame()) {
+        mcle_ios_pad_state pad = {};
+        mcle_ios_input_poll(0, &pad);
+        mcle_container_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime());
+        self.lastPadButtons = pad.buttons;
+    }
     MCLEContainerApplyOps();
     if (mcle_container_close_requested()) {
         if (mcle_container_back_movie()) [self containerNavigateBack];
@@ -5069,7 +5081,7 @@ static void MCLESetContainerCursorOnTop(bool on) {
     float px = 0, py = 0;
     if (mcle_container_pointer(&px, &py)) ruffle_ios_player_mouse_move_stage(g_ruffle_player, px, py);
     MCLESetContainerCursorOnTop(true);
-    ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+    ruffle_ios_player_tick(g_ruffle_player, g_frame_seconds);
     // The crafting menus have around 70 slots
     RuffleIosCustomDrawRegion regions[128];
     int n = ruffle_ios_custom_draw_regions(g_ruffle_player, regions, 128);
@@ -5630,10 +5642,12 @@ static void MCLESkinSelectTickMovie(void) {
 // the characters drawn in
 - (void)skinSelectMenuFrame {
     extern PlayerHandle* g_ruffle_player;
-    mcle_ios_pad_state pad = {};
-    mcle_ios_input_poll(0, &pad);
-    mcle_skin_select_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime(), MCLESkinSelectTickMovie);
-    self.lastPadButtons = pad.buttons;
+    if (mcle_game_console_frame()) {
+        mcle_ios_pad_state pad = {};
+        mcle_ios_input_poll(0, &pad);
+        mcle_skin_select_frame(pad.buttons, self.lastPadButtons, CACurrentMediaTime(), MCLESkinSelectTickMovie);
+        self.lastPadButtons = pad.buttons;
+    }
     MCLEContainerApplyOps();
     if (mcle_skin_select_close_requested()) {
         [self navigateBack];
@@ -6153,6 +6167,13 @@ static void MCLESkinSelectTickMovie(void) {
 }
 
 - (void)tick:(CADisplayLink*)link {
+    // From one frame's time on screen to the next one's
+    static CFTimeInterval s_lastTarget = 0;
+    const CFTimeInterval target = link.targetTimestamp;
+    const CFTimeInterval took = s_lastTarget > 0 ? target - s_lastTarget : link.duration;
+    s_lastTarget = target;
+    g_frame_seconds = mcle_game_frame_begin(took) / 60.0f;
+
     // The main loop's app.HandleXuiActions, the texture pack reload
     mcle_handle_xui_actions();
     if (mcle_ui_take_skin_reload()) [self reloadSkin];
@@ -6340,7 +6361,7 @@ static void MCLESkinSelectTickMovie(void) {
             // Keep the SWF layer presenting over the world (transparent stage)
             extern PlayerHandle* g_ruffle_player;
             if (g_ruffle_player) {
-                ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+                ruffle_ios_player_tick(g_ruffle_player, g_frame_seconds);
                 // The custom draw callbacks for what the movie just drew
                 static_assert(sizeof(RuffleIosCustomDrawRegion) == sizeof(MCLECustomDrawRegion),
                               "region layouts differ");
@@ -6804,7 +6825,7 @@ static void MCLESkinSelectTickMovie(void) {
         }
 
         // Ruffle owns the frame: advance the player, wgpu draws + presents.
-        ruffle_ios_player_tick(g_ruffle_player, 1.0f / 60.0f);
+        ruffle_ios_player_tick(g_ruffle_player, g_frame_seconds);
         // The scene after the intro has drawn, its white can go
         if (self.introBackdrop && ![self.currentMenuSwf isEqualToString:@"Intro1080.swf"]) {
             [self.introBackdrop removeFromSuperview];

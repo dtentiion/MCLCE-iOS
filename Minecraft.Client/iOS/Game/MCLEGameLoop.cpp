@@ -2119,10 +2119,33 @@ static unsigned int mcle_store_presses(bool take) {
     return stored;
 }
 
+// The original draws 60 frames a second at its fastest and counts a few
+// things in them: the gaps in the music, a closed menu's last frames, the
+// pointer in a container. The host says how long each of its frames took
+// and gets back how many of the original's that makes: none on some frames
+// of a faster screen, two after a slow one. The movies are run on that many
+// 60ths (UIScene::tick's IggyPlayerReadyToTick loop), and what's counted in
+// frames is stepped once when there's any.
+static std::atomic<int> g_consoleFrames{1};
+
+extern "C" int mcle_game_frame_begin(double seconds) {
+    static double owed = 0.0;
+    owed += std::min(std::max(seconds, 0.0), 0.1) * 60.0;
+    // A 60 Hz screen's frames come a hair under or over a 60th
+    const int frames = (int)floor(owed + 0.1);
+    owed -= frames;
+    g_consoleFrames.store(frames);
+    return frames;
+}
+
+extern "C" int mcle_game_console_frame(void) {
+    return g_consoleFrames.load() > 0 ? 1 : 0;
+}
+
 // UIController::CheckMenuDisplayed, once a frame after the present
 extern "C" void mcle_game_check_menu_displayed(void) {
     mcle_store_presses(false);
-    if (!g_menuToBeClosed) return;
+    if (!g_menuToBeClosed || g_consoleFrames.load() <= 0) return;
     if (g_menuCountDown != 0) {
         g_menuCountDown--;
     } else {
@@ -4493,8 +4516,10 @@ extern "C" void mcle_world_drive_renderer(void) {
         // Minecraft::run_middle's soundEngine->tick and the main loop's
         // playMusicTick, both once a frame and paused or not. Volumes from
         // the settings like ActionGameSettings.
-        mcle_sound_tick(g_player, a, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
-                        mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
+        if (g_consoleFrames.load() > 0) {
+            mcle_sound_tick(g_player, a, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
+                            mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
+        }
 
         // GameRenderer::getFov: the FOV setting, the sprint / fly / bow
         // factor from tickFov, the death zoom and narrower under water
