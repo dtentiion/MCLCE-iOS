@@ -88,6 +88,9 @@ jobs:
           chmod +x scripts/patch-upstream-stdafx.sh
           ./scripts/patch-upstream-stdafx.sh
 
+      - name: Make the app icon
+        run: python3 scripts/make-app-icon.py
+
       - name: Configure (iOS device)
         run: |
           cmake -S . -B build \
