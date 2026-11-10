@@ -1782,6 +1782,12 @@ if [ -f "$DML_PY" ]; then
     python3 "$DML_PY"
 fi
 
+# The tooltips' use tests have no effect on the server's player and level
+TUS_PY="$REPO_ROOT/scripts/patch-test-use-server.py"
+if [ -f "$TUS_PY" ]; then
+    python3 "$TUS_PY"
+fi
+
 # Map icons include the item frame and End portal ones the client would get
 MMD_PY="$REPO_ROOT/scripts/patch-minimap-ios-decorations.py"
 if [ -f "$MMD_PY" ]; then

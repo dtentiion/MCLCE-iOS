@@ -106,6 +106,21 @@ void mcle_hud_update(const std::shared_ptr<ServerPlayer> &player) {
     st.regen = player->hasEffect(MobEffect::regeneration);
     // Entity's, the hit flash. ServerPlayer has its own for spawn protection.
     int invulnerableTime = player->Entity::invulnerableTime;
+    // LocalPlayer::hurtTo: health going up puts the client's at half
+    // invulnerableDuration, which this player's never gets
+    static const void *s_healPlayer = nullptr;
+    static float s_healLast = 0;
+    static int s_healTick = 0;
+    const float healthNow = player->getHealth();
+    if (s_healPlayer != player.get()) {
+        s_healPlayer = player.get();
+        s_healTick = player->tickCount - player->invulnerableDuration;
+    } else if (s_healLast > 0 && healthNow > s_healLast) {
+        s_healTick = player->tickCount;
+    }
+    s_healLast = healthNow;
+    const int healTime = player->invulnerableDuration / 2 - (player->tickCount - s_healTick);
+    if (healTime > invulnerableTime) invulnerableTime = healTime;
     bool blink = invulnerableTime / 3 % 2 == 1;
     if (invulnerableTime < 10) blink = false;
     st.blink = blink;

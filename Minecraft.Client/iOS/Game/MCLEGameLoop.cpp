@@ -3396,7 +3396,8 @@ extern "C" void mcle_game_tick(void) {
             MCLE_LOG("mcle_game_tick: player input threw");
         }
         try {
-            mcle_tooltips_update(g_player, mcle_player_hit_result());
+            // Minecraft::tick only works the tooltips out with no menu up
+            if (!mcle_game_menu_displayed()) mcle_tooltips_update(g_player, mcle_player_hit_result());
         } catch (...) {
             MCLE_LOG("mcle_game_tick: tooltips threw");
         }

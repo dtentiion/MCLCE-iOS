@@ -1548,7 +1548,7 @@ extern "C" float mcle_hud_jukebox(char *out, int cap);
 // sent starting from UIControl's 1.0 / unset
 static struct {
     float labelOpacity[10], backgroundOpacity[10], jukeboxOpacity;
-    char label[10][256], jukebox[256];
+    char label[10][1024], jukebox[1024];
     bool labelSet[10], jukeboxSet;
     double lastTimer;
 } g_hudChat;
@@ -1574,7 +1574,7 @@ static void MCLEHudControlAlpha(NSString* control, float opacity, float& last) {
 static void MCLEHudLabel(NSString* control, const char* text, char* last, bool& set) {
     if (!set || strcmp(text, last) != 0) {
         set = true;
-        snprintf(last, 256, "%s", text);
+        snprintf(last, 1024, "%s", text);
         NSString* str = [NSString stringWithUTF8String:text];
         MCLECallPath(control, @"SetLabel", @[str ? str : @""]);
     }
@@ -1586,7 +1586,7 @@ static void MCLEHudChatTimer(void) {
     double now = CACurrentMediaTime();
     if (now - g_hudChat.lastTimer < 0.1) return;
     g_hudChat.lastTimer = now;
-    char text[256];
+    char text[1024];
     for (int i = 0; i < 10; ++i) {
         NSString* label = [NSString stringWithFormat:@"Label%d", i + 1];
         NSString* background = [NSString stringWithFormat:@"Label%dBackground", i + 1];
@@ -1630,11 +1630,13 @@ static void MCLEHudPump(void) {
     // A new HUD movie loads its size first
     if (g_hud.guiScale != hudSize) MCLEHudExtendChatStrips();
 
-    // SetDisplayName
+    // SetDisplayName. UIController::DisplayGamertag has the label hidden
+    // on a full screen.
     if (strcmp(st.displayName, g_hud.displayName) != 0) {
         snprintf(g_hud.displayName, sizeof(g_hud.displayName), "%s", st.displayName);
         NSString* name = [NSString stringWithUTF8String:st.displayName];
-        MCLECallPath(@"", @"SetDisplayName", @[name ? name : @""]);
+        MCLECallPath(@"", @"SetGamertag", @[name ? name : @""]);
+        MCLESetPathVisible(@"LabelGamertag", false);
     }
 
     // SetTooltipsEnabled, with no menu up while this runs
@@ -6046,6 +6048,8 @@ static void MCLESkinSelectTickMovie(void) {
         } else if ([swfName isEqualToString:@"PauseMenu1080.swf"]) {
             [self initPauseMenu];
         } else if ([swfName isEqualToString:@"HUD1080.swf"]) {
+            // UIScene_HUD::updateSafeZone, no right edge on a full screen
+            MCLECallPath(@"", @"SetSafeZone", @[@(kSafeZoneTop), @(kSafeZoneBottom), @(kSafeZoneLeft), @(0.0)]);
             // UIScene_HUD constructor
             MCLECallPath(@"", @"SetDragonLabel", @[MCLEStr(IDS_BOSS_ENDERDRAGON_HEALTH)]);
             MCLECallPath(@"", @"SetSelectedLabel", @[@""]);
