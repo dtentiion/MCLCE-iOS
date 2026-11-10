@@ -306,6 +306,13 @@ ServerPlayerGameMode         *g_playerGameMode = nullptr;
 LevelRenderer                *g_levelRenderer  = nullptr;
 std::wstring                  g_levelName;
 
+// Set while code that only ever runs on a server adds particles
+// (scripts/patch-server-only-particles.py)
+thread_local int t_serverOnlyParticles = 0;
+extern "C" void mcle_server_only_particles(int on) {
+    t_serverOnlyParticles += on ? 1 : -1;
+}
+
 // The LevelRenderer listens to the server level here, not a client one.
 // ServerLevelListener never sends a player its own crack progress, its
 // client draws its own guess (MultiPlayerGameMode), so the server's calls
@@ -328,6 +335,9 @@ public:
         r->playSoundExceptPlayer(player, iSound, x, y, z, volume, pitch, clip);
     }
     void addParticle(ePARTICLE_TYPE name, double x, double y, double z, double xa, double ya, double za) override {
+        // ones from code a client never runs go the way of
+        // ServerLevelListener::addParticle
+        if (t_serverOnlyParticles > 0) return;
         std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
         r->addParticle(name, x, y, z, xa, ya, za);
     }

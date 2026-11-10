@@ -1790,6 +1790,12 @@ if [ -f "$TUS_PY" ]; then
     python3 "$TUS_PY"
 fi
 
+# Particles from code only a server runs aren't drawn
+SOP_PY="$REPO_ROOT/scripts/patch-server-only-particles.py"
+if [ -f "$SOP_PY" ]; then
+    python3 "$SOP_PY"
+fi
+
 # Map icons include the item frame and End portal ones the client would get
 MMD_PY="$REPO_ROOT/scripts/patch-minimap-ios-decorations.py"
 if [ -f "$MMD_PY" ]; then
