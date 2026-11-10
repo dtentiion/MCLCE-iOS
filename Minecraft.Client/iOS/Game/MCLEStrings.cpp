@@ -173,6 +173,32 @@ std::string to_utf8(const wchar_t *w) {
 } // namespace
 
 // CMinecraftApp::GetString. The table's strings live as long as it does.
+// Windows64_Minecraft.cpp's g_Win64Username: the first line of username.txt
+// beside the game's files, "Player" without one
+extern "C" const wchar_t *mcle_username(void) {
+    static std::wstring name;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        char buf[128] = {};
+        const char *root = ios_documents_dir();
+        const std::string path = std::string(root ? root : "") + "/username.txt";
+        if (FILE *f = fopen(path.c_str(), "r")) {
+            if (fgets(buf, sizeof(buf), f)) {
+                int len = static_cast<int>(strlen(buf));
+                while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r' || buf[len - 1] == ' ')) {
+                    buf[--len] = '\0';
+                }
+            }
+            fclose(f);
+        }
+        // g_Win64Username holds 16 characters
+        buf[16] = '\0';
+        if (buf[0] == 0) strcpy(buf, "Player");
+        name.assign(buf, buf + strlen(buf));
+    });
+    return name.c_str();
+}
+
 extern "C" const wchar_t *mcle_wstring(int id) {
     std::lock_guard<std::mutex> lk(g_mu);
     load_locked();

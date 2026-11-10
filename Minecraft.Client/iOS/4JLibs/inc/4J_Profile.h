@@ -14,6 +14,8 @@
 #include <istream>
 #include <cwchar>
 
+extern "C" const wchar_t *mcle_username(void); // Game/MCLEStrings.cpp
+
 // Opaque player identity stub. Other platforms back this with platform-
 // specific identity (Sony NP, Xbox Live, etc). iOS has no online
 // identity yet, so PlayerUID is a fixed-size byte buffer that satisfies
@@ -104,10 +106,10 @@ public:
     // Upstream Minecraft.cpp calls profile.GetXUID(...) (uppercase ID).
     template<class... A> uint64_t GetXUID(A...)           { return 0; }
     template<class... A> bool IsGuest(A...)               { return false; }
-    template<class... A> const wchar_t* GetDisplayName(A...) { return L"iOSPlayer"; }
+    template<class... A> const wchar_t* GetDisplayName(A...) { return mcle_username(); }
     template<class... A> bool IsSignedInLive(A...)        { return false; }
     template<class... A> bool IsSystemUIDisplayed(A...)   { return false; }
-    template<class... A> const wchar_t* GetGamertag(A...) { return L"iOSPlayer"; }
+    template<class... A> const wchar_t* GetGamertag(A...) { return mcle_username(); }
     template<class... A> int  GetUserIndexForPad(A...)    { return 0; }
     template<class... A> int  GetPadForUserIndex(A...)    { return 0; }
     template<class... A> bool IsFullVersion(A...)         { return true; }

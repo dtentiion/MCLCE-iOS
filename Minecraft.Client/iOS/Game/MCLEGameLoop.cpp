@@ -51,6 +51,7 @@
 // Declared in Render lib (MetalContext.mm). Forward decl here so
 // the tick log can read the cumulative DrawVertices count.
 extern "C" unsigned long long mcle_metal_draw_count(void);
+extern "C" const wchar_t *mcle_username(void); // MCLEStrings.cpp
 
 // Number of recorded display lists. Bumps once per glNewList during
 // LevelRenderer ctor (skyList, starList, darkList, cloudList, chunkLists)
@@ -1447,7 +1448,7 @@ void initImpl() {
             g_player = std::make_shared<ServerPlayer>(
                 g_server,
                 static_cast<Level *>(g_levels[0]),
-                std::wstring(L"iOSPlayer"),
+                std::wstring(mcle_username()),
                 g_playerGameMode);
             MCLE_LOG("mcle_game_init: ServerPlayer at %p", (void*)g_player.get());
             // PlayerList::getPlayerForLogin, 4J took this out of ServerPlayer's ctor
