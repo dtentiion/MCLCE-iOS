@@ -1,8 +1,7 @@
-// iOS audio backend. Uses miniaudio (same library the console LCE
-// uses in SoundEngine.cpp), so the stock .ogg tracks from
-// the console build play directly without transcoding. Scans Documents for
-// menu1.ogg..menu4.ogg (or anything else supported) and shuffles
-// across them on loop.
+// iOS audio backend for the menus' own sounds. Uses miniaudio (same
+// library the console LCE uses in SoundEngine.cpp), and its implementation
+// is compiled here for the game's SoundEngine too. The music is that
+// engine's.
 //
 // miniaudio supports ogg/mp3/wav/flac out of the box, handles iOS
 // AVAudioSession internally, and is a single-header library
@@ -26,174 +25,20 @@
 #include <atomic>
 #include <mutex>
 #include <string>
-#include <vector>
 
 namespace {
 
 ma_engine g_engine;
 bool g_engine_ok = false;
-ma_sound g_sound;
-bool g_sound_loaded = false;
-std::string g_current_path;
 std::string g_status = "not started";
-std::vector<std::string> g_tracks;
-// Mirrors SoundEngine::m_bHeardTrackA on console: true means the
-// track at that index has played recently. GetRandomishTrack picks
-// from unheard tracks first, resets the whole array once they're
-// all flagged.
-std::vector<bool> g_heard;
 std::mutex g_mu;
-std::atomic<bool> g_shuffle_stop{false};
-// Bumped on stop so a wait for the next track from before is dropped
-std::atomic<unsigned> g_music_gen{0};
 
-// Live audio volumes sourced from MCLE_SETTING_MusicVolume /
-// _SoundFXVolume. 0..1 floats applied to ma_sound instances.
-// Declared here (ahead of startNextTrack's music-sound init) so
-// newly-played tracks can pick up the user's stored volume
-// instead of snapping to 100%.
-std::atomic<float> g_music_volume{1.0f};
+// The UI SFX volume from MCLE_SETTING_SoundFXVolume, 0..1
 std::atomic<float> g_sfx_volume{1.0f};
-
-// Overworld track base names. On console these are indices
-// eStream_Overworld_Calm1..eStream_Overworld_piano3 (SoundEngine.h:17-41)
-// and SoundEngine::getMusicID returns one at random from this range
-// both on the main menu (pMinecraft==nullptr branch at
-// SoundEngine.cpp:803) and during overworld gameplay. Menu tracks
-// (menu1..menu4) are part of the same pool, not a separate category.
-static NSArray<NSString*>* overworldTrackBaseNames() {
-    return @[
-        @"calm1", @"calm2", @"calm3",
-        @"hal1",  @"hal2",  @"hal3", @"hal4",
-        @"nuance1", @"nuance2",
-        @"creative1", @"creative2", @"creative3",
-        @"creative4", @"creative5", @"creative6",
-        @"menu1", @"menu2", @"menu3", @"menu4",
-        @"piano1", @"piano2", @"piano3",
-    ];
-}
-
-std::vector<std::string> findAllMenuTracks() {
-    std::vector<std::string> out;
-    NSString* docs = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    if (!docs) return out;
-    NSFileManager* fm = [NSFileManager defaultManager];
-    NSArray<NSString*>* extsAllowed = @[@"ogg", @"mp3", @"m4a", @"aac",
-                                         @"wav", @"aiff", @"caf", @"flac"];
-    NSSet<NSString*>* overworldSet =
-        [NSSet setWithArray:overworldTrackBaseNames()];
-    // The top of the folder, then music/music where Windows64 keeps them
-    NSMutableSet<NSString*>* found = [NSMutableSet set];
-    for (NSString* dir in @[docs, [docs stringByAppendingPathComponent:@"music/music"]]) {
-        NSArray<NSString*>* entries = [fm contentsOfDirectoryAtPath:dir error:nil];
-        for (NSString* e in entries) {
-            NSString* ext = e.pathExtension.lowercaseString;
-            if (![extsAllowed containsObject:ext]) continue;
-            NSString* base = [e stringByDeletingPathExtension].lowercaseString;
-            if (![overworldSet containsObject:base] || [found containsObject:base]) continue;
-            [found addObject:base];
-            out.push_back([dir stringByAppendingPathComponent:e].UTF8String);
-        }
-    }
-    return out;
-}
-
-// Forward decl.
-void startRandomTrack();
-
-// miniaudio end-of-sound callback. Fires on the audio thread; the
-// next-track selection is deferred to the main thread so there's no
-// file I/O inside the callback.
-// SoundEngine::playMusicUpdate's eMusicStreamState_Completed: a random
-// delay of up to 3 minutes, nextInt(20 * 60 * 3) music ticks, before the
-// next track. The in-game engine counts them on the 20Hz game tick.
-void onSoundEnd(void* pUserData, ma_sound* pSound) {
-    (void)pUserData; (void)pSound;
-    if (g_shuffle_stop.load()) return;
-    const unsigned gen = g_music_gen.load();
-    const int64_t delayTicks = arc4random_uniform(20 * 60 * 3);
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayTicks * 50 * (int64_t)NSEC_PER_MSEC),
-                   dispatch_get_main_queue(), ^{
-        if (g_music_gen.load() != gen) return;
-        startRandomTrack();
-    });
-}
-
-void startRandomTrack() {
-    std::lock_guard<std::mutex> lk(g_mu);
-    if (g_shuffle_stop.load()) return;
-    if (g_tracks.empty() || !g_engine_ok) return;
-
-    // Unload the previous sound if any.
-    if (g_sound_loaded) {
-        ma_sound_uninit(&g_sound);
-        g_sound_loaded = false;
-    }
-
-    // Mirror SoundEngine::GetRandomishTrack (SoundEngine.cpp:744).
-    // Reset the heard-array when all tracks have been played, then
-    // pick a random track, preferring ones not flagged heard. Gives
-    // up after (range/2) tries and accepts the current pick even if
-    // heard - same as console.
-    if (g_heard.size() != g_tracks.size()) {
-        g_heard.assign(g_tracks.size(), false);
-    }
-    bool allHeard = true;
-    for (bool b : g_heard) { if (!b) { allHeard = false; break; } }
-    if (allHeard) {
-        std::fill(g_heard.begin(), g_heard.end(), false);
-    }
-    size_t idx = 0;
-    size_t maxTries = (g_tracks.size() + 1) / 2;
-    for (size_t tries = 0; tries <= maxTries; ++tries) {
-        idx = arc4random_uniform((uint32_t)g_tracks.size());
-        if (!g_heard[idx]) break;
-    }
-    g_heard[idx] = true;
-    std::string next = g_tracks[idx];
-
-    ma_result r = ma_sound_init_from_file(
-        &g_engine, next.c_str(), 0, NULL, NULL, &g_sound);
-    if (r != MA_SUCCESS) {
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "ma_sound_init failed (%d) for %s", r,
-                 [[NSString stringWithUTF8String:next.c_str()] lastPathComponent].UTF8String);
-        g_status = buf;
-        NSLog(@"[mcle_audio] %s", buf);
-        return;
-    }
-    g_sound_loaded = true;
-    g_current_path = next;
-    ma_sound_set_end_callback(&g_sound, onSoundEnd, NULL);
-    // Pick up the current user-chosen music volume so newly started
-    // tracks don't reset to 100% after the user turned it down.
-    ma_sound_set_volume(&g_sound, g_music_volume.load());
-    if (ma_sound_start(&g_sound) != MA_SUCCESS) {
-        g_status = std::string("ma_sound_start failed for ") + next;
-        NSLog(@"[mcle_audio] %s", g_status.c_str());
-        return;
-    }
-    {
-        NSString* last = [[NSString stringWithUTF8String:next.c_str()] lastPathComponent];
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "playing %s (%zu tracks)", last.UTF8String, g_tracks.size());
-        g_status = buf;
-    }
-    NSLog(@"[mcle_audio] %s", g_status.c_str());
-}
 
 } // namespace
 
-extern "C" int mcle_audio_start_menu_music(void) {
-    // Already playing? Nothing to do.
-    {
-        std::lock_guard<std::mutex> lk(g_mu);
-        if (g_sound_loaded && ma_sound_is_playing(&g_sound)) return 1;
-    }
-
+extern "C" int mcle_audio_init(void) {
     // Route audio to playback category so it doesn't duck for silent
     // switch / lock screen music. miniaudio handles the actual Audio
     // Unit setup, but the session category is ours to pick.
@@ -206,7 +51,7 @@ extern "C" int mcle_audio_start_menu_music(void) {
     }
     [[AVAudioSession sharedInstance] setActive:YES error:nil];
 
-    // Lazy-init the miniaudio engine on first call.
+    std::lock_guard<std::mutex> lk(g_mu);
     if (!g_engine_ok) {
         ma_engine_config cfg = ma_engine_config_init();
         ma_result r = ma_engine_init(&cfg, &g_engine);
@@ -218,21 +63,9 @@ extern "C" int mcle_audio_start_menu_music(void) {
             return -1;
         }
         g_engine_ok = true;
+        g_status = "engine up";
     }
-
-    std::vector<std::string> tracks = findAllMenuTracks();
-    if (tracks.empty()) {
-        g_status = "no overworld tracks found in Documents (expected calm/hal/nuance/creative/menu/piano .ogg)";
-        NSLog(@"[mcle_audio] %s", g_status.c_str());
-        return 0;
-    }
-    {
-        std::lock_guard<std::mutex> lk(g_mu);
-        g_tracks = std::move(tracks);
-        g_shuffle_stop.store(false);
-    }
-    startRandomTrack();
-    return g_sound_loaded ? 1 : -2;
+    return 1;
 }
 
 extern "C" size_t mcle_audio_status(char* out, size_t cap) {
@@ -298,14 +131,6 @@ extern "C" void mcle_audio_load_ui_sfx(void) {
     }
 }
 
-extern "C" void mcle_audio_set_music_volume(int volume_0_100) {
-    int v = volume_0_100;
-    if (v < 0) v = 0; if (v > 100) v = 100;
-    g_music_volume.store((float)v / 100.0f);
-    std::lock_guard<std::mutex> lk(g_mu);
-    if (g_sound_loaded) ma_sound_set_volume(&g_sound, g_music_volume.load());
-}
-
 extern "C" void mcle_audio_set_sfx_volume(int volume_0_100) {
     int v = volume_0_100;
     if (v < 0) v = 0; if (v > 100) v = 100;
@@ -333,20 +158,4 @@ extern "C" void mcle_audio_play_ui_sfx(const char* name, float volume, float pit
     ma_sound_set_pitch(s, pitch);
     ma_sound_seek_to_pcm_frame(s, 0);
     ma_sound_start(s);
-}
-
-extern "C" void mcle_audio_stop_menu_music(void) {
-    g_shuffle_stop.store(true);
-    g_music_gen.fetch_add(1);
-    {
-        std::lock_guard<std::mutex> lk(g_mu);
-        if (g_sound_loaded) {
-            ma_sound_stop(&g_sound);
-            ma_sound_uninit(&g_sound);
-            g_sound_loaded = false;
-        }
-        g_current_path.clear();
-    }
-    // The session stays active, the game's SoundEngine plays through it
-    // once the world is up
 }

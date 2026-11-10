@@ -1607,11 +1607,10 @@ void initImpl() {
         }
     }
 
-    // Minecraft::init starts the sound engine. The levels' sounds reach the
-    // player the way LevelSoundPackets reach a client.
+    // The levels' sounds reach the player the way LevelSoundPackets reach a
+    // client
     if (g_player) {
         try {
-            mcle_sound_init(StorageManager.GetSaveRootPath());
             for (int i = 0; i < 3; ++i) {
                 if (g_levels[i]) mcle_sound_listen(g_player, g_levels[i]);
             }
@@ -2127,6 +2126,8 @@ static unsigned int mcle_store_presses(bool take) {
 // 60ths (UIScene::tick's IggyPlayerReadyToTick loop), and what's counted in
 // frames is stepped once when there's any.
 static std::atomic<int> g_consoleFrames{1};
+// The world's frame ticked the sound engine, with the player to listen from
+static std::atomic<bool> g_worldSoundTick{false};
 
 extern "C" int mcle_game_frame_begin(double seconds) {
     static double owed = 0.0;
@@ -2135,6 +2136,14 @@ extern "C" int mcle_game_frame_begin(double seconds) {
     const int frames = (int)floor(owed + 0.1);
     owed -= frames;
     g_consoleFrames.store(frames);
+    // Minecraft::run_middle's soundEngine->tick and the main loop's
+    // playMusicTick run in the menus too: the music there is the engine's,
+    // and it plays on into a world and back out of it
+    if (frames > 0 && !g_worldSoundTick.load()) {
+        mcle_sound_tick(nullptr, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
+                        mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
+    }
+    g_worldSoundTick.store(false);
     return frames;
 }
 
@@ -2979,6 +2988,12 @@ extern "C" void mcle_minecraft_init(void) {
     Minecraft *minecraft = mcle_minecraft_shim();
     mcle_make_options(minecraft);
     mcle_make_textures(minecraft);
+    // Minecraft's constructor makes the sound engine and init starts it
+    try {
+        mcle_sound_init(StorageManager.GetSaveRootPath());
+    } catch (...) {
+        MCLE_LOG("minecraft init: sound engine init threw");
+    }
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after
@@ -4520,6 +4535,7 @@ extern "C" void mcle_world_drive_renderer(void) {
             mcle_sound_tick(g_player, a, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
                             mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
         }
+        g_worldSoundTick.store(true);
 
         // GameRenderer::getFov: the FOV setting, the sprint / fly / bow
         // factor from tickFov, the death zoom and narrower under water
@@ -5214,7 +5230,6 @@ static void mcle_exit_world(bool save) {
     mcle_client_weather_set_level(nullptr);
     mcle_portal_client_reset();
     mcle_sound_unlisten();
-    mcle_sound_stop_music();
     mcle_player_input_reset();
     mcle_hud_reset();
     // removeLocalPlayer: out of the tutorial, and its game mode deleted

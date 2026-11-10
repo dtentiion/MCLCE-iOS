@@ -1,6 +1,5 @@
-// Tiny AVAudioPlayer wrapper for menu music. Looks up a file in the
-// app's Documents directory and plays it on loop. Separate from the
-// Ruffle SWF pipeline.
+// The menus' own sounds. The music and the game's sounds are the game's
+// SoundEngine (Game/MCLESound.cpp).
 
 #pragma once
 
@@ -8,12 +7,9 @@
 extern "C" {
 #endif
 
-// Returns 1 on success (playing or already playing), 0 if no music
-// file was found in Documents, -1 if AVAudioPlayer init failed,
-// -2 if play() returned NO.
-int  mcle_audio_start_menu_music(void);
-
-void mcle_audio_stop_menu_music(void);
+// Starts the engine the menus' sounds play on. 1 when it's up, -1 when
+// it couldn't be made.
+int  mcle_audio_init(void);
 
 // Human-readable status string for the on-screen overlay. NUL-terminated
 // UTF-8 copied into `out`, up to `cap` bytes. Returns bytes written
@@ -33,11 +29,7 @@ void   mcle_audio_load_ui_sfx(void);
 // pile of clicks.
 void   mcle_audio_play_ui_sfx(const char* name, float volume, float pitch);
 
-// Set music and UI-SFX volumes, each 0..100, the scale of
-// eGameSetting_MusicVolume / eGameSetting_SoundFXVolume. Any
-// currently playing track or future SFX picks up the new level on
-// the next frame.
-void   mcle_audio_set_music_volume(int volume_0_100);
+// The UI SFX volume, 0..100, the scale of eGameSetting_SoundFXVolume
 void   mcle_audio_set_sfx_volume(int volume_0_100);
 
 #ifdef __cplusplus

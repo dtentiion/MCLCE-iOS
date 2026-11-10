@@ -845,7 +845,6 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         // ActionGameSettings -> Options::set: the game's sound engine
         // changes straight away too, paused or not
         if (setting == MCLE_SETTING_MusicVolume) {
-            mcle_audio_set_music_volume(stored);
             mcle_sound_update_music_volume(stored / 100.0f);
         } else if (setting == MCLE_SETTING_SoundFXVolume) {
             mcle_audio_set_sfx_volume(stored);
@@ -2647,6 +2646,10 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     // layer above it, so both can draw every frame.
     mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
     mcle_metal_attach_ui_layer((__bridge void*)self.customDrawView.layer, pw, ph);
+    // The engine the menus' own sounds play on. The music is the game's
+    // sound engine's, made in mcle_minecraft_init.
+    int mrc = mcle_audio_init();
+    NSLog(@"[MinecraftVC] audio init rc=%d", mrc);
     // Minecraft::init once there's a renderer: the options, textures and
     // fonts the menus can draw the game's models with
     mcle_minecraft_init();
@@ -2671,10 +2674,6 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive)
         self.displayLink.paused = YES;
 
-    // Start menu music if the user has a supported audio file in
-    // Documents. Silent no-op otherwise.
-    int mrc = mcle_audio_start_menu_music();
-    NSLog(@"[MinecraftVC] menu music start rc=%d", mrc);
     // Preload the six UI SFX oggs so menu interactions are audible.
     // Files ship in Documents/UI/<name>.ogg, same layout as console's
     // Windows64Media/Sound/Minecraft/UI folder.
@@ -2685,7 +2684,6 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     mcle_settings_load();
     // Seed live audio volumes from the settings store so first-run
     // or a pre-existing settings.dat applies immediately.
-    mcle_audio_set_music_volume(mcle_settings_get(MCLE_SETTING_MusicVolume));
     mcle_audio_set_sfx_volume(mcle_settings_get(MCLE_SETTING_SoundFXVolume));
     // Suppress Ruffle's auto-drawn yellow focus rectangle.
     // LCE's FJ_Slider and FJ_CheckBox include their own authored
@@ -2710,7 +2708,6 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
-    mcle_audio_stop_menu_music();
     [self.displayLink invalidate];
     self.displayLink = nil;
     mcle_render_shutdown();
@@ -5275,8 +5272,6 @@ static void MCLEConnectingHoldStart(void) {
     const int depths[] = { -2, kMenuBackgroundDepth, kLogoDepth, kDimDepth, kTooltipsDepth };
     for (int d : depths) ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, d, 0);
     if (self.splashLabel) self.splashLabel.hidden = YES;
-    // In game the upstream SoundEngine plays the music
-    mcle_audio_stop_menu_music();
 }
 
 // UIScene_FullscreenProgress::tick, fed from the iOS init stages instead
@@ -5419,8 +5414,6 @@ static void MCLEConnectingHoldStart(void) {
         ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
         ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
     }
-    // The menus have their music back
-    mcle_audio_start_menu_music();
 }
 
 // Ports UIScene_HowToPlayMenu constructor
@@ -6582,7 +6575,6 @@ static void MCLESkinSelectTickMovie(void) {
                                     dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                                     dispatch_get_main_queue(), ^{
                                         NSLog(@"[MinecraftVC] Exit Game confirmed, terminating");
-                                        mcle_audio_stop_menu_music();
                                         exit(0);
                                     });
                             }];
@@ -6688,7 +6680,6 @@ static void MCLESkinSelectTickMovie(void) {
                                         // the ones read every tick follow
                                         unsigned char music = mcle_settings_get(MCLE_SETTING_MusicVolume);
                                         unsigned char sfx = mcle_settings_get(MCLE_SETTING_SoundFXVolume);
-                                        mcle_audio_set_music_volume(music);
                                         mcle_audio_set_sfx_volume(sfx);
                                         mcle_sound_update_music_volume(music / 100.0f);
                                         mcle_sound_update_sfx_volume(sfx / 100.0f);
