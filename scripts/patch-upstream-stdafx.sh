@@ -1802,6 +1802,12 @@ if [ -f "$SOO_PY" ]; then
     python3 "$SOO_PY"
 fi
 
+# A music track that won't open isn't opened again every tick
+SOF_PY="$REPO_ROOT/scripts/patch-soundengine-open-failed.py"
+if [ -f "$SOF_PY" ]; then
+    python3 "$SOF_PY"
+fi
+
 # Map icons include the item frame and End portal ones the client would get
 MMD_PY="$REPO_ROOT/scripts/patch-minimap-ios-decorations.py"
 if [ -f "$MMD_PY" ]; then
