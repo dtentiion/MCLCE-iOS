@@ -6321,26 +6321,39 @@ static void MCLESkinSelectTickMovie(void) {
         mcle_ios_pad_state pad;
         if (mcle_ios_input_poll(0, &pad)) {
             // iggy is the key UIScene::convertGameActionToIggyKeycode
-            // gives the button's menu action, -1 for none
-            static const struct { uint32_t mask; int code; int iggy; } btnMap[] = {
-                { 0x00000001u,  0,  13 },  // A     -> South, ENTER
-                { 0x00000002u,  1,  27 },  // B     -> East, ESCAPE
-                { 0x00000008u,  2, 113 },  // Y     -> North, F2
-                { 0x00000004u,  3, 112 },  // X     -> West, F1
-                { 0x00000010u,  4,  -1 },  // START
-                { 0x00000020u,  5,  -1 },  // BACK  -> Select
-                { 0x00000400u,  6,  38 },  // DPadUp, UP
-                { 0x00000800u,  7,  40 },  // DPadDown, DOWN
-                { 0x00001000u,  8,  37 },  // DPadLeft, LEFT
-                { 0x00002000u,  9,  39 },  // DPadRight, RIGHT
-                { 0x00000080u, 10, 115 },  // LB    -> LeftTrigger, F4
-                { 0x00000040u, 11, 114 },  // RB    -> RightTrigger, F3
-                { 0x00800000u, 12,  33 },  // LT    -> LeftTrigger2, PAGE_UP
-                { 0x00400000u, 13,  34 },  // RT    -> RightTrigger2, PAGE_DOWN
+            // gives the button's menu action, -1 for none. repeat is
+            // UIScene::allowRepeat, which leaves A, B, X and Y out.
+            static const struct { uint32_t mask; int code; int iggy; bool repeat; } btnMap[] = {
+                { 0x00000001u,  0,  13, false },  // A     -> South, ENTER
+                { 0x00000002u,  1,  27, false },  // B     -> East, ESCAPE
+                { 0x00000008u,  2, 113, false },  // Y     -> North, F2
+                { 0x00000004u,  3, 112, false },  // X     -> West, F1
+                { 0x00000010u,  4,  -1, false },  // START
+                { 0x00000020u,  5,  -1, false },  // BACK  -> Select
+                { 0x00000400u,  6,  38, true },   // DPadUp, UP
+                { 0x00000800u,  7,  40, true },   // DPadDown, DOWN
+                { 0x00001000u,  8,  37, true },   // DPadLeft, LEFT
+                { 0x00002000u,  9,  39, true },   // DPadRight, RIGHT
+                { 0x00000080u, 10, 115, true },   // LB    -> LeftTrigger, F4
+                { 0x00000040u, 11, 114, true },   // RB    -> RightTrigger, F3
+                { 0x00800000u, 12,  33, true },   // LT    -> LeftTrigger2, PAGE_UP
+                { 0x00400000u, 13,  34, true },   // RT    -> RightTrigger2, PAGE_DOWN
             };
+            // The menu directions are the D-pad or the left stick
+            // (SetGameJoypadMaps in Windows64_Minecraft.cpp)
             uint32_t now = pad.buttons;
+            if (now & 0x00200000u) now |= 0x00000400u;  // LStickUp
+            if (now & 0x00100000u) now |= 0x00000800u;  // LStickDown
+            if (now & 0x00008000u) now |= 0x00001000u;  // LStickLeft
+            if (now & 0x00004000u) now |= 0x00002000u;  // LStickRight
             uint32_t prev = self.lastPadButtons;
             uint32_t changed = now ^ prev;
+            // UIController::handleKeyPress: a button held down presses
+            // again after UI_REPEAT_KEY_DELAY_MS, then every
+            // UI_REPEAT_KEY_REPEAT_RATE_MS
+            static double repeatAt[sizeof(btnMap)/sizeof(btnMap[0])];
+            uint32_t repeated = 0;
+            const double padTime = CACurrentMediaTime();
             // UIScene_LeaderboardsMenu::handleInput only takes
             // ACTION_MENU_CANCEL while m_bIgnoreInput is set, which on
             // Windows64 it always is
@@ -6349,13 +6362,21 @@ static void MCLESkinSelectTickMovie(void) {
             for (size_t i = 0; i < sizeof(btnMap)/sizeof(btnMap[0]); ++i) {
                 if (changed & btnMap[i].mask) {
                     if (now & btnMap[i].mask) {
+                        repeatAt[i] = btnMap[i].repeat ? padTime + 0.3 : 0;
                         if (cancelOnly && btnMap[i].mask != 0x00000002u) continue;
                         // The scene's handleInput animates the press first
                         MCLEAnimateKeyPress(btnMap[i].iggy);
                         ruffle_ios_player_gamepad_down(g_ruffle_player, btnMap[i].code);
                     } else {
+                        repeatAt[i] = 0;
                         ruffle_ios_player_gamepad_up(g_ruffle_player, btnMap[i].code);
                     }
+                } else if ((now & btnMap[i].mask) && repeatAt[i] > 0 && padTime > repeatAt[i]) {
+                    repeatAt[i] = padTime + 0.1;
+                    if (cancelOnly) continue;
+                    repeated |= btnMap[i].mask;
+                    MCLEAnimateKeyPress(btnMap[i].iggy);
+                    ruffle_ios_player_gamepad_down(g_ruffle_player, btnMap[i].code);
                 }
             }
             self.lastPadButtons = now;
@@ -6375,7 +6396,8 @@ static void MCLESkinSelectTickMovie(void) {
             // UIScene_MessageBox::handleInput (line 99-105).
             NSArray<NSDictionary*>* cfg = g_pending_dialog ? nil : self.menuButtonConfig;
             int count = (int)cfg.count;
-            uint32_t pressedNow = changed & now;  // buttons that went 0 -> 1
+            // buttons that went 0 -> 1, and the ones held long enough to repeat
+            uint32_t pressedNow = (changed & now) | repeated;
             auto changeState = ^(int idx, int state) {
                 if (idx < 0 || idx >= count) return;
                 const char* name = [cfg[idx][@"name"] UTF8String];
