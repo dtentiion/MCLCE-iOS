@@ -6374,13 +6374,18 @@ static void MCLESkinSelectTickMovie(void) {
                 { 0x00400000u, 13,  34, true },   // RT    -> RightTrigger2, PAGE_DOWN
             };
             // The menu directions are the D-pad or the left stick
-            // (SetGameJoypadMaps in Windows64_Minecraft.cpp)
-            uint32_t now = pad.buttons;
-            if (now & 0x00200000u) now |= 0x00000400u;  // LStickUp
-            if (now & 0x00100000u) now |= 0x00000800u;  // LStickDown
-            if (now & 0x00008000u) now |= 0x00001000u;  // LStickLeft
-            if (now & 0x00004000u) now |= 0x00002000u;  // LStickRight
-            uint32_t prev = self.lastPadButtons;
+            // (SetGameJoypadMaps in Windows64_Minecraft.cpp). The buttons
+            // before go through the same, a stick held since the game
+            // isn't a new press.
+            auto withStick = [](uint32_t buttons) {
+                if (buttons & 0x00200000u) buttons |= 0x00000400u;  // LStickUp
+                if (buttons & 0x00100000u) buttons |= 0x00000800u;  // LStickDown
+                if (buttons & 0x00008000u) buttons |= 0x00001000u;  // LStickLeft
+                if (buttons & 0x00004000u) buttons |= 0x00002000u;  // LStickRight
+                return buttons;
+            };
+            uint32_t now = withStick(pad.buttons);
+            uint32_t prev = withStick(self.lastPadButtons);
             uint32_t changed = now ^ prev;
             // UIController::handleKeyPress: a button held down presses
             // again after UI_REPEAT_KEY_DELAY_MS, then every
@@ -6405,7 +6410,11 @@ static void MCLESkinSelectTickMovie(void) {
                         repeatAt[i] = 0;
                         ruffle_ios_player_gamepad_up(g_ruffle_player, btnMap[i].code);
                     }
-                } else if ((now & btnMap[i].mask) && repeatAt[i] > 0 && padTime > repeatAt[i]) {
+                } else if ((now & btnMap[i].mask) && btnMap[i].repeat) {
+                    // One held since before the menu came up was repeating
+                    // all along
+                    if (repeatAt[i] == 0) repeatAt[i] = padTime + 0.1;
+                    if (padTime <= repeatAt[i]) continue;
                     repeatAt[i] = padTime + 0.1;
                     if (cancelOnly) continue;
                     repeated |= btnMap[i].mask;
