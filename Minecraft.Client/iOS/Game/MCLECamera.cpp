@@ -121,7 +121,10 @@ TilePos *Camera::getCameraTilePos(shared_ptr<LivingEntity> player, double alpha)
 Vec3 *Camera::getCameraPos(shared_ptr<LivingEntity> player, double alpha)
 {
     double xx = player->xo + (player->x - player->xo) * alpha;
-    double yy = player->yo + (player->y - player->yo) * alpha + player->getHeadHeight();
+    // The client's player has its y at the eyes and Player::getHeadHeight's
+    // 0.12 goes on top. This one's is at its feet, and the way up to the
+    // eyes is already in yPlayerOffs.
+    double yy = player->yo + (player->y - player->yo) * alpha + 0.12f;
     double zz = player->zo + (player->z - player->zo) * alpha;
 
     double xt = xx + Camera::xPlayerOffs * 1;

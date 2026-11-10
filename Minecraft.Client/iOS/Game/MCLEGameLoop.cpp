@@ -3386,7 +3386,8 @@ extern "C" void mcle_game_tick(void) {
         if (g_player && g_player->level) {
             float fogBr = g_fogBr.load(std::memory_order_relaxed);
             g_fogBrO.store(fogBr, std::memory_order_relaxed);
-            float brr = g_player->level->getBrightness(Mth::floor(g_player->x), Mth::floor(g_player->y),
+            float brr = g_player->level->getBrightness(Mth::floor(g_player->x),
+                                                       Mth::floor(g_player->y + 1.62 - g_player->heightOffset),
                                                        Mth::floor(g_player->z));
             float whiteness = (3 - Minecraft::GetInstance()->options->viewDistance) / 3.0f;
             float fogBrT = brr * (1 - whiteness) + whiteness;
@@ -3633,12 +3634,10 @@ extern "C" void mcle_game_tick(void) {
                 std::lock_guard<std::mutex> lock(g_itemInHandMutex);
                 g_itemInHand->tick();
             }
-            // Minecraft::run's soundEngine->tick and the main loop's
-            // playMusicTick, volumes from the settings like ActionGameSettings
-            mcle_sound_tick(g_player, 1.0f, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
-                            mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
             mcle_hud_update(g_player);
-            animateTick(g_player->level, Mth::floor(g_player->x), Mth::floor(g_player->y), Mth::floor(g_player->z));
+            // around the client player's y, at its eyes
+            animateTick(g_player->level, Mth::floor(g_player->x),
+                        Mth::floor(g_player->y + 1.62 - g_player->heightOffset), Mth::floor(g_player->z));
             mcle_weather_tick(g_player, g_player->level);
             g_playerDead.store(g_player->getHealth() <= 0, std::memory_order_relaxed);
         } catch (...) {
@@ -3960,7 +3959,9 @@ static void mcle_setup_clear_color(float a) {
     fg *= brr;
     fb *= brr;
 
-    double yy = (player->yOld + (player->y - player->yOld) * a) * level->dimension->getClearColorScale();
+    // the client's player has its y at the eyes
+    double yy = (player->yOld + (player->y - player->yOld) * a + 1.62 - player->heightOffset) *
+                level->dimension->getClearColorScale();
 
     if (player->hasEffect(MobEffect::blindness)) {
         int duration = player->getEffect(MobEffect::blindness)->getDuration();
@@ -4049,7 +4050,7 @@ static void mcle_setup_fog(int i, float alpha) {
             // 4J - test for doing bedrockfog brought forward from 1.2.3
             if (level->dimension->hasBedrockFog() && !creative) {
                 double yy = ((player->getLightColor(alpha) & 0xf00000) >> 20) / 16.0 +
-                            (player->yOld + (player->y - player->yOld) * alpha + 4) / 32;
+                            (player->yOld + (player->y - player->yOld) * alpha + 1.62 - player->heightOffset + 4) / 32;
                 if (yy < 1) {
                     if (yy < 0) yy = 0;
                     yy = yy * yy;
@@ -4470,6 +4471,12 @@ extern "C" void mcle_world_drive_renderer(void) {
         }
         const float a = frame_partial_tick;
 
+        // Minecraft::run_middle's soundEngine->tick and the main loop's
+        // playMusicTick, both once a frame and paused or not. Volumes from
+        // the settings like ActionGameSettings.
+        mcle_sound_tick(g_player, a, mcle_settings_get(0 /*MusicVolume*/) / 100.0f,
+                        mcle_settings_get(1 /*SoundFXVolume*/) / 100.0f);
+
         // GameRenderer::getFov: the FOV setting, the sprint / fly / bow
         // factor from tickFov, the death zoom and narrower under water
         float fov = 70.0f + mcle_settings_get(4 /*FOV*/) * 40.0f / 100.0f;
@@ -4478,13 +4485,10 @@ extern "C" void mcle_world_drive_renderer(void) {
             float duration = g_player->deathTime + a;
             fov /= ((1 - 500 / (duration + 500)) * 2.0f + 1);
         }
-        {
-            double cx = g_player->xo + (g_player->x - g_player->xo) * a;
-            double cy = g_player->yo + (g_player->y - g_player->yo) * a + 1.62 - g_player->heightOffset;
-            double cz = g_player->zo + (g_player->z - g_player->zo) * a;
-            int t = g_player->level->getTile(Mth::floor(cx), Mth::floor(cy), Mth::floor(cz));
-            if (t != 0 && Tile::tiles[t] && Tile::tiles[t]->material == Material::water) fov = fov * 60 / 70;
-        }
+        const int cameraTile = Camera::getBlockAt(g_player->level, g_player, a);
+        const bool cameraInWater = cameraTile != 0 && Tile::tiles[cameraTile] &&
+                                   Tile::tiles[cameraTile]->material == Material::water;
+        if (cameraInWater) fov = fov * 60 / 70;
 
         // GameRenderer::setupCamera, first person
         mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
@@ -4916,6 +4920,7 @@ extern "C" void mcle_world_drive_renderer(void) {
                 float duration = g_player->deathTime + a;
                 handFov /= ((1 - 500 / (duration + 500)) * 2.0f + 1);
             }
+            if (cameraInWater) handFov = handFov * 60 / 70;
             mcle_glbridge_matrix_mode(0x1701 /* GL_PROJECTION */);
             mcle_glbridge_load_identity();
             mcle_glbridge_metal_perspective(handFov, aspect, 0.05f, mcle_render_distance() * 2);

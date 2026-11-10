@@ -1829,3 +1829,9 @@ HLE_PY="$REPO_ROOT/scripts/patch-iteminhand-light-eye.py"
 if [ -f "$HLE_PY" ]; then
     python3 "$HLE_PY"
 fi
+
+# So is the block drawn over the screen with the head inside one
+IWE_PY="$REPO_ROOT/scripts/patch-iteminhand-inwall-eye.py"
+if [ -f "$IWE_PY" ]; then
+    python3 "$IWE_PY"
+fi
