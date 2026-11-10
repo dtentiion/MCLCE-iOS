@@ -14,9 +14,10 @@ There may be small issues or bugs here and there, if you find any, be sure to op
 The most recent build is available on [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest), and will be updated on each commit to `main`.
 
 <p align="center">
-  <img src="docs/screenshots/menu.jpg" width="32%" alt="Main menu">
-  <img src="docs/screenshots/world.jpg" width="32%" alt="In game">
-  <img src="docs/screenshots/creative.jpg" width="32%" alt="Creative menu">
+  <img src="docs/screenshots/autosave.jpg" width="49%" alt="Autosave notice">
+  <img src="docs/screenshots/menu.jpg" width="49%" alt="Main menu">
+  <img src="docs/screenshots/world.jpg" width="49%" alt="In game">
+  <img src="docs/screenshots/creative.jpg" width="49%" alt="Creative menu">
 </p>
 
 ## Further options
