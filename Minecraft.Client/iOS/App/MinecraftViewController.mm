@@ -847,7 +847,6 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         if (setting == MCLE_SETTING_MusicVolume) {
             mcle_sound_update_music_volume(stored / 100.0f);
         } else if (setting == MCLE_SETTING_SoundFXVolume) {
-            mcle_audio_set_sfx_volume(stored);
             mcle_sound_update_sfx_volume(stored / 100.0f);
         }
 
@@ -2646,8 +2645,8 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     // layer above it, so both can draw every frame.
     mcle_render_init((__bridge void*)self.metalView.layer, pw, ph);
     mcle_metal_attach_ui_layer((__bridge void*)self.customDrawView.layer, pw, ph);
-    // The engine the menus' own sounds play on. The music is the game's
-    // sound engine's, made in mcle_minecraft_init.
+    // The audio session, before the game's sound engine is made in
+    // mcle_minecraft_init. The music and every sound are that engine's.
     int mrc = mcle_audio_init();
     NSLog(@"[MinecraftVC] audio init rc=%d", mrc);
     // Minecraft::init once there's a renderer: the options, textures and
@@ -2674,17 +2673,10 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive)
         self.displayLink.paused = YES;
 
-    // Preload the six UI SFX oggs so menu interactions are audible.
-    // Files ship in Documents/UI/<name>.ogg, same layout as console's
-    // Windows64Media/Sound/Minecraft/UI folder.
-    mcle_audio_load_ui_sfx();
     // Load persisted game settings (or seed console defaults on
     // first run). Mirrors CMinecraftApp::InitGameSettings path:
     // load settings.dat, fall through to defaults otherwise.
     mcle_settings_load();
-    // Seed live audio volumes from the settings store so first-run
-    // or a pre-existing settings.dat applies immediately.
-    mcle_audio_set_sfx_volume(mcle_settings_get(MCLE_SETTING_SoundFXVolume));
     // Suppress Ruffle's auto-drawn yellow focus rectangle.
     // LCE's FJ_Slider and FJ_CheckBox include their own authored
     // outline MovieClips (FJ_Slider_Outline etc) so the default
@@ -6680,7 +6672,6 @@ static void MCLESkinSelectTickMovie(void) {
                                         // the ones read every tick follow
                                         unsigned char music = mcle_settings_get(MCLE_SETTING_MusicVolume);
                                         unsigned char sfx = mcle_settings_get(MCLE_SETTING_SoundFXVolume);
-                                        mcle_audio_set_sfx_volume(sfx);
                                         mcle_sound_update_music_volume(music / 100.0f);
                                         mcle_sound_update_sfx_volume(sfx / 100.0f);
                                         mcle_game_host_settings_changed();

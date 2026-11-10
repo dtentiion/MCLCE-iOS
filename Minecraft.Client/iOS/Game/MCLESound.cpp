@@ -4,8 +4,10 @@
 // methods call the mcle_sound_* functions here. The real class is renamed
 // in this file so the two don't clash.
 
+#include <atomic>
 #include <cerrno>
 #include <cfloat>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -235,6 +237,27 @@ void mcle_sound_schedule(int iSound, float x, float y, float z, float volume, fl
 void mcle_sound_play_ui(int iSound, float volume, float pitch) {
     std::lock_guard<std::recursive_mutex> lock(g_mutex);
     if (g_engine) g_engine->playUI(iSound, volume, pitch);
+}
+
+// UIController::PlayUISFX for the menus the host runs, by the sound's name
+// in ConsoleSoundEngine::wchUISoundNames
+extern "C" void mcle_audio_play_ui_sfx(const char *name, float volume, float pitch) {
+    static const char *const kNames[eSFX_MAX] = {"back", "craft", "craftfail", "focus", "press", "scroll"};
+    static std::atomic<long long> s_lastUiSfx{0};
+    if (name == nullptr) return;
+
+    // Don't play multiple SFX on the same tick
+    const long long time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (time - s_lastUiSfx.load() < 10) return;
+    s_lastUiSfx.store(time);
+
+    for (int i = 0; i < eSFX_MAX; i++) {
+        if (strcmp(name, kNames[i]) == 0) {
+            mcle_sound_play_ui(i, volume, pitch);
+            return;
+        }
+    }
 }
 
 void mcle_sound_play_streaming(const std::wstring &name, float x, float y, float z, float volume, float pitch,
