@@ -1796,6 +1796,12 @@ if [ -f "$SOP_PY" ]; then
     python3 "$SOP_PY"
 fi
 
+# Nor is what a server leaves to a player's own client
+SOO_PY="$REPO_ROOT/scripts/patch-server-only-own.py"
+if [ -f "$SOO_PY" ]; then
+    python3 "$SOO_PY"
+fi
+
 # Map icons include the item frame and End portal ones the client would get
 MMD_PY="$REPO_ROOT/scripts/patch-minimap-ios-decorations.py"
 if [ -f "$MMD_PY" ]; then

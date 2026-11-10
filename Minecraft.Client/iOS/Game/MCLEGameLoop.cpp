@@ -313,6 +313,18 @@ extern "C" void mcle_server_only_particles(int on) {
     t_serverOnlyParticles += on ? 1 : -1;
 }
 
+// Set while that code does what a server leaves to the player's own client:
+// its particles, the sounds that skip the player and the level events sent
+// on the player's behalf (scripts/patch-server-only-own.py)
+thread_local int t_serverOnlyOwn = 0;
+extern "C" void mcle_server_only_own(int on) {
+    t_serverOnlyOwn += on ? 1 : -1;
+    t_serverOnlyParticles += on ? 1 : -1;
+}
+extern "C" int mcle_server_only_own_set(void) {
+    return t_serverOnlyOwn > 0 ? 1 : 0;
+}
+
 // The LevelRenderer listens to the server level here, not a client one.
 // ServerLevelListener never sends a player its own crack progress, its
 // client draws its own guess (MultiPlayerGameMode), so the server's calls
@@ -353,6 +365,8 @@ public:
     void globalLevelEvent(int type, int x, int y, int z, int data) override { r->globalLevelEvent(type, x, y, z, data); }
     // ServerLevelListener::levelEvent sends it to the players within 64
     void levelEvent(shared_ptr<Player> source, int type, int x, int y, int z, int data) override {
+        // ServerLevelListener::levelEvent doesn't send it to its source
+        if (source != nullptr && t_serverOnlyOwn > 0) return;
         if (g_player) {
             const double xd = x - g_player->x;
             const double yd = y - g_player->y;

@@ -70,6 +70,8 @@ static bool FileExists(const char *path) {
 #include "../../../upstream/Minecraft.World/SharedConstants.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 
+extern "C" int mcle_server_only_own_set(void); // MCLEGameLoop.cpp
+
 namespace {
 
 MCLEUpstreamSoundEngine *g_engine = nullptr;
@@ -101,6 +103,8 @@ public:
     }
     void playSoundExceptPlayer(shared_ptr<Player>, int iSound, double x, double y, double z, float volume,
                                float pitch, float) override {
+        // unless it's from code that client never runs
+        if (mcle_server_only_own_set()) return;
         if (inListenerLevel()) mcle_level_play_local_sound(x, y, z, iSound, volume, pitch, false, 16.0f);
     }
     void addParticle(ePARTICLE_TYPE, double, double, double, double, double, double) override {}
