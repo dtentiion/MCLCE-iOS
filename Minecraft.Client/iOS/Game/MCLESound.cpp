@@ -133,7 +133,11 @@ void mcle_level_play_local_sound(double x, double y, double z, int iSound, float
     float minDistSq = FLT_MAX;
     {
         std::lock_guard<std::recursive_mutex> lock(g_mutex);
-        if (g_listenerPlayer) minDistSq = static_cast<float>(g_listenerPlayer->distanceToSqr(x, y, z));
+        // from the y the client's player has, at its eyes
+        if (g_listenerPlayer) {
+            minDistSq = static_cast<float>(
+                g_listenerPlayer->distanceToSqr(x, y - (1.62 - g_listenerPlayer->heightOffset), z));
+        }
     }
 
     if (minDistSq < fClipSoundDist * fClipSoundDist) {

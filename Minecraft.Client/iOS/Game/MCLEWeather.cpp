@@ -11,6 +11,7 @@
 #include <mutex>
 
 #include "../../../upstream/Minecraft.Client/Minecraft.h"
+#include "../../../upstream/Minecraft.Client/GameRenderer.h"
 #include "../../../upstream/Minecraft.Client/LevelRenderer.h"
 #include "../../../upstream/Minecraft.Client/Options.h"
 #include "../../../upstream/Minecraft.Client/ParticleEngine.h"
@@ -20,6 +21,7 @@
 #include "../../../upstream/Minecraft.Client/WaterDropParticle.h"
 #include "../../../upstream/Minecraft.World/Biome.h"
 #include "../../../upstream/Minecraft.World/BiomeSource.h"
+#include "../../../upstream/Minecraft.World/Dimension.h"
 #include "../../../upstream/Minecraft.World/Level.h"
 #include "../../../upstream/Minecraft.World/LivingEntity.h"
 #include "../../../upstream/Minecraft.World/Material.h"
@@ -35,8 +37,20 @@ namespace {
 
 std::atomic<int> g_tick{0};
 int g_rainSoundTime = 0;
+
+std::mutex g_clientWeatherMutex;
+Level *g_clientWeatherLevel = nullptr;
+bool g_clientRaining = false;
+float g_clientRainLevel = 0, g_clientORainLevel = 0;
+thread_local int t_clientSide = 0;
 float *g_rainXa = nullptr;
 float *g_rainZa = nullptr;
+
+// The y the client's player would have, heightOffset above its feet. The
+// server's player has none.
+double clientY(const std::shared_ptr<LivingEntity> &player, double y) {
+    return y + 1.62 - player->heightOffset;
+}
 
 ResourceLocation &rainLocation() {
     static ResourceLocation location(TN_ENVIRONMENT_RAIN);
@@ -54,11 +68,47 @@ int mcle_renderer_tick() {
     return g_tick.load(std::memory_order_relaxed);
 }
 
+MCLEClientSide::MCLEClientSide() { ++t_clientSide; }
+MCLEClientSide::~MCLEClientSide() { --t_clientSide; }
+
+// For Level::getRainLevel and getThunderLevel (scripts/patch-level-client-weather.py)
+extern "C" int mcle_client_weather_level(const void *level, int thunder, float a, float *out) {
+    if (t_clientSide == 0) return 0;
+    std::lock_guard<std::mutex> lock(g_clientWeatherMutex);
+    if (level != g_clientWeatherLevel) return 0;
+    *out = thunder ? 0.0f : g_clientORainLevel + (g_clientRainLevel - g_clientORainLevel) * a;
+    return 1;
+}
+
+void mcle_client_weather_set_level(Level *level) {
+    const bool raining = level != nullptr && level->isRaining();
+    std::lock_guard<std::mutex> lock(g_clientWeatherMutex);
+    g_clientWeatherLevel = level;
+    g_clientRaining = raining;
+    g_clientRainLevel = g_clientORainLevel = raining ? 1.0f : 0.0f;
+}
+
+void mcle_client_weather_set_raining(bool raining) {
+    std::lock_guard<std::mutex> lock(g_clientWeatherMutex);
+    g_clientRaining = raining;
+    g_clientRainLevel = g_clientORainLevel = raining ? 1.0f : 0.0f;
+}
+
 void mcle_weather_tick(const std::shared_ptr<LivingEntity> &player, Level *level) {
     static Random s_random;
     Random *random = &s_random;
     Minecraft *mc = Minecraft::GetInstance();
     int _tick = g_tick.load(std::memory_order_relaxed);
+
+    // MultiPlayerLevel::tickWeather
+    if (!level->dimension->hasCeiling) {
+        std::lock_guard<std::mutex> lock(g_clientWeatherMutex);
+        g_clientORainLevel = g_clientRainLevel;
+        g_clientRainLevel += g_clientRaining ? 0.01f : -0.01f;
+        if (g_clientRainLevel < 0) g_clientRainLevel = 0;
+        if (g_clientRainLevel > 1) g_clientRainLevel = 1;
+    }
+    MCLEClientSide clientSide;
 
     // tickRain
     do {
@@ -71,8 +121,9 @@ void mcle_weather_tick(const std::shared_ptr<LivingEntity> &player, Level *level
 
         random->setSeed(_tick * 312987231l);
 
+        const double playerY = clientY(player, player->y);
         int x0 = Mth::floor(player->x);
-        int y0 = Mth::floor(player->y);
+        int y0 = Mth::floor(playerY);
         int z0 = Mth::floor(player->z);
 
         int r = 10;
@@ -117,8 +168,8 @@ void mcle_weather_tick(const std::shared_ptr<LivingEntity> &player, Level *level
 
         if (rainPosSamples > 0 && random->nextInt(3) < g_rainSoundTime++) {
             g_rainSoundTime = 0;
-            if (rainPosY > player->y + 1 &&
-                level->getTopRainBlock(Mth::floor(player->x), Mth::floor(player->z)) > Mth::floor(player->y)) {
+            if (rainPosY > playerY + 1 &&
+                level->getTopRainBlock(Mth::floor(player->x), Mth::floor(player->z)) > Mth::floor(playerY)) {
                 level->playLocalSound(rainPosX, rainPosY, rainPosZ, eSoundType_AMBIENT_WEATHER_RAIN, 0.1f, 0.5f, false);
             } else {
                 level->playLocalSound(rainPosX, rainPosY, rainPosZ, eSoundType_AMBIENT_WEATHER_RAIN, 0.2f, 1.0f, false);
@@ -139,6 +190,8 @@ void mcle_weather_render(const std::shared_ptr<LivingEntity> &player, Level *lev
     float rainLevel = level->getRainLevel(a);
     if (rainLevel <= 0) return;
 
+    mc->gameRenderer->turnOnLightLayer(a);
+
     if (g_rainXa == nullptr) {
         g_rainXa = new float[32 * 32];
         g_rainZa = new float[32 * 32];
@@ -155,7 +208,7 @@ void mcle_weather_render(const std::shared_ptr<LivingEntity> &player, Level *lev
     }
 
     int x0 = Mth::floor(player->x);
-    int y0 = Mth::floor(player->y);
+    int y0 = Mth::floor(clientY(player, player->y));
     int z0 = Mth::floor(player->z);
 
     Tesselator *t = Tesselator::getInstance();
@@ -171,7 +224,7 @@ void mcle_weather_render(const std::shared_ptr<LivingEntity> &player, Level *lev
     double yo = player->yOld + (player->y - player->yOld) * a;
     double zo = player->zOld + (player->z - player->zOld) * a;
 
-    int yMin = Mth::floor(yo);
+    int yMin = Mth::floor(clientY(player, yo));
 
     int r = 5;
     switch (mc->levelRenderer->activePlayers()) {
@@ -277,4 +330,5 @@ void mcle_weather_render(const std::shared_ptr<LivingEntity> &player, Level *lev
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glAlphaFunc(GL_GREATER, 0.1f);
+    mc->gameRenderer->turnOffLightLayer(a);
 }

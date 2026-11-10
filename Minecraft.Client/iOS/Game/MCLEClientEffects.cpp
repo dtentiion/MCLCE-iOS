@@ -15,6 +15,7 @@ std::shared_ptr<ServerPlayer> mcle_local_player();   // MCLEGameLoop.cpp
 void mcle_local_player_win_game();   // MCLEGameLoop.cpp
 // MCLEGameLoop.cpp, with the Gui's lock held
 void mcle_gui_add_message(const std::wstring &message, bool bIsDeathMessage);
+void mcle_client_weather_set_raining(bool raining);   // MCLEWeather.cpp
 
 // Whether a level is the one the local player is in, the client's level
 bool mcle_client_level(Level *level) {
@@ -31,12 +32,14 @@ void mcle_client_game_event(std::shared_ptr<GameEventPacket> packet) {
             mcle_gui_add_message(app.GetString(GameEventPacket::EVENT_LANGUAGE_ID[event]), false);
         }
     }
-    // START_RAINING and STOP_RAINING set the client level's rain outright.
-    // The client's level is the server's here, whose rain comes and goes on
-    // its own. CHANGE_GAME_MODE sets the client's game mode, which is the
-    // server's here and already has it. START_SAVING and STOP_SAVING do
-    // nothing on the host.
-    if (event == GameEventPacket::WIN_GAME) {
+    // CHANGE_GAME_MODE sets the client's game mode, which is the server's
+    // here and already has it. START_SAVING and STOP_SAVING do nothing on
+    // the host.
+    if (event == GameEventPacket::START_RAINING) {
+        mcle_client_weather_set_raining(true);
+    } else if (event == GameEventPacket::STOP_RAINING) {
+        mcle_client_weather_set_raining(false);
+    } else if (event == GameEventPacket::WIN_GAME) {
         mcle_local_player_win_game();
     } else if (event == GameEventPacket::SUCCESSFUL_BOW_HIT) {
         std::shared_ptr<ServerPlayer> player = mcle_local_player();

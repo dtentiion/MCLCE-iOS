@@ -341,7 +341,14 @@ public:
         r->playStreamingMusic(name, x, y, z);
     }
     void globalLevelEvent(int type, int x, int y, int z, int data) override { r->globalLevelEvent(type, x, y, z, data); }
+    // ServerLevelListener::levelEvent sends it to the players within 64
     void levelEvent(shared_ptr<Player> source, int type, int x, int y, int z, int data) override {
+        if (g_player) {
+            const double xd = x - g_player->x;
+            const double yd = y - g_player->y;
+            const double zd = z - g_player->z;
+            if (xd * xd + yd * yd + zd * zd >= 64.0 * 64.0) return;
+        }
         std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
         r->levelEvent(source, type, x, y, z, data);
     }
@@ -382,6 +389,7 @@ void mcle_client_set_level(ServerLevel *level) {
     MultiPlayerLevel *lvl = reinterpret_cast<MultiPlayerLevel *>(level);
     if (g_clientLevel && g_clientLevelListener) g_clientLevel->removeListener(g_clientLevelListener);
     g_clientLevel = level;
+    mcle_client_weather_set_level(level);
     mc->level = lvl;
     {
         std::lock_guard<std::recursive_mutex> lock(g_particleMutex);
@@ -4387,6 +4395,7 @@ static void mcle_world_phase(int phase) {
 
 extern "C" void mcle_world_drive_renderer(void) {
     std::lock_guard<std::mutex> frameLock(g_frameMutex);
+    MCLEClientSide clientSide;
     mcle_world_phase(0);
     if (g_initState != kStateTicking || !g_levelRenderer || !g_player) return;
     if (g_levelChanging.load()) return;
@@ -5162,6 +5171,7 @@ static void mcle_exit_world(bool save) {
     delete g_clientLevelListener;
     g_clientLevelListener = nullptr;
     g_clientLevel = nullptr;
+    mcle_client_weather_set_level(nullptr);
     mcle_portal_client_reset();
     mcle_sound_unlisten();
     mcle_sound_stop_music();

@@ -1424,14 +1424,6 @@ if [ -f "$LPL_PY" ]; then
     python3 "$LPL_PY"
 fi
 
-# LevelRenderer.cpp: skip the always-on darkList draw at the bottom
-# of renderSky. Chunks render after renderSky in this build so chunk
-# gaps showed the dome through them as blue jittery patches.
-RSD_PY="$REPO_ROOT/scripts/patch-rendersky-no-darklist-overworld.py"
-if [ -f "$RSD_PY" ]; then
-    python3 "$RSD_PY"
-fi
-
 # ColourTable.h: expose the static name table publicly so the iOS shim
 # can parse colours.xml and look up names against it.
 CTP_PY="$REPO_ROOT/scripts/patch-colourtable-public.py"
@@ -1595,6 +1587,16 @@ fi
 SNDF_PY="$REPO_ROOT/scripts/patch-soundengine-sound-folder.py"
 if [ -f "$SNDF_PY" ]; then
     python3 "$SNDF_PY"
+fi
+# The listener is at the eyes, where the client's player has its y
+SLE_PY="$REPO_ROOT/scripts/patch-soundengine-listener-eye.py"
+if [ -f "$SLE_PY" ]; then
+    python3 "$SLE_PY"
+fi
+# Rain and thunder levels as a client's level has them, for the client's side
+LCW_PY="$REPO_ROOT/scripts/patch-level-client-weather.py"
+if [ -f "$LCW_PY" ]; then
+    python3 "$LCW_PY"
 fi
 
 # Level::playLocalSound is empty upstream (MultiPlayerLevel has the real
