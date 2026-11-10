@@ -9,6 +9,8 @@ Native iOS port of TU19 Legacy Console Edition. **There are no Minecraft game fi
 
 **It's playable!** All aspects of the game except multiplayer are working, including the full menu tree, HUD, inventory/crafting screens, survival/creative modes, the tutorial, the Nether and the End, saving and use of texture/skin packs. See [STATUS.md](STATUS.md) for more details and known issues.
 
+There may be small issues or bugs here and there, if you find any, be sure to open an issue in the Issues section.
+
 The most recent build is available on [Releases](https://github.com/dtentiion/MCLCE-iOS/releases/latest), and will be updated on each commit to `main`.
 
 <p align="center">
