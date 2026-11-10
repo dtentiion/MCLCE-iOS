@@ -86,7 +86,16 @@ static int  g_load_default_buttons = 1;
 static int  g_load_save_list_index = 0;
 static int  g_load_focus_control = -1;
 static bool g_load_or_join_ignore_input = false;
-static int  g_load_game_mode = 0;              // GameType id, 0 survival 1 creative
+static int  g_load_game_mode = 0;              // GameType id: 0 survival, 1 creative, 2 adventure
+std::wstring mcle_format_html_string(int iPad, const std::wstring& desc); // Game/MCLEHowToPlay.cpp
+
+static NSString* MCLELoadGameModeLabel(void) {
+    switch (g_load_game_mode) {
+        case 1:  return MCLEStr(IDS_GAMEMODE_CREATIVE);
+        case 2:  return MCLEStr(IDS_GAMEMODE_ADVENTURE);
+        default: return MCLEStr(IDS_GAMEMODE_SURVIVAL);
+    }
+}
 static bool g_load_has_been_in_creative = false;
 static bool g_load_is_save_owner = true;       // m_bIsSaveOwner
 // Opened from the save list, not come back to from More Options
@@ -231,9 +240,29 @@ typedef void (^MCLEDialogCallback)(MCLEDialogResult result);
 
 static MCLEDialogRequest* g_pending_dialog = nil;
 
-// UIScene::m_iFocusControl, the control the scene's movie last put its focus
-// on. -1 until it has.
+// UIScene::m_iFocusControl and m_iFocusChild, where the scene's movie last
+// put its focus, and the same for a message box over it. -1 until it has.
 static int g_scene_focus_control = -1;
+static int g_scene_focus_child = -1;
+static int g_dialog_focus_control = -1;
+static int g_dialog_focus_child = -1;
+// Set while a scene is put back as it was, which isn't the player moving
+// the focus
+static bool g_focus_restoring = false;
+
+// UIController::PlayUISFX: one sound a tick at most, and the focus sound's
+// pitch varies a little
+static void MCLEPlayUISFX(const char* sound) {
+    static double s_last = 0;
+    const double now = CACurrentMediaTime();
+    if (now - s_last < 0.010) return;
+    s_last = now;
+    float pitch = 1.0f;
+    if (strcmp(sound, "focus") == 0) {
+        pitch += ((float)arc4random_uniform(1000) / 1000.0f - 0.5f) / 10.0f;
+    }
+    mcle_audio_play_ui_sfx(sound, 1.0f, pitch);
+}
 
 // Stage-sibling depth assignments. Stack is back-to-front:
 //   -2  Panorama
@@ -802,6 +831,8 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         unsigned char stored = 0;
         int setting = mcle_map_slider((int)id, value, &stored);
         if (setting < 0) return;
+        // UIControl_Slider::handleSliderMove
+        if (mcle_settings_get(setting) != stored) MCLEPlayUISFX("scroll");
         mcle_settings_set(setting, stored);
         NSLog(@"[settings] %@ slider id=%d raw=%g -> setting=%d val=%u",
               g_current_scene_name, (int)id, value, setting, stored);
@@ -926,6 +957,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 // UIScene_LoadOrJoinMenu::handlePress: item 0 is Create New
                 // World, then the level generators, then the saves.
                 int defaultButtons = g_load_default_buttons;
+                MCLEPlayUISFX("press");
                 if (itemId == 0) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         MCLECreateWorldReset();
@@ -936,7 +968,6 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                     int lGenID = itemId - 1;
                     dispatch_async(dispatch_get_main_queue(), ^{
                         if (g_loading_world) return;
-                        mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
                         [g_active_vc navigateForwardTo:@"FullscreenProgress1080.swf"];
                         if (mcle_game_start_level_gen(lGenID)) {
                             g_loading_world = true;
@@ -963,6 +994,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         } else if ([g_current_scene_name isEqualToString:@"HowToPlayMenu1080.swf"]) {
             // UIScene_HowToPlayMenu::handlePress: the topic's page
             int page = mcle_htp_menu_page(itemId);
+            MCLEPlayUISFX("press");
             dispatch_async(dispatch_get_main_queue(), ^{
                 g_htp_page = page;
                 [g_active_vc navigateForwardTo:@"HowToPlay1080.swf"];
@@ -1018,6 +1050,9 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                 case 3: r = MCLEDialogResultFourth;   break;
                 default: break;
             }
+            // UIScene_MessageBox::handlePress leaves through navigateBack,
+            // which makes the back sound
+            MCLEPlayUISFX("back");
             dispatch_async(dispatch_get_main_queue(), ^{
                 MinecraftViewController* vc = g_active_vc;
                 if (vc) [vc finishDialogWithResult:r];
@@ -1027,8 +1062,18 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                   g_current_scene_name, listId, itemId);
         }
     } else if (strcmp(method, "handleFocusChange") == 0) {
-        // UIScene::_handleFocusChange. The message box reports its own here too.
-        if (!g_pending_dialog) g_scene_focus_control = (int)id;
+        // UIScene::_handleFocusChange, for the scene or the message box over
+        // it. The scenes in the game's own code make the sound themselves.
+        {
+            int& control = g_pending_dialog ? g_dialog_focus_control : g_scene_focus_control;
+            int& child = g_pending_dialog ? g_dialog_focus_child : g_scene_focus_child;
+            const bool changed = control != (int)id || child != (int)value;
+            control = (int)id;
+            child = (int)value;
+            const bool own = !g_pending_dialog &&
+                (mcle_container_is_open() || mcle_keyboard_front_end_is_open());
+            if (changed && !own && !g_focus_restoring) MCLEPlayUISFX("focus");
+        }
         if (mcle_container_is_open() && !g_pending_dialog) {
             int cid = (int)id;
             int child = (int)value;
@@ -1090,7 +1135,13 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
         }
     } else if (strcmp(method, "handleInitFocus") == 0) {
         // UIScene::_handleInitFocus
-        if (!g_pending_dialog) g_scene_focus_control = (int)id;
+        if (g_pending_dialog) {
+            g_dialog_focus_control = (int)id;
+            g_dialog_focus_child = (int)value;
+        } else {
+            g_scene_focus_control = (int)id;
+            g_scene_focus_child = (int)value;
+        }
         if (mcle_container_is_open() && !g_pending_dialog) {
             int cid = (int)id;
             int child = (int)value;
@@ -2937,6 +2988,10 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
         @"LeaderboardsMenu1080.swf",
         @"CreateWorldMenu1080.swf",
         @"LaunchMoreOptionsMenu1080.swf",
+        // Neither has an updateComponents, and in the game nothing has
+        // the logo up for them to leave on
+        @"DeathMenu1080.swf",
+        @"EndPoem1080.swf",
     ]];
     int visible = [logoOff containsObject:swfName] ? 0 : 1;
     ruffle_ios_set_xui_sibling_visible_at_depth(
@@ -3465,7 +3520,7 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     // Default first item: "Create New World". Console adds this
     // at JOIN_LOAD_CREATE_BUTTON_INDEX=0 regardless of whether
     // any saves exist (UIScene_LoadOrJoinMenu.cpp:1098).
-    const char* createLabel = "Create New World";
+    const char* createLabel = MCLEStr(IDS_CREATE_NEW_WORLD).UTF8String;
     ruffle_ios_call_list_add_item(g_ruffle_player,
         (const uint8_t*)saves, strlen(saves),
         (const uint8_t*)createLabel, strlen(createLabel),
@@ -3849,7 +3904,7 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
         if (read) {
             g_load_has_been_in_creative = (opts & 0x200) != 0;   // GAME_HOST_OPTION_BITMASK_BEENINCREATIVE
             g_load_game_mode = (opts & 0x30) >> 4;               // GAME_HOST_OPTION_BITMASK_GAMETYPE
-            if (g_load_game_mode != 1) g_load_game_mode = 0;
+            if (g_load_game_mode > 2) g_load_game_mode = 0;
         }
         g_start_options = MCLELaunchMoreOptions();
         MCLEStartGameOffline(g_start_options);
@@ -3902,8 +3957,7 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
 
         MCLECallPath(@"MainPanel.CreatedMode", @"SetLabel",
                      @[MCLEStr(g_load_has_been_in_creative ? IDS_CREATED_IN_CREATIVE : IDS_CREATED_IN_SURVIVAL)]);
-        MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel",
-                     @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
+        MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel", @[MCLELoadGameModeLabel()]);
     }
 
     if (!g_texture_pack_waiting_for_dlc) MCLEFillTexturePackList();
@@ -3915,7 +3969,10 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
 
 - (void)loadMenuSlider:(int)sliderId value:(int)value {
     if (sliderId != 1) return;   // eControl_Difficulty
-    mcle_settings_set(MCLE_SETTING_Difficulty, (unsigned char)MAX(0, MIN(value, 3)));
+    const unsigned char difficulty = (unsigned char)MAX(0, MIN(value, 3));
+    // UIControl_Slider::handleSliderMove
+    if (mcle_settings_get(MCLE_SETTING_Difficulty) != difficulty) MCLEPlayUISFX("scroll");
+    mcle_settings_set(MCLE_SETTING_Difficulty, difficulty);
     MCLECallPath(@"MainPanel.Difficulty", @"SetLabel", @[MCLEDifficultyLabel(value)]);
 }
 
@@ -3924,9 +3981,9 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
     mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
     switch (controlId) {
         case 0: {   // eControl_GameMode
-            g_load_game_mode = (g_load_game_mode == 0) ? 1 : 0;
-            MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel",
-                         @[MCLEStr(g_load_game_mode == 1 ? IDS_GAMEMODE_CREATIVE : IDS_GAMEMODE_SURVIVAL)]);
+            // Survival, Creative, Adventure and round again
+            g_load_game_mode = (g_load_game_mode + 1) % 3;
+            MCLECallPath(@"MainPanel.GameModeToggle", @"SetLabel", @[MCLELoadGameModeLabel()]);
             break;
         }
         case 2:     // eControl_MoreOptions
@@ -4099,7 +4156,10 @@ static NSString* MCLECreateWorldGameModeLabel(void) {
 // UIScene_CreateWorldMenu::handleSliderMove
 - (void)createWorldSlider:(int)sliderId value:(int)value {
     if (sliderId != 3) return;   // eControl_Difficulty
-    mcle_settings_set(MCLE_SETTING_Difficulty, (unsigned char)MAX(0, MIN(value, 3)));
+    const unsigned char difficulty = (unsigned char)MAX(0, MIN(value, 3));
+    // UIControl_Slider::handleSliderMove
+    if (mcle_settings_get(MCLE_SETTING_Difficulty) != difficulty) MCLEPlayUISFX("scroll");
+    mcle_settings_set(MCLE_SETTING_Difficulty, difficulty);
     MCLECallPath(@"MainPanel.Difficulty", @"SetLabel", @[MCLEDifficultyLabel(value)]);
 }
 
@@ -4488,9 +4548,11 @@ static void MCLEFullscreenProgressSetBar(int current) {
 }
 
 static NSString* MCLETipHTML(void) {
-    // FullscreenProgress wraps each tip like this (eHTMLColor_White)
+    // FullscreenProgress puts each tip through FormatHTMLString, for the
+    // buttons some of them name, and wraps it like this (eHTMLColor_White)
+    const std::wstring tip = mcle_format_html_string(0, MCLEWideString(MCLEStr(MCLENextTip())));
     return [NSString stringWithFormat:@"<font color=\"#ffffffff\"><p align=center>%@</p>",
-            MCLEStr(MCLENextTip())];
+            MCLEStringFromWide(tip)];
 }
 
 // UIScene_FullscreenProgress::handleTimerComplete, the next tip every
@@ -5037,8 +5099,9 @@ static void MCLESetContainerCursorOnTop(bool on) {
     ];
     [self applyMenuButtonConfig:cfg];
     MCLECallPath(@"Title", @"SetLabel", @[MCLEStr(IDS_YOU_DIED)]);
+    // UIScene_DeathMenu adds no components: the game shows behind it as it is
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, -2, 0);
-    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 1);
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kMenuBackgroundDepth, 0);
     ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, kTooltipsDepth, 1);
 }
 
@@ -5414,48 +5477,40 @@ static void MCLEConnectingHoldStart(void) {
     ruffle_ios_call_list_remove_all(g_ruffle_player,
         (const uint8_t*)list, strlen(list));
 
-    // Labels mirror m_uiHTPButtonNameA string-table ids in
-    // UIScene_HowToPlayMenu.cpp:6-39. Non-Xbox build: SocialMedia
-    // and BanningLevels are excluded. Order and ids match the
-    // console enum so a later per-topic scene wire-up lines up
-    // with the same press ids console's handlePress switches on.
-    // Labels mirror IDS_HOW_TO_PLAY_MENU_* in strings.resx
-    // (lines 504-691). Ordering + ids match the console enum
-    // in UIScene_HowToPlayMenu.cpp:6-39 so when per-topic scenes
-    // land the press ids line up with console's handlePress.
-    struct Item { const char* label; int id; };
-    Item items[] = {
-        { "What's New",              0 },
-        { "Basics",                  1 },
-        { "Multiplayer",             2 },
-        { "HUD",                     3 },
-        { "Creative Mode",           4 },
-        { "Inventory",               5 },
-        { "Chests",                  6 },
-        { "Crafting",                7 },
-        { "Furnace",                 8 },
-        { "Dispenser",               9 },
-        { "Brewing",                10 },
-        { "Enchantment",            11 },
-        { "Anvil",                  12 },
-        { "Farming Animals",        13 },
-        { "Breeding Animals",       14 },
-        { "Trading",                15 },
-        { "Horses",                 16 },
-        { "Beacons",                17 },
-        { "Fireworks",              18 },
-        { "Hoppers",                19 },
-        { "Droppers",               20 },
-        { "Nether Portal",          21 },
-        { "The End",                22 },
-        { "Host and Player Options",23 },
+    // m_uiHTPButtonNameA without the two Xbox ones, the id is the index
+    static const int kTopics[] = {
+        IDS_HOW_TO_PLAY_MENU_WHATSNEW,
+        IDS_HOW_TO_PLAY_MENU_BASICS,
+        IDS_HOW_TO_PLAY_MENU_MULTIPLAYER,
+        IDS_HOW_TO_PLAY_MENU_HUD,
+        IDS_HOW_TO_PLAY_MENU_CREATIVE,
+        IDS_HOW_TO_PLAY_MENU_INVENTORY,
+        IDS_HOW_TO_PLAY_MENU_CHESTS,
+        IDS_HOW_TO_PLAY_MENU_CRAFTING,
+        IDS_HOW_TO_PLAY_MENU_FURNACE,
+        IDS_HOW_TO_PLAY_MENU_DISPENSER,
+        IDS_HOW_TO_PLAY_MENU_BREWING,
+        IDS_HOW_TO_PLAY_MENU_ENCHANTMENT,
+        IDS_HOW_TO_PLAY_MENU_ANVIL,
+        IDS_HOW_TO_PLAY_MENU_FARMANIMALS,
+        IDS_HOW_TO_PLAY_MENU_BREEDANIMALS,
+        IDS_HOW_TO_PLAY_MENU_TRADING,
+        IDS_HOW_TO_PLAY_MENU_HORSES,
+        IDS_HOW_TO_PLAY_MENU_BEACONS,
+        IDS_HOW_TO_PLAY_MENU_FIREWORKS,
+        IDS_HOW_TO_PLAY_MENU_HOPPERS,
+        IDS_HOW_TO_PLAY_MENU_DROPPERS,
+        IDS_HOW_TO_PLAY_MENU_NETHERPORTAL,
+        IDS_HOW_TO_PLAY_MENU_THEEND,
+        IDS_HOW_TO_PLAY_MENU_HOSTOPTIONS,
     };
-    for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); ++i) {
+    for (size_t i = 0; i < sizeof(kTopics) / sizeof(kTopics[0]); ++i) {
+        const char* label = MCLEStr(kTopics[i]).UTF8String;
         ruffle_ios_call_list_add_menu_item(
             g_ruffle_player,
             (const uint8_t*)list, strlen(list),
-            (const uint8_t*)items[i].label, strlen(items[i].label),
-            (double)items[i].id);
+            (const uint8_t*)label, strlen(label),
+            (double)i);
     }
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
@@ -5628,6 +5683,8 @@ static void MCLESkinSelectTickMovie(void) {
     req.focusIndex = focus;
     req.callback = callback;
     g_pending_dialog = req;
+    g_dialog_focus_control = -1;
+    g_dialog_focus_child = -1;
 
     // Dim the scene behind the dialog by flipping the
     // MenuBackground sibling on. Mirrors console's
@@ -5835,9 +5892,12 @@ static void MCLESkinSelectTickMovie(void) {
 - (void)navigateForwardTo:(NSString*)swfName {
     if (self.currentMenuSwf.length) {
         if (!self.menuStack) self.menuStack = [NSMutableArray array];
+        // UIScene::m_iFocusControl and m_iFocusChild go with it
         [self.menuStack addObject:@{
             @"swf":   self.currentMenuSwf,
             @"focus": @(self.menuFocusIndex),
+            @"focusControl": @(g_scene_focus_control),
+            @"focusChild": @(g_scene_focus_child),
         }];
     }
     [self transitionToMenuNamed:swfName];
@@ -5850,10 +5910,14 @@ static void MCLESkinSelectTickMovie(void) {
 - (void)navigateBack {
     NSString* target = nil;
     int restoreFocus = 0;
+    int restoreControl = -1;
+    int restoreChild = -1;
     if (self.menuStack.count > 0) {
         NSDictionary* entry = self.menuStack.lastObject;
         target = entry[@"swf"];
         restoreFocus = [entry[@"focus"] intValue];
+        restoreControl = [entry[@"focusControl"] intValue];
+        restoreChild = [entry[@"focusChild"] intValue];
         [self.menuStack removeLastObject];
     }
     if (!target.length) target = @"MainMenu1080.swf";
@@ -5863,6 +5927,25 @@ static void MCLESkinSelectTickMovie(void) {
     // button is the one the user left on.
     [self setMenuFocusIndex:restoreFocus];
     [self refreshFocusState];
+    // On Windows64 the scene under the one that closed still has its movie,
+    // with the focus where it was. Here the movie was loaded again, so the
+    // focus goes back like UIScene::reloadMovie puts it back.
+    extern PlayerHandle* g_ruffle_player;
+    if (g_ruffle_player && !self.menuButtonConfig.count && restoreControl >= 0 &&
+        [self.currentMenuSwf isEqualToString:target]) {
+        g_focus_restoring = true;
+        ruffle_ios_call_root_set_focus(g_ruffle_player, (double)restoreControl);
+        if ([target isEqualToString:@"LoadOrJoinMenu1080.swf"]) {
+            if (restoreControl == 0 && restoreChild >= 0 &&
+                restoreChild < g_load_default_buttons + mcle_saves_count()) {
+                g_load_save_list_index = restoreChild;
+                MCLELoadOrJoinRefocusSave();
+            }
+        } else if ([target isEqualToString:@"HowToPlayMenu1080.swf"] && restoreChild >= 0) {
+            MCLECallPath(@"HowToList", @"HighlightItem", @[@(restoreChild)]);
+        }
+        g_focus_restoring = false;
+    }
 }
 
 - (void)transitionToMenuNamed:(NSString*)swfName {
@@ -5906,6 +5989,7 @@ static void MCLESkinSelectTickMovie(void) {
         self.currentMenuSwf = swfName;
         g_current_scene_name = swfName ?: @"";
         g_scene_focus_control = -1;
+        g_scene_focus_child = -1;
         self.menuFocusIndex = 0;
         // Re-roll the splash when entering MainMenu. Console does
         // the same every time UIScene_MainMenu is constructed.
@@ -5976,6 +6060,8 @@ static void MCLESkinSelectTickMovie(void) {
         } else if ([swfName isEqualToString:@"HowToPlayMenu1080.swf"]) {
             [self initHowToPlayMenu];
         } else if ([swfName isEqualToString:@"Credits1080.swf"]) {
+            // UIScene_Credits makes no sounds of its own
+            self.menuButtonConfig = nil;
             MCLECreditsInit();
             MCLECreditsCoverScreen(g_ruffle_player, self.view.bounds.size);
         } else if ([swfName isEqualToString:@"HowToPlay1080.swf"]) {
@@ -6218,7 +6304,11 @@ static void MCLESkinSelectTickMovie(void) {
                 bool gameInfoPressed = (game & ~self.lastPadButtons & mcle_ingame_info_buttons()) != 0;
                 self.lastPadButtons = pad.buttons;
                 if (gameInfoPressed && mcle_ingame_info_input_allowed()) [self openInGameInfoMenu];
-                else if (startNow && !startBefore) [self openPauseMenu];
+                else if (startNow && !startBefore) {
+                    // Minecraft::tick's pause press
+                    MCLEPlayUISFX("press");
+                    [self openPauseMenu];
+                }
                 else if (inventoryPressed) [self openInventoryMenu];
             }
         }
@@ -6462,15 +6552,16 @@ static void MCLESkinSelectTickMovie(void) {
                     self.menuFocusIndex = next;
                     NSLog(@"[MinecraftVC] menu focus -> %@",
                           cfg[next][@"name"]);
-                    // Console UIController::PlayUISFX pitches Focus
-                    // by +-0.05 randomly so repeat navigation doesn't
-                    // fatigue. Matches Common/UI/UIController.cpp:2533.
-                    float jitter = ((float)arc4random_uniform(1000) / 1000.0f - 0.5f) * 0.1f;
-                    mcle_audio_play_ui_sfx("focus", 1.0f, 1.0f + jitter);
+                    MCLEPlayUISFX("focus");
                 }
                 if (pressedNow & 0x00000001u) {  // A -> PRESSED
                     changeState(cur, 3);
-                    mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+                    // UIScene_PauseMenu and UIScene_DeathMenu's handlePress
+                    // make no sound, the other scenes' do
+                    if (![self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"] &&
+                        ![self.currentMenuSwf isEqualToString:@"DeathMenu1080.swf"]) {
+                        mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+                    }
                     int id = [cfg[cur][@"id"] intValue];
                     NSLog(@"[MinecraftVC] menu press -> %@ (id=%d)",
                           cfg[cur][@"name"], id);
@@ -6534,7 +6625,8 @@ static void MCLESkinSelectTickMovie(void) {
                     } else if ([self.currentMenuSwf isEqualToString:@"PauseMenu1080.swf"]) {
                         // UIScene_PauseMenu::handlePress
                         switch (id) {
-                            case 0: [self resumeFromPause]; break;
+                            // navigateBack, with its sound
+                            case 0: MCLEPlayUISFX("back"); [self resumeFromPause]; break;
                             case 1: [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"]; break;
                             case 2: [self navigateForwardTo:@"LeaderboardMenu1080.swf"]; break;
                             case 4: {
@@ -6652,6 +6744,12 @@ static void MCLESkinSelectTickMovie(void) {
                     MCLEHowToPlayStartPage(g_htp_page - 1);
                     mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
                 }
+            }
+            // UIScene_ControlsMenu::handleInput: A makes the press sound
+            // whatever it's on
+            if (!g_pending_dialog && (pressedNow & 0x00000001u) &&
+                [self.currentMenuSwf isEqualToString:@"Controls1080.swf"]) {
+                MCLEPlayUISFX("press");
             }
             // UIScene_LaunchMoreOptionsMenu::handleInput: LB and RB swap the tab
             if (!g_pending_dialog && (pressedNow & (0x00000080u | 0x00000040u)) &&
