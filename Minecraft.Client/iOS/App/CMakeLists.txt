@@ -81,6 +81,8 @@ set_target_properties(Minecraft.LCE PROPERTIES
   XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "${DEPLOYMENT_TARGET}"
   XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
   XCODE_ATTRIBUTE_ENABLE_BITCODE NO
+  # The icon's @2x and @3x files stay as they are, not merged into a tiff
+  XCODE_ATTRIBUTE_COMBINE_HIDPI_IMAGES NO
   # Extended-memory entitlements. Sideloaders honor these even on unsigned
   # builds - raises the iOS jetsam ceiling so more streamed chunks fit in memory.
   XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${CMAKE_SOURCE_DIR}/Minecraft.Client/iOS/Resources/Minecraft.LCE.entitlements
