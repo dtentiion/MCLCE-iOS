@@ -36,6 +36,11 @@ void mcle_ios_input_shutdown(void);
 // Returns 0 if no controller is present for that index, 1 otherwise.
 int mcle_ios_input_poll(int index, mcle_ios_pad_state* out);
 
+// What the 4J input library makes of a pad: takes a state with its buttons
+// and the sticks and triggers as the pad gives them, adds the stick and
+// trigger buttons, and leaves the sticks as the game is handed them.
+void mcle_ios_pad_state_finish(mcle_ios_pad_state* s, int southpaw);
+
 #ifdef __cplusplus
 }
 #endif

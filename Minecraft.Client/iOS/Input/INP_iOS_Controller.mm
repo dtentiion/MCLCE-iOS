@@ -58,28 +58,7 @@ mcle_ios_pad_state snapshot(GCExtendedGamepad* p) {
     s.lt = p.leftTrigger.value;
     s.rt = p.rightTrigger.value;
 
-    // ActionGameSettings(eGameSetting_ControlSouthPaw): SetJoypadStickAxisMap
-    // swaps the sticks and SetJoypadStickTriggerMap the triggers
-    if (mcle_settings_get(11 /*ControlSouthPaw*/)) {
-        std::swap(s.lx, s.rx);
-        std::swap(s.ly, s.ry);
-        std::swap(s.lt, s.rt);
-    }
-
-    // Synthesize digital stick buttons for games that only look at the bitmask.
-    const float kStickThresh = 0.5f;
-    if (s.lx >  kStickThresh) s.buttons |= _360_JOY_BUTTON_LSTICK_RIGHT;
-    if (s.lx < -kStickThresh) s.buttons |= _360_JOY_BUTTON_LSTICK_LEFT;
-    if (s.ly >  kStickThresh) s.buttons |= _360_JOY_BUTTON_LSTICK_UP;
-    if (s.ly < -kStickThresh) s.buttons |= _360_JOY_BUTTON_LSTICK_DOWN;
-    if (s.rx >  kStickThresh) s.buttons |= _360_JOY_BUTTON_RSTICK_RIGHT;
-    if (s.rx < -kStickThresh) s.buttons |= _360_JOY_BUTTON_RSTICK_LEFT;
-    if (s.ry >  kStickThresh) s.buttons |= _360_JOY_BUTTON_RSTICK_UP;
-    if (s.ry < -kStickThresh) s.buttons |= _360_JOY_BUTTON_RSTICK_DOWN;
-
-    const float kTrigThresh = 0.25f;
-    if (s.lt > kTrigThresh) s.buttons |= _360_JOY_BUTTON_LT;
-    if (s.rt > kTrigThresh) s.buttons |= _360_JOY_BUTTON_RT;
+    mcle_ios_pad_state_finish(&s, mcle_settings_get(11 /*ControlSouthPaw*/));
 
     return s;
 }
