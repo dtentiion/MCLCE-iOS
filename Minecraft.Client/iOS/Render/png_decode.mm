@@ -9,6 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 extern "C" int mcle_png_decode_rgba8(const void* data, unsigned long length,
                                        unsigned char** out_rgba,
@@ -100,6 +101,14 @@ extern "C" int mcle_log_msg(const char *msg) {
             }
             if (!clean) {
                 snprintf(path, sizeof(path), "%s/mcle_log.txt", root);
+                // It's only ever added to. Past a few megabytes the one
+                // there is kept as the old one and a new one started.
+                struct stat st;
+                if (stat(path, &st) == 0 && st.st_size > 8 * 1024 * 1024) {
+                    char old[1024];
+                    snprintf(old, sizeof(old), "%s/mcle_log_old.txt", root);
+                    rename(path, old);
+                }
                 clean = fopen(path, "a");
             }
         }
