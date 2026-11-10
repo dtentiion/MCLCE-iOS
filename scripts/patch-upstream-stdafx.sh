@@ -1385,12 +1385,6 @@ if [ -f "$GTX_PY" ]; then
     python3 "$GTX_PY"
 fi
 
-# renderChunks loop CKPTs - count visible/empty/drawn chunks per layer
-RC_PY="$REPO_ROOT/scripts/patch-renderchunks-ckpts.py"
-if [ -f "$RC_PY" ]; then
-    python3 "$RC_PY"
-fi
-
 # Gui.cpp m_iScreenSection -> VIEWPORT_TYPE_FULLSCREEN; ServerPlayer has no
 # m_iScreenSection field (LocalPlayer-only), iOS is single-player anyway.
 GSS_PY="$REPO_ROOT/scripts/patch-gui-screensection.py"
