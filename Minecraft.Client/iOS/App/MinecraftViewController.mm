@@ -653,20 +653,6 @@ static CGRect MCLEScreenInStage(CGSize view) {
     return CGRectMake((1920.0 - w) * 0.5, (1080.0 - h) * 0.5, w, h);
 }
 
-// A PNG redrawn at another size
-static NSData* MCLEPngAtSize(NSData* png, CGSize size) {
-    UIImage* image = [UIImage imageWithData:png];
-    if (!image) return png;
-    UIGraphicsImageRendererFormat* format = [UIGraphicsImageRendererFormat preferredFormat];
-    format.scale = 1;
-    UIGraphicsImageRenderer* renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
-    NSData* out = [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext* ctx) {
-        CGContextSetInterpolationQuality(ctx.CGContext, kCGInterpolationHigh);
-        [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
-    }];
-    return out.length ? out : png;
-}
-
 // Strips the movie runs from one side of its stage to the other go on to
 // the sides of a wider screen
 static void MCLEExtendStripsToScreen(PlayerHandle* player, CGSize view, const int* depths, int count) {
@@ -2801,45 +2787,11 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     {
         // Console Iggy layers each scene as its own movie. Panorama
         // is Panorama1080.swf, a sibling of MainMenu1080.swf that the
-        // host composites beneath it. Before loading the SWF, register
-        // any matching PNGs in Documents as Ruffle Bitmap characters
-        // keyed by class name - this mirrors 4J's Iggy XUI texture-
-        // import mechanism where skin_Minecraft.xui maps AS3 class
-        // names (Panorama_Background_S etc.) to external PNG paths.
+        // host composites beneath it. Its picture and the logo's come
+        // out of the skin (platformskinHD.swf), the selected pack's
+        // when it has one.
         NSString* docs = [NSSearchPathForDirectoriesInDomains(
             NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        // The 1080 skin's own Panorama_Background_S/N (skinHDWin.swf) are
-        // 1230x216, the 820x144 art at the 1080 skin's 1.5x. The Panorama
-        // clip places two of them 6150 apart at 5x and scrolls one tile,
-        // 6150, per loop, so the PNG is drawn at that size: the tiles meet
-        // and the loop goes round without a jump. MenuTitle is drawn at
-        // native size (0x0 here).
-        const float sx = 1.0f;
-        const float sy = 1.0f;
-        NSArray* xuiAssets = @[
-            @[@"Panorama_Background_S", @(1230), @(216)],
-            @[@"Panorama_Background_N", @(1230), @(216)],
-            @[@"MenuTitle",             @(0),    @(0)],
-        ];
-        for (NSArray* entry in xuiAssets) {
-            NSString* className = entry[0];
-            const CGSize size = CGSizeMake([entry[1] floatValue], [entry[2] floatValue]);
-            NSString* pngPath = [docs stringByAppendingPathComponent:
-                                 [className stringByAppendingString:@".png"]];
-            NSData* pngData = [NSData dataWithContentsOfFile:pngPath];
-            if (!pngData.length) {
-                NSLog(@"[MinecraftVC] XUI %@ missing at %@", className, pngPath);
-                continue;
-            }
-            if (size.width > 0) pngData = MCLEPngAtSize(pngData, size);
-            int rc = ruffle_ios_register_xui_bitmap(
-                g_ruffle_player,
-                (const uint8_t*)className.UTF8String, strlen(className.UTF8String),
-                (const uint8_t*)pngData.bytes, pngData.length,
-                sx, sy);
-            NSLog(@"[MinecraftVC] register_xui_bitmap %@ scale=%.1fx%.1f -> %d",
-                  className, sx, sy, rc);
-        }
 
         // Load the same sibling movies UIScene_MainMenu composites on
         // console (UIScene_MainMenu.cpp:29-30 adds eUIComponent_Panorama
