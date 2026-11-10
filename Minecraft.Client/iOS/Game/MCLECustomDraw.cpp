@@ -14,11 +14,13 @@
 #include "../../../upstream/Minecraft.Client/Lighting.h"
 #include "../../../upstream/Minecraft.Client/Textures.h"
 #include "../../../upstream/Minecraft.World/Inventory.h"
+#include "../../../upstream/Minecraft.World/Item.h"
 #include "../../../upstream/Minecraft.World/ItemInstance.h"
 
 extern "C" unsigned char mcle_settings_get(int setting); // MCLE_iOS_Settings.mm
 extern "C" int  mcle_metal_ui_frame_begin(void);         // MetalContext.mm
 extern "C" void mcle_metal_ui_frame_end(void);
+extern "C" int mcle_metal_ui_frame_begin_keyed(unsigned long long key);
 extern "C" void mcle_metal_ui_size(int *out_width, int *out_height);
 extern "C" void mcle_glbridge_metal_ortho(float left, float right, float bottom, float top, float zNear, float zFar);
 extern "C" void mcle_glbridge_start_frame(void);
@@ -29,6 +31,18 @@ const int kSettingInterfaceOpacity = 17; // MCLE_SETTING_InterfaceOpacity
 
 ItemRenderer *g_itemRenderer = nullptr; // UIScene::m_pItemRenderer
 bool g_drewLastFrame = false;
+
+// FNV-1a over what a frame of slots is drawn from
+struct SlotsKey {
+    unsigned long long hash = 1469598103934665603ull;
+    template <class T> void add(const T &value) {
+        const unsigned char *bytes = reinterpret_cast<const unsigned char *>(&value);
+        for (size_t i = 0; i < sizeof(T); i++) {
+            hash ^= bytes[i];
+            hash *= 1099511628211ull;
+        }
+    }
+};
 
 // UIScene::_customDrawSlotControl, with the region already in pixels
 void drawSlot(float x, float y, float bwidth, float bheight, std::shared_ptr<ItemInstance> item, float fAlpha,
@@ -188,14 +202,47 @@ extern "C" void mcle_hud_custom_draw(const MCLECustomDrawRegion *regions, int co
     const bool popupIcon = count > 0 && mcle_tutorial_popup_has_icon();
     // An empty layer only needs clearing once
     if (!anything && !popupIcon && !g_drewLastFrame) return;
-    if (mcle_metal_ui_frame_begin() != 0) return;
+
+    float fVal = 1.0f;
+    if (anything) {
+        MCLEHudState st;
+        mcle_hud_get_state(&st);
+        fVal = slotAlpha(st.opacityTimer);
+    }
+
+    // Iggy draws the slots into every frame of the movie. Here they're a
+    // layer of their own, which keeps a frame that would come out the same:
+    // not with an item that's popping or shimmering, a clock or compass
+    // face, or one with a tag, which can colour it.
+    bool still = anything && !popupIcon;
+    SlotsKey key;
+    int width = 0, height = 0;
+    mcle_metal_ui_size(&width, &height);
+    key.add(width);
+    key.add(height);
+    key.add(fVal);
+    for (int i = 0; still && i < count; i++) {
+        int slot = -1;
+        if (sscanf(regions[i].name, "slot_%d", &slot) != 1 || slot < 0 || slot >= 9) continue;
+        const std::shared_ptr<ItemInstance> &item = hotbar[slot];
+        if (item == nullptr) continue;
+        if (item->popTime > 0 || item->hasTag() || item->isFoil() || item->id == Item::clock_Id ||
+            item->id == Item::compass_Id) {
+            still = false;
+        }
+        key.add(slot);
+        key.add(regions[i].x0);
+        key.add(regions[i].y0);
+        key.add(regions[i].x1);
+        key.add(regions[i].y1);
+        key.add(item->id);
+        key.add(item->count);
+        key.add(item->getAuxValue());
+    }
+    if ((still ? mcle_metal_ui_frame_begin_keyed(key.hash) : mcle_metal_ui_frame_begin()) != 0) return;
     g_drewLastFrame = anything || popupIcon;
 
     if (anything || popupIcon) {
-        MCLEHudState st;
-        mcle_hud_get_state(&st);
-        float fVal = slotAlpha(st.opacityTimer);
-
         setupCustomDrawGameState();
         for (int i = 0; anything && i < count; i++) {
             // UIScene_HUD::customDraw

@@ -2155,7 +2155,14 @@ NSString* const kGammaShaderSrc = @R"(
 
 static float g_gamma = 1.0f;
 
+// The key of the frame the UI layer shows, when it was drawn for one
+static bool               g_uiKeyShown = false;
+static bool               g_uiKeyNext  = false;
+static unsigned long long g_uiKey      = 0;
+
 extern "C" void mcle_metal_set_gamma(float gamma) {
+    // What the UI layer shows went through the old curve
+    if (g_gamma != gamma) g_uiKeyShown = false;
     g_gamma = gamma;
 }
 
@@ -2615,6 +2622,7 @@ extern "C" void mcle_metal_attach_ui_layer(void* ca_metal_layer, int width, int 
     g_uiW = width;
     g_uiH = height;
     if (g_uiLayer) g_uiLayer.drawableSize = CGSizeMake(width, height);
+    g_uiKeyShown = false;
 }
 
 extern "C" void mcle_metal_ui_size(int* out_width, int* out_height) {
@@ -2676,7 +2684,20 @@ extern "C" int mcle_metal_ui_frame_begin(void) {
     g_depth_func          = 0x0203;
     g_fog_enabled         = false;
     mcle_start_frame_common();
+    g_uiKeyNext = false;
     return 0;
+}
+
+// mcle_metal_ui_frame_begin for a frame that only depends on key. -1 when
+// the layer still shows the last one drawn for it.
+extern "C" int mcle_metal_ui_frame_begin_keyed(unsigned long long key) {
+    if (g_uiKeyShown && g_uiKey == key) return -1;
+    const int result = mcle_metal_ui_frame_begin();
+    if (result == 0) {
+        g_uiKey     = key;
+        g_uiKeyNext = true;
+    }
+    return result;
 }
 
 extern "C" void mcle_metal_ui_frame_end(void) {
@@ -2691,6 +2712,8 @@ extern "C" void mcle_metal_ui_frame_end(void) {
     g.drawable = nil;
     g.inFrame = false;
     g_uiFrameDepthTex = nil;
+    g_uiKeyShown = g_uiKeyNext;
+    g_uiKeyNext  = false;
 }
 
 // Tesselator -> Metal hook. Routes into the display-list
