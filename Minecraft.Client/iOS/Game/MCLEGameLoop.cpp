@@ -2078,8 +2078,32 @@ void mcle_game_set_menu_displayed(bool displayed) {
     }
 }
 
+// Minecraft::run_middle stores the buttons pressed every frame, "since the
+// minecraft::tick may not be called if we're running fast, and a button
+// press and release will be missed", and the tick clears them once it has
+// acted on them. The frame and the tick are on two threads here, so both
+// look at the pad through this.
+static std::mutex g_pressMutex;
+static unsigned int g_pressLastButtons = 0;
+static unsigned int g_pressStored = 0;
+
+static unsigned int mcle_store_presses(bool take) {
+    std::lock_guard<std::mutex> lock(g_pressMutex);
+    const unsigned int buttons = (unsigned int)mcle_ios_input_poll_buttons(0);
+    g_pressStored |= buttons & ~g_pressLastButtons;
+    g_pressLastButtons = buttons;
+    // With a menu displayed the game gets none of the pad's buttons. One
+    // pressed for the menu is still down when the game gets them again, so
+    // it's no press there.
+    if (g_menuDisplayed.load()) g_pressStored = 0;
+    const unsigned int stored = g_pressStored;
+    if (take) g_pressStored = 0;
+    return stored;
+}
+
 // UIController::CheckMenuDisplayed, once a frame after the present
 extern "C" void mcle_game_check_menu_displayed(void) {
+    mcle_store_presses(false);
     if (!g_menuToBeClosed) return;
     if (g_menuCountDown != 0) {
         g_menuCountDown--;
@@ -3317,15 +3341,12 @@ extern "C" void mcle_game_tick(void) {
         g_nextSimTickNs.store(s_nextTickNs, std::memory_order_relaxed);
     }
 
-    // InputManager::Tick, paused or not: a press is a button that's gone
-    // down since the last look, and with a menu displayed the game gets
-    // none of the pad's buttons. A button pressed for the menu is still
-    // down when the game gets them again, so it's no press there.
+    // InputManager::Tick, paused or not: the buttons down now, and the ones
+    // pressed since the last tick. With a menu displayed the game gets none
+    // of them.
     {
-        static unsigned int s_lastRaw = 0;
+        const unsigned int pressed = mcle_store_presses(true);
         const unsigned int raw = (unsigned int)mcle_ios_input_poll_buttons(0);
-        const unsigned int pressed = raw & ~s_lastRaw;
-        s_lastRaw = raw;
         const bool menu = g_menuDisplayed.load();
         g_gameButtons = menu ? 0 : raw;
         g_gamePressed = menu ? 0 : pressed;

@@ -13,6 +13,7 @@
 #include "../../../upstream/Minecraft.Client/Common/Potion_Macros.h"
 #include "../../../upstream/Minecraft.World/Abilities.h"
 #include "../../../upstream/Minecraft.World/Animal.h"
+#include "../../../upstream/Minecraft.World/BedTile.h"
 #include "../../../upstream/Minecraft.World/ChestTile.h"
 #include "../../../upstream/Minecraft.World/ColoredTile.h"
 #include "../../../upstream/Minecraft.World/Dimension.h"
@@ -77,6 +78,28 @@ struct TooltipGameMode {
         return result;
     }
 
+    // BedTile::TestUse and the test half of Player::startSleepInBed, as the
+    // client's player gets them. Its y is at the eyes, so the two blocks of
+    // height it allows are measured from there.
+    static bool bedTestUse(Level *level, int x, int y, int z, const std::shared_ptr<Player> &player) {
+        int data = level->getData(x, y, z);
+        if (!BedTile::isHeadPiece(data)) {
+            // fetch head piece instead
+            int direction = DirectionalTile::getDirection(data);
+            x += BedTile::HEAD_DIRECTION_OFFSETS[direction][0];
+            z += BedTile::HEAD_DIRECTION_OFFSETS[direction][1];
+            if (level->getTile(x, y, z) != Tile::bed_Id) return true;
+            data = level->getData(x, y, z);
+        }
+        if (!level->dimension->mayRespawn()) return false;
+        if (BedTile::isOccupied(data)) return false;
+        if (player->isSleeping() || !player->isAlive()) return false;
+        if (!level->dimension->isNaturalDimension()) return false;
+        const double eyeY = player->y + 1.62;
+        if (abs(player->x - x) > 3 || abs(eyeY - y) > 2 || abs(player->z - z) > 3) return false;
+        return true;
+    }
+
     // MultiPlayerGameMode::useItemOn
     bool multiPlayerUseItemOn(std::shared_ptr<Player> player, Level *level, std::shared_ptr<ItemInstance> item,
                               int x, int y, int z, int face, Vec3 *hit, bool bTestUseOnly, bool *pbUsedItem) {
@@ -92,7 +115,8 @@ struct TooltipGameMode {
                 switch (t) {
                 case Tile::jukebox_Id:
                 case Tile::bed_Id: // special case for a bed
-                    if (Tile::tiles[t]->TestUse(level, x, y, z, player)) {
+                    if (t == Tile::bed_Id ? bedTestUse(level, x, y, z, player)
+                                          : Tile::tiles[t]->TestUse(level, x, y, z, player)) {
                         return true;
                     } else if (t == Tile::bed_Id) {
                         // bed is too far away, or something

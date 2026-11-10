@@ -32,6 +32,7 @@ public:
 
     void handleInput(int key, bool repeat, bool pressed, bool released) override {
         if (m_bIgnoreInput) return;
+        mcleContainerUI.AnimateKeyPress(getPad(), key, repeat, pressed, released);
         if (pressed) handleKeyDown(getPad(), key, repeat);
     }
 

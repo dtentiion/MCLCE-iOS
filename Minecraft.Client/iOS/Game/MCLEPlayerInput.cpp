@@ -14,6 +14,7 @@
 #include "MCLETutorial.h"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <mutex>
 
@@ -45,6 +46,8 @@
 #include "../../../upstream/Minecraft.World/EntityHorse.h"
 #include "../../../upstream/Minecraft.World/Mth.h"
 
+bool mcle_game_menu_displayed(); // MCLEGameLoop.cpp
+
 // LocalPlayer::m_iThirdPersonView: 0 first person, 1 behind, 2 in front
 std::atomic<int> g_thirdPersonView{0};
 
@@ -64,6 +67,50 @@ namespace {
 unsigned int actionButtons(int action) {
     return InputManager.GetGameJoypadMaps(InputManager.GetJoypadMapVal(0), action);
 }
+
+// CInput's timer for a key and its GetValue with bRepeat set: the press,
+// again once it's been held SetKeyRepeatRate's 0.3 seconds, then every 0.2
+struct KeyRepeat {
+    bool down = false;
+    std::chrono::steady_clock::time_point startTime;
+    float totalHoldTime = 0;
+    float lastRepeatTime = 0;
+    bool initialPressHandled = false;
+
+    // CInput::UpdateJoypads
+    void update(bool isDown) {
+        const auto now = std::chrono::steady_clock::now();
+        if (isDown && !down) {
+            startTime = now;
+            totalHoldTime = 0;
+            lastRepeatTime = 0;
+            initialPressHandled = false;
+        } else if (isDown) {
+            totalHoldTime = std::chrono::duration<float>(now - startTime).count();
+        }
+        down = isDown;
+    }
+
+    bool value() {
+        const float repeatDelaySecs = 0.3f;
+        const float repeatRateSecs = 0.2f;
+        if (!down) return false;
+        if (repeatDelaySecs <= totalHoldTime || initialPressHandled) {
+            if (totalHoldTime < repeatDelaySecs) return false;
+            if (lastRepeatTime == 0.0f) {
+                lastRepeatTime = repeatDelaySecs;
+                return true;
+            }
+            if (totalHoldTime - lastRepeatTime <= repeatRateSecs) return false;
+            lastRepeatTime += repeatRateSecs;
+            return true;
+        }
+        initialPressHandled = true;
+        return true;
+    }
+};
+
+KeyRepeat g_scrollLeft, g_scrollRight;
 
 // PlayerActionPacket actions the client sends while mining
 enum Action { START_DESTROY_BLOCK, ABORT_DESTROY_BLOCK, STOP_DESTROY_BLOCK };
@@ -513,6 +560,9 @@ bool handleMouseClick(int button) {
     if (button == 1 && P->isSleeping()) {
         if (s.lastClickState == lastClick_oldRepeat) return false;
         P->stopSleepInBed(false, true, true);
+        // The client's player is still asleep when its packet goes, so
+        // waking is all the press does
+        return false;
     }
     if (P->isSleeping()) return false;
 
@@ -685,11 +735,19 @@ void mcle_player_input_tick(const std::shared_ptr<ServerPlayer> &player, ServerL
     // Minecraft::tick
     pick(1);
 
+    // The input library times its keys whether there's a menu up or not
+    const unsigned int padButtons = static_cast<unsigned int>(mcle_ios_input_poll_buttons(0));
+    g_scrollLeft.update((padButtons & actionButtons(MINECRAFT_ACTION_LEFT_SCROLL)) != 0);
+    g_scrollRight.update((padButtons & actionButtons(MINECRAFT_ACTION_RIGHT_SCROLL)) != 0);
+
+    // All of what follows is for when there's no menu displayed. An item
+    // in use or a block being mined stays as it is under one.
+    if (mcle_game_menu_displayed()) return;
+
     int wheel = 0;
-    if ((pressed & actionButtons(MINECRAFT_ACTION_LEFT_SCROLL)) && mcle_tutorial_input_allowed(MINECRAFT_ACTION_LEFT_SCROLL)) {
+    if (g_scrollLeft.value() && mcle_tutorial_input_allowed(MINECRAFT_ACTION_LEFT_SCROLL)) {
         wheel = 1;
-    } else if ((pressed & actionButtons(MINECRAFT_ACTION_RIGHT_SCROLL)) &&
-               mcle_tutorial_input_allowed(MINECRAFT_ACTION_RIGHT_SCROLL)) {
+    } else if (g_scrollRight.value() && mcle_tutorial_input_allowed(MINECRAFT_ACTION_RIGHT_SCROLL)) {
         wheel = -1;
     }
     if (wheel != 0) {
@@ -803,6 +861,8 @@ struct MoveState {
     bool sprintTriggerRegisteredReturn = false;
     int jumpTriggerTime = 0;
     bool twoJumpsRegistered = false;
+    // Input::lReset / rReset
+    bool lReset = false, rReset = false;
     // LocalPlayer::ullDpad_last / ullDpad_filtered
     unsigned int dpadLast = 0, dpadFiltered = 0;
     // What the client's player rides, as the server's SetEntityLinkPackets say
@@ -930,6 +990,11 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
     if (mcle_tutorial_input_allowed(MINECRAFT_ACTION_FORWARD) || mcle_tutorial_input_allowed(MINECRAFT_ACTION_BACKWARD)) {
         m.ya = stickY;
     }
+    // A new Input takes nothing from a stick until it's been let go
+    if (!m.lReset) {
+        if (m.xa * m.xa + m.ya * m.ya == 0.0f) m.lReset = true;
+        m.xa = m.ya = 0.0f;
+    }
 
     // In flying mode don't toggle sneaking, unless riding (sneak dismounts)
     if (!P->abilities.flying || P->riding != nullptr) {
@@ -956,6 +1021,10 @@ void mcle_player_move_tick(const std::shared_ptr<ServerPlayer> &player, float st
         ty = lookY * sensitivity;
     }
     if (invertLook) ty = -ty;
+    if (!m.rReset) {
+        if (tx * tx + ty * ty == 0.0f) m.rReset = true;
+        tx = ty = 0.0f;
+    }
     float turnX = tx * fabsf(tx) * turnSpeed;
     float turnY = ty * fabsf(ty) * turnSpeed;
     P->interpolateTurn(turnX, turnY);
