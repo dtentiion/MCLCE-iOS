@@ -81,3 +81,6 @@ Cargo.lock
 # scripts/list-arc.py). These are Mojang-copyrighted and must NEVER be
 # committed. Everything under local/ stays on your machine.
 local/
+
+# The app icon, made at build time
+Minecraft.Client/iOS/Resources/AppIcon*.png
