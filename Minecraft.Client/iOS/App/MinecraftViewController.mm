@@ -231,6 +231,10 @@ typedef void (^MCLEDialogCallback)(MCLEDialogResult result);
 
 static MCLEDialogRequest* g_pending_dialog = nil;
 
+// UIScene::m_iFocusControl, the control the scene's movie last put its focus
+// on. -1 until it has.
+static int g_scene_focus_control = -1;
+
 // Stage-sibling depth assignments. Stack is back-to-front:
 //   -2  Panorama
 //    0  root scene (the active menu SWF)
@@ -1023,6 +1027,8 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                   g_current_scene_name, listId, itemId);
         }
     } else if (strcmp(method, "handleFocusChange") == 0) {
+        // UIScene::_handleFocusChange. The message box reports its own here too.
+        if (!g_pending_dialog) g_scene_focus_control = (int)id;
         if (mcle_container_is_open() && !g_pending_dialog) {
             int cid = (int)id;
             int child = (int)value;
@@ -1083,6 +1089,8 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
             });
         }
     } else if (strcmp(method, "handleInitFocus") == 0) {
+        // UIScene::_handleInitFocus
+        if (!g_pending_dialog) g_scene_focus_control = (int)id;
         if (mcle_container_is_open() && !g_pending_dialog) {
             int cid = (int)id;
             int child = (int)value;
@@ -5776,6 +5784,12 @@ static void MCLESkinSelectTickMovie(void) {
             [self seedTooltipsForScene:self.currentMenuSwf hidden:NO];
         }
         [self refreshFocusState];
+        // The message box was on the same stage and took its focus. The
+        // scene's own movie keeps it on Windows64, so it goes back to the
+        // control it was on.
+        if (!self.menuButtonConfig.count && g_scene_focus_control >= 0) {
+            ruffle_ios_call_root_set_focus(g_ruffle_player, (double)g_scene_focus_control);
+        }
     }
     if (req.callback) req.callback(result);
 }
@@ -5857,6 +5871,7 @@ static void MCLESkinSelectTickMovie(void) {
         if (mcle_keyboard_front_end_is_open()) [self closeFrontEndKeyboard];
         self.currentMenuSwf = swfName;
         g_current_scene_name = swfName ?: @"";
+        g_scene_focus_control = -1;
         self.menuFocusIndex = 0;
         // Re-roll the splash when entering MainMenu. Console does
         // the same every time UIScene_MainMenu is constructed.
