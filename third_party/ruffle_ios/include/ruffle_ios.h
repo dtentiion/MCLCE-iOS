@@ -536,6 +536,10 @@ int           ruffle_ios_call_list_remove_all(PlayerHandle* h,
 int           ruffle_ios_set_xui_sibling_visible_at_depth(PlayerHandle* h,
                                                           int depth, int visible);
 
+// 0 when the sibling at the depth was last hidden with the call above,
+// 1 otherwise
+int           ruffle_ios_xui_sibling_visible_at_depth(PlayerHandle* h, int depth);
+
 // Register a callback that fires when LCE AS3 reports a setting
 // change via ExternalInterface. The two method names currently
 // routed are "handleCheckboxToggled" (id=control id, value=1.0 for

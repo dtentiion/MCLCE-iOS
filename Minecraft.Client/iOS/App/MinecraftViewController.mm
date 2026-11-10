@@ -1293,9 +1293,10 @@ static void MCLEUpdateAutosaveCountdownTimer(unsigned int seconds) {
 
 // UIComponent_Panorama::tick: night once the loaded overworld is past 14000
 // in its day, day otherwise (no level, or the Nether / End)
+static bool s_showingDay = true;
+
 static void MCLEPanoramaTick(void) {
     extern PlayerHandle* g_ruffle_player;
-    static bool s_showingDay = true;
     long long gameTime = 0;
     int dimension = 0;
     long long timeOfDay = 0;
@@ -2167,12 +2168,45 @@ static int MCLEPadIsPlayStation(void) {
     MCLETutorialPopupMovieReloaded();
 }
 
+// A component's movie up again on the new skin libraries, shown or hidden
+// as the one before it was. Its init runs in the frames the tooltips'
+// reload ticks after.
+static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, float tx, float ty) {
+    extern PlayerHandle* g_ruffle_player;
+    NSString* docs = [NSSearchPathForDirectoriesInDomains(
+        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    NSString* path = [docs stringByAppendingPathComponent:swf];
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data.length) return;
+    NSString* url = [NSString stringWithFormat:@"file://%@",
+        [path stringByReplacingOccurrencesOfString:@" " withString:@"%20"]];
+    int visible = ruffle_ios_xui_sibling_visible_at_depth(g_ruffle_player, depth);
+    ruffle_ios_remove_sibling_at_depth(g_ruffle_player, depth);
+    int rc = ruffle_ios_add_sibling_swf_to_root(g_ruffle_player,
+        (const uint8_t*)data.bytes, data.length,
+        (const uint8_t*)url.UTF8String, strlen(url.UTF8String),
+        depth, sx, sy, tx, ty);
+    NSLog(@"[skin] %@ reloaded -> %d", swf, rc);
+    if (rc != 1) return;
+    ruffle_ios_set_xui_sibling_visible_at_depth(g_ruffle_player, depth, visible);
+    ruffle_ios_set_sibling_takes_input(g_ruffle_player, depth, 0);
+}
+
 // UIController::ReloadSkin for a texture pack: the libraries, then
 // UILayer::ReloadAll reloading the components that stay up. The scenes
 // load with the new libraries as they come.
 - (void)reloadSkin {
     MCLEReloadSkinLibraries();
     if (!self.scenerAttached) return;
+    // The panorama and the logo are the skin's own art, placed as
+    // attachMenuScenery places them
+    const CGRect panoramaRect = MCLEScreenInStage(self.view.bounds.size);
+    MCLEReloadComponent(@"Panorama1080.swf", -2,
+                        (float)(panoramaRect.size.width / 1920.0), (float)(panoramaRect.size.height / 1080.0),
+                        (float)panoramaRect.origin.x, (float)panoramaRect.origin.y);
+    // UIComponent_Panorama starts on its day half
+    s_showingDay = true;
+    MCLEReloadComponent(@"ComponentLogo1080.swf", kLogoDepth, 1.0f, 1.0f, 0.0f, 0.0f);
     [self reloadTooltipsComponent];
     [self reloadTutorialPopupComponent];
 }

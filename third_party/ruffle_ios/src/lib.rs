@@ -1644,11 +1644,27 @@ pub unsafe extern "C" fn ruffle_ios_set_xui_sibling_visible_at_depth(
     let Ok(mut p) = handle.player.lock() else { return -1; };
     let found = p.set_xui_sibling_visible_at_depth(depth, visible != 0);
     drop(p);
+    if visible != 0 {
+        handle.hidden_siblings.borrow_mut().remove(&depth);
+    } else if found {
+        handle.hidden_siblings.borrow_mut().insert(depth);
+    }
     avm_log_push(format!(
         "[ruffle_ios] set_xui_sibling_visible_at_depth(depth={}, visible={}) -> {}",
         depth, visible != 0, found
     ));
     if found { 1 } else { 0 }
+}
+
+/// 0 when the sibling at `depth` was last hidden with
+/// ruffle_ios_set_xui_sibling_visible_at_depth, 1 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn ruffle_ios_xui_sibling_visible_at_depth(
+    raw: *mut PlayerHandle,
+    depth: c_int,
+) -> c_int {
+    let Some(handle) = borrow_handle(raw) else { return 1; };
+    if handle.hidden_siblings.borrow().contains(&depth) { 0 } else { 1 }
 }
 
 /// removeAllItems() on an FJ_ButtonList child. Wrapper around
@@ -1744,6 +1760,9 @@ pub struct PlayerHandle {
     overlay: std::cell::RefCell<Option<OverlayBackend>>,
     overlay_path: std::cell::RefCell<String>,
     overlay_dirty: std::cell::Cell<bool>,
+    // The depths of the siblings the host has hidden, so a movie loaded
+    // again at one of them can be left as the one before it was
+    hidden_siblings: std::cell::RefCell<std::collections::HashSet<c_int>>,
 }
 
 type OverlayBackend =
@@ -1764,6 +1783,7 @@ fn to_handle(p: Arc<Mutex<Player>>, executor: NullExecutor) -> *mut PlayerHandle
         overlay: std::cell::RefCell::new(None),
         overlay_path: std::cell::RefCell::new(String::new()),
         overlay_dirty: std::cell::Cell::new(false),
+        hidden_siblings: std::cell::RefCell::new(std::collections::HashSet::new()),
     }))
 }
 
