@@ -1853,3 +1853,9 @@ IWE_PY="$REPO_ROOT/scripts/patch-iteminhand-inwall-eye.py"
 if [ -f "$IWE_PY" ]; then
     python3 "$IWE_PY"
 fi
+
+# The held item swings at the power Windows64 has
+SWP_PY="$REPO_ROOT/scripts/patch-iteminhand-swing.py"
+if [ -f "$SWP_PY" ]; then
+    python3 "$SWP_PY"
+fi
