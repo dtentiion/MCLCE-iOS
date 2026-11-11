@@ -601,7 +601,7 @@ static void mcle_world_thread_end() {
 // file goes to disc. Leaving also closes the level storage after the last
 // level (saveAllChunks) and unloads the rules before the flush. Each step
 // goes on Minecraft's progress renderer, which FullscreenProgress shows.
-static void mcle_save_world(bool exiting, bool autosave) {
+static void mcle_save_world(bool exiting, bool autosave, bool toDisc = true) {
     const auto start = std::chrono::steady_clock::now();
     ProgressRenderer *progress = Minecraft::GetInstance() ? Minecraft::GetInstance()->progressRenderer : nullptr;
     // PlayerList::saveAll for the one player
@@ -646,8 +646,10 @@ static void mcle_save_world(bool exiting, bool autosave) {
             csf->closeHandle(fe);
         }
         if (exiting) app.m_gameRules.unloadCurrentGameRules();
-        try { g_levels[0]->saveToDisc(progress, autosave); }
-        catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
+        if (toDisc) {
+            try { g_levels[0]->saveToDisc(progress, autosave); }
+            catch (...) { MCLE_LOG("BG_SAVE: saveToDisc threw"); }
+        }
     }
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start).count();
@@ -1925,11 +1927,12 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: tutorial threw");
     }
 
-    // MinecraftServer::loadLevel saves a newly created level straight away,
-    // before the server's first tick. saveToDisc looks at Minecraft's
-    // texture packs, which only exist from here.
+    // MinecraftServer::loadLevel saves a newly created level into its save
+    // file straight away, before the server's first tick. Windows64 leaves
+    // out the saveToDisc after it, so Exit without saving on a new world
+    // doesn't leave a save of it behind.
     if (g_loadIsNew) {
-        try { mcle_save_world(false, false); } catch (...) { MCLE_LOG("mcle_game_init: first save threw"); }
+        try { mcle_save_world(false, false, false); } catch (...) { MCLE_LOG("mcle_game_init: first save threw"); }
     }
 
     g_loadPercent = 100;

@@ -363,6 +363,15 @@ extern "C" void mcle_storage_set_save_folder(const char *folder) {
     g_saveFolder = folder ? folder : "";
 }
 
+// C4JStorage::DoesSaveExist: the world being played has a save on disc
+extern "C" int mcle_storage_save_exists(void) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    const char *root = ios_documents_dir();
+    if (g_saveFolder.empty() || !root) return 0;
+    struct stat st;
+    return stat((std::string(root) + "/saves/" + g_saveFolder).c_str(), &st) == 0 ? 1 : 0;
+}
+
 // C4JStorage::ResetSaveData: the next save is a new one
 extern "C" void mcle_storage_reset_save_data(void) {
     std::lock_guard<std::mutex> lock(g_storageMutex);
