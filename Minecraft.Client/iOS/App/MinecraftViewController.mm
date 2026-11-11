@@ -4443,11 +4443,14 @@ static void MCLEMoreOptionsChangeTab(void) {
 // UIScene_LaunchMoreOptionsMenu::handleSliderMove
 - (void)moreOptionsSlider:(int)sliderId value:(int)value {
     if (value < 0 || value > 3) return;
+    // UIControl_Slider::handleSliderMove makes the sound when the value moved
     if (sliderId == kMoreOptionsWorldSize) {
+        if (g_start_options.worldSize != value) MCLEPlayUISFX("scroll");
         g_start_options.worldSize = value;
         MCLECallPath(@"WorldOptions.WorldSizeSlider", @"SetLabel", @[MCLEStr(kWorldSizeTitles[value])]);
     } else if (sliderId == kMoreOptionsWorldResize) {
         if (value + 1 >= g_start_options.currentWorldSize) {
+            if (g_start_options.newWorldSize != value + 1) MCLEPlayUISFX("scroll");
             g_start_options.newWorldSize = value + 1;
             MCLECallPath(@"WorldOptions.ChangeWorldSizeSlider", @"SetLabel", @[MCLEStr(kWorldSizeTitles[value])]);
         }
@@ -5194,6 +5197,9 @@ static void MCLEConnectingHoldStart(void) {
     MCLEProgressTipTick();
     if (!mcle_game_save_done()) return;
     g_world_saving = false;
+    // UIScene_FullscreenProgress leaves through UIScene::navigateBack, a
+    // save's and an autosave's alike
+    MCLEPlayUISFX("back");
     if (g_saving_over == 1) {
         [self navigateBack];
         return;
