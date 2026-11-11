@@ -481,6 +481,48 @@ static void MCLEToggleLongerLoading(void) {
     MCLECallPath(@"Languages", @"SetLabel", @[MCLELongerLoadingLabel()]);
 }
 
+// UIControl_CheckBox::IsChecked for the Options, Graphics and User Interface
+// scenes, by control id, -1 where the scene has no box. Their movies don't
+// call handleCheckboxToggled, the scenes ask each box on the way out, so a
+// box is followed from the A that flips it.
+static const int kSettingsCheckboxes = 8;
+static int g_settings_checkbox[kSettingsCheckboxes] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static bool MCLEIsSettingsCheckboxScene(NSString* scene) {
+    return [scene isEqualToString:@"SettingsOptionsMenu1080.swf"] ||
+           [scene isEqualToString:@"SettingsGraphicsMenu1080.swf"] ||
+           [scene isEqualToString:@"SettingsUIMenu1080.swf"];
+}
+
+static void MCLESettingsCheckboxesClear(void) {
+    for (int& box : g_settings_checkbox) box = -1;
+}
+
+// FJ_CheckBox flips on the ENTER it gets while it has the focus
+static void MCLESettingsCheckboxPressed(void) {
+    int id = g_scene_focus_control;
+    if (id < 0 || id >= kSettingsCheckboxes || g_settings_checkbox[id] < 0) return;
+    g_settings_checkbox[id] = g_settings_checkbox[id] ? 0 : 1;
+}
+
+// UIScene_SettingsOptionsMenu::setGameSettings, and the same thing in
+// UIScene_SettingsGraphicsMenu and UIScene_SettingsUIMenu's ACTION_MENU_CANCEL
+static void MCLESettingsSetGameSettings(void) {
+    // check the checkboxes
+    bool hostOptions = false;
+    for (int id = 0; id < kSettingsCheckboxes; ++id) {
+        if (g_settings_checkbox[id] < 0) continue;
+        int setting = mcle_map_checkbox(id);
+        if (setting < 0) continue;
+        unsigned char v = g_settings_checkbox[id] ? 1 : 0;
+        if (mcle_settings_get(setting) == v) continue;
+        mcle_settings_set(setting, v);
+        // ActionGameSettings: the host's game options follow these in game
+        if (setting == MCLE_SETTING_GamertagsVisible || setting == MCLE_SETTING_BedrockFog) hostOptions = true;
+    }
+    if (hostOptions) mcle_game_host_settings_changed();
+}
+
 // UIScene_ControlsMenu. The labels and lines in e_Pad order.
 extern "C" void mcle_controls_text(int layout, int creativeMode, int southPaw, int* out); // Game/MCLEControls.cpp
 static const char* const kControlsLabels[19] = {
@@ -3196,7 +3238,9 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
         {"ShowTooltips",    MCLEStr(IDS_IN_GAME_TOOLTIPS).UTF8String,  2, (BOOL)mcle_settings_get(MCLE_SETTING_Tooltips)},
         {"InGameGamertags", MCLEStr(IDS_IN_GAME_GAMERTAGS).UTF8String, 3, (BOOL)mcle_settings_get(MCLE_SETTING_GamertagsVisible)},
     };
+    MCLESettingsCheckboxesClear();
     for (auto& c : checkboxes) {
+        g_settings_checkbox[c.id] = c.checked ? 1 : 0;
         ruffle_ios_call_init_checkbox(
             g_ruffle_player,
             (const uint8_t*)c.name,  strlen(c.name),
@@ -3360,7 +3404,9 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
         {"BedrockFog",     mcle_string(IDS_CHECKBOX_RENDER_BEDROCKFOG), 1, (BOOL)mcle_settings_get(MCLE_SETTING_BedrockFog)},
         {"CustomSkinAnim", mcle_string(IDS_CHECKBOX_CUSTOM_SKIN_ANIM),  2, (BOOL)mcle_settings_get(MCLE_SETTING_CustomSkinAnim)},
     };
+    MCLESettingsCheckboxesClear();
     for (auto& c : checkboxes) {
+        g_settings_checkbox[c.id] = c.checked ? 1 : 0;
         ruffle_ios_call_init_checkbox(
             g_ruffle_player,
             (const uint8_t*)c.name,  strlen(c.name),
@@ -3437,7 +3483,9 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
         {"Splitscreen",              mcle_string(IDS_CHECKBOX_VERTICAL_SPLIT_SCREEN),       4, (BOOL)mcle_settings_get(MCLE_SETTING_SplitScreenVertical)},
         {"ShowSplitscreenGamertags", mcle_string(IDS_CHECKBOX_DISPLAY_SPLITSCREENGAMERTAGS), 5, (BOOL)mcle_settings_get(MCLE_SETTING_DisplaySplitscreenGamertags)},
     };
+    MCLESettingsCheckboxesClear();
     for (auto& c : checkboxes) {
+        g_settings_checkbox[c.id] = c.checked ? 1 : 0;
         ruffle_ios_call_init_checkbox(
             g_ruffle_player,
             (const uint8_t*)c.name,  strlen(c.name),
@@ -6574,6 +6622,12 @@ static void MCLESkinSelectTickMovie(void) {
             int count = (int)cfg.count;
             // buttons that went 0 -> 1, and the ones held long enough to repeat
             uint32_t pressedNow = (changed & now) | repeated;
+            // UIScene_Settings*Menu::handleInput: ACTION_MENU_OK went to the
+            // movie, where the focused checkbox takes it
+            if (!g_pending_dialog && (pressedNow & 0x00000001u) &&
+                MCLEIsSettingsCheckboxScene(self.currentMenuSwf)) {
+                MCLESettingsCheckboxPressed();
+            }
             auto changeState = ^(int idx, int state) {
                 if (idx < 0 || idx >= count) return;
                 const char* name = [cfg[idx][@"name"] UTF8String];
@@ -6840,6 +6894,7 @@ static void MCLESkinSelectTickMovie(void) {
                           self.currentMenuSwf,
                           (unsigned long)self.menuStack.count);
                     mcle_audio_play_ui_sfx("back", 1.0f, 1.0f);
+                    if (MCLEIsSettingsCheckboxScene(self.currentMenuSwf)) MCLESettingsSetGameSettings();
                     [self navigateBack];
                 }
             }
