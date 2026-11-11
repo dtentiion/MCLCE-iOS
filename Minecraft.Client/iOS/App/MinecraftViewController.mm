@@ -42,6 +42,10 @@ extern "C" void mcle_minecraft_init(void);                  // MCLEGameLoop.cpp
 extern "C" int  mcle_level_generators_refresh(void);        // MCLEGameLoop.cpp
 extern "C" const char* mcle_level_generator_name(int i);    // MCLEGameLoop.cpp
 extern "C" int  mcle_game_start_level_gen(int i);           // MCLEGameLoop.cpp
+extern "C" int  mcle_level_generator_is_tutorial(int i);    // MCLEGameLoop.cpp
+extern "C" unsigned int mcle_level_generator_texture_pack(int i);   // MCLEGameLoop.cpp
+extern "C" int  mcle_level_generator_in_creative(int i);    // MCLEGameLoop.cpp
+extern "C" const char* mcle_level_generator_display_name(int i);    // MCLEGameLoop.cpp
 
 // app.GetString(IDS_*)
 static NSString* MCLEStr(int ids) {
@@ -78,6 +82,9 @@ static int MCLENextTip(void) {
 
 // UIScene_LoadMenu state the bridge and the loading screen need.
 static int  g_load_save_index = -1;
+// UIScene_LoadMenu::m_levelGen, a mash-up pack's world in place of a save.
+// -1 for none.
+static int  g_load_level_gen = -1;
 // UIScene_LoadOrJoinMenu::m_iDefaultButtonsC: Create New World and the level
 // generators come before the saves
 static int  g_load_default_buttons = 1;
@@ -956,9 +963,17 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                         [g_active_vc navigateForwardTo:@"CreateWorldMenu1080.swf"];
                     });
                 } else if (itemId < defaultButtons) {
-                    // The tutorial's LoadLevelGen goes straight to the game
+                    // The tutorial's LoadLevelGen goes straight to the game,
+                    // the others have LoadMenu first
                     int lGenID = itemId - 1;
                     dispatch_async(dispatch_get_main_queue(), ^{
+                        if (!mcle_level_generator_is_tutorial(lGenID)) {
+                            g_load_save_index = -1;
+                            g_load_level_gen = lGenID;
+                            g_load_menu_fresh = true;
+                            [g_active_vc navigateForwardTo:@"LoadMenu1080.swf"];
+                            return;
+                        }
                         if (g_loading_world) return;
                         [g_active_vc navigateForwardTo:@"FullscreenProgress1080.swf"];
                         if (mcle_game_start_level_gen(lGenID)) {
@@ -972,6 +987,7 @@ extern "C" void mcle_ios_settings_event_bridge(const char* method, double id, do
                     int saveIdx = itemId - defaultButtons;
                     dispatch_async(dispatch_get_main_queue(), ^{
                         g_load_save_index = saveIdx;
+                        g_load_level_gen = -1;
                         g_load_menu_fresh = true;
                         [g_active_vc navigateForwardTo:@"LoadMenu1080.swf"];
                     });
@@ -3462,6 +3478,9 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     self.menuFocusIndex = 0;
 }
 
+static void MCLERegisterSubstitutionTexture(NSString* textureName, const unsigned char* pbData, unsigned int dwLength);
+static NSString* MCLETexturePackIconName(int index);
+
 // UIScene_LoadOrJoinMenu::AddDefaultButtons, then the saves its tick adds
 // once GetSaveInfo has them, onto the cleared SavesList
 - (void)loadOrJoinAddSaves {
@@ -3488,6 +3507,18 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
             (const uint8_t*)name, strlen(name),
             (double)g_load_default_buttons,
             (const uint8_t*)"", 0);
+        // retrieve the save icon from the texture pack, if there is one
+        unsigned int uiTexturePackID = mcle_level_generator_texture_pack(i);
+        if (uiTexturePackID != 0) {
+            int pack = mcle_texture_pack_index(uiTexturePackID);
+            unsigned int dwImageBytes = 0;
+            const unsigned char* pbImageData = mcle_texture_pack_icon(pack, &dwImageBytes);
+            if (dwImageBytes > 0 && pbImageData) {
+                NSString* imageName = MCLETexturePackIconName(pack);
+                MCLERegisterSubstitutionTexture(imageName, pbImageData, dwImageBytes);
+                MCLECallPath(@"SavesList", @"SetTextureName", @[@(g_load_default_buttons), imageName]);
+            }
+        }
         ++g_load_default_buttons;
     }
 
@@ -3865,6 +3896,13 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
         // was played with from the thumbnail like tick() reads it
         g_texture_pack_desc_displayed = false;
         if (idx >= 0 && idx < mcle_saves_count()) g_start_options.dwTexturePack = mcle_saves_texture_pack(idx);
+        // Level gen
+        if (g_load_level_gen >= 0) {
+            unsigned int uiTexturePackID = mcle_level_generator_texture_pack(g_load_level_gen);
+            if (uiTexturePackID != 0) g_start_options.dwTexturePack = uiTexturePackID;
+            // Set this level as created in creative mode, so that people can't use the themed worlds as an easy way to get achievements
+            g_load_has_been_in_creative = mcle_level_generator_in_creative(g_load_level_gen) != 0;
+        }
         g_texture_pack_index = mcle_texture_pack_index(g_start_options.dwTexturePack);
         // block input if we're waiting for DLC to install. The end of dlc mounting fills the list.
         g_texture_pack_waiting_for_dlc = mcle_dlc_start_install_process(0);
@@ -3912,6 +3950,25 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
     }
 
     if (!g_texture_pack_waiting_for_dlc) MCLEFillTexturePackList();
+
+    // Level gen
+    if (g_load_level_gen >= 0) {
+        MCLECallPath(@"MainPanel.GameName", @"SetLabel",
+                     @[[NSString stringWithUTF8String:mcle_level_generator_display_name(g_load_level_gen)] ?: @""]);
+        if (mcle_level_generator_texture_pack(g_load_level_gen) != 0) {
+            MCLECallPath(@"MainPanel.TexturePackSelector", @"EnableSelector", @[@NO]);
+
+            // retrieve the save icon from the texture pack, if there is one
+            unsigned int dwImageBytes = 0;
+            const unsigned char* pbImageData = mcle_texture_pack_icon(g_texture_pack_index, &dwImageBytes);
+            if (dwImageBytes > 0 && pbImageData) {
+                MCLERegisterSubstitutionTexture(@"loadsave", pbImageData, dwImageBytes);
+                MCLECallPath(@"MainPanel.LevelIcon", @"SetTextureName", @[@"loadsave"]);
+            }
+        }
+        MCLECallPath(@"MainPanel.CreatedMode", @"SetLabel",
+                     @[MCLEStr(g_load_has_been_in_creative ? IDS_CREATED_IN_CREATIVE : IDS_CREATED_IN_SURVIVAL)]);
+    }
 
     ruffle_ios_call_root_set_focus(g_ruffle_player, -1.0);
     self.menuButtonConfig = nil;
@@ -4028,6 +4085,18 @@ extern "C" void mcle_start_game_dlc_mounting_complete(void) {
 
 // StartGameFromSave -> NavigateToScene(eUIScene_FullscreenProgress)
 - (void)startLoadingSelectedSave {
+    if (g_load_level_gen >= 0) {
+        if (g_loading_world) return;
+        [self navigateForwardTo:@"FullscreenProgress1080.swf"];
+        if (mcle_game_load_level_gen(g_load_level_gen, g_start_options, g_load_is_save_owner,
+                                     MAX(0, MIN((int)mcle_settings_get(MCLE_SETTING_Difficulty), 3)),
+                                     g_load_game_mode)) {
+            g_loading_world = true;
+        } else {
+            NSLog(@"[loadmenu] level generator %d didn't start", g_load_level_gen);
+        }
+        return;
+    }
     int idx = g_load_save_index;
     if (idx < 0 || idx >= mcle_saves_count() || g_loading_world) return;
     NSString* folder = [NSString stringWithUTF8String:mcle_saves_folder(idx)];
