@@ -1412,8 +1412,6 @@ fi
 # state stubbed to no-ops). Letting upstream's own fancyGraphics branch
 # decide; with fancyGraphics=true that gives proper 3D cube clouds
 # tiling around the player instead of the simple flat sheet.
-# patch-renderclouds-force-simple.py kept on disk in case a
-# fallback is needed, but no longer applied by default.
 
 # LevelRenderer.h: expose starList/skyList/darkList/haloRingList/
 # cloudList as public. MCLEGameLoop reads them post-ctor to register

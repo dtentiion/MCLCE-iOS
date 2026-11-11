@@ -871,11 +871,8 @@ static void mcle_make_options(Minecraft *minecraft) {
     try {
         minecraft->options = new Options();
         // fancyGraphics=true gives leaves the cutout-transparency path
-        // (LevelRenderer.cpp:427 Tile::leaves->setFancy). Clouds normally
-        // branch to renderAdvancedClouds when this is true, but
-        // patch-renderclouds-force-simple.py rewires renderClouds to
-        // always take the simple 2D path on iOS - so leaves are fancy
-        // without the unsupported advanced cloud path.
+        // (LevelRenderer.cpp:427 Tile::leaves->setFancy) and the clouds
+        // renderAdvancedClouds, as Options::init has it.
         minecraft->options->fancyGraphics = true;
         // Ambient occlusion controls TileRenderer's per-vertex
         // light-blending pass (TileRenderer.cpp:5246+). With it off, every
