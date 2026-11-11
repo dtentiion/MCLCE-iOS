@@ -14,10 +14,6 @@ DLCSkinFile.cpp:
 - A skin's BOX and ANIM values are read with GCC's swscanf, as on PS3. iOS
   maps swscanf_s to swscanf, which would take the buffer size for a pointer.
 
-DLCPack.cpp:
-- A mash-up pack's game rules header (its world template) is skipped, the
-  mash-up worlds aren't offered on iOS yet.
-
 Idempotent.
 """
 import sys
@@ -81,20 +77,5 @@ patch(DLC / "DLCSkinFile.cpp", "__APPLE_IOS__", [
     (PS3_SCANF.format(tabs="\t\t"), [
         "#if defined(__PS3__) || defined(__APPLE_IOS__)",
         "\t\t// 4J Stu - The Xbox version used swscanf_s which isn't available in GCC.",
-    ]),
-])
-
-patch(DLC / "DLCPack.cpp", "__APPLE_IOS__", [
-    ('#include "DLCGameRulesHeader.h"', [
-        "#ifndef __APPLE_IOS__",
-        '#include "DLCGameRulesHeader.h"',
-        "#endif",
-    ]),
-    ("\tcase DLCManager::e_DLCType_GameRulesHeader:\n\t\tnewFile = new DLCGameRulesHeader(path);\n\t\tbreak;", [
-        "#ifndef __APPLE_IOS__",
-        "\tcase DLCManager::e_DLCType_GameRulesHeader:",
-        "\t\tnewFile = new DLCGameRulesHeader(path);",
-        "\t\tbreak;",
-        "#endif",
     ]),
 ])

@@ -1120,6 +1120,17 @@ void initImpl() {
     }
     MCLE_LOG("mcle_game_init: selected level id = %{public}s", narrow(levelId).c_str());
 
+    // ServerThreadProc: a level generator out of a DLC pack has its base
+    // save and rules read here, when the pack's own mount didn't bring them
+    {
+        LevelGenerationOptions *levelGen = app.getLevelGenerationOptions();
+        if (g_newWorld.active && levelGen != nullptr && levelGen->isFromDLC()) {
+            mcle_texture_packs_wait_for_reload();
+            if (!levelGen->hasLoadedData()) levelGen->loadBaseSaveData();
+            while (!levelGen->hasLoadedData()) Sleep(1);
+        }
+    }
+
     if (g_newWorld.active) {
         // MinecraftServer::loadLevel with no save data: a new, empty save file
         g_saveFile = new ConsoleSaveFileOriginal(L"");
@@ -3011,23 +3022,50 @@ extern "C" void mcle_minecraft_init(void) {
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after
-// Create New World. Only the tutorial for now: a mash-up world needs its
-// pack's data mounted, which isn't done on iOS yet.
+// Create New World: the tutorial, then each mash-up pack's world.
 static std::vector<LevelGenerationOptions *> g_menuGenerators;
 static std::string g_menuGeneratorName;
 
 extern "C" int mcle_level_generators_refresh(void) {
     g_menuGenerators.clear();
     for (LevelGenerationOptions *levelGen : *app.getLevelGenerators()) {
-        if (levelGen->requiresTexturePack()) continue;
         g_menuGenerators.push_back(levelGen);
     }
     return static_cast<int>(g_menuGenerators.size());
 }
 
+extern "C" int mcle_level_generator_is_tutorial(int i) {
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
+    return g_menuGenerators[i]->isTutorial() ? 1 : 0;
+}
+
+// The texture pack a generator's world comes with, 0 for the tutorial
+extern "C" unsigned int mcle_level_generator_texture_pack(int i) {
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
+    return g_menuGenerators[i]->getRequiredTexturePackId();
+}
+
+// UIScene_LoadMenu marks a themed world as made in creative, so it's no
+// easy way to achievements
+extern "C" int mcle_level_generator_in_creative(int i) {
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
+    return g_menuGenerators[i]->getLevelHasBeenInCreative() ? 1 : 0;
+}
+
+static const char *generatorString(LPCWSTR wstr);
+
 extern "C" const char *mcle_level_generator_name(int i) {
     if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return "";
-    LPCWSTR wstr = g_menuGenerators[i]->getWorldName();
+    return generatorString(g_menuGenerators[i]->getWorldName());
+}
+
+// UIScene_LoadMenu's name for the world, m_levelGen->getDisplayName()
+extern "C" const char *mcle_level_generator_display_name(int i) {
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return "";
+    return generatorString(g_menuGenerators[i]->getDisplayName());
+}
+
+static const char *generatorString(LPCWSTR wstr) {
     g_menuGeneratorName.clear();
     for (const wchar_t *p = wstr; p && *p; ++p) {
         unsigned int c = static_cast<unsigned int>(*p);
@@ -3096,6 +3134,39 @@ extern "C" int mcle_game_start_level_gen(int i) {
     app.SetGameHostOption(eGameHostOption_All, settings);
 
     MCLE_LOG("level gen: tutorial seed=%lld host=%08x", (long long)param.seed, settings);
+    g_newWorld = param;
+    // initServer names the level from server.properties' level-name
+    g_pendingLevelId = L"world";
+    return mcle_start_game_thread();
+}
+
+// UIScene_LoadMenu::StartGameFromSave with a level generator, a mash-up
+// pack's world. The host options are LoadMenu's, the rest goes as the
+// tutorial's does.
+int mcle_game_load_level_gen(int i, const MCLELaunchMoreOptions &params, bool isSaveOwner, int difficulty,
+                             int gameModeId) {
+    if (g_initStarted || g_initState != kStateUnstarted) return 0;
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
+    LevelGenerationOptions *levelGen = g_menuGenerators[i];
+    app.SetTutorialMode(false);
+
+    StorageManager.ResetSaveData();
+    // Make our next save default to the name of the level
+    StorageManager.SetSaveTitle(levelGen->getDefaultSaveName().c_str());
+
+    // The pack's data comes in with the level's rules and its base save
+    // when the level's already the app's (DLCTexturePack::packMounted)
+    app.setLevelGenerationOptions(levelGen);
+    mcle_game_set_load_options(params, isSaveOwner, difficulty, gameModeId);
+
+    NewWorldParams param;
+    param.active = true;
+    param.xzSize = LEVEL_LEGACY_WIDTH;
+    param.hellScale = HELL_LEVEL_LEGACY_SCALE;
+    param.seed = levelGen->getLevelSeed();
+
+    MCLE_LOG("level gen: %s seed=%lld host=%08x", narrow(levelGen->getDefaultSaveName()).c_str(),
+             (long long)param.seed, app.GetGameHostOption(eGameHostOption_All));
     g_newWorld = param;
     // initServer names the level from server.properties' level-name
     g_pendingLevelId = L"world";

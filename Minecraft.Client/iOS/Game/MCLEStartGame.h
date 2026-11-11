@@ -56,6 +56,11 @@ void mcle_load_menu_options(MCLELaunchMoreOptions &params, bool hostOptionsRead,
 void mcle_game_set_load_options(const MCLELaunchMoreOptions &params, bool isSaveOwner,
                                 int difficulty, int gameModeId);
 
+// UIScene_LoadMenu::StartGameFromSave for a level generator's world, the
+// index one of mcle_level_generators_refresh's
+int mcle_game_load_level_gen(int i, const MCLELaunchMoreOptions &params, bool isSaveOwner,
+                             int difficulty, int gameModeId);
+
 // UIScene_CreateWorldMenu::CreateGame, then the game thread starts on a new level
 int mcle_game_create_world(const MCLELaunchMoreOptions &params, const std::wstring &worldName,
                            int gameModeId, int difficulty);
