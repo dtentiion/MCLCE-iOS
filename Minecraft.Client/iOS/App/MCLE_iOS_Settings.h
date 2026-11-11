@@ -94,6 +94,12 @@ void          mcle_settings_set_tutorial(const unsigned char *completion, int by
 unsigned char mcle_settings_get_longer_loading(void);
 void          mcle_settings_set_longer_loading(unsigned char on);
 
+// uiMashUpPackWorldsDisplay: a bit for each mash-up pack's world, the pack's
+// id less 1024, clear once the world has been hidden from the Start Game
+// list. Saved last, so an older settings.dat loads with them all showing.
+unsigned int  mcle_settings_get_mashup_worlds(void);
+void          mcle_settings_set_mashup_worlds(unsigned int mask);
+
 #ifdef __cplusplus
 }
 #endif

@@ -44,6 +44,7 @@ extern "C" const char* mcle_level_generator_name(int i);    // MCLEGameLoop.cpp
 extern "C" int  mcle_game_start_level_gen(int i);           // MCLEGameLoop.cpp
 extern "C" int  mcle_level_generator_is_tutorial(int i);    // MCLEGameLoop.cpp
 extern "C" unsigned int mcle_level_generator_texture_pack(int i);   // MCLEGameLoop.cpp
+extern "C" int  mcle_level_generator_requires_texture_pack(int i);  // MCLEGameLoop.cpp
 extern "C" int  mcle_level_generator_in_creative(int i);    // MCLEGameLoop.cpp
 extern "C" const char* mcle_level_generator_display_name(int i);    // MCLEGameLoop.cpp
 
@@ -88,6 +89,8 @@ static int  g_load_level_gen = -1;
 // UIScene_LoadOrJoinMenu::m_iDefaultButtonsC: Create New World and the level
 // generators come before the saves
 static int  g_load_default_buttons = 1;
+// m_iMashUpButtonsC, the mash-up pack worlds among them
+static int  g_load_mashup_buttons = 0;
 // UIScene_LoadOrJoinMenu's m_iSaveListIndex and m_bIgnoreInput, and the
 // control UIScene has the focus on (m_iFocusControl)
 static int  g_load_save_list_index = 0;
@@ -446,7 +449,7 @@ static int mcle_map_checkbox(int boxId) {
             case 1: return MCLE_SETTING_Hints;
             case 2: return MCLE_SETTING_Tooltips;
             case 3: return MCLE_SETTING_GamertagsVisible;
-            // case 4: MashUp unhide - one-shot action, no store slot.
+            // 4 is the mash-up worlds one, which isn't a setting
         }
     } else if ([g_current_scene_name isEqualToString:@"SettingsGraphicsMenu1080.swf"]) {
         switch (boxId) {
@@ -480,6 +483,10 @@ static void MCLEToggleLongerLoading(void) {
     mcle_settings_set_longer_loading(!mcle_settings_get_longer_loading());
     MCLECallPath(@"Languages", @"SetLabel", @[MCLELongerLoadingLabel()]);
 }
+
+// UIScene_SettingsOptionsMenu's m_bMashUpWorldsUnhideOption
+static const int kOptionsMashUpControl = 4;      // eControl_ShowMashUpWorlds
+static bool g_options_mashup_unhide = false;
 
 // UIControl_CheckBox::IsChecked for the Options, Graphics and User Interface
 // scenes, by control id, -1 where the scene has no box. Their movies don't
@@ -521,6 +528,13 @@ static void MCLESettingsSetGameSettings(void) {
         if (setting == MCLE_SETTING_GamertagsVisible || setting == MCLE_SETTING_BedrockFog) hostOptions = true;
     }
     if (hostOptions) mcle_game_host_settings_changed();
+
+    // the mashup option will only be shown if some worlds have been previously hidden
+    if ([g_current_scene_name isEqualToString:@"SettingsOptionsMenu1080.swf"] && g_options_mashup_unhide &&
+        g_settings_checkbox[kOptionsMashUpControl] > 0) {
+        // unhide all worlds
+        mcle_settings_set_mashup_worlds(0xFFFFFFFF);
+    }
 }
 
 // UIScene_ControlsMenu. The labels and lines in e_Pad order.
@@ -1291,16 +1305,27 @@ static bool MCLELoadOrJoinSavesListHasFocus(void) {
     return g_load_focus_control == 0 && g_load_save_list_index > g_load_default_buttons - 1;
 }
 
+// UIScene_LoadOrJoinMenu::DoesMashUpWorldHaveFocus
+static bool MCLELoadOrJoinMashUpWorldHasFocus(void) {
+    if (g_load_focus_control != 0) return false;
+    // check it's not the first or second element (new world or tutorial)
+    if (g_load_save_list_index > g_load_default_buttons - 1) return false;
+    return g_load_save_list_index > g_load_default_buttons - 1 - g_load_mashup_buttons;
+}
+
 // UIScene_LoadOrJoinMenu::updateTooltips. The join list is always empty and
-// there's no party, and no mash-up worlds are listed to Hide. Saving is
-// never disabled and EnoughSpaceForAMinSaveGame is always true in the
-// Windows64 storage, so a save gets Save Options. X is Change Storage
-// Device, which SetTooltips takes off.
+// there's no party. Saving is never disabled and EnoughSpaceForAMinSaveGame
+// is always true in the Windows64 storage, so a save gets Save Options. X
+// is Change Storage Device, which SetTooltips takes off.
 static void MCLELoadOrJoinTooltips(void) {
     int iRB = -1;
-    if (MCLELoadOrJoinSavesListHasFocus() && g_load_default_buttons > 0 &&
-        g_load_save_list_index >= g_load_default_buttons) {
-        iRB = IDS_TOOLTIPS_SAVEOPTIONS;
+    if (MCLELoadOrJoinSavesListHasFocus()) {
+        if (g_load_default_buttons > 0 && g_load_save_list_index >= g_load_default_buttons) {
+            iRB = IDS_TOOLTIPS_SAVEOPTIONS;
+        }
+    } else if (MCLELoadOrJoinMashUpWorldHasFocus()) {
+        // If it's a mash-up pack world, give the Hide option
+        iRB = IDS_TOOLTIPS_HIDE;
     }
     int ids[11] = { IDS_TOOLTIPS_SELECT, IDS_TOOLTIPS_BACK, IDS_TOOLTIPS_CHANGEDEVICE, -1, -1, -1, -1, iRB, -1, -1, -1 };
     MCLESetTooltips(ids);
@@ -3275,9 +3300,24 @@ static void MCLEReloadComponent(NSString* swf, int depth, float sx, float sy, fl
     // The difficulty description under the slider
     MCLECallPath(@"DifficultyText", @"Init", @[MCLEDifficultyText(diffClamped)]);
 
-    // UIScene::removeControl for what this build doesn't have: no mash-up
-    // packs to unhide, and no difficulty change once in game
-    MCLECallPath(@"", @"RemoveObject", @[@"ShowMashUpWorlds", @YES]);
+    // check if we should display the mash-up option
+    if (!mcle_world_is_ticking() && mcle_settings_get_mashup_worlds() != 0xFFFFFFFF) {
+        // the mash-up option is needed
+        g_options_mashup_unhide = true;
+        g_settings_checkbox[kOptionsMashUpControl] = 0;
+        const char* mashUpName = "ShowMashUpWorlds";
+        const char* mashUpLabel = MCLEStr(IDS_UNHIDE_MASHUP_WORLDS).UTF8String;
+        ruffle_ios_call_init_checkbox(
+            g_ruffle_player,
+            (const uint8_t*)mashUpName, strlen(mashUpName),
+            (const uint8_t*)mashUpLabel, strlen(mashUpLabel),
+            (double)kOptionsMashUpControl,
+            0);
+    } else {
+        MCLECallPath(@"", @"RemoveObject", @[@"ShowMashUpWorlds", @YES]);
+        g_options_mashup_unhide = false;
+    }
+    // UIScene::removeControl: no difficulty change once in game
     if (mcle_world_is_ticking()) {
         MCLESetPathVisible(@"DifficultyText", false);
         MCLECallPath(@"", @"RemoveObject", @[@"Difficulty", @YES]);
@@ -3545,6 +3585,7 @@ static NSString* MCLETexturePackIconName(int index);
         0.0,
         (const uint8_t*)"", 0);
     g_load_default_buttons = 1;
+    g_load_mashup_buttons = 0;
 
     // AddDefaultButtons: then the level generators, the tutorial first
     int generatorCount = mcle_level_generators_refresh();
@@ -3558,6 +3599,8 @@ static NSString* MCLETexturePackIconName(int index);
         // retrieve the save icon from the texture pack, if there is one
         unsigned int uiTexturePackID = mcle_level_generator_texture_pack(i);
         if (uiTexturePackID != 0) {
+            // increment the count of the mash-up pack worlds in the save list
+            g_load_mashup_buttons++;
             int pack = mcle_texture_pack_index(uiTexturePackID);
             unsigned int dwImageBytes = 0;
             const unsigned char* pbImageData = mcle_texture_pack_icon(pack, &dwImageBytes);
@@ -3735,6 +3778,22 @@ static int MCLELoadOrJoinKeyboardComplete(void* lpParam, const bool bRes) {
 // always space for a save, so it's Save Options rather than Delete Save.
 - (void)loadOrJoinSaveOptions {
     if (g_load_or_join_ignore_input) return;
+    if (MCLELoadOrJoinMashUpWorldHasFocus()) {
+        // hiding a mash-up world
+        if (g_load_save_list_index != 0) {
+            int lGenID = g_load_save_list_index - 1;
+            if (!mcle_level_generator_is_tutorial(lGenID) &&
+                mcle_level_generator_requires_texture_pack(lGenID)) {
+                // CMinecraftApp::HideMashupPackWorld, mash-up ids start at 1024
+                unsigned int uiPackID = mcle_level_generator_texture_pack(lGenID) - 1024;
+                mcle_settings_set_mashup_worlds(mcle_settings_get_mashup_worlds() & ~(1u << uiPackID));
+                // update the saves list
+                [self loadOrJoinRepopulate];
+            }
+        }
+        mcle_audio_play_ui_sfx("press", 1.0f, 1.0f);
+        return;
+    }
     // 4J-PB - check we are on a valid save
     if (!MCLELoadOrJoinSavesListHasFocus() || g_load_default_buttons == 0 ||
         g_load_save_list_index < g_load_default_buttons) return;
@@ -3804,19 +3863,26 @@ static int MCLELoadOrJoinKeyboardComplete(void* lpParam, const bool bRes) {
 // UIScene_LoadOrJoinMenu::DeleteSaveDataReturned, then its tick's
 // e_SavesRepopulateAfterDelete: the list is wiped and filled again from disk
 - (void)loadOrJoinDeleteSaveDataReturned:(bool)bRes {
-    extern PlayerHandle* g_ruffle_player;
     if (bRes) {
-        g_load_or_join_ignore_input = false;
-        const char* saves = "SavesList";
-        ruffle_ios_call_list_remove_all(g_ruffle_player, (const uint8_t*)saves, strlen(saves));
-        [self loadOrJoinAddSaves];
-        // clearList leaves the selection on the first button, Create New World
-        g_load_save_list_index = 0;
-        // m_spaceIndicatorSaves.reset(), then addSave for each
-        MCLESelectSaveSize(-1);
+        [self loadOrJoinRepopulate];
     } else {
         g_load_or_join_ignore_input = false;
+        MCLELoadOrJoinTooltips();
     }
+}
+
+// UIScene_LoadOrJoinMenu::tick's e_SavesRepopulateAfterDelete and
+// e_SavesRepopulateAfterMashupHide
+- (void)loadOrJoinRepopulate {
+    extern PlayerHandle* g_ruffle_player;
+    g_load_or_join_ignore_input = false;
+    const char* saves = "SavesList";
+    ruffle_ios_call_list_remove_all(g_ruffle_player, (const uint8_t*)saves, strlen(saves));
+    [self loadOrJoinAddSaves];
+    // clearList leaves the selection on the first button, Create New World
+    g_load_save_list_index = 0;
+    // m_spaceIndicatorSaves.reset(), then addSave for each
+    MCLESelectSaveSize(-1);
     MCLELoadOrJoinTooltips();
 }
 

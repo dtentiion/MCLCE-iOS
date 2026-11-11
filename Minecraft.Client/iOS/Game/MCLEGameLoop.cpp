@@ -3026,9 +3026,19 @@ extern "C" void mcle_minecraft_init(void) {
 static std::vector<LevelGenerationOptions *> g_menuGenerators;
 static std::string g_menuGeneratorName;
 
+extern "C" unsigned int mcle_settings_get_mashup_worlds(void); // MCLE_iOS_Settings.mm
+
 extern "C" int mcle_level_generators_refresh(void) {
     g_menuGenerators.clear();
     for (LevelGenerationOptions *levelGen : *app.getLevelGenerators()) {
+        unsigned int uiTexturePackID = levelGen->getRequiredTexturePackId();
+        if (uiTexturePackID != 0) {
+            unsigned int uiMashUpWorldsBitmask = mcle_settings_get_mashup_worlds();
+            if ((uiMashUpWorldsBitmask & (1 << (uiTexturePackID - 1024))) == 0) {
+                // this world is hidden, so skip
+                continue;
+            }
+        }
         g_menuGenerators.push_back(levelGen);
     }
     return static_cast<int>(g_menuGenerators.size());
@@ -3043,6 +3053,11 @@ extern "C" int mcle_level_generator_is_tutorial(int i) {
 extern "C" unsigned int mcle_level_generator_texture_pack(int i) {
     if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
     return g_menuGenerators[i]->getRequiredTexturePackId();
+}
+
+extern "C" int mcle_level_generator_requires_texture_pack(int i) {
+    if (i < 0 || i >= static_cast<int>(g_menuGenerators.size())) return 0;
+    return g_menuGenerators[i]->requiresTexturePack() ? 1 : 0;
 }
 
 // UIScene_LoadMenu marks a themed world as made in creative, so it's no
