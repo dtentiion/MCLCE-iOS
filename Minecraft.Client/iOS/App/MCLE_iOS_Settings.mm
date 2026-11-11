@@ -44,6 +44,8 @@ unsigned char g_values[MCLE_SETTING_MAX] = {};
 SkinSettings g_skin = {};
 TutorialSettings g_tutorial = {};
 PortSettings g_port = {};
+// GAME_SETTINGS::uiMashUpPackWorldsDisplay
+uint32_t g_mashUpWorlds = 0xFFFFFFFF;
 std::atomic<bool> g_loaded{false};
 
 NSString* settings_path() {
@@ -106,6 +108,9 @@ void apply_defaults() {
         g_skin.favoriteSkins[i] = 0xFFFFFFFF;
     }
 
+    // TU 13
+    g_mashUpWorlds = 0xFFFFFFFF;
+
     // Port options start off, the game as TU19 has it
     g_port.longerLoading = 0;
 }
@@ -121,6 +126,7 @@ void save_locked() {
     std::fwrite(&g_skin, 1, sizeof(g_skin), f);
     std::fwrite(&g_tutorial, 1, sizeof(g_tutorial), f);
     std::fwrite(&g_port, 1, sizeof(g_port), f);
+    std::fwrite(&g_mashUpWorlds, 1, sizeof(g_mashUpWorlds), f);
     std::fclose(f);
 }
 
@@ -136,7 +142,7 @@ extern "C" void mcle_settings_load(void) {
         FILE* f = std::fopen(path.UTF8String, "rb");
         if (f) {
             unsigned char buf[MCLE_SETTING_MAX + sizeof(SkinSettings) + sizeof(TutorialSettings) +
-                              sizeof(PortSettings)] = {};
+                              sizeof(PortSettings) + sizeof(g_mashUpWorlds)] = {};
             size_t n = std::fread(buf, 1, sizeof(buf), f);
             std::fclose(f);
             // Tolerate shorter files: newer builds may have more
@@ -148,7 +154,9 @@ extern "C" void mcle_settings_load(void) {
                 std::memcpy(g_values, buf, n < MCLE_SETTING_MAX ? n : MCLE_SETTING_MAX);
                 if (n >= skinEnd) std::memcpy(&g_skin, buf + MCLE_SETTING_MAX, sizeof(g_skin));
                 if (n >= tutorialEnd) std::memcpy(&g_tutorial, buf + skinEnd, sizeof(g_tutorial));
-                if (n > tutorialEnd) std::memcpy(&g_port, buf + tutorialEnd, n - tutorialEnd);
+                const size_t portEnd = tutorialEnd + sizeof(PortSettings);
+                if (n >= portEnd) std::memcpy(&g_port, buf + tutorialEnd, sizeof(g_port));
+                if (n >= portEnd + sizeof(g_mashUpWorlds)) std::memcpy(&g_mashUpWorlds, buf + portEnd, sizeof(g_mashUpWorlds));
                 NSLog(@"[settings] loaded %zu byte(s) from %@", n, path);
             }
         }
@@ -261,5 +269,17 @@ extern "C" void mcle_settings_set_longer_loading(unsigned char on) {
     on = on ? 1 : 0;
     if (g_port.longerLoading == on) return;
     g_port.longerLoading = on;
+    save_locked();
+}
+
+extern "C" unsigned int mcle_settings_get_mashup_worlds(void) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    return g_mashUpWorlds;
+}
+
+extern "C" void mcle_settings_set_mashup_worlds(unsigned int mask) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_mashUpWorlds == mask) return;
+    g_mashUpWorlds = mask;
     save_locked();
 }
