@@ -181,6 +181,7 @@ extern "C" int  mcle_game_save(int autosave);        // MCLEGameLoop.cpp
 extern "C" int  mcle_game_save_done(void);           // MCLEGameLoop.cpp
 extern "C" void mcle_game_progress(int reset, int *title, int *status, int *percent); // MCLEGameLoop.cpp
 extern "C" void mcle_storage_set_save_folder(const char *folder); // MCLESaveList.cpp
+extern "C" int mcle_storage_save_exists(void); // MCLESaveList.cpp
 extern "C" void mcle_capture_save_thumbnail(void);   // MCLESaveList.cpp
 extern "C" void mcle_game_host_settings_changed(void); // MCLEGameLoop.cpp
 void mcle_sound_update_music_volume(float v);          // MCLESound.cpp
@@ -5326,11 +5327,16 @@ static void MCLEConnectingHoldStart(void) {
     }];
 }
 
-// IUIScene_PauseMenu::ExitGameSaveDialogReturned. The save is there, so
-// saving asks before overwriting it, and not saving asks too.
+// IUIScene_PauseMenu::ExitGameSaveDialogReturned. Saving asks before
+// overwriting a save that's there, and not saving asks too.
 - (void)exitGameSaveDialogReturned:(MCLEDialogResult)r {
     __weak MinecraftViewController* weakSelf = self;
     if (r == MCLEDialogResultDecline) {
+        // does the save exist?
+        if (!mcle_storage_save_exists()) {
+            [self exitWorldSaving:YES];
+            return;
+        }
         [self presentDialogWithTitle:MCLEStr(IDS_TITLE_SAVE_GAME)
                              content:MCLEStr(IDS_CONFIRM_SAVE_GAME)
                              buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
@@ -6597,10 +6603,16 @@ static void MCLESkinSelectTickMovie(void) {
                             case 1: [self navigateForwardTo:@"HelpAndOptionsMenu1080.swf"]; break;
                             case 2: [self navigateForwardTo:@"LeaderboardMenu1080.swf"]; break;
                             case 4: {
-                                // PerformActionSaveGame: the save is there, so
-                                // ask before overwriting it. SaveGameDialogReturned
-                                // saves on the second button.
                                 __weak MinecraftViewController* weakSelf = self;
+                                // PerformActionSaveGame: does the save exist?
+                                if (!mcle_storage_save_exists()) {
+                                    // flag a app action of save game
+                                    MCLECaptureThumbnailThen(^{ [weakSelf openSaveProgress:NO]; });
+                                    break;
+                                }
+                                // we need to ask if they are sure they want to
+                                // overwrite the existing game.
+                                // SaveGameDialogReturned saves on the second button.
                                 [self presentDialogWithTitle:MCLEStr(IDS_TITLE_SAVE_GAME)
                                                      content:MCLEStr(IDS_CONFIRM_SAVE_GAME)
                                                      buttons:@[MCLEStr(IDS_CONFIRM_CANCEL), MCLEStr(IDS_CONFIRM_OK)]
