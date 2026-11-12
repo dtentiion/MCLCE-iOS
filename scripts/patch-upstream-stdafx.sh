@@ -196,46 +196,6 @@ print(f"patch-upstream-stdafx: skipped ItemInstance include on iOS in {path}")
 PY
 fi
 
-# DataOutputStream.cpp / DataInputStream.cpp gate writePlayerUID /
-# readPlayerUID on platform macros to either (a) write/read 16 raw
-# bytes (Sony platforms - PS3, Orbis, Vita), (b) write/read a string
-# (Durango), or (c) write/read a Long (everywhere else). iOS
-# PlayerUID is a 16-byte struct, so put __APPLE_IOS__ in the Sony
-# branch where the for-loop write-each-byte path matches.
-add_ios_to_sony_branch() {
-    local file="$1"
-    if grep -q '__APPLE_IOS__' "$file"; then
-        echo "patch-upstream-stdafx: $(basename "$file") already patched, skipping"
-        return
-    fi
-    python3 - "$file" <<'PY'
-import re, sys
-path = sys.argv[1]
-with open(path, 'r', encoding='utf-8', errors='replace') as f:
-    src = f.read()
-
-# Match both variants: `defined (__PSVITA__)` with space and
-# `defined(__PSVITA__)` without. Two upstream files use different
-# whitespace styles in the same conditional.
-pat = re.compile(
-    r'#if defined\(__PS3__\) \|\| defined\(__ORBIS__\) \|\| defined ?\(__PSVITA__\)'
-)
-m = pat.search(src)
-if not m:
-    sys.exit(f"patch-upstream-stdafx: Sony branch anchor not found in {path}")
-
-# Re-emit with iOS appended, preserving whatever whitespace style the
-# original had (it just appends `|| defined(__APPLE_IOS__)`).
-new_text = m.group(0) + ' || defined(__APPLE_IOS__)'
-patched = src[:m.start()] + new_text + src[m.end():]
-with open(path, 'w', encoding='utf-8', newline='\n') as f:
-    f.write(patched)
-print(f"patch-upstream-stdafx: added __APPLE_IOS__ to Sony branch in {path}")
-PY
-}
-add_ios_to_sony_branch "$DOSCPP"
-add_ios_to_sony_branch "$DISCPP"
-
 # compression.cpp picks zlib headers per platform. The first chain
 # (line 3) selects upstream's bundled Common/zlib for Orbis / PS3 /
 # Durango / Win64. iOS has the same file accessible, so add iOS to
@@ -453,33 +413,6 @@ with open(path, 'w', encoding='utf-8', newline='\n') as f:
 print(f"patch-upstream-stdafx: inserted ChunkSource.h include into {path}")
 PY
 fi
-
-# DirectoryLevelStorage.cpp uses std::to_wstring(PlayerUID) in two places
-# (lines 401, 450), which Sony/Xbox supplies but iOS doesn't. The Durango
-# (_DURANGO) branch right above uses xuid.toString(), which is what iOS needs.
-# Add __APPLE_IOS__ to those _DURANGO arms.
-DLSCPP="$REPO_ROOT/upstream/Minecraft.World/DirectoryLevelStorage.cpp"
-if grep -q '__APPLE_IOS__' "$DLSCPP"; then
-    echo "patch-upstream-stdafx: DirectoryLevelStorage.cpp already patched, skipping"
-else
-python3 - "$DLSCPP" <<'PY'
-import sys
-path = sys.argv[1]
-with open(path, 'r', encoding='utf-8', errors='replace') as f:
-    src = f.read()
-needle = '#elif defined(_DURANGO)'
-if needle not in src:
-    sys.exit("patch-upstream-stdafx: DLSCPP _DURANGO anchor not found")
-patched = src.replace(needle, '#elif defined(_DURANGO) || defined(__APPLE_IOS__)')
-with open(path, 'w', encoding='utf-8', newline='\n') as f:
-    f.write(patched)
-print(f"patch-upstream-stdafx: routed iOS through Durango branch in {path}")
-PY
-fi
-
-# StringHelpers.h's _fromString<PlayerUID> template was the second blocker;
-# fixed instead by adding `operator>>(wistream&, PlayerUID&)` to the iOS
-# PlayerUID stub in 4JLibs/inc/4J_Profile.h. No source patch needed here.
 
 # WeighedTreasure.h forward-declares DispenserTileEntity in a shared_ptr<>.
 # The real header isn't reachable from EnchantedBookItem.cpp's include set on
@@ -1858,4 +1791,11 @@ fi
 SWP_PY="$REPO_ROOT/scripts/patch-iteminhand-swing.py"
 if [ -f "$SWP_PY" ]; then
     python3 "$SWP_PY"
+fi
+
+# The player's id is a 64 bit number as on Windows64, and saves from when
+# it was 16 bytes still load
+PUID_PY="$REPO_ROOT/scripts/patch-playeruid-win64.py"
+if [ -f "$PUID_PY" ]; then
+    python3 "$PUID_PY"
 fi
