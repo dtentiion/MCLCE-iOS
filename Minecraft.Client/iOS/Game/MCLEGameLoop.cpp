@@ -212,6 +212,8 @@ void mcle_network_init(void); // MCLENetwork.cpp
 #include "MCLEStartGame.h"
 #include "MCLEHud.h"
 #include "../../../upstream/Minecraft.Client/EntityTracker.h"
+#include "../../../upstream/Minecraft.World/SetTimePacket.h"
+#include "../../../upstream/Minecraft.World/GameRules.h"
 #include <dispatch/dispatch.h>
 #include <pthread.h>
 #include "MCLETooltips.h"
@@ -2913,6 +2915,9 @@ static int g_changeDimensionTo = 0;
 static bool g_changingDimension = false;
 
 bool mcle_defer_change_dimension(ServerPlayer *player, int i) {
+    // A player who joined goes through ServerPlayer::changeDimension as it
+    // is, once their client has ticked
+    if (player != g_player.get()) return !player->connection->hasClientTickedOnce();
     if (g_changingDimension) return false;
     if (!g_changeDimensionPending) {
         g_changeDimensionPending = true;
@@ -3044,6 +3049,9 @@ extern "C" void mcle_minecraft_init(void) {
     }
     // Windows64_Minecraft.cpp: g_NetworkManager.Initialise and the player slots
     mcle_network_init();
+    // What this thread adds to a world, an item dropped out of a menu, has
+    // an id the entity packets can carry
+    Entity::useSmallIds();
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after
@@ -3533,7 +3541,10 @@ extern "C" void mcle_game_tick(void) {
         g_gamePressed = menu ? 0 : pressed;
     }
 
-    if (g_gamePaused.load(std::memory_order_relaxed)) return;
+    // UIScene_PauseMenu only pauses the server for a local game with one
+    // player in it
+    if (g_gamePaused.load(std::memory_order_relaxed) &&
+        (!g_server || !g_server->getPlayers() || g_server->getPlayers()->players.empty())) return;
 
     if (g_respawnRequested.exchange(false)) mcle_do_respawn();
 
@@ -3633,10 +3644,23 @@ extern "C" void mcle_game_tick(void) {
     // entity moving until then the frame waits, or it draws the mobs' new
     // places with the old time and they jump.
     std::unique_lock<std::mutex> entityFrameLock(g_frameMutex, std::defer_lock);
+    // The players who joined. The local one isn't in the player list.
+    const bool playersJoined = !g_server->getPlayers()->players.empty();
+    static int s_serverTickCount = 0;
+    const bool timeTick = (s_serverTickCount++ % 20) == 0;
     try {
         for (int i = 0; i < 3; ++i) {
             if (!g_levels[i]) continue;
             const auto lvlStart = hrclock::now();
+            // MinecraftServer::tick: once a second the players are sent the
+            // time. The local player's level is the server's, so that's the
+            // ones who joined.
+            if (playersJoined && timeTick) {
+                g_server->getPlayers()->broadcastAll(
+                    std::make_shared<SetTimePacket>(g_levels[i]->getGameTime(), g_levels[i]->getDayTime(),
+                                                    g_levels[i]->getGameRules()->getBoolean(GameRules::RULE_DAYLIGHT)),
+                    g_levels[i]->dimension->id);
+            }
             g_levels[i]->tick();
             // 4J added to stop ticking entities in levels when players are
             // not in those levels, unless there are entities to be removed.
@@ -3650,9 +3674,15 @@ extern "C" void mcle_game_tick(void) {
                 if (g_levels[i]->skyFlashTime > 0) g_levels[i]->skyFlashTime--;
                 g_levels[i]->tickEntities();
             }
-            // level->getTracker()->tick()
-            mcle_tracker_item_frame_maps(i);
-            mcle_tracker_hurt_marked(i);
+            // level->getTracker()->tick(). It sends what changed to the
+            // players tracking each entity, so with only the local player in
+            // the game two parts of it are all there is to do.
+            if (playersJoined) {
+                g_levels[i]->getTracker()->tick();
+            } else {
+                mcle_tracker_item_frame_maps(i);
+                mcle_tracker_hurt_marked(i);
+            }
             const auto lvlMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                    hrclock::now() - lvlStart).count();
             if (lvlMs > 50) {
@@ -5319,6 +5349,12 @@ static void mcle_exit_world(bool save) {
     std::lock_guard<std::mutex> life(g_worldLifeMutex);
     MCLE_LOG("EXIT_WORLD: world stopped");
 
+    // stopServer: the players who joined are told and their connections
+    // closed first, each of them saved and taken out of its level on the way
+    if (g_server && g_server->connection) {
+        try { g_server->connection->stop(); } catch (...) { MCLE_LOG("EXIT_WORLD: connection stop threw"); }
+    }
+
     // stopServer: saveAll, saveAllChunks, the game rules and saveToDisc
     // when saving on exit
     if (save) {
@@ -5409,9 +5445,7 @@ static void mcle_exit_world(bool save) {
         }
     }
     if (g_server) {
-        // stopServer: the connections are told and closed first
         if (g_server->connection) {
-            g_server->connection->stop();
             delete g_server->connection;
             g_server->connection = nullptr;
         }
