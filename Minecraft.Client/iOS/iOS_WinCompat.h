@@ -904,10 +904,7 @@ void         glCallLists(IntBuffer *);                                   // Offs
 #  define THREAD_PRIORITY_LOWEST       (-2)
 #endif
 
-// 4J QNet send-flags. Console-only; probe never sends a packet.
-#ifndef NON_QNET_SENDDATA_ACK_REQUIRED
-#  define NON_QNET_SENDDATA_ACK_REQUIRED 0
-#endif
+// NON_QNET_SENDDATA_ACK_REQUIRED is GameNetworkManager.h's
 
 // Win32 file open hints. Probe never opens a real file.
 #ifndef FILE_FLAG_SEQUENTIAL_SCAN

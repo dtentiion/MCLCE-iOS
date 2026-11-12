@@ -78,6 +78,7 @@
 // Item statics. In-class initialisers in Item.h give the values; ODR-use
 // (e.g. taking the address) needs an out-of-line definition.
 // ---------------------------------------------------------------------------
+const int Item::map_Id;
 const int Item::flint_Id;
 const int Item::emerald_Id;
 const int Item::apple_Id;
@@ -406,20 +407,10 @@ void mcle_local_player_packet(std::shared_ptr<Packet> packet) {
         mcle_client_server_settings_changed(settings);
     }
 }
-void PlayerConnection::send(std::shared_ptr<Packet> packet) {
-    mcle_local_player_packet(packet);
-}
-bool PlayerConnection::isLocal() { return true; }
-// PlayerConnection::teleport moves the server's player and tells its client
-// where it went. The one ServerPlayer here is the local player and has no
-// connection, so the move is left, with what the client does when it's told
-// (beds, portals, respawn, ender pearls).
-extern void mcle_local_player_abs_move_to(double x, double y, double z, float yRot, float xRot, bool sendPacket);
-void PlayerConnection::teleport(double x, double y, double z, float yRot, float xRot, bool sendPacket) {
-    mcle_local_player_abs_move_to(x, y, z, yRot, xRot, sendPacket);
-}
-void PlayerConnection::queueSend(std::shared_ptr<Packet> /*packet*/) {}
-int  PlayerConnection::countDelayedPackets() { return 0; }
+// PlayerConnection is upstream's now. Its send, teleport and the rest ask
+// mcle_connection_is_local first (scripts/patch-playerconnection-local.py),
+// and for the local player's come to mcle_local_player_packet above and
+// mcle_local_player_abs_move_to.
 
 // ServerPlayer: real upstream now compiles, all methods come from the .cpp.
 

@@ -105,9 +105,6 @@ const int ZonedChunkStorage::CHUNKS_PER_ZONE = 1 << ZonedChunkStorage::CHUNKS_PE
 // upstream Minecraft.cpp does the same: `return m_instance;`.
 Minecraft *Minecraft::GetInstance()                         { return Minecraft::m_instance; }
 
-// PlayerConnection
-INetworkPlayer *PlayerConnection::getNetworkPlayer()        { return nullptr; }
-
 // ServerPlayer.cpp now compiles and is in the lib, so its real method
 // bodies (incl ~ServerPlayer + vtable) are emitted there.
 

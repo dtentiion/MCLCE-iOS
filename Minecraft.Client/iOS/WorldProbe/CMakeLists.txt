@@ -1059,6 +1059,11 @@ set(WORLD_PROBE_SOURCES
   ${UPSTREAM_DIR}/Minecraft.World/SpringTile.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/Chunk.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PendingConnection.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/PlayerConnection.cpp
+  ${UPSTREAM_DIR}/Minecraft.World/Socket.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Xbox/Network/NetworkPlayerXbox.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Common/Network/PlatformNetworkManagerStub.cpp
+  ${UPSTREAM_DIR}/Minecraft.Client/Windows64/Network/WinsockNetLayer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/PlayerRenderer.cpp
   ${UPSTREAM_DIR}/Minecraft.Client/StringTable.cpp
   ${UPSTREAM_DIR}/Minecraft.World/SetRidingPacket.cpp

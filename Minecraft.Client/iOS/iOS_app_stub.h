@@ -702,50 +702,9 @@ struct McleAppStub {
 // link is not needed since the world-probe is a syntax-only build.
 inline McleAppStub app;
 
-// Stub for the upstream global `g_NetworkManager`. Connection.cpp /
-// Socket.cpp reach into it during the receive-loop. Probe never runs
-// the receive loop; variadic template members absorb signatures and
-// every getter returns sane null/false defaults.
-struct McleNetworkManagerStub {
-    template<class... A> bool IsLeavingGame(A...)        { return false; }
-    template<class... A> bool IsInSession(A...)          { return false; }
-    template<class... A> bool IsHost(A...)               { return false; }
-    template<class... A> bool IsLocalGame(A...)          { return true; }
-    template<class... A> int  GetSmallId(A...)           { return 0; }
-    template<class... A> McleNetworkManagerStub* GetHostPlayer(A...) { return this; }
-    // Real upstream returns INetworkPlayer*. NetworkPlayerInterface.h
-    // is pre-included in iOS_stdafx so the type is visible.
-    template<class... A> class INetworkPlayer* GetPlayerByXuid(A...)            { return nullptr; }
-    template<class... A> class INetworkPlayer* GetPlayerBySmallId(A...)         { return nullptr; }
-    template<class... A> class INetworkPlayer* GetLocalPlayerByUserIndex(A...)  { return nullptr; }
-    template<class... A> void  ServerReady(A...)         {}
-    template<class... A> void  ServerStopped(A...)       {}
-    template<class... A> void  ClientReady(A...)         {}
-    template<class... A> void  ClientStopped(A...)       {}
-    template<class... A> void  Disconnect(A...)          {}
-    template<class... A> bool  IsServer(A...)            { return false; }
-    template<class... A> bool  IsClient(A...)            { return false; }
-    template<class... A> int   GetNumPlayers(A...)       { return 0; }
-    template<class... A> int   GetMaxPlayers(A...)       { return 1; }
-    template<class... A> int   GetSessionState(A...)     { return 0; }
-    template<class... A> bool  SystemFlagGet(A...)       { return false; }
-    template<class... A> void  SystemFlagSet(A...)       {}
-    template<class... A> int   GetPlayerCount(A...)      { return 0; }
-    template<class... A> bool  SessionHasSpace(A...)     { return true; }
-    template<class... A> int   GetLocalPlayerCount(A...) { return 0; }
-    template<class... A> int   GetRemotePlayerCount(A...) { return 0; }
-    template<class... A> int   GetOnlinePlayerCount(A...) { return 0; }
-    template<class... A> class INetworkPlayer* GetPlayerByIndex(A...) { return nullptr; }
-    template<class... A> class INetworkPlayer* GetPlayerBySessionIndex(A...) { return nullptr; }
-    template<class... A> class INetworkPlayer* AddLocalPlayerByUserIndex(A...) { return nullptr; }
-    template<class... A> void  RemoveLocalPlayerByUserIndex(A...) {}
-    template<class... A> void  AddLocalPlayer(A...) {}
-    template<class... A> void  RemoveLocalPlayer(A...) {}
-    template<class... A> void  AddRemotePlayer(A...) {}
-    template<class... A> void  RemoveRemotePlayer(A...) {}
-    template<class... A> int   GetSendQueueSizeMessages(A...) { return 0; }
-    template<class... A> int   GetSendQueueSizeBytes(A...)    { return 0; }
-};
-inline McleNetworkManagerStub g_NetworkManager;
+// g_NetworkManager is the game's own CGameNetworkManager. Its members are
+// in Game/MCLENetwork.cpp, the ones a host needs taken from
+// Common/Network/GameNetworkManager.cpp.
+#include "../Minecraft.Client/Common/Network/GameNetworkManager.h"
 
 #endif // __cplusplus

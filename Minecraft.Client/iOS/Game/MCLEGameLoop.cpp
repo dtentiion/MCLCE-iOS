@@ -159,6 +159,8 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 #include "../../../upstream/Minecraft.Client/ServerChunkCache.h"
 #include "../../../upstream/Minecraft.Client/DerivedServerLevel.h"
 #include "../../../upstream/Minecraft.Client/MinecraftServer.h"
+
+void mcle_network_init(void); // MCLENetwork.cpp
 #include "../../../upstream/Minecraft.Client/PlayerList.h"
 #include "../../../upstream/Minecraft.Client/Settings.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
@@ -1220,6 +1222,12 @@ void initImpl() {
     delete levelData;
     levelData = nullptr;
 
+    // The create and load menus start a game through the network manager
+    // (UIScene_CreateWorldMenu::CreateGame): the session is hosted, an
+    // offline one, and the host is its first player
+    g_NetworkManager.HostGame(0, false, false, MINECRAFT_NET_MAX_PLAYERS, 0);
+    g_NetworkManager.FakeLocalPlayerJoined();
+
     // Step 5.5: construct a real MinecraftServer instance, as in
     // MinecraftServer::main:2251 (`server = new MinecraftServer()`).
     // The ctor sets up command dispatcher + dispenser bootstrap +
@@ -1646,6 +1654,9 @@ void initImpl() {
     // _RunNetworkGame: the client doesn't start until the selected texture
     // pack's data is in and the main loop has reloaded with it
     mcle_texture_packs_wait_for_reload();
+
+    // _RunNetworkGame: the session is in game play from here
+    g_NetworkManager._RunNetworkGame(nullptr);
 
     // Flip to ticking state ONLY after the player is fully registered.
     // Otherwise the render thread tick races against the bootstrap and
@@ -3019,6 +3030,8 @@ extern "C" void mcle_minecraft_init(void) {
     } catch (...) {
         MCLE_LOG("minecraft init: sound engine init threw");
     }
+    // Windows64_Minecraft.cpp: g_NetworkManager.Initialise and the player slots
+    mcle_network_init();
 }
 
 // UIScene_LoadOrJoinMenu::AddDefaultButtons lists the level generators after
@@ -5383,6 +5396,8 @@ static void mcle_exit_world(bool save) {
     }
     // _ExitWorld: MinecraftServer::resetFlags() once the level is gone
     MinecraftServer::resetFlags();
+    // and the session is left
+    g_NetworkManager.LeaveGame(false);
 
     // DirectoryLevelStorage's destructor deletes the save file it was given,
     // and ~ConsoleSaveFileOriginal lets go of a thumbnail no save took

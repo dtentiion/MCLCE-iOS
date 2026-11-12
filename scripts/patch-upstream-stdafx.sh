@@ -1799,3 +1799,11 @@ PUID_PY="$REPO_ROOT/scripts/patch-playeruid-win64.py"
 if [ -f "$PUID_PY" ]; then
     python3 "$PUID_PY"
 fi
+
+# Windows64's LAN layer builds here, and the network manager's host side
+# is taken out of upstream for Game/MCLENetwork.cpp
+for NET_PY in "$REPO_ROOT/scripts/patch-winsock-net-layer.py" "$REPO_ROOT/scripts/gen-network-manager.py" "$REPO_ROOT/scripts/patch-playerconnection-local.py"; do
+    if [ -f "$NET_PY" ]; then
+        python3 "$NET_PY"
+    fi
+done
