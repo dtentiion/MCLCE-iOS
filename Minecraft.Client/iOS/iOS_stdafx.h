@@ -607,6 +607,10 @@ class BufferedImage;
 typedef unsigned char byte;
 #endif
 
+// IQNet, IQNetPlayer and the other QNet names the network code is written
+// against
+#include "iOS_QNet.h"
+
 // PlayerUID lives in iOS/4JLibs/inc/4J_Profile.h (already pre-included
 // via the iOS_stdafx.h `#include "4JLibs/inc/4J_Storage.h"` chain at the
 // top of this file via iOS_app_stub.h forward refs). Definition kept

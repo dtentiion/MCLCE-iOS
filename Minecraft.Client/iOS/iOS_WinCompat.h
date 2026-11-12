@@ -492,30 +492,19 @@ enum {
 static inline int XGetLanguage(void) { return XC_LANGUAGE_ENGLISH; }
 static inline int XGetLocale(void)   { return XC_LANGUAGE_ENGLISH; }
 
-// Xbox-style invalid XUID sentinel.
+// The invalid XUID, 0 as in the Windows64 build (extraX64.h)
 #ifndef INVALID_XUID
-#  define INVALID_XUID ((uint64_t)0xFFFFFFFFFFFFFFFFull)
+#  define INVALID_XUID ((uint64_t)0)
 #endif
 
-// Xbox-style user name size constant from XUSER_API.
+// XUSER_NAME_SIZE, 32 in the Windows64 build (extraX64.h)
 #ifndef XUSER_NAME_SIZE
-#  define XUSER_NAME_SIZE 16
+#  define XUSER_NAME_SIZE 32
 #endif
 
-// SessionID type from upstream's Sony SQRNetworkManager. iOS doesn't
-// ship PSN, so this is an opaque 16-byte buffer matching the Sony
-// layout. SessionInfo.h declares fields of this type.
-#ifdef __cplusplus
-struct SessionID {
-    uint8_t bytes[16];
-    SessionID() { for (int i = 0; i < 16; ++i) bytes[i] = 0; }
-    bool operator==(const SessionID& o) const {
-        for (int i = 0; i < 16; ++i) if (bytes[i] != o.bytes[i]) return false;
-        return true;
-    }
-    bool operator!=(const SessionID& o) const { return !(*this == o); }
-};
-#endif
+// SessionID, a number as in the Windows64 build (extraX64.h).
+// SessionInfo.h declares fields of this type.
+typedef uint64_t SessionID;
 
 // Xbox-style content / device descriptors. Probe never opens XContent;
 // these typedefs satisfy DLCTexturePack / DLCManager headers that
@@ -537,11 +526,11 @@ typedef struct D3D11_VIEWPORT {
     float MaxDepth;
 } D3D11_VIEWPORT;
 
-// Net protocol cap. Real value differs per platform (PS4/Switch use
-// 16, X1 uses 8). Probe never sends/receives so the constant just
-// needs to exist and be reasonable.
+// MINECRAFT_NET_MAX_PLAYERS, 256 in the Windows64 build (extraX64.h). It
+// sizes the small id space; how many can be in a world is the player
+// list's max players.
 #ifndef MINECRAFT_NET_MAX_PLAYERS
-#  define MINECRAFT_NET_MAX_PLAYERS 8
+#  define MINECRAFT_NET_MAX_PLAYERS 256
 #endif
 
 // 4J game-rules save filename. Defined in upstream
@@ -928,10 +917,14 @@ void         glCallLists(IntBuffer *);                                   // Offs
 #  define FILE_FLAG_RANDOM_ACCESS   0x10000000
 #endif
 
-// Net protocol revision. Probe never sends a packet; constant just
-// needs to exist for compile.
+// MINECRAFT_NET_VERSION is VER_NETWORK, which the Windows64 build gets from
+// cmake/GenerateBuildVer.cmake's BUILD_NUMBER. A host and a client only
+// play together with the same one.
+#ifndef VER_NETWORK
+#  define VER_NETWORK 560
+#endif
 #ifndef MINECRAFT_NET_VERSION
-#  define MINECRAFT_NET_VERSION 0
+#  define MINECRAFT_NET_VERSION VER_NETWORK
 #endif
 
 // Win32 thread-exit-code sentinel for "still running". Probe never
