@@ -1529,6 +1529,10 @@ void initImpl() {
     // Minecraft.cpp: on Windows64 the world host keeps the legacy embedded
     // host XUID, which its player file in the save is named by. Then
     // PlayerList::placeNewPlayer loads that player's saved data.
+    // MinecraftServer::loadLevel: the player list reads and writes the
+    // players through the level's storage, for the ones who join
+    if (g_server->getPlayers() && g_levels[0]) g_server->getPlayers()->setLevel(g_server->levels);
+
     bool newPlayer = false;
     if (g_player && g_levelStorage) {
         g_player->setXuid((PlayerUID)0xe000d45248242f2eULL); // Win64Xuid::GetLegacyEmbeddedHostXuid
@@ -3666,6 +3670,9 @@ extern "C" void mcle_game_tick(void) {
             g_NetworkManager.DoWork();
             g_server->getPlayers()->tick();
             g_server->connection->tick();
+            // MinecraftServer::run, after each tick: whose turn it is to be
+            // sent chunks moves on
+            g_server->chunkPacketManagement_PostTick();
         }
         // LevelRenderer::tick increments the renderer-side `ticks` member
         // which renderClouds reads for the cloud drift offset

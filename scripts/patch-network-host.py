@@ -85,6 +85,12 @@ patch(CLIENT / "PlayerList.cpp", [
     on("\t\t// The old Connection's read/write threads are now dead"),
 ])
 
+# No wait between one player's chunks and the next's, as on Windows64
+patch(CLIENT / "MinecraftServer.h", [
+    ("#if defined(_WINDOWS64)\n#define MINECRAFT_SERVER_SLOW_QUEUE_DELAY 0",
+     "#if defined(_WINDOWS64) || defined(__APPLE_IOS__) // MCLE_iOS_NET_HOST\n#define MINECRAFT_SERVER_SLOW_QUEUE_DELAY 0"),
+])
+
 patch(CLIENT / "PendingConnection.cpp", [
     on("bool g_bRejectDuplicateNames = true;\n"),
     on("\telse if (g_bRejectDuplicateNames)\n"),
