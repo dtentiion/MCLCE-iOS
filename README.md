@@ -30,6 +30,8 @@ This builds the TU19 Legacy Console Edition base. If you're after a different ve
 
 Select the appropriate repo, and download the resulting `.ipa` from its Releases page, and install via AltStore, Sideloadly, xtool or TrollStore.
 
+There's an Android port too, at [MCLCE-Android](https://github.com/dtentiion/MCLCE-Android).
+
 ## What it is
 
 An (almost) direct port of the LCE code, with no emulation, Wine or other tricks. Just an ordinary `.ipa`.

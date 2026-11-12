@@ -12,6 +12,7 @@ Not set in stone - items will change as we progress.
 - appropriate music, sfx and ambient sounds
 - save/autosave functionality
 - support for texture and skin packs from user supplied files
+- an Android version using the same code base, at [MCLCE-Android](https://github.com/dtentiion/MCLCE-Android)
 
 ## Upcoming
 
@@ -31,6 +32,5 @@ Not set in stone - items will change as we progress.
 
 ## Possibly
 
-- an equivalent Android version using the same code base
 - a mod loader
 - touch based on screen controls
