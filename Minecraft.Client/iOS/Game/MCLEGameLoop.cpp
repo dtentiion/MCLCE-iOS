@@ -162,6 +162,9 @@ extern "C" void mcle_world_g1b_probe_tick(void);
 
 void mcle_network_init(void); // MCLENetwork.cpp
 #include "../../../upstream/Minecraft.Client/PlayerList.h"
+#include "../../../upstream/Minecraft.Client/ServerConnection.h"
+#include "../../../upstream/Minecraft.World/Socket.h"
+#include "../../../upstream/Minecraft.Client/Windows64/Network/WinsockNetLayer.h"
 #include "../../../upstream/Minecraft.Client/Settings.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayer.h"
 #include "../../../upstream/Minecraft.Client/ServerPlayerGameMode.h"
@@ -1290,6 +1293,11 @@ void initImpl() {
         MCLE_LOG("mcle_game_init: PlayerList viewDistance=%d", pl->getViewDistance());
         g_server->setPlayers(pl);
         MCLE_LOG("mcle_game_init: PlayerList attached");
+        // MinecraftServer::initServer: the server's end of the connections,
+        // which a player who joins comes in through, and how many can
+        g_server->connection = new ServerConnection(g_server);
+        Socket::Initialise(g_server->connection);
+        WinsockNetLayer::UpdateAdvertiseMaxPlayers(static_cast<BYTE>(pl->getMaxPlayers()));
     } catch (const std::exception &e) {
         MCLE_LOG("mcle_game_init: PlayerList ctor threw: %{public}s", e.what());
         g_initState = kStateFailed;
@@ -3650,6 +3658,15 @@ extern "C" void mcle_game_tick(void) {
         // MinecraftServer::tick, after the levels: which of the despawn
         // protected animals get to wander, to find out if they're penned in
         Entity::tickExtraWandering();
+        // then the players who joined and their connections, whose packets
+        // move things the frame is drawing. DoWork is the main loop's on
+        // Windows64, it picks up the ones who dropped.
+        if (g_server->connection) {
+            if (!entityFrameLock.owns_lock()) entityFrameLock.lock();
+            g_NetworkManager.DoWork();
+            g_server->getPlayers()->tick();
+            g_server->connection->tick();
+        }
         // LevelRenderer::tick increments the renderer-side `ticks` member
         // which renderClouds reads for the cloud drift offset
         // (time * 0.03f at LevelRenderer.cpp:1330). Without this the cloud
@@ -5385,7 +5402,12 @@ static void mcle_exit_world(bool save) {
         }
     }
     if (g_server) {
-        // No ServerConnection is made on iOS
+        // stopServer: the connections are told and closed first
+        if (g_server->connection) {
+            g_server->connection->stop();
+            delete g_server->connection;
+            g_server->connection = nullptr;
+        }
         delete g_server->getPlayers();
         g_server->setPlayers(nullptr);
         delete g_server->settings;

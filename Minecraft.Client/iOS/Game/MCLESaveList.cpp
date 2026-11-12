@@ -372,6 +372,16 @@ extern "C" int mcle_storage_save_exists(void) {
     return stat((std::string(root) + "/saves/" + g_saveFolder).c_str(), &st) == 0 ? 1 : 0;
 }
 
+// C4JStorage::GetSaveUniqueFilename, which PendingConnection sends a joining
+// player. The Windows64 stub fills nothing in, so what goes out there is
+// whatever the buffer held. Here it's the save's folder name, the 14
+// characters of when it was made, or zeros for a world with no save yet.
+extern "C" void mcle_storage_save_unique_filename(char *name) {
+    std::lock_guard<std::mutex> lock(g_storageMutex);
+    std::memset(name, 0, 14);
+    std::memcpy(name, g_saveFolder.data(), g_saveFolder.size() < 14 ? g_saveFolder.size() : 14);
+}
+
 // C4JStorage::ResetSaveData: the next save is a new one
 extern "C" void mcle_storage_reset_save_data(void) {
     std::lock_guard<std::mutex> lock(g_storageMutex);

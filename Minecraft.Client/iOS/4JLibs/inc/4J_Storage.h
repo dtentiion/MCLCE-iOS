@@ -44,6 +44,7 @@ typedef struct _XCONTENT_DATA {
 extern "C" void *mcle_storage_allocate_save_data(unsigned int size);
 extern "C" int  mcle_storage_save_save_data(void);
 extern "C" void mcle_storage_reset_save_data(void);
+extern "C" void mcle_storage_save_unique_filename(char *name);
 extern "C" void mcle_storage_set_save_title(const wchar_t *title);
 extern "C" void mcle_storage_set_save_images(const unsigned char *thumb, unsigned int thumbBytes,
                                              const unsigned char *text, unsigned int textBytes);
@@ -127,7 +128,9 @@ public:
         if (callback) callback(param, ok);
     }
     template<class... A> bool         GetSaveUniqueNumber(A...) { return false; }
-    template<class... A> std::wstring GetSaveUniqueFilename(A...) { return std::wstring(); }
+    // The 14 characters a joining player is sent for the save. Windows64's
+    // stub leaves the buffer as it was.
+    void GetSaveUniqueFilename(char *pszName) { mcle_storage_save_unique_filename(pszName); }
 
     // Structs defined in the DLC_Creator, but added here to be used in the app
     typedef struct

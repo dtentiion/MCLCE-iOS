@@ -28,20 +28,10 @@
 #include "../../../upstream/Minecraft.Client/Common/Network/PlatformNetworkManagerStub.h"
 #include "../../../upstream/Minecraft.Client/Xbox/Network/NetworkPlayerXbox.h"
 #include "../../../upstream/Minecraft.Client/Windows64/Network/WinsockNetLayer.h"
+#include "../../../upstream/Minecraft.Client/Windows64/Windows64_Xuid.h"
 
 // Windows64_Minecraft.cpp's name for the player, which IQNet puts in slot 0
 wchar_t g_Win64UsernameW[17] = { 0 };
-
-// Windows64/Windows64_Xuid.h. A world's host keeps the id every Windows64
-// host had before ids were persistent, so its player data is found in a
-// save from either.
-namespace Win64Xuid
-{
-	inline PlayerUID GetLegacyEmbeddedHostXuid()
-	{
-		return (PlayerUID)0xe000d45248242f2eULL;
-	}
-}
 
 #include "../../../upstream/Minecraft.Client/iOS_QNet.inc"
 
